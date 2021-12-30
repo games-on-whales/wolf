@@ -6,11 +6,10 @@ pt::ptree serverinfo(LocalState &local_state,
                      bool isServerBusy,
                      int current_appid,
                      const std::vector<DisplayMode> display_modes,
-                     const std::string clientID,
-                     const std::string local_endpoint_address) {
+                     const std::string clientID) {
   int pair_status = local_state.isPaired(clientID);
   pt::ptree tree;
-  
+
   tree.put("root.<xmlattr>.status_code", 200);
   tree.put("root.hostname", local_state.hostname());
 
@@ -20,7 +19,7 @@ pt::ptree serverinfo(LocalState &local_state,
 
   tree.put("root.MaxLumaPixelsHEVC",
            "0"); // TODO: tree.put("root.MaxLumaPixelsHEVC",config::video.hevc_mode > 1 ? "1869449984" : "0");
-  tree.put("root.ServerCodecModeSupport", "3");
+  tree.put("root.ServerCodecModeSupport", "3"); // TODO: what are the modes here?
 
   tree.put("root.HttpsPort", local_state.map_port(local_state.HTTPS_PORT));
   tree.put("root.ExternalPort", local_state.map_port(local_state.HTTP_PORT));
