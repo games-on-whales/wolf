@@ -1,0 +1,8 @@
+{
+    "hostname": "test_wolf",
+    "uid": "uid-12345",
+    "base_port": 3000,
+    "external_ip": "192.168.99.1",
+    "local_ip": "192.168.1.1",
+    "mac_address": "AA:BB:CC:DD"
+}

@@ -1,0 +1,3 @@
+[submodule "apps/libraries/Simple-Web-Server"]
+	path = apps/libraries/Simple-Web-Server
+	url = https://gitlab.com/eidheim/Simple-Web-Server
