@@ -9,6 +9,9 @@ FetchContent_MakeAvailable(catch)
 # Tests need to be added as executables first
 add_executable(wolflib testlib.cpp)
 
+target_include_directories(wolflib PUBLIC ./)
+
+
 # I'm using C++17 in the test
 target_compile_features(wolflib PRIVATE cxx_std_17)
 

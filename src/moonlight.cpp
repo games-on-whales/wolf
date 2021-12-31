@@ -3,11 +3,12 @@
 namespace pt = boost::property_tree;
 
 pt::ptree serverinfo(LocalState &local_state,
+                     UserPair &pair_handler,
                      bool isServerBusy,
                      int current_appid,
                      const std::vector<DisplayMode> display_modes,
                      const std::string clientID) {
-  int pair_status = local_state.isPaired(clientID);
+  int pair_status = pair_handler.isPaired(clientID);
   pt::ptree tree;
 
   tree.put("root.<xmlattr>.status_code", 200);

@@ -2,6 +2,7 @@
 #include <boost/property_tree/xml_parser.hpp>
 #include <catch2/catch.hpp>
 #include <moonlight/protocol.hpp>
+#include <simple-pair.cpp>
 
 TEST_CASE("LocalState load JSON", "[LocalState]") {
   auto state = new LocalState("local_state.json");
@@ -20,10 +21,21 @@ TEST_CASE("LocalState load JSON", "[LocalState]") {
 TEST_CASE("Mocked serverinfo", "[MoonlightProtocol]") {
   auto state = new LocalState("local_state.json");
   std::vector<DisplayMode> displayModes = {{1920, 1080, 60}, {1024, 768, 30}};
-  auto result = serverinfo(*state, false, 0, displayModes, "001122");
-  // Checking that our server_info conforms with the expected server_info_response.xml
-  pt::ptree expectedResult;
-  pt::read_xml("server_info_response.xml", expectedResult, boost::property_tree::xml_parser::trim_whitespace);
-  
-  REQUIRE(result == expectedResult);
+  auto pair_handler = new SimplePair();
+
+  SECTION("server_info conforms with the expected server_info_response.xml") {
+    auto result = serverinfo(*state, *pair_handler, false, 0, displayModes, "001122");
+    pt::ptree expectedResult;
+    pt::read_xml("server_info_response.xml", expectedResult, boost::property_tree::xml_parser::trim_whitespace);
+
+    REQUIRE(result == expectedResult);
+    REQUIRE(result.get<bool>("root.PairStatus") == false);
+  }
+
+  SECTION("does pairing change the returned serverinfo?") {
+    pair_handler->pair("001122", "", "", "");
+    auto result = serverinfo(*state, *pair_handler, false, 0, displayModes, "001122");
+
+    REQUIRE(result.get<bool>("root.PairStatus") == true);
+  }
 }

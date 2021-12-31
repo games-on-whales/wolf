@@ -64,10 +64,6 @@ public:
     return _state.get<std::string>("mac_address");
   }
 
-  bool isPaired(std::string clientID) {
-    return false; // TODO
-  }
-
 private:
   pt::ptree _state;
 
