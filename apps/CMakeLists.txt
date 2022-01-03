@@ -14,17 +14,17 @@ FetchContent_MakeAvailable(fmtlib)
 
 # Some libraries don't work with FetchContent_Declare out of the box
 # We have to manually git clone them and adding them into `libraries`
-target_include_directories(wolf PRIVATE libraries)
+target_include_directories(wolf PRIVATE libraries helpers)
 
 target_link_libraries(wolf PRIVATE fmt::fmt PipeWire::PipeWire)
 
-set(OPENSSL_LIBRARIES
-libssl.a
-libcrypto.a)
+find_package(OpenSSL REQUIRED)
+target_include_directories(wolf PRIVATE ${OPENSSL_INCLUDE_DIR})
 
 target_link_libraries(
     wolf PRIVATE
-    ${OPENSSL_LIBRARIES} 
+    ${Boost_LIBRARIES}
+    ${OPENSSL_LIBRARIES}
     ${CMAKE_DL_LIBS}
     ${CMAKE_THREAD_LIBS_INIT}
 )

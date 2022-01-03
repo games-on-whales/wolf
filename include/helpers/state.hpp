@@ -15,8 +15,7 @@ namespace pt = boost::property_tree;
 
 class LocalState {
 public:
-  LocalState(pt::ptree state) {
-    _state = state;
+  LocalState(pt::ptree state) : _state(state) {
   }
 
   LocalState(std::string config_file) {

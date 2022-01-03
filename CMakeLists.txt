@@ -35,7 +35,8 @@ endif()
 # FindPipeWire
 list(APPEND CMAKE_MODULE_PATH ${CMAKE_CURRENT_SOURCE_DIR}/cmake)
 
-find_package(Boost REQUIRED)
+find_package(Boost REQUIRED COMPONENTS log_setup log)
+include_directories(${Boost_INCLUDE_DIRS})
 
 # The compiled library code is here
 add_subdirectory(src)
