@@ -1,5 +1,3 @@
-#include <fmt/format.h>
-
 #include <iostream>
 #include <tuple>
 #include <vector>
@@ -10,7 +8,7 @@
 #include <rest/servers.cpp>
 
 int main(int argc, char *argv[]) {
-  Logger::init(debug);
+  Logger::init(trace);
   Logger::log(debug,
               "Compiled with libpipewire {} - Linked with libpipewire: {}\n",
               pw_get_headers_version(),
@@ -19,8 +17,8 @@ int main(int argc, char *argv[]) {
   auto https_server = HTTPServers::createHTTPS("key.pem", "cert.pem");
   auto http_server = HTTPServers::createHTTP();
 
-  auto https_thread = HTTPServers::startServer(https_server.get(), 8080);
-  auto http_thread = HTTPServers::startServer(http_server.get(), 8081);
+  auto https_thread = HTTPServers::startServer(https_server.get(), 47984);
+  auto http_thread = HTTPServers::startServer(http_server.get(), 47989);
 
   https_thread.join();
   http_thread.join();

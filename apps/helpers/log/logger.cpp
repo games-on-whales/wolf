@@ -13,7 +13,11 @@
 #include <boost/log/utility/setup/common_attributes.hpp>
 #include <boost/log/utility/setup/console.hpp>
 #include <boost/shared_ptr.hpp>
+
+#include <fmt/core.h>
 #include <fmt/format.h>
+#include <fmt/ranges.h>
+#include <fmt/ostream.h>
 
 using namespace boost::log::trivial;
 
