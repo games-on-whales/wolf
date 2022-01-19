@@ -2,8 +2,10 @@
 
 namespace pt = boost::property_tree;
 
-pt::ptree serverinfo(LocalState &local_state,
-                     UserPair &pair_handler,
+namespace moonlight {
+
+pt::ptree serverinfo(const Config &config,
+                     const UserPair &pair_handler,
                      bool isServerBusy,
                      int current_appid,
                      const std::vector<DisplayMode> display_modes,
@@ -12,21 +14,21 @@ pt::ptree serverinfo(LocalState &local_state,
   pt::ptree tree;
 
   tree.put("root.<xmlattr>.status_code", 200);
-  tree.put("root.hostname", local_state.hostname());
+  tree.put("root.hostname", config.hostname());
 
   tree.put("root.appversion", M_VERSION);
   tree.put("root.GfeVersion", M_GFE_VERSION);
-  tree.put("root.uniqueid", local_state.get_uuid());
+  tree.put("root.uniqueid", config.get_uuid());
 
-  tree.put("root.MaxLumaPixelsHEVC",
-           "0"); // TODO: tree.put("root.MaxLumaPixelsHEVC",config::video.hevc_mode > 1 ? "1869449984" : "0");
+  tree.put("root.MaxLumaPixelsHEVC", "0");
+  // TODO: tree.put("root.MaxLumaPixelsHEVC",config::video.hevc_mode > 1 ? "1869449984" : "0");
   tree.put("root.ServerCodecModeSupport", "3"); // TODO: what are the modes here?
 
-  tree.put("root.HttpsPort", local_state.map_port(local_state.HTTPS_PORT));
-  tree.put("root.ExternalPort", local_state.map_port(local_state.HTTP_PORT));
-  tree.put("root.mac", local_state.mac_address());
-  tree.put("root.ExternalIP", local_state.external_ip());
-  tree.put("root.LocalIP", local_state.local_ip());
+  tree.put("root.HttpsPort", config.map_port(config.HTTPS_PORT));
+  tree.put("root.ExternalPort", config.map_port(config.HTTP_PORT));
+  tree.put("root.mac", config.mac_address());
+  tree.put("root.ExternalIP", config.external_ip());
+  tree.put("root.LocalIP", config.local_ip());
 
   pt::ptree display_nodes;
   for (auto mode : display_modes) {
@@ -44,3 +46,4 @@ pt::ptree serverinfo(LocalState &local_state,
   tree.put("root.state", isServerBusy ? "SUNSHINE_SERVER_BUSY" : "SUNSHINE_SERVER_FREE");
   return tree;
 }
+} // namespace moonlight

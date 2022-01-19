@@ -13,16 +13,20 @@ namespace pt = boost::property_tree;
 #include <boost/uuid/uuid_generators.hpp> // generators
 #include <boost/uuid/uuid_io.hpp>         // streaming operators etc.
 
-class LocalState {
+/**
+ * @brief Immutable configuration class
+ *
+ */
+class Config {
 public:
-  LocalState(pt::ptree state) : _state(state) {
+  Config(const pt::ptree &state) : _state(state) {
   }
 
-  LocalState(std::string config_file) {
+  Config(const std::string config_file) {
     pt::read_json(config_file, _state);
   }
 
-  void saveCurrentConfig(std::string config_file) {
+  void saveCurrentConfig(const std::string config_file) const {
     pt::write_json(config_file, _state);
   }
 
@@ -32,11 +36,11 @@ public:
     HTTP_PORT = 0,
   };
 
-  std::string hostname() {
+  std::string hostname() const {
     return _state.get<std::string>("hostname", "wolf");
   }
 
-  std::string get_uuid() {
+  std::string get_uuid() const {
     return _state.get<std::string>("uid", gen_uuid());
   }
 
@@ -46,27 +50,27 @@ public:
    * @param port: one of the VALID_PORTS
    * @return std::uint16_t: a valid port number
    */
-  std::uint16_t map_port(VALID_PORTS port) {
+  std::uint16_t map_port(VALID_PORTS port) const {
     auto base_port = _state.get<int>("base_port");
     return (std::uint16_t)(base_port + port);
   }
 
-  std::string external_ip() {
+  std::string external_ip() const {
     return _state.get<std::string>("external_ip");
   }
 
-  std::string local_ip() {
+  std::string local_ip() const {
     return _state.get<std::string>("local_ip");
   }
 
-  std::string mac_address() {
+  std::string mac_address() const {
     return _state.get<std::string>("mac_address");
   }
 
 private:
   pt::ptree _state;
 
-  std::string gen_uuid() {
+  std::string gen_uuid() const {
     auto uuid = boost::uuids::random_generator()();
     return boost::lexical_cast<std::string>(uuid);
   }

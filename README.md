@@ -37,5 +37,5 @@ Unit tests will live under `tests/`, they'll be focused on testing the library p
 **TODO: this is not a complete list (yet)**
 
 ```
-cmake libpipewire-0.3-dev libboost-thread-dev libssl-dev
+cmake g++-10 gcc-10 libpipewire-0.3-dev libboost-thread-dev libboost-filesystem-dev libboost-log-dev libssl-dev
 ```

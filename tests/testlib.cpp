@@ -4,8 +4,10 @@
 #include <moonlight/protocol.hpp>
 #include <simple-pair.cpp>
 
+using namespace moonlight;
+
 TEST_CASE("LocalState load JSON", "[LocalState]") {
-  auto state = new LocalState("local_state.json");
+  auto state = new Config("config.json");
   REQUIRE(state->hostname() == "test_wolf");
   REQUIRE(state->get_uuid() == "uid-12345");
   REQUIRE(state->external_ip() == "192.168.99.1");
@@ -13,13 +15,13 @@ TEST_CASE("LocalState load JSON", "[LocalState]") {
   REQUIRE(state->mac_address() == "AA:BB:CC:DD");
 
   SECTION("Port mapping") {
-    REQUIRE(state->map_port(LocalState::HTTP_PORT) == 3000);
-    REQUIRE(state->map_port(LocalState::HTTPS_PORT) == 2995);
+    REQUIRE(state->map_port(Config::HTTP_PORT) == 3000);
+    REQUIRE(state->map_port(Config::HTTPS_PORT) == 2995);
   }
 }
 
 TEST_CASE("Mocked serverinfo", "[MoonlightProtocol]") {
-  auto state = new LocalState("local_state.json");
+  auto state = new Config("config.json");
   std::vector<DisplayMode> displayModes = {{1920, 1080, 60}, {1024, 768, 30}};
   auto pair_handler = new SimplePair();
 

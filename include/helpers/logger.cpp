@@ -16,12 +16,13 @@
 
 #include <fmt/core.h>
 #include <fmt/format.h>
-#include <fmt/ranges.h>
 #include <fmt/ostream.h>
+#include <fmt/ranges.h>
+
+namespace logs {
 
 using namespace boost::log::trivial;
 
-namespace Logger {
 /**
  * @brief first time Boost log system initialization
  *
@@ -62,4 +63,4 @@ template <typename S, typename... Args> void log(severity_level lv, const S &for
 
   BOOST_LOG_SEV(lg, lv) << msg;
 }
-} // namespace Logger
+} // namespace logs

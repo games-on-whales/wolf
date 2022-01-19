@@ -14,7 +14,7 @@
 
 #include <boost/filesystem.hpp>
 
-#include <log/logger.cpp>
+#include <helpers/logger.cpp>
 
 namespace x509 {
 
@@ -26,7 +26,7 @@ namespace x509 {
 EVP_PKEY *generate_key() {
   auto pkey = EVP_PKEY_new();
   if (!pkey) {
-    Logger::log(error, "Unable to create EVP_PKEY structure.");
+    logs::log(logs::error, "Unable to create EVP_PKEY structure.");
     return NULL;
   }
 
@@ -35,7 +35,7 @@ EVP_PKEY *generate_key() {
   BN_set_word(big_num, RSA_F4);
   RSA_generate_key_ex(rsa, 2048, big_num, nullptr);
   if (!EVP_PKEY_assign_RSA(pkey, rsa)) {
-    Logger::log(error, "Unable to generate 2048-bit RSA key.");
+    logs::log(logs::error, "Unable to generate 2048-bit RSA key.");
     EVP_PKEY_free(pkey);
     return NULL;
   }
@@ -53,7 +53,7 @@ X509 *generate_x509(EVP_PKEY *pkey) {
   /* Allocate memory for the X509 structure. */
   X509 *x509 = X509_new();
   if (!x509) {
-    Logger::log(error, "Unable to create X509 structure.");
+    logs::log(logs::error, "Unable to create X509 structure.");
     return NULL;
   }
 
@@ -79,7 +79,7 @@ X509 *generate_x509(EVP_PKEY *pkey) {
 
   /* Actually sign the certificate with our key. */
   if (!X509_sign(x509, pkey, EVP_sha256())) {
-    Logger::log(error, "Error signing certificate.");
+    logs::log(logs::error, "Error signing certificate.");
     X509_free(x509);
     return NULL;
   }
@@ -101,7 +101,7 @@ bool write_to_disk(EVP_PKEY *pkey, std::string pkey_filename, X509 *x509, std::s
   /* Open the PEM file for writing the key to disk. */
   FILE *pkey_file = fopen(pkey_filename.c_str(), "wb");
   if (!pkey_file) {
-    Logger::log(error, "Unable to open {} for writing.", pkey_filename);
+    logs::log(logs::error, "Unable to open {} for writing.", pkey_filename);
     return false;
   }
 
@@ -110,14 +110,14 @@ bool write_to_disk(EVP_PKEY *pkey, std::string pkey_filename, X509 *x509, std::s
   fclose(pkey_file);
 
   if (!ret) {
-    Logger::log(error, "Unable to write {} to disk.", pkey_filename);
+    logs::log(logs::error, "Unable to write {} to disk.", pkey_filename);
     return false;
   }
 
   /* Open the PEM file for writing the certificate to disk. */
   FILE *x509_file = fopen(cert_filename.c_str(), "wb");
   if (!x509_file) {
-    Logger::log(error, "Unable to open {} for writing", cert_filename);
+    logs::log(logs::error, "Unable to open {} for writing", cert_filename);
     return false;
   }
 
@@ -126,7 +126,7 @@ bool write_to_disk(EVP_PKEY *pkey, std::string pkey_filename, X509 *x509, std::s
   fclose(x509_file);
 
   if (!ret) {
-    Logger::log(error, "Unable to write {} to disk.", cert_filename);
+    logs::log(logs::error, "Unable to write {} to disk.", cert_filename);
     return false;
   }
 
@@ -144,9 +144,9 @@ bool cert_exists(std::string pkey_filename, std::string cert_filename) {
 
 /**
  * @brief: cleanup pointers after use
- * 
+ *
  * TODO: replace with smart pointers?
- * 
+ *
  * @param pkey: a private key generated with generate_key()
  * @param x509: a certificate generated with generate_x509()
  */

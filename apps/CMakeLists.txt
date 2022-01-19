@@ -16,7 +16,7 @@ FetchContent_MakeAvailable(fmtlib)
 # We have to manually git clone them and adding them into `libraries`
 target_include_directories(wolf PRIVATE libraries helpers)
 
-target_link_libraries(wolf PRIVATE fmt::fmt PipeWire::PipeWire)
+target_link_libraries(wolf PRIVATE fmt::fmt PipeWire::PipeWire moonlight)
 
 find_package(OpenSSL REQUIRED)
 target_include_directories(wolf PRIVATE ${OPENSSL_INCLUDE_DIR})
