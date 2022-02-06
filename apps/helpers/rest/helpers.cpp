@@ -54,11 +54,11 @@ void send_xml(std::shared_ptr<typename SimpleWeb::ServerBase<T>::Response> respo
  * @param key: the header key name
  * @return std::string if found, NULL otherwise
  */
-std::string get_header(const SimpleWeb::CaseInsensitiveMultimap &headers, const std::string key) {
+std::optional<std::string> get_header(const SimpleWeb::CaseInsensitiveMultimap &headers, const std::string key) {
   auto it = headers.find(key);
   if (it != headers.end()) {
     return it->second;
   } else {
-    return ""; // TODO: missing signal
+    return {};
   }
 }

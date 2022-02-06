@@ -36,6 +36,9 @@ void not_found(std::shared_ptr<typename SimpleWeb::ServerBase<T>::Response> resp
   send_xml<T>(response, SimpleWeb::StatusCode::client_error_not_found, xml);
 }
 
+/**
+ * @brief Moonlight protocol phase 1: GET /serverinfo
+ */
 template <class T>
 void serverinfo(std::shared_ptr<typename SimpleWeb::ServerBase<T>::Response> response,
                 std::shared_ptr<typename SimpleWeb::ServerBase<T>::Request> request,
@@ -44,7 +47,7 @@ void serverinfo(std::shared_ptr<typename SimpleWeb::ServerBase<T>::Response> res
 
   SimpleWeb::CaseInsensitiveMultimap headers = request->parse_query_string();
   auto clientId = get_header(headers, "uuid");
-  if (clientId == "") {
+  if (!clientId) {
     logs::log(logs::warning, "Received serverinfo request without uuid");
     server_error<T>(response);
     return;
@@ -52,10 +55,10 @@ void serverinfo(std::shared_ptr<typename SimpleWeb::ServerBase<T>::Response> res
 
   auto xml = moonlight::serverinfo(*state.config.get(),
                                    *state.pair_handler.get(),
-                                   false,
-                                   -1,
+                                   false, // TODO:
+                                   -1,    // TODO:
                                    *state.display_modes.get(),
-                                   clientId);
+                                   clientId.value());
 
   send_xml<T>(response, SimpleWeb::StatusCode::success_ok, xml);
 }
