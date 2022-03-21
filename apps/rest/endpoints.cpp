@@ -1,9 +1,11 @@
 #pragma once
 
+#include <moonlight/crypto.hpp>
 #include <moonlight/protocol.hpp>
 
-#include <rest/helpers.cpp>
-#include <state/data-structures.hpp>
+#include <x509.cpp>
+#include <helpers.cpp>
+#include <data-structures.hpp>
 
 #include <Simple-Web-Server/server_http.hpp>
 #include <Simple-Web-Server/server_https.hpp>
@@ -55,12 +57,46 @@ void serverinfo(std::shared_ptr<typename SimpleWeb::ServerBase<T>::Response> res
 
   auto xml = moonlight::serverinfo(*state.config.get(),
                                    *state.pair_handler.get(),
-                                   false, // TODO:
-                                   -1,    // TODO:
+                                   false, // TODO: isServerBusy
+                                   -1,    // TODO: current_appid
                                    *state.display_modes.get(),
-                                   clientId.value());
+                                   clientId.value());       
 
   send_xml<T>(response, SimpleWeb::StatusCode::success_ok, xml);
+}
+
+/**
+ * @brief Moonlight protocol phase 2: GET /pair
+ */
+template <class T>
+void pair(std::shared_ptr<typename SimpleWeb::ServerBase<T>::Response> response,
+          std::shared_ptr<typename SimpleWeb::ServerBase<T>::Request> request,
+          const LocalState &state) {
+  log_req<T>(request);
+
+  SimpleWeb::CaseInsensitiveMultimap headers = request->parse_query_string();
+
+  auto salt = get_header(headers, "salt");
+  auto client_cert_str = get_header(headers, "clientcert");
+  if (salt && client_cert_str) {
+    std::string user_pin;
+    std::cout << "Insert pin:" << std::endl;
+    std::getline(std::cin, user_pin);
+
+    auto [xml, key] = moonlight::pair_get_server_cert(user_pin, salt.value(), *state.server_cert);
+
+    auto client_cert_parsed = crypto::hex_to_str(client_cert_str.value(), true);
+    auto client_cert = x509::cert_from_string(client_cert_parsed);
+    // TODO: save key and client_cert for later
+
+    send_xml<T>(response, SimpleWeb::StatusCode::success_ok, xml);
+  }
+
+  auto client_challenge = get_header(headers, "clientchallenge");
+  if (client_challenge) {
+
+    // TODO: retrieve key and client_cert
+  }
 }
 
 } // namespace endpoints

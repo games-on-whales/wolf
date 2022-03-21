@@ -1,6 +1,8 @@
 #define CATCH_CONFIG_MAIN
+// #include <helpers/crypto.cpp>
 #include <boost/property_tree/xml_parser.hpp>
-#include <catch2/catch.hpp>
+#include <catch2/catch_test_macros.hpp>
+#include <moonlight/crypto.hpp>
 #include <moonlight/protocol.hpp>
 #include <simple-pair.cpp>
 
@@ -41,3 +43,4 @@ TEST_CASE("Mocked serverinfo", "[MoonlightProtocol]") {
     REQUIRE(result.get<bool>("root.PairStatus") == true);
   }
 }
+

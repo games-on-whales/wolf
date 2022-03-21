@@ -5,12 +5,12 @@
 
 #include <pipewire/pipewire.h>
 
+#include <data-structures.hpp>
 #include <helpers/config.hpp>
 #include <helpers/logger.cpp>
 #include <moonlight/data-structures.hpp>
-#include <rest/servers.cpp>
-#include <state/data-structures.hpp>
-#include <state/pair.cpp>
+#include <pair.cpp>
+#include <servers.cpp>
 
 /**
  * @brief Will try to load the config file and fallback to defaults
@@ -42,11 +42,12 @@ std::shared_ptr<std::vector<moonlight::DisplayMode>> getDisplayModes() {
 /**
  * @brief Local state initialization
  */
-std::shared_ptr<LocalState> initialize(const std::string config_file) {
+std::shared_ptr<LocalState> initialize(const std::string config_file, const std::string cert_filename) {
   auto config = load_config(config_file);
   auto pair_handler = std::make_shared<SimplePair>();
   auto display_modes = getDisplayModes();
-  LocalState state = {config, pair_handler, display_modes};
+  auto server_cert = x509::cert_from_file(cert_filename);
+  LocalState state = {config, pair_handler, display_modes, server_cert};
   return std::make_shared<LocalState>(state);
 }
 
@@ -60,11 +61,11 @@ int main(int argc, char *argv[]) {
             pw_get_headers_version(),
             pw_get_library_version());
 
-  auto config_file = "config.json";
-  auto local_state = initialize(config_file);
-
   auto https_server = HTTPServers::createHTTPS("key.pem", "cert.pem");
   auto http_server = HTTPServers::createHTTP();
+
+  auto config_file = "config.json";
+  auto local_state = initialize(config_file, "cert.pem");
 
   auto https_thread = HTTPServers::startServer(https_server.get(),
                                                *local_state.get(),

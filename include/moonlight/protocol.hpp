@@ -40,10 +40,8 @@ pt::ptree serverinfo(const Config &config,
  *
  * @return std::pair<pt::ptree, string> the response and the AES key to be used in the next steps
  */
-std::pair<pt::ptree, std::string> pair_get_server_cert(const std::string user_pin,
-                                                       const X509 &server_cert,
-                                                       const X509 &client_cert,
-                                                       const std::string salt);
+std::pair<pt::ptree, std::string>
+pair_get_server_cert(const std::string user_pin, const std::string salt, const X509 &server_cert);
 
 /**
  * @brief Pair, phase 2

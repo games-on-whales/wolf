@@ -4,13 +4,13 @@
 #include <memory>
 #include <utility>
 
-#include <rest/x509.cpp>
+#include <x509.cpp>
 
 #include <Simple-Web-Server/server_http.hpp>
 #include <Simple-Web-Server/server_https.hpp>
-#include <rest/endpoints.cpp>
-#include <rest/helpers.cpp>
-#include <state/data-structures.hpp>
+#include <endpoints.cpp>
+#include <helpers.cpp>
+#include <data-structures.hpp>
 
 using HttpsServer = SimpleWeb::Server<SimpleWeb::HTTPS>;
 using HttpServer = SimpleWeb::Server<SimpleWeb::HTTP>;
@@ -59,6 +59,8 @@ template <typename T> std::thread startServer(SimpleWeb::Server<T> *server, cons
   server->resource["^/serverinfo$"]["GET"] = [&state](auto resp, auto req) {
     endpoints::serverinfo<T>(resp, req, state);
   };
+
+  server->resource["^/pair$"]["GET"] = [&state](auto resp, auto req) { endpoints::pair<T>(resp, req, state); };
 
   std::promise<unsigned short> server_port;
   std::thread server_thread([&server, &server_port]() {

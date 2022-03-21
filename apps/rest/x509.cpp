@@ -88,6 +88,35 @@ X509 *generate_x509(EVP_PKEY *pkey) {
 }
 
 /**
+ * @brief Reads a X509 certificate string
+ */
+X509 *cert_from_string(const std::string cert) {
+  BIO *bio;
+  X509 *certificate;
+
+  bio = BIO_new(BIO_s_mem());
+  BIO_puts(bio, cert.c_str());
+  certificate = PEM_read_bio_X509(bio, NULL, NULL, NULL);
+  return certificate;
+}
+
+/**
+ * @brief Reads a X509 certificate from file
+ */
+X509 *cert_from_file(const std::string cert_path) {
+  X509 *certificate;
+  BIO *bio;
+
+  bio = BIO_new(BIO_s_file());
+  if (BIO_read_filename(bio, cert_path.c_str()) <= 0) {
+    logs::log(logs::error, "Error reading certificate: {}.", cert_path);
+    return NULL;
+  }
+  certificate = PEM_read_bio_X509(bio, NULL, NULL, NULL);
+  return certificate;
+}
+
+/**
  * @brief Write cert and key to disk
  *
  * @param pkey: a private key generated with generate_key()

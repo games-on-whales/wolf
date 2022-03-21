@@ -51,7 +51,7 @@ public:
    * @return std::uint16_t: a valid port number
    */
   std::uint16_t map_port(VALID_PORTS port) const {
-    auto base_port = _state.get<int>("base_port");
+    auto base_port = _state.get<int>("base_port", 47989);
     return (std::uint16_t)(base_port + port);
   }
 
