@@ -1,9 +1,4 @@
-#include <iostream>
-#include <signal.h>
-#include <tuple>
 #include <vector>
-
-#include <pipewire/pipewire.h>
 
 #include <data-structures.hpp>
 #include <helpers/config.hpp>
@@ -56,10 +51,6 @@ std::shared_ptr<LocalState> initialize(const std::string config_file, const std:
  */
 int main(int argc, char *argv[]) {
   logs::init(logs::trace);
-  logs::log(logs::debug,
-            "Compiled with libpipewire {} - Linked with libpipewire: {}\n",
-            pw_get_headers_version(),
-            pw_get_library_version());
 
   auto https_server = HTTPServers::createHTTPS("key.pem", "cert.pem");
   auto http_server = HTTPServers::createHTTP();
