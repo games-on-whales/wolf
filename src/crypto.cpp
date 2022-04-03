@@ -1,25 +1,25 @@
+#include "aes.cpp"
+#include <moonlight/crypto.hpp>
+
 #include <openssl/pem.h>
 #include <openssl/sha.h>
-#include <openssl/x509.h>
-#include <moonlight/crypto.hpp>
 
 #include <algorithm>
 #include <iomanip>
-#include <iostream>
 #include <sstream>
-#include <string>
+#include <stdexcept>
 
 namespace crypto {
 
-std::string sha256(const std::string str) {
+std::string sha256(const std::string &str) {
   unsigned char hash[SHA256_DIGEST_LENGTH];
   SHA256_CTX sha256;
   SHA256_Init(&sha256);
   SHA256_Update(&sha256, str.c_str(), str.size());
   SHA256_Final(hash, &sha256);
   std::stringstream ss;
-  for (int i = 0; i < SHA256_DIGEST_LENGTH; i++) {
-    ss << std::hex << std::setw(2) << std::setfill('0') << (int)hash[i];
+  for (unsigned char i : hash) {
+    ss << std::hex << std::setw(2) << std::setfill('0') << (int)i;
   }
   return ss.str();
 }
@@ -95,6 +95,32 @@ std::string hex_to_str(const std::string &hex, bool reverse) {
   }
 
   return buf;
+}
+
+std::string random(int length) {
+  std::string rnd;
+  rnd.resize(length);
+  if (RAND_bytes((uint8_t *)rnd.data(), length) != 1)
+    handle_openssl_error("RAND_bytes failed");
+  return rnd;
+}
+
+std::string aes_encrypt_cbc(const std::string &msg, const std::string &enc_key, const std::string &iv, bool padding) {
+  auto enc_key_uc = to_unsigned(enc_key);
+  auto msg_uc = to_unsigned(msg);
+  auto iv_uc = to_unsigned(iv);
+
+  auto ctx = aes_init_enc(EVP_aes_128_ecb(), enc_key_uc.get(), iv_uc.get(), padding);
+  return aes_encrypt(ctx.get(), msg_uc.get());
+}
+
+std::string aes_decrypt_cbc(const std::string &msg, const std::string &enc_key, const std::string &iv, bool padding) {
+  auto enc_key_uc = to_unsigned(enc_key);
+  auto msg_uc = to_unsigned(msg);
+  auto iv_uc = to_unsigned(iv);
+
+  auto ctx = aes_init_dec(EVP_aes_128_ecb(), enc_key_uc.get(), iv_uc.get(), padding);
+  return aes_decrypt(ctx.get(), msg_uc.get());
 }
 
 } // namespace crypto

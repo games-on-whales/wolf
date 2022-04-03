@@ -74,7 +74,7 @@ pair_send_server_challenge(const std::string aes_key, const std::string client_c
   // std::vector<uint8_t> decrypted;
   // crypto::cipher::ecb_t cipher(*sess.cipher_key, false);
 
-  // cipher.decrypt(encrypted_response, decrypted);
+  // cipher.aes_decrypt_cbc(encrypted_response, decrypted);
 
   // sess.clienthash = std::move(decrypted);
 

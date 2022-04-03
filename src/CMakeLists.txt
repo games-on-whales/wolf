@@ -6,7 +6,7 @@ file(GLOB HEADER_LIST CONFIGURE_DEPENDS "${wolf_SOURCE_DIR}/include/moonlight/*.
 # set(HEADER_LIST "${wolf_SOURCE_DIR}/include/moonlight/protocol.hpp")
 
 # Make an automatic library - will be static or dynamic based on user setting
-add_library(moonlight moonlight.cpp crypto.cpp ${HEADER_LIST})
+add_library(moonlight moonlight.cpp crypto.cpp aes.cpp ${HEADER_LIST})
 
 # We need this directory, and users of our library will need it too
 target_include_directories(moonlight PUBLIC ../include)
@@ -15,16 +15,16 @@ find_package(OpenSSL REQUIRED)
 
 # This depends on (header only) boost
 target_link_libraries(
-  moonlight PUBLIC 
-  Boost::boost
-  OpenSSL::SSL 
-  OpenSSL::Crypto)
+        moonlight PUBLIC
+        Boost::boost
+        OpenSSL::SSL
+        OpenSSL::Crypto)
 
-# All users of this library will need at least C++11
-target_compile_features(moonlight PUBLIC cxx_std_11)
+# All users of this library will need at least C++17
+target_compile_features(moonlight PUBLIC cxx_std_17)
 
 # IDEs should put the headers in a nice place
 source_group(
-  TREE "${PROJECT_SOURCE_DIR}/include"
-  PREFIX "Header Files"
-  FILES ${HEADER_LIST})
+        TREE "${PROJECT_SOURCE_DIR}/include"
+        PREFIX "Header Files"
+        FILES ${HEADER_LIST})

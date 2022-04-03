@@ -2,6 +2,9 @@
 #include <boost/property_tree/xml_parser.hpp>
 #include <catch2/catch_test_macros.hpp>
 #include <moonlight/crypto.hpp>
+#include <string>
+
+using namespace std::string_literals;
 
 TEST_CASE("sha256", "[Crypto]") {
   REQUIRE(crypto::sha256("") == "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855");
@@ -63,5 +66,19 @@ TEST_CASE("str and hex", "[Crypto]") {
   SECTION("back and forth") {
     auto original_str = "a very complex string";
     REQUIRE(crypto::hex_to_str(crypto::str_to_hex(original_str), true) == original_str);
+  }
+}
+
+TEST_CASE("AES", "[Crypto]") {
+  auto key = "0123456789012345"s;
+  auto msg = "a message to be sent!"s;
+
+  auto encrypted = crypto::aes_encrypt_cbc(msg, key, "12345678");
+
+  REQUIRE(crypto::str_to_hex(encrypted) == "ABAF3D0AEE0FEDE3955EA4BBE190B5817777A7F53C3A0BF3258967E547285A9A");
+  REQUIRE(crypto::aes_decrypt_cbc(encrypted, key) == msg);
+
+  SECTION("back and forth") {
+    REQUIRE(crypto::aes_decrypt_cbc(crypto::aes_encrypt_cbc(msg, key), key) == msg);
   }
 }

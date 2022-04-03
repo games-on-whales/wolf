@@ -35,7 +35,7 @@ pt::ptree serverinfo(const Config &config,
 /**
  * @brief Pair, phase 1:
  * Moonlight will send a salt and client certificate
- * (PIN + SALT) --> SHA256 needs to be stored in order to use AES to decrypt the next phases
+ * (PIN + SALT) --> SHA256 needs to be stored in order to use AES to aes_decrypt_cbc the next phases
  * At this stage we only have to send back our public certificate.
  *
  * @return std::pair<pt::ptree, string> the response and the AES key to be used in the next steps
@@ -45,8 +45,8 @@ pair_get_server_cert(const std::string user_pin, const std::string salt, const X
 
 /**
  * @brief Pair, phase 2
- * Using the AES key that we generated in the phase 1 we have to decrypt the clientchallenge,
- * The response will AES encrypt:
+ * Using the AES key that we generated in the phase 1 we have to aes_decrypt_cbc the clientchallenge,
+ * The response will AES aes_encrypt_cbc:
  *   - the decrypted clientchallenge,
  *   - the signature of our X509 serverCert
  *   - a server secret that we generate (in order to be checked later on)
