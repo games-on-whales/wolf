@@ -6,7 +6,6 @@
 #pragma once
 
 #include <cstdio>
-#include <iostream>
 #include <memory>
 
 #include <openssl/pem.h>
@@ -27,7 +26,7 @@ EVP_PKEY *generate_key() {
   auto pkey = EVP_PKEY_new();
   if (!pkey) {
     logs::log(logs::error, "Unable to create EVP_PKEY structure.");
-    return NULL;
+    return nullptr;
   }
 
   auto big_num = BN_new();
@@ -37,7 +36,7 @@ EVP_PKEY *generate_key() {
   if (!EVP_PKEY_assign_RSA(pkey, rsa)) {
     logs::log(logs::error, "Unable to generate 2048-bit RSA key.");
     EVP_PKEY_free(pkey);
-    return NULL;
+    return nullptr;
   }
 
   return pkey;
@@ -54,7 +53,7 @@ X509 *generate_x509(EVP_PKEY *pkey) {
   X509 *x509 = X509_new();
   if (!x509) {
     logs::log(logs::error, "Unable to create X509 structure.");
-    return NULL;
+    return nullptr;
   }
 
   /* Set the serial number. */
@@ -81,7 +80,7 @@ X509 *generate_x509(EVP_PKEY *pkey) {
   if (!X509_sign(x509, pkey, EVP_sha256())) {
     logs::log(logs::error, "Error signing certificate.");
     X509_free(x509);
-    return NULL;
+    return nullptr;
   }
 
   return x509;
@@ -90,29 +89,29 @@ X509 *generate_x509(EVP_PKEY *pkey) {
 /**
  * @brief Reads a X509 certificate string
  */
-X509 *cert_from_string(const std::string cert) {
+X509 *cert_from_string(const std::string& cert) {
   BIO *bio;
   X509 *certificate;
 
   bio = BIO_new(BIO_s_mem());
   BIO_puts(bio, cert.c_str());
-  certificate = PEM_read_bio_X509(bio, NULL, NULL, NULL);
+  certificate = PEM_read_bio_X509(bio, nullptr, nullptr, nullptr);
   return certificate;
 }
 
 /**
  * @brief Reads a X509 certificate from file
  */
-X509 *cert_from_file(const std::string cert_path) {
+X509 *cert_from_file(const std::string& cert_path) {
   X509 *certificate;
   BIO *bio;
 
   bio = BIO_new(BIO_s_file());
   if (BIO_read_filename(bio, cert_path.c_str()) <= 0) {
     logs::log(logs::error, "Error reading certificate: {}.", cert_path);
-    return NULL;
+    return nullptr;
   }
-  certificate = PEM_read_bio_X509(bio, NULL, NULL, NULL);
+  certificate = PEM_read_bio_X509(bio, nullptr, nullptr, nullptr);
   return certificate;
 }
 
@@ -126,7 +125,7 @@ X509 *cert_from_file(const std::string cert_path) {
  * @return true when both pkey and x509 are stored on disk
  * @return false when one or both failed
  */
-bool write_to_disk(EVP_PKEY *pkey, std::string pkey_filename, X509 *x509, std::string cert_filename) {
+bool write_to_disk(EVP_PKEY *pkey, const std::string& pkey_filename, X509 *x509, const std::string& cert_filename) {
   /* Open the PEM file for writing the key to disk. */
   FILE *pkey_file = fopen(pkey_filename.c_str(), "wb");
   if (!pkey_file) {
@@ -135,7 +134,7 @@ bool write_to_disk(EVP_PKEY *pkey, std::string pkey_filename, X509 *x509, std::s
   }
 
   /* Write the key to disk. */
-  bool ret = PEM_write_PrivateKey(pkey_file, pkey, NULL, NULL, 0, NULL, NULL);
+  bool ret = PEM_write_PrivateKey(pkey_file, pkey, nullptr, nullptr, 0, nullptr, nullptr);
   fclose(pkey_file);
 
   if (!ret) {
@@ -167,7 +166,7 @@ bool write_to_disk(EVP_PKEY *pkey, std::string pkey_filename, X509 *x509, std::s
  * @param cert_filename: the name of the cert file to be saved
  * @return true when both files are present
  */
-bool cert_exists(std::string pkey_filename, std::string cert_filename) {
+bool cert_exists(const std::string& pkey_filename, const std::string& cert_filename) {
   return boost::filesystem::exists(pkey_filename) && boost::filesystem::exists(cert_filename);
 }
 

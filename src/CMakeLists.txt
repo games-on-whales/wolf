@@ -3,13 +3,14 @@
 
 # Optionally glob, but only for CMake 3.12 or later:
 file(GLOB HEADER_LIST CONFIGURE_DEPENDS "${wolf_SOURCE_DIR}/include/moonlight/*.hpp")
+file(GLOB CRYPTO_LIST SRCS "${wolf_SOURCE_DIR}/src/crypto/*.cpp")
 # set(HEADER_LIST "${wolf_SOURCE_DIR}/include/moonlight/protocol.hpp")
 
 # Make an automatic library - will be static or dynamic based on user setting
-add_library(moonlight moonlight.cpp crypto.cpp aes.cpp ${HEADER_LIST})
+add_library(moonlight moonlight.cpp crypto.cpp ${CRYPTO_LIST} ${HEADER_LIST})
 
 # We need this directory, and users of our library will need it too
-target_include_directories(moonlight PUBLIC ../include)
+target_include_directories(moonlight PUBLIC ../include crypto)
 
 find_package(OpenSSL REQUIRED)
 

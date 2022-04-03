@@ -1,4 +1,3 @@
-#include <boost/property_tree/xml_parser.hpp>
 #include <catch2/catch_test_macros.hpp>
 #include <moonlight/crypto.hpp>
 #include <string>
@@ -19,8 +18,6 @@ TEST_CASE("str and hex", "[Crypto]") {
   }
 
   SECTION("hex to str") {
-    std::string user_pin = "1234";
-    std::string salt = "9b550a45b9426212b685f8ccaf1089ba";
     std::string client_cert =
         "2d2d2d2d2d424547494e2043455254494649434154452d2d2d2d2d0a4d494943767a43434161656741774942416749424144414e42676b"
         "71686b694739773042415173464144416a4d53457748775944565151444442684f566b6c450a53554567523246745a564e30636d566862"
@@ -71,14 +68,15 @@ TEST_CASE("str and hex", "[Crypto]") {
 TEST_CASE("AES", "[Crypto]") {
   auto key = "0123456789012345"s;
   auto msg = "a message to be sent!"s;
+  auto iv = "12345678"s;
 
-  auto encrypted = crypto::aes_encrypt_cbc(msg, key, "12345678");
+  auto encrypted = crypto::aes_encrypt_ecb(msg, key, iv);
 
   REQUIRE(crypto::str_to_hex(encrypted) == "ABAF3D0AEE0FEDE3955EA4BBE190B5817777A7F53C3A0BF3258967E547285A9A");
-  REQUIRE(crypto::aes_decrypt_cbc(encrypted, key) == msg);
+  REQUIRE(crypto::aes_decrypt_ecb(encrypted, key, iv) == msg);
 
   SECTION("back and forth") {
-    REQUIRE(crypto::aes_decrypt_cbc(crypto::aes_encrypt_cbc(msg, key), key) == msg);
+    REQUIRE(crypto::aes_decrypt_ecb(crypto::aes_encrypt_ecb(msg, key, iv), key, iv) == msg);
   }
 }
 

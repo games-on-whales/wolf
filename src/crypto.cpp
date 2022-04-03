@@ -1,4 +1,5 @@
-#include "aes.cpp"
+#include "crypto/aes.cpp"
+#include "crypto/sign.cpp"
 #include <moonlight/crypto.hpp>
 
 #include <openssl/pem.h>
@@ -105,89 +106,30 @@ std::string random(int length) {
   return rnd;
 }
 
-std::string aes_encrypt_cbc(const std::string &msg, const std::string &enc_key, const std::string &iv, bool padding) {
+std::string aes_encrypt_ecb(const std::string &msg, const std::string &enc_key, const std::string &iv, bool padding) {
   auto enc_key_uc = to_unsigned(enc_key);
   auto msg_uc = to_unsigned(msg);
   auto iv_uc = to_unsigned(iv);
 
-  auto ctx = aes_init_enc(EVP_aes_128_ecb(), enc_key_uc.get(), iv_uc.get(), padding);
-  return aes_encrypt(ctx.get(), msg_uc.get());
+  auto ctx = aes::init(EVP_aes_128_ecb(), enc_key_uc.get(), iv_uc.get(), true, padding);
+  return aes::encrypt(ctx.get(), msg_uc.get());
 }
 
-std::string aes_decrypt_cbc(const std::string &msg, const std::string &enc_key, const std::string &iv, bool padding) {
+std::string aes_decrypt_ecb(const std::string &msg, const std::string &enc_key, const std::string &iv, bool padding) {
   auto enc_key_uc = to_unsigned(enc_key);
   auto msg_uc = to_unsigned(msg);
   auto iv_uc = to_unsigned(iv);
 
-  auto ctx = aes_init_dec(EVP_aes_128_ecb(), enc_key_uc.get(), iv_uc.get(), padding);
-  return aes_decrypt(ctx.get(), msg_uc.get());
-}
-
-using EVP_MD_CTX_ptr = std::unique_ptr<EVP_MD_CTX, decltype(&::EVP_MD_CTX_free)>;
-
-std::string evp_sign(const unsigned char *msg, EVP_PKEY *key_data, const EVP_MD *digest_type) {
-  EVP_MD_CTX_ptr ctx(EVP_MD_CTX_create(), ::EVP_MD_CTX_free);
-  int msg_size = (int)strlen((char *)msg);
-
-  if (EVP_DigestSignInit(ctx.get(), nullptr, digest_type, nullptr, key_data) != 1)
-    handle_openssl_error("EVP_DigestSignInit failed");
-
-  if (EVP_DigestSignUpdate(ctx.get(), msg, msg_size) != 1)
-    handle_openssl_error("EVP_DigestSignUpdate failed");
-
-  std::size_t digest_size = 256;
-  unsigned char digest[digest_size];
-
-  if (EVP_DigestSignFinal(ctx.get(), digest, &digest_size) != 1)
-    handle_openssl_error("EVP_DigestSignFinal failed");
-
-  return {reinterpret_cast<char *>(digest), digest_size};
-}
-
-bool evp_verify(const unsigned char *msg,
-                const unsigned char *signature,
-                EVP_PKEY *key_data,
-                const EVP_MD *digest_type) {
-  EVP_MD_CTX_ptr ctx(EVP_MD_CTX_create(), ::EVP_MD_CTX_free);
-  int msg_size = (int)strlen((char *)msg);
-
-  if (EVP_DigestVerifyInit(ctx.get(), nullptr, digest_type, nullptr, key_data) != 1)
-    handle_openssl_error("EVP_DigestSignInit failed");
-
-  if (EVP_DigestVerifyUpdate(ctx.get(), msg, msg_size) != 1)
-    handle_openssl_error("EVP_DigestSignUpdate failed");
-
-  std::size_t signature_size = strlen((char *)signature);
-  return EVP_DigestVerifyFinal(ctx.get(), signature, signature_size) == 1;
-}
-
-using EVP_PKEY_ptr = std::unique_ptr<EVP_PKEY, decltype(&::EVP_PKEY_free)>;
-
-EVP_PKEY_ptr create_key(const unsigned char *k, bool is_private) {
-  BIO *bio = BIO_new(BIO_s_mem());
-
-  int k_size = (int)strlen((char *)k);
-  if (BIO_write(bio, k, k_size) <= 0)
-    handle_openssl_error("BIO_write failed");
-
-  EVP_PKEY *p_key = nullptr;
-  if (is_private)
-    PEM_read_bio_PrivateKey(bio, &p_key, nullptr, nullptr);
-  else
-    PEM_read_bio_PUBKEY(bio, &p_key, nullptr, nullptr);
-  if (p_key == nullptr)
-    handle_openssl_error("PEM_read_bio_PrivateKey failed");
-
-  BIO_free(bio);
-  return {p_key, ::EVP_PKEY_free};
+  auto ctx = aes::init(EVP_aes_128_ecb(), enc_key_uc.get(), iv_uc.get(), false, padding);
+  return aes::decrypt(ctx.get(), msg_uc.get());
 }
 
 std::string sign(const std::string &msg, const std::string &private_key) {
   auto pkey_uc = to_unsigned(private_key);
   auto msg_uc = to_unsigned(msg);
 
-  auto p_key = create_key(pkey_uc.get(), true);
-  return evp_sign(msg_uc.get(), p_key.get(), EVP_sha256());
+  auto p_key = signature::create_key(pkey_uc.get(), true);
+  return signature::sign(msg_uc.get(), p_key.get(), EVP_sha256());
 }
 
 bool verify(const std::string &msg, const std::string &signature, const std::string &public_key) {
@@ -195,8 +137,8 @@ bool verify(const std::string &msg, const std::string &signature, const std::str
   auto msg_uc = to_unsigned(msg);
   auto sig_uc = to_unsigned(signature);
 
-  auto p_key = create_key(pkey_uc.get(), false);
-  return evp_verify(msg_uc.get(), sig_uc.get(), p_key.get(), EVP_sha256());
+  auto p_key = signature::create_key(pkey_uc.get(), false);
+  return signature::verify(msg_uc.get(), sig_uc.get(), p_key.get(), EVP_sha256());
 }
 
 } // namespace crypto

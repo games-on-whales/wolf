@@ -55,11 +55,11 @@ void serverinfo(std::shared_ptr<typename SimpleWeb::ServerBase<T>::Response> res
     return;
   }
 
-  auto xml = moonlight::serverinfo(*state.config.get(),
-                                   *state.pair_handler.get(),
+  auto xml = moonlight::serverinfo(*state.config,
+                                   *state.pair_handler,
                                    false, // TODO: isServerBusy
                                    -1,    // TODO: current_appid
-                                   *state.display_modes.get(),
+                                   *state.display_modes,
                                    clientId.value());       
 
   send_xml<T>(response, SimpleWeb::StatusCode::success_ok, xml);

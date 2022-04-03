@@ -8,9 +8,9 @@
 
 #include <Simple-Web-Server/server_http.hpp>
 #include <Simple-Web-Server/server_https.hpp>
+#include <data-structures.hpp>
 #include <endpoints.cpp>
 #include <helpers.cpp>
-#include <data-structures.hpp>
 
 using HttpsServer = SimpleWeb::Server<SimpleWeb::HTTPS>;
 using HttpServer = SimpleWeb::Server<SimpleWeb::HTTP>;
@@ -24,7 +24,7 @@ namespace HTTPServers {
  * @param cert_filename
  * @return std::unique_ptr<HttpsServer>
  */
-std::unique_ptr<HttpsServer> createHTTPS(const std::string pkey_filename, const std::string cert_filename) {
+std::unique_ptr<HttpsServer> createHTTPS(const std::string &pkey_filename, const std::string &cert_filename) {
   if (!x509::cert_exists(pkey_filename, cert_filename)) {
     logs::log(logs::info, "x509 certificates not present, generating...");
     auto pkey = x509::generate_key();
