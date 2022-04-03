@@ -29,8 +29,8 @@ pt::ptree serverinfo(const Config &config,
                      const UserPair &pair_handler,
                      bool isServerBusy,
                      int current_appid,
-                     const std::vector<DisplayMode> display_modes,
-                     const std::string clientID);
+                     const std::vector<DisplayMode> &display_modes,
+                     const std::string &clientID);
 
 /**
  * @brief Pair, phase 1:
@@ -41,7 +41,7 @@ pt::ptree serverinfo(const Config &config,
  * @return std::pair<pt::ptree, string> the response and the AES key to be used in the next steps
  */
 std::pair<pt::ptree, std::string>
-pair_get_server_cert(const std::string user_pin, const std::string salt, const X509 &server_cert);
+pair_get_server_cert(const std::string &user_pin, const std::string &salt, const X509 &server_cert);
 
 /**
  * @brief Pair, phase 2
@@ -54,7 +54,7 @@ pair_get_server_cert(const std::string user_pin, const std::string salt, const X
  * @return std::pair<pt::ptree, std::string> the response and the generated server_secret
  */
 std::pair<pt::ptree, std::string>
-pair_send_server_challenge(const std::string aes_key, const std::string client_challenge, const X509 &server_cert);
+pair_send_server_challenge(const std::string &aes_key, const std::string &client_challenge, const X509 &server_cert);
 
 /**
  * @brief Pair, phase 3:
@@ -63,9 +63,9 @@ pair_send_server_challenge(const std::string aes_key, const std::string client_c
  *
  * @return std::pair<pt::ptree, std::string> the response and the decrypted client_hash
  */
-std::pair<pt::ptree, std::string> pair_get_client_hash(const std::string aes_key,
-                                                       const std::string server_secret,
-                                                       const std::string server_challenge_resp,
+std::pair<pt::ptree, std::string> pair_get_client_hash(const std::string &aes_key,
+                                                       const std::string &server_secret,
+                                                       const std::string &server_challenge_resp,
                                                        const X509 &server_cert);
 
 /**
@@ -79,10 +79,10 @@ std::pair<pt::ptree, std::string> pair_get_client_hash(const std::string aes_key
  *
  * @return pt::ptree if all checks are fine it'll send paired = 1 else will send back paired = 0
  */
-pt::ptree pair_client_pair(const std::string aes_key,
-                           const std::string server_secret,
-                           const std::string client_hash,
-                           const std::string client_pairing_secret,
+pt::ptree pair_client_pair(const std::string &aes_key,
+                           const std::string &server_secret,
+                           const std::string &client_hash,
+                           const std::string &client_pairing_secret,
                            const X509 &client_cert);
 
 } // namespace moonlight

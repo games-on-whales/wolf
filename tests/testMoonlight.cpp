@@ -1,5 +1,3 @@
-#define CATCH_CONFIG_MAIN
-// #include <helpers/crypto.cpp>
 #include <boost/property_tree/xml_parser.hpp>
 #include <catch2/catch_test_macros.hpp>
 #include <moonlight/crypto.hpp>

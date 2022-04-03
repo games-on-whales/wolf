@@ -9,8 +9,8 @@ pt::ptree serverinfo(const Config &config,
                      const UserPair &pair_handler,
                      bool isServerBusy,
                      int current_appid,
-                     const std::vector<DisplayMode> display_modes,
-                     const std::string clientID) {
+                     const std::vector<DisplayMode> &display_modes,
+                     const std::string &clientID) {
   int pair_status = pair_handler.isPaired(clientID);
   pt::ptree resp;
 
@@ -49,7 +49,7 @@ pt::ptree serverinfo(const Config &config,
 }
 
 std::pair<pt::ptree, std::string>
-pair_get_server_cert(const std::string user_pin, const std::string salt, const X509 &server_cert) {
+pair_get_server_cert(const std::string &user_pin, const std::string &salt, const X509 &server_cert) {
   pt::ptree resp;
 
   auto key = crypto::sha256(salt + user_pin);
@@ -64,7 +64,7 @@ pair_get_server_cert(const std::string user_pin, const std::string salt, const X
 }
 
 std::pair<pt::ptree, std::string>
-pair_send_server_challenge(const std::string aes_key, const std::string client_challenge, const X509 &server_cert) {
+pair_send_server_challenge(const std::string &aes_key, const std::string &client_challenge, const X509 &server_cert) {
   pt::ptree resp;
   std::string server_secret;
 
