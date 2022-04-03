@@ -36,6 +36,8 @@ jobs:
 
     steps:
       - uses: actions/checkout@v2
+        with:
+          submodules: true
 
       - name: Prepare environment
         run: sudo apt-get install -y ninja-build ${{matrix.other_pkgs}}
