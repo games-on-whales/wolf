@@ -26,7 +26,7 @@ jobs:
           - cxx: clang++-10
             other_pkgs: clang-10 libboost-thread-dev libboost-filesystem-dev libboost-log-dev libssl-dev
           - cxx: clang++-10
-            build_type: Debug libboost-thread-dev libboost-filesystem-dev libboost-log-dev libssl-dev
+            build_type: Debug
             std: 17
             other_pkgs: clang-10 libboost-thread-dev libboost-filesystem-dev libboost-log-dev libssl-dev
           - cxx: clang++-10
