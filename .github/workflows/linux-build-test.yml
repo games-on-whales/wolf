@@ -15,24 +15,24 @@ jobs:
           - clang++-9
           - clang++-10
         build_type: [ Debug, Release ]
-        std: [ 14 ]
+        std: [ 17 ]
         include:
           - cxx: g++-9
-            other_pkgs: g++-9
+            other_pkgs: g++-9 libpipewire-0.3-dev libboost-thread-dev libboost-filesystem-dev libboost-log-dev libssl-dev
           - cxx: g++-10
-            other_pkgs: g++-10
+            other_pkgs: g++-10 libpipewire-0.3-dev libboost-thread-dev libboost-filesystem-dev libboost-log-dev libssl-dev
           - cxx: clang++-9
-            other_pkgs: clang-9
+            other_pkgs: clang-9 libpipewire-0.3-dev libboost-thread-dev libboost-filesystem-dev libboost-log-dev libssl-dev
           - cxx: clang++-10
-            other_pkgs: clang-10
+            other_pkgs: clang-10 libpipewire-0.3-dev libboost-thread-dev libboost-filesystem-dev libboost-log-dev libssl-dev
           - cxx: clang++-10
-            build_type: Debug
+            build_type: Debug libpipewire-0.3-dev libboost-thread-dev libboost-filesystem-dev libboost-log-dev libssl-dev
             std: 17
-            other_pkgs: clang-10
+            other_pkgs: clang-10 libpipewire-0.3-dev libboost-thread-dev libboost-filesystem-dev libboost-log-dev libssl-dev
           - cxx: clang++-10
             build_type: Release
             std: 17
-            other_pkgs: clang-10
+            other_pkgs: clang-10 libpipewire-0.3-dev libboost-thread-dev libboost-filesystem-dev libboost-log-dev libssl-dev
 
     steps:
       - uses: actions/checkout@v2
