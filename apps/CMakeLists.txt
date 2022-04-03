@@ -28,7 +28,9 @@ target_link_libraries(
 if (UNIX AND NOT APPLE)
     add_compile_definitions(WOLF_PLATFORM="linux")
 
-    find_package(PipeWire REQUIRED)
-    target_include_directories(wolf PRIVATE platforms/linux)
-    target_link_libraries(wolf PRIVATE PipeWire::PipeWire)
+    find_package(PipeWire)
+    if (PipeWire_FOUND)
+        target_include_directories(wolf PRIVATE platforms/linux)
+        target_link_libraries(wolf PRIVATE PipeWire::PipeWire)
+    endif ()
 endif ()
