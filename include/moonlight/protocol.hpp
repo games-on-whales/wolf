@@ -4,7 +4,6 @@
 #include <openssl/x509.h>
 
 #include <moonlight/data-structures.hpp>
-#include <moonlight/user-pair.hpp>
 
 #include <boost/property_tree/ptree.hpp>
 namespace pt = boost::property_tree;
@@ -26,7 +25,6 @@ constexpr auto M_GFE_VERSION = "3.23.0.74";
  * @return pt::ptree
  */
 pt::ptree serverinfo(const Config &config,
-                     const UserPair &pair_handler,
                      bool isServerBusy,
                      int current_appid,
                      const std::vector<DisplayMode> &display_modes,
@@ -44,6 +42,14 @@ std::pair<pt::ptree, std::string>
 pair_get_server_cert(const std::string &user_pin, const std::string &salt, const X509 &server_cert);
 
 /**
+ * @brief will derive a common AES key given the sent salt and the user provided pin
+ *
+ * This method needs to match what Moonlight is doing internally otherwise we wouldn't be able to decrypt the
+ * client challenge
+ */
+std::string gen_aes_key(const std::string &salt, const std::string &pin);
+
+/**
  * @brief Pair, phase 2
  * Using the AES key that we generated in the phase 1 we have to aes_decrypt_cbc the clientchallenge,
  * The response will AES aes_encrypt_cbc:
@@ -53,8 +59,9 @@ pair_get_server_cert(const std::string &user_pin, const std::string &salt, const
  *
  * @return std::pair<pt::ptree, std::string> the response and the generated server_secret
  */
-std::pair<pt::ptree, std::string>
-pair_send_server_challenge(const std::string &aes_key, const std::string &client_challenge, const X509 &server_cert);
+std::pair<pt::ptree, std::string> pair_send_server_challenge(const std::string &aes_key,
+                                                             const std::string &client_challenge,
+                                                             const std::string &server_cert_signature);
 
 /**
  * @brief Pair, phase 3:

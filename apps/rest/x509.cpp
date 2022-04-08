@@ -89,7 +89,7 @@ X509 *generate_x509(EVP_PKEY *pkey) {
 /**
  * @brief Reads a X509 certificate string
  */
-X509 *cert_from_string(const std::string& cert) {
+X509 *cert_from_string(const std::string &cert) {
   BIO *bio;
   X509 *certificate;
 
@@ -102,7 +102,7 @@ X509 *cert_from_string(const std::string& cert) {
 /**
  * @brief Reads a X509 certificate from file
  */
-X509 *cert_from_file(const std::string& cert_path) {
+X509 *cert_from_file(const std::string &cert_path) {
   X509 *certificate;
   BIO *bio;
 
@@ -125,7 +125,7 @@ X509 *cert_from_file(const std::string& cert_path) {
  * @return true when both pkey and x509 are stored on disk
  * @return false when one or both failed
  */
-bool write_to_disk(EVP_PKEY *pkey, const std::string& pkey_filename, X509 *x509, const std::string& cert_filename) {
+bool write_to_disk(EVP_PKEY *pkey, const std::string &pkey_filename, X509 *x509, const std::string &cert_filename) {
   /* Open the PEM file for writing the key to disk. */
   FILE *pkey_file = fopen(pkey_filename.c_str(), "wb");
   if (!pkey_file) {
@@ -166,8 +166,18 @@ bool write_to_disk(EVP_PKEY *pkey, const std::string& pkey_filename, X509 *x509,
  * @param cert_filename: the name of the cert file to be saved
  * @return true when both files are present
  */
-bool cert_exists(const std::string& pkey_filename, const std::string& cert_filename) {
+bool cert_exists(const std::string &pkey_filename, const std::string &cert_filename) {
   return boost::filesystem::exists(pkey_filename) && boost::filesystem::exists(cert_filename);
+}
+
+/**
+ * @return the certificate signature
+ */
+std::string get_cert_signature(const X509 *cert) {
+  const ASN1_BIT_STRING *asn1 = nullptr;
+  X509_get0_signature(&asn1, nullptr, cert);
+
+  return {(const char *)asn1->data, (std::size_t)asn1->length};
 }
 
 /**

@@ -4,7 +4,6 @@
 #include <helpers/config.hpp>
 #include <helpers/logger.cpp>
 #include <moonlight/data-structures.hpp>
-#include <pair.cpp>
 #include <servers.cpp>
 
 /**
@@ -39,10 +38,9 @@ std::shared_ptr<std::vector<moonlight::DisplayMode>> getDisplayModes() {
  */
 std::shared_ptr<LocalState> initialize(const std::string config_file, const std::string cert_filename) {
   auto config = load_config(config_file);
-  auto pair_handler = std::make_shared<SimplePair>();
   auto display_modes = getDisplayModes();
   auto server_cert = x509::cert_from_file(cert_filename);
-  LocalState state = {config, pair_handler, display_modes, server_cert};
+  LocalState state = {config, display_modes, server_cert, std::make_shared<std::vector<PairCache>>()};
   return std::make_shared<LocalState>(state);
 }
 
@@ -59,10 +57,10 @@ int main(int argc, char *argv[]) {
   auto local_state = initialize(config_file, "cert.pem");
 
   auto https_thread = HTTPServers::startServer(https_server.get(),
-                                               *local_state.get(),
+                                               *local_state,
                                                local_state->config->map_port(Config::HTTPS_PORT));
   auto http_thread =
-      HTTPServers::startServer(http_server.get(), *local_state.get(), local_state->config->map_port(Config::HTTP_PORT));
+      HTTPServers::startServer(http_server.get(), *local_state, local_state->config->map_port(Config::HTTP_PORT));
 
   https_thread.join();
   http_thread.join();

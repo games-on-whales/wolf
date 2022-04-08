@@ -1,5 +1,8 @@
+#include <algorithm>
+#include <array>
 #include <catch2/catch_test_macros.hpp>
 #include <moonlight/crypto.hpp>
+#include <moonlight/protocol.hpp>
 #include <string>
 
 using namespace std::string_literals;
@@ -70,13 +73,26 @@ TEST_CASE("AES", "[Crypto]") {
   auto msg = "a message to be sent!"s;
   auto iv = "12345678"s;
 
-  auto encrypted = crypto::aes_encrypt_ecb(msg, key, iv);
+  auto encrypted = crypto::aes_encrypt_ecb(msg, key, iv, true);
 
   REQUIRE(crypto::str_to_hex(encrypted) == "ABAF3D0AEE0FEDE3955EA4BBE190B5817777A7F53C3A0BF3258967E547285A9A");
-  REQUIRE(crypto::aes_decrypt_ecb(encrypted, key, iv) == msg);
+  REQUIRE(crypto::aes_decrypt_ecb(encrypted, key, iv, true) == msg);
 
   SECTION("back and forth") {
-    REQUIRE(crypto::aes_decrypt_ecb(crypto::aes_encrypt_ecb(msg, key, iv), key, iv) == msg);
+    REQUIRE(crypto::aes_decrypt_ecb(crypto::aes_encrypt_ecb(msg, key, iv, true), key, iv, true) == msg);
+  }
+
+  SECTION("Moonlight simulation") {
+    auto salt = "ff5dc6eda99339a8a0793e216c4257c4"s;
+    auto pin = "5338";
+    auto client_challenge = "c05930ac81d7bd426344235436046018";
+
+    auto aes_key = moonlight::gen_aes_key(salt, pin);
+    REQUIRE(crypto::str_to_hex(aes_key) == "5EA186FFBA663C75AEC82187CE502647");
+
+    auto client_challenge_hex = crypto::hex_to_str(client_challenge, true);
+    auto decrypted_challenge = crypto::aes_decrypt_ecb(client_challenge_hex, aes_key, "12345678", false);
+    REQUIRE(crypto::str_to_hex(decrypted_challenge) == "E3A915CCCB4C60206077D7E9A12316A5");
   }
 }
 

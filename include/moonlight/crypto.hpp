@@ -24,7 +24,7 @@ std::string random(int length);
 std::string aes_encrypt_ecb(const std::string &msg,
                             const std::string &enc_key,
                             const std::string &iv = random(AES_BLOCK_SIZE),
-                            bool padding = true);
+                            bool padding = false);
 
 /**
  * Decrypt the given msg using AES ecb at 128 bit
@@ -38,7 +38,7 @@ std::string aes_encrypt_ecb(const std::string &msg,
 std::string aes_decrypt_ecb(const std::string &msg,
                             const std::string &enc_key,
                             const std::string &iv = random(AES_BLOCK_SIZE),
-                            bool padding = true);
+                            bool padding = false);
 
 /**
  * Will sign the given message using the private key

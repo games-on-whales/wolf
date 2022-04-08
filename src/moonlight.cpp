@@ -6,12 +6,11 @@ namespace pt = boost::property_tree;
 namespace moonlight {
 
 pt::ptree serverinfo(const Config &config,
-                     const UserPair &pair_handler,
                      bool isServerBusy,
                      int current_appid,
                      const std::vector<DisplayMode> &display_modes,
                      const std::string &clientID) {
-  int pair_status = pair_handler.isPaired(clientID);
+  int pair_status = config.isPaired(clientID);
   pt::ptree resp;
 
   resp.put("root.<xmlattr>.status_code", 200);
@@ -52,7 +51,7 @@ std::pair<pt::ptree, std::string>
 pair_get_server_cert(const std::string &user_pin, const std::string &salt, const X509 &server_cert) {
   pt::ptree resp;
 
-  auto key = crypto::sha256(salt + user_pin);
+  auto key = gen_aes_key(salt, user_pin);
   auto cert_pem = crypto::pem(server_cert);
   auto cert_hex = crypto::str_to_hex(cert_pem);
 
@@ -63,28 +62,29 @@ pair_get_server_cert(const std::string &user_pin, const std::string &salt, const
   return std::make_pair(resp, key);
 }
 
-std::pair<pt::ptree, std::string>
-pair_send_server_challenge(const std::string &aes_key, const std::string &client_challenge, const X509 &server_cert) {
+std::string gen_aes_key(const std::string &salt, const std::string &pin) {
+  auto salt_parsed = crypto::hex_to_str(salt, true);
+  auto aes_key = crypto::hex_to_str(crypto::sha256(salt_parsed + pin), true);
+  aes_key.resize(16);
+  return aes_key;
+}
+
+std::pair<pt::ptree, std::string> pair_send_server_challenge(const std::string &aes_key,
+                                                             const std::string &client_challenge,
+                                                             const std::string &server_cert_signature) {
   pt::ptree resp;
-  std::string server_secret;
+  std::string server_secret = crypto::random(16);
 
-  // TODO: fill server_secret
-  // auto encrypted_response = util::from_hex_vec(args.at("serverchallengeresp"s), true);
+  auto client_challenge_hex = crypto::hex_to_str(client_challenge, true);
+  auto decrypted_challenge = crypto::aes_decrypt_ecb(client_challenge_hex, aes_key);
 
-  // std::vector<uint8_t> decrypted;
-  // crypto::cipher::ecb_t cipher(*sess.cipher_key, false);
+  auto hash = crypto::sha256(decrypted_challenge + server_cert_signature + server_secret);
+  auto server_challenge = crypto::random(16);
+  auto plain_text = hash + server_challenge;
+  auto encrypted = crypto::aes_encrypt_ecb(plain_text, aes_key, crypto::random(AES_BLOCK_SIZE), true);
 
-  // cipher.aes_decrypt_cbc(encrypted_response, decrypted);
-
-  // sess.clienthash = std::move(decrypted);
-
-  // auto serversecret = sess.serversecret;
-  // auto sign = crypto::sign256(crypto::pkey(conf_intern.pkey), serversecret);
-
-  // serversecret.insert(std::end(serversecret), std::begin(sign), std::end(sign));
-
-  resp.put("root.pairingsecret", crypto::str_to_hex(server_secret));
   resp.put("root.paired", 1);
+  resp.put("root.challengeresponse", crypto::str_to_hex(encrypted));
   resp.put("root.<xmlattr>.status_code", 200);
 
   return std::make_pair(resp, server_secret);
