@@ -107,36 +107,23 @@ std::string random(int length) {
 }
 
 std::string aes_encrypt_ecb(const std::string &msg, const std::string &enc_key, const std::string &iv, bool padding) {
-  auto enc_key_uc = to_unsigned(enc_key);
-  auto msg_uc = to_unsigned(msg);
-  auto iv_uc = to_unsigned(iv);
-
-  auto ctx = aes::init(EVP_aes_128_ecb(), enc_key_uc.get(), iv_uc.get(), true, padding);
-  return aes::encrypt(ctx.get(), msg_uc.get());
+  auto ctx = aes::init(EVP_aes_128_ecb(), enc_key, iv, true, padding);
+  return aes::encrypt(ctx.get(), msg);
 }
 
 std::string aes_decrypt_ecb(const std::string &msg, const std::string &enc_key, const std::string &iv, bool padding) {
-  auto enc_key_uc = to_unsigned(enc_key);
-  auto msg_uc = to_unsigned(msg);
-  auto iv_uc = to_unsigned(iv);
-
-  auto ctx = aes::init(EVP_aes_128_ecb(), enc_key_uc.get(), iv_uc.get(), false, padding);
-  return aes::decrypt(ctx.get(), msg_uc.get());
+  auto ctx = aes::init(EVP_aes_128_ecb(), enc_key, iv, false, padding);
+  return aes::decrypt(ctx.get(), msg);
 }
 
 std::string sign(const std::string &msg, const std::string &private_key) {
-  auto msg_uc = to_unsigned(msg);
-
   auto p_key = signature::create_key(private_key, true);
-  return signature::sign(msg_uc.get(), p_key.get(), EVP_sha256());
+  return signature::sign(msg, p_key.get(), EVP_sha256());
 }
 
 bool verify(const std::string &msg, const std::string &signature, const std::string &public_key) {
-  auto msg_uc = to_unsigned(msg);
-  auto sig_uc = to_unsigned(signature);
-
   auto p_key = signature::create_key(public_key, false);
-  return signature::verify(msg_uc.get(), sig_uc.get(), p_key.get(), EVP_sha256());
+  return signature::verify(msg, signature, p_key.get(), EVP_sha256());
 }
 
 } // namespace crypto

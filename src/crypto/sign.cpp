@@ -6,14 +6,14 @@
 namespace signature {
 using EVP_MD_CTX_ptr = std::unique_ptr<EVP_MD_CTX, decltype(&::EVP_MD_CTX_free)>;
 
-std::string sign(const unsigned char *msg, EVP_PKEY *key_data, const EVP_MD *digest_type) {
+std::string sign(const std::string &msg, EVP_PKEY *key_data, const EVP_MD *digest_type) {
   EVP_MD_CTX_ptr ctx(EVP_MD_CTX_create(), ::EVP_MD_CTX_free);
-  int msg_size = (int)strlen((char *)msg);
+  int msg_size = (int)msg.size();
 
   if (EVP_DigestSignInit(ctx.get(), nullptr, digest_type, nullptr, key_data) != 1)
     handle_openssl_error("EVP_DigestSignInit failed");
 
-  if (EVP_DigestSignUpdate(ctx.get(), msg, msg_size) != 1)
+  if (EVP_DigestSignUpdate(ctx.get(), msg.data(), msg_size) != 1)
     handle_openssl_error("EVP_DigestSignUpdate failed");
 
   std::size_t digest_size = 256;
@@ -25,18 +25,18 @@ std::string sign(const unsigned char *msg, EVP_PKEY *key_data, const EVP_MD *dig
   return {reinterpret_cast<char *>(digest), digest_size};
 }
 
-bool verify(const unsigned char *msg, const unsigned char *signature, EVP_PKEY *key_data, const EVP_MD *digest_type) {
+bool verify(const std::string &msg, const std::string &signature, EVP_PKEY *key_data, const EVP_MD *digest_type) {
   EVP_MD_CTX_ptr ctx(EVP_MD_CTX_create(), ::EVP_MD_CTX_free);
-  int msg_size = (int)strlen((char *)msg);
+  int msg_size = (int)msg.size();
 
   if (EVP_DigestVerifyInit(ctx.get(), nullptr, digest_type, nullptr, key_data) != 1)
     handle_openssl_error("EVP_DigestSignInit failed");
 
-  if (EVP_DigestVerifyUpdate(ctx.get(), msg, msg_size) != 1)
+  if (EVP_DigestVerifyUpdate(ctx.get(), msg.data(), msg_size) != 1)
     handle_openssl_error("EVP_DigestSignUpdate failed");
 
-  std::size_t signature_size = strlen((char *)signature);
-  return EVP_DigestVerifyFinal(ctx.get(), signature, signature_size) == 1;
+  std::size_t signature_size = signature.size();
+  return EVP_DigestVerifyFinal(ctx.get(), (const std::uint8_t *)signature.data(), signature_size) == 1;
 }
 
 using EVP_PKEY_ptr = std::unique_ptr<EVP_PKEY, decltype(&::EVP_PKEY_free)>;
