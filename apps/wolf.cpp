@@ -36,11 +36,15 @@ std::shared_ptr<std::vector<moonlight::DisplayMode>> getDisplayModes() {
 /**
  * @brief Local state initialization
  */
-std::shared_ptr<LocalState> initialize(const std::string config_file, const std::string cert_filename) {
+std::shared_ptr<LocalState>
+initialize(const std::string &config_file, const std::string &pkey_filename, const std::string &cert_filename) {
   auto config = load_config(config_file);
   auto display_modes = getDisplayModes();
   auto server_cert = x509::cert_from_file(cert_filename);
-  LocalState state = {config, display_modes, server_cert, std::make_shared<std::vector<PairCache>>()};
+  auto server_pkey = x509::pkey_from_file(pkey_filename);
+  auto pair_cache =
+      std::make_shared<std::unordered_map<std::string, PairCache>>(std::unordered_map<std::string, PairCache>());
+  LocalState state = {config, display_modes, server_cert, server_pkey, pair_cache};
   return std::make_shared<LocalState>(state);
 }
 
@@ -54,11 +58,10 @@ int main(int argc, char *argv[]) {
   auto http_server = HTTPServers::createHTTP();
 
   auto config_file = "config.json";
-  auto local_state = initialize(config_file, "cert.pem");
+  auto local_state = initialize(config_file, "key.pem", "cert.pem");
 
-  auto https_thread = HTTPServers::startServer(https_server.get(),
-                                               *local_state,
-                                               local_state->config->map_port(Config::HTTPS_PORT));
+  auto https_thread =
+      HTTPServers::startServer(https_server.get(), *local_state, local_state->config->map_port(Config::HTTPS_PORT));
   auto http_thread =
       HTTPServers::startServer(http_server.get(), *local_state, local_state->config->map_port(Config::HTTP_PORT));
 

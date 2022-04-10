@@ -6,11 +6,11 @@
 
 #include <x509.cpp>
 
-#include <Simple-Web-Server/server_http.hpp>
-#include <Simple-Web-Server/server_https.hpp>
 #include <data-structures.hpp>
 #include <endpoints.cpp>
 #include <helpers.cpp>
+#include <Simple-Web-Server/server_http.hpp>
+#include <Simple-Web-Server/server_https.hpp>
 
 using HttpsServer = SimpleWeb::Server<SimpleWeb::HTTPS>;
 using HttpServer = SimpleWeb::Server<SimpleWeb::HTTP>;

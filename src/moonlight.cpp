@@ -1,3 +1,4 @@
+#include "utils.hpp"
 #include <moonlight/crypto.hpp>
 #include <moonlight/protocol.hpp>
 
@@ -71,23 +72,39 @@ std::string gen_aes_key(const std::string &salt, const std::string &pin) {
 
 std::pair<pt::ptree, std::string> pair_send_server_challenge(const std::string &aes_key,
                                                              const std::string &client_challenge,
-                                                             const std::string &server_cert_signature) {
+                                                             const std::string &server_cert_signature,
+                                                             const std::string &server_secret,
+                                                             const std::string &server_challenge) {
   pt::ptree resp;
-  std::string server_secret = crypto::random(16);
 
   auto client_challenge_hex = crypto::hex_to_str(client_challenge, true);
   auto decrypted_challenge = crypto::aes_decrypt_ecb(client_challenge_hex, aes_key);
-
-  auto hash = crypto::sha256(decrypted_challenge + server_cert_signature + server_secret);
-  auto server_challenge = crypto::random(16);
+  auto hash = crypto::hex_to_str(crypto::sha256(decrypted_challenge + server_cert_signature + server_secret), true);
   auto plain_text = hash + server_challenge;
-  auto encrypted = crypto::aes_encrypt_ecb(plain_text, aes_key, crypto::random(AES_BLOCK_SIZE), true);
+  auto encrypted = crypto::aes_encrypt_ecb(plain_text, aes_key, crypto::random(AES_BLOCK_SIZE), false);
 
   resp.put("root.paired", 1);
   resp.put("root.challengeresponse", crypto::str_to_hex(encrypted));
   resp.put("root.<xmlattr>.status_code", 200);
 
   return std::make_pair(resp, server_secret);
+}
+
+std::pair<pt::ptree, std::string> pair_get_client_hash(const std::string &aes_key,
+                                                       const std::string &server_secret,
+                                                       const std::string &server_challenge_resp,
+                                                       const std::string &server_cert_private_key) {
+  pt::ptree resp;
+
+  auto server_challenge_hex = crypto::hex_to_str(server_challenge_resp, true);
+  auto decrypted_challenge = crypto::aes_decrypt_ecb(server_challenge_hex, aes_key);
+  auto signature = crypto::sign(server_secret, server_cert_private_key);
+
+  resp.put("root.pairingsecret", crypto::str_to_hex(server_secret + signature));
+  resp.put("root.paired", 1);
+  resp.put("root.<xmlattr>.status_code", 200);
+
+  return std::make_pair(resp, decrypted_challenge);
 }
 
 } // namespace moonlight

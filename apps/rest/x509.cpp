@@ -96,6 +96,8 @@ X509 *cert_from_string(const std::string &cert) {
   bio = BIO_new(BIO_s_mem());
   BIO_puts(bio, cert.c_str());
   certificate = PEM_read_bio_X509(bio, nullptr, nullptr, nullptr);
+
+  BIO_free(bio);
   return certificate;
 }
 
@@ -112,7 +114,27 @@ X509 *cert_from_file(const std::string &cert_path) {
     return nullptr;
   }
   certificate = PEM_read_bio_X509(bio, nullptr, nullptr, nullptr);
+
+  BIO_free(bio);
   return certificate;
+}
+
+/**
+ * @brief Reads a private key from file
+ */
+EVP_PKEY *pkey_from_file(const std::string &pkey_path) {
+  EVP_PKEY *pkey;
+  BIO *bio;
+
+  bio = BIO_new(BIO_s_file());
+  if (BIO_read_filename(bio, pkey_path.c_str()) <= 0) {
+    logs::log(logs::error, "Error reading certificate: {}.", pkey_path);
+    return nullptr;
+  }
+  pkey = PEM_read_bio_PrivateKey(bio, nullptr, nullptr, nullptr);
+
+  BIO_free(bio);
+  return pkey;
 }
 
 /**
@@ -178,6 +200,26 @@ std::string get_cert_signature(const X509 *cert) {
   X509_get0_signature(&asn1, nullptr, cert);
 
   return {(const char *)asn1->data, (std::size_t)asn1->length};
+}
+
+/**
+ * @return the private key content
+ */
+std::string get_pkey_content(EVP_PKEY *pkey) {
+  BIO *bio;
+  BUF_MEM *bufmem;
+  char *pem;
+
+  bio = BIO_new(BIO_s_mem());
+
+  PEM_write_bio_PrivateKey(bio, pkey, nullptr, nullptr, 0, nullptr, nullptr);
+
+  const int keylen = BIO_pending(bio);
+  char *key = (char *)calloc(keylen + 1, 1);
+  BIO_read(bio, key, keylen);
+  BIO_free_all(bio);
+
+  return {key, static_cast<size_t>(keylen)};
 }
 
 /**

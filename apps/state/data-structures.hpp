@@ -3,9 +3,14 @@
 #include <helpers/config.hpp>
 #include <moonlight/data-structures.hpp>
 #include <openssl/x509.h>
+#include <unordered_map>
 
 struct PairCache : moonlight::PairedClients {
-  const std::string aes_key;
+  std::string aes_key;
+
+  // Followings will be filled later on during the pair process
+  std::optional<std::string> server_secret;
+  std::optional<std::string> client_hash;
 };
 
 struct LocalState {
@@ -13,7 +18,8 @@ struct LocalState {
   const std::shared_ptr<std::vector<moonlight::DisplayMode>> display_modes;
 
   const X509 *server_cert;
+  const EVP_PKEY *server_pkey;
 
-  /* Holds pairs of client_id/client_cert that are in the middle of the pairing process*/
-  const std::shared_ptr<std::vector<PairCache>> pairing_cache;
+  /* Holds temporary results in order to achieve the multistep pairing process */
+  const std::shared_ptr<std::unordered_map<std::string, PairCache>> pairing_cache;
 };

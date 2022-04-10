@@ -61,7 +61,9 @@ std::string gen_aes_key(const std::string &salt, const std::string &pin);
  */
 std::pair<pt::ptree, std::string> pair_send_server_challenge(const std::string &aes_key,
                                                              const std::string &client_challenge,
-                                                             const std::string &server_cert_signature);
+                                                             const std::string &server_cert_signature,
+                                                             const std::string &server_secret = crypto::random(16),
+                                                             const std::string &server_challenge = crypto::random(16));
 
 /**
  * @brief Pair, phase 3:
@@ -73,7 +75,7 @@ std::pair<pt::ptree, std::string> pair_send_server_challenge(const std::string &
 std::pair<pt::ptree, std::string> pair_get_client_hash(const std::string &aes_key,
                                                        const std::string &server_secret,
                                                        const std::string &server_challenge_resp,
-                                                       const X509 &server_cert);
+                                                       const std::string &server_cert_private_key);
 
 /**
  * @brief Pair, phase 4 (final)

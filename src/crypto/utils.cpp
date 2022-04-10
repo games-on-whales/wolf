@@ -1,5 +1,3 @@
-#pragma once
-
 #include <memory>
 #include <openssl/err.h>
 #include <stdexcept>

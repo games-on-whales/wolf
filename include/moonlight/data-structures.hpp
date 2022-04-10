@@ -10,8 +10,8 @@ struct DisplayMode {
 };
 
 struct PairedClients {
-  const std::string client_id;
-  const std::string client_cert;
+  std::string client_id;
+  std::string client_cert;
 };
 
 } // namespace moonlight

@@ -1,7 +1,7 @@
-#include "utils.cpp"
+#include "utils.hpp"
+#include <cstring>
 #include <openssl/evp.h>
 #include <openssl/pem.h>
-#include <cstring>
 
 namespace signature {
 using EVP_MD_CTX_ptr = std::unique_ptr<EVP_MD_CTX, decltype(&::EVP_MD_CTX_free)>;
