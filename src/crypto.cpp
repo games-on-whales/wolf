@@ -125,19 +125,17 @@ std::string aes_decrypt_ecb(const std::string &msg, const std::string &enc_key, 
 }
 
 std::string sign(const std::string &msg, const std::string &private_key) {
-  auto pkey_uc = to_unsigned(private_key);
   auto msg_uc = to_unsigned(msg);
 
-  auto p_key = signature::create_key(pkey_uc.get(), true);
+  auto p_key = signature::create_key(private_key, true);
   return signature::sign(msg_uc.get(), p_key.get(), EVP_sha256());
 }
 
 bool verify(const std::string &msg, const std::string &signature, const std::string &public_key) {
-  auto pkey_uc = to_unsigned(public_key);
   auto msg_uc = to_unsigned(msg);
   auto sig_uc = to_unsigned(signature);
 
-  auto p_key = signature::create_key(pkey_uc.get(), false);
+  auto p_key = signature::create_key(public_key, false);
   return signature::verify(msg_uc.get(), sig_uc.get(), p_key.get(), EVP_sha256());
 }
 

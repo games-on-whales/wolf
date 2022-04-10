@@ -70,11 +70,12 @@ std::string gen_aes_key(const std::string &salt, const std::string &pin) {
   return aes_key;
 }
 
-std::pair<pt::ptree, std::string> pair_send_server_challenge(const std::string &aes_key,
-                                                             const std::string &client_challenge,
-                                                             const std::string &server_cert_signature,
-                                                             const std::string &server_secret,
-                                                             const std::string &server_challenge) {
+std::pair<pt::ptree, std::pair<std::string, std::string>>
+pair_send_server_challenge(const std::string &aes_key,
+                           const std::string &client_challenge,
+                           const std::string &server_cert_signature,
+                           const std::string &server_secret,
+                           const std::string &server_challenge) {
   pt::ptree resp;
 
   auto client_challenge_hex = crypto::hex_to_str(client_challenge, true);
@@ -87,7 +88,7 @@ std::pair<pt::ptree, std::string> pair_send_server_challenge(const std::string &
   resp.put("root.challengeresponse", crypto::str_to_hex(encrypted));
   resp.put("root.<xmlattr>.status_code", 200);
 
-  return std::make_pair(resp, server_secret);
+  return std::make_pair(resp, std::make_pair(server_secret, server_challenge));
 }
 
 std::pair<pt::ptree, std::string> pair_get_client_hash(const std::string &aes_key,
@@ -105,6 +106,34 @@ std::pair<pt::ptree, std::string> pair_get_client_hash(const std::string &aes_ke
   resp.put("root.<xmlattr>.status_code", 200);
 
   return std::make_pair(resp, decrypted_challenge);
+}
+
+pt::ptree pair_client_pair(const std::string &aes_key,
+                           const std::string &server_challenge,
+                           const std::string &client_hash,
+                           const std::string &client_pairing_secret,
+                           const std::string &client_public_cert_signature,
+                           const std::string &client_cert_public_key) {
+  pt::ptree resp;
+  resp.put("root.<xmlattr>.status_code", 200);
+  auto digest_size = 256;
+
+  auto pairing_secret = crypto::hex_to_str(client_pairing_secret, true);
+  auto client_secret = pairing_secret.substr(0, 16);
+  auto client_signature = pairing_secret.substr(16, digest_size);
+
+  auto hash = crypto::hex_to_str(crypto::sha256(server_challenge + client_public_cert_signature + client_secret), true);
+  if (hash != client_hash) {
+    resp.put("root.paired", 0);
+    return resp;
+  }
+
+  if (crypto::verify(client_secret, client_signature, client_cert_public_key)) {
+    resp.put("root.paired", 1);
+  } else {
+    resp.put("root.paired", 0);
+  }
+  return resp;
 }
 
 } // namespace moonlight

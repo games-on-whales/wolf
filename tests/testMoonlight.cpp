@@ -75,10 +75,16 @@ TEST_CASE("Mocked serverinfo", "[MoonlightProtocol]") {
 
 TEST_CASE("Pairing protocol", "[MoonlightProtocol]") {
   // Stuff generated from Moonlight
-  auto pin = "5101";
-  auto salt = "bf395390da77a2a9385b65b803733b32";
-  auto client_challenge = "b8e23c44cbebc46054f28cf76e36ea4a";
-  auto server_challenge = "57ec770c95a3ef7b67c5f42c8c39cefbbc451235a9bb422c4fefa1fdb8e08629";
+  auto pin = "7284";
+  auto salt = "a0c288cfb0ea624ec3e5cc54d6ab7e38";
+  auto client_challenge = "60418ac415307d7a1f9695ba04e1ae34";
+  auto server_challenge_resp = "2798e4a56fa102558e8c93b892fbbe17b06b0cac91855ceb536ca2def53f7cf1";
+  auto client_pairing_secret =
+      "3dda32b87413e98005d608df9c54323f507ccaef60a5a31acfc2b9bc64bb27e3cc467555bf81bc0464dc4b1488810d435266f31e22acd275"
+      "07bce4a8173d1b4c5ea51f47d702a074e9cf95c6ff6cb7cf85e1abf9d236c5e3b638601092adc6a993f77b0585100994cecec88e01023f7f"
+      "0ef13e8d66f5ba89608f1838c85d214b91a4be276d9ad555382a599b142b1e62b571427dc30697342da9995bfc5362cc27f09a3cb3622eda"
+      "9f6ccad3385e296e5b9b296377523e0e41b5748d60ea96f2ebabb9c30c13e98cef420d87e266f72bfc2e18cf584a03e6141e9dd4967dd77e"
+      "4ce99b20f73e37caf801931babbc4ff75df4013b529651b97d7bfc228d2c13785c50e22071bc6ce1332ee777a009c630";
   auto client_cert_base64 =
       "2d2d2d2d2d424547494e2043455254494649434154452d2d2d2d2d0a4d494943767a43434161656741774942416749424144414e42676b71"
       "686b694739773042415173464144416a4d53457748775944565151444442684f566b6c450a53554567523246745a564e30636d5668625342"
@@ -151,19 +157,22 @@ TEST_CASE("Pairing protocol", "[MoonlightProtocol]") {
 
   // PHASE 1
   auto [xml_p1, aes_key] = moonlight::pair_get_server_cert(pin, salt, *server_cert);
-  REQUIRE(crypto::str_to_hex(aes_key) == "F7681123C68E9693B99CEC0A39F8174A");
+  REQUIRE(crypto::str_to_hex(aes_key) == "8A0191F59F31950D5DE3396901AA585D");
 
   // PHASE 2
   auto server_cert_sig = x509::get_cert_signature(server_cert);
-  auto [xml_p2, server_secret_ret] =
+  auto [xml_p2, server_secret_pair] =
       moonlight::pair_send_server_challenge(aes_key, client_challenge, server_cert_sig, server_secret, server_secret);
+  auto [server_secret_ret, server_challenge_ret] = server_secret_pair;
   REQUIRE(server_secret == server_secret_ret);
+  REQUIRE(server_secret == server_challenge_ret);
   REQUIRE(xml_p2.get<std::string>("root.challengeresponse") ==
-          "1E2B10A91D57B7097B782875E126C50247A00DA2D881E9AA5D662556E61A2DA40113C52E4D94193DE71F8576B360FFEF");
+          "2A86F54B35997EAE9CC30D3F06E66D93178FB7892180FEE2B4BBB8C68473BDE13401EFE6604815200DE9BEA7D2215FC4");
 
   // PHASE 3
-  auto [xml_p3, client_hash] = moonlight::pair_get_client_hash(aes_key, server_secret, server_challenge, server_pkey);
-  REQUIRE(crypto::str_to_hex(client_hash) == "8290F7C1FD14D6EDA086E4D710275C7D27610ACF329E4A726F5DB56997B7EFE5");
+  auto [xml_p3, client_hash] =
+      moonlight::pair_get_client_hash(aes_key, server_secret, server_challenge_resp, server_pkey);
+  REQUIRE(crypto::str_to_hex(client_hash) == "3875FFF759355205355EFE5D3065CD776A06A806CAAE0CEFAEF22475D593CEA4");
   auto pairing_secret = xml_p3.get<std::string>("root.pairingsecret");
   REQUIRE(
       pairing_secret ==
@@ -172,4 +181,16 @@ TEST_CASE("Pairing protocol", "[MoonlightProtocol]") {
       "FFC8DF985D8E5AB4D74CCEA266ED6A227C9F61BACF0968925A327368367EB5CF9507D21B85A3AB9F782A6DB927A013C6FD1C6201BFCE480D"
       "29BDCE706389AB4A735B5115F1E42A19FFB735617DD7EF2B46558DACDF352F33564C663E84D130F3FCBB81BC5CC125E3F772472F9A0350C1"
       "0D6B9B5ECEFE177514E8AF496E1E210FBC03571DDB222B3AA97E76BE5A7D7731756CFE3B1202237D38433F789F87B3FA");
+
+  // PHASE 4
+  auto client_cert = x509::cert_from_string(crypto::hex_to_str(client_cert_base64, true));
+  auto client_public_cert_signature = x509::get_cert_signature(client_cert);
+  auto client_cert_public_key = x509::get_cert_public_key(client_cert);
+  auto xml_p4 = moonlight::pair_client_pair(aes_key,
+                                            server_challenge_ret,
+                                            client_hash,
+                                            client_pairing_secret,
+                                            client_public_cert_signature,
+                                            client_cert_public_key);
+  REQUIRE(xml_p4.get<int>("root.paired") == 1);
 }

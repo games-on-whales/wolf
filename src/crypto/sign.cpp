@@ -41,11 +41,10 @@ bool verify(const unsigned char *msg, const unsigned char *signature, EVP_PKEY *
 
 using EVP_PKEY_ptr = std::unique_ptr<EVP_PKEY, decltype(&::EVP_PKEY_free)>;
 
-EVP_PKEY_ptr create_key(const unsigned char *k, bool is_private) {
+EVP_PKEY_ptr create_key(const std::string &k, bool is_private) {
   BIO *bio = BIO_new(BIO_s_mem());
 
-  int k_size = (int)strlen((char *)k);
-  if (BIO_write(bio, k, k_size) <= 0)
+  if (BIO_write(bio, k.data(), k.size()) <= 0)
     handle_openssl_error("BIO_write failed");
 
   EVP_PKEY *p_key = nullptr;

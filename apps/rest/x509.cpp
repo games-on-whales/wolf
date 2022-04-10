@@ -202,17 +202,18 @@ std::string get_cert_signature(const X509 *cert) {
   return {(const char *)asn1->data, (std::size_t)asn1->length};
 }
 
-/**
- * @return the private key content
- */
-std::string get_pkey_content(EVP_PKEY *pkey) {
+std::string get_key_content(EVP_PKEY *pkey, bool private_key) {
   BIO *bio;
   BUF_MEM *bufmem;
   char *pem;
 
   bio = BIO_new(BIO_s_mem());
 
-  PEM_write_bio_PrivateKey(bio, pkey, nullptr, nullptr, 0, nullptr, nullptr);
+  if (private_key) {
+    PEM_write_bio_PrivateKey(bio, pkey, nullptr, nullptr, 0, nullptr, nullptr);
+  } else {
+    PEM_write_bio_PUBKEY(bio, pkey);
+  }
 
   const int keylen = BIO_pending(bio);
   char *key = (char *)calloc(keylen + 1, 1);
@@ -220,6 +221,22 @@ std::string get_pkey_content(EVP_PKEY *pkey) {
   BIO_free_all(bio);
 
   return {key, static_cast<size_t>(keylen)};
+}
+
+/**
+ * @return the private key content
+ */
+std::string get_pkey_content(EVP_PKEY *pkey) {
+  return get_key_content(pkey, true);
+}
+
+/**
+ *
+ * @return the certificate public key content
+ */
+std::string get_cert_public_key(X509 *cert) {
+  auto pkey = X509_get_pubkey(cert);
+  return get_key_content(pkey, false);
 }
 
 /**

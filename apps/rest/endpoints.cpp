@@ -109,10 +109,12 @@ void pair(std::shared_ptr<typename SimpleWeb::ServerBase<T>::Response> response,
   if (client_challenge) {
 
     auto server_cert_signature = x509::get_cert_signature(state.server_cert);
-    auto [xml, server_secret] =
+    auto [xml, server_secret_pair] =
         moonlight::pair_send_server_challenge(client_cache.aes_key, client_challenge.value(), server_cert_signature);
 
+    auto [server_secret, server_challenge] = server_secret_pair;
     client_cache.server_secret = server_secret;
+    client_cache.server_challenge = server_challenge;
     (*state.pairing_cache)[client_id.value() + client_ip] = client_cache;
 
     send_xml<T>(response, SimpleWeb::StatusCode::success_ok, xml);
@@ -121,7 +123,7 @@ void pair(std::shared_ptr<typename SimpleWeb::ServerBase<T>::Response> response,
 
   // PHASE 3
   auto server_challenge = get_header(headers, "serverchallengeresp");
-  if (server_challenge) {
+  if (server_challenge && client_cache.server_secret) {
 
     auto [xml, client_hash] = moonlight::pair_get_client_hash(
         client_cache.aes_key,
@@ -137,10 +139,43 @@ void pair(std::shared_ptr<typename SimpleWeb::ServerBase<T>::Response> response,
   }
 
   // PHASE 4
-  auto clientsecret = get_header(headers, "clientpairingsecret");
-  if (clientsecret) {
-    // TODO:
+  auto client_secret = get_header(headers, "clientpairingsecret");
+  if (client_secret && client_cache.server_challenge && client_cache.client_hash) {
+    auto client_cert = x509::cert_from_string(client_cache.client_cert);
+
+    auto xml = moonlight::pair_client_pair(client_cache.aes_key,
+                                           client_cache.server_challenge.value(),
+                                           client_cache.client_hash.value(),
+                                           client_secret.value(),
+                                           x509::get_cert_signature(client_cert),
+                                           x509::get_cert_public_key(client_cert));
+
+    send_xml<T>(response, SimpleWeb::StatusCode::success_ok, xml);
+
+    auto is_paired = xml.get<int>("root.paired") == 1;
+    if (is_paired) {
+      state.config->pair(client_id.value(), client_cache.client_cert);
+      logs::log(logs::info, "Succesfully paired {}", client_ip);
+    } else {
+      logs::log(logs::warning, "Failed pairing with {}", client_ip);
+    }
+    return;
   }
+
+  // PHASE 5 (over HTTPS)
+  auto phrase = get_header(headers, "phrase");
+  if (phrase && phrase.value() == "pairchallenge") {
+    // TODO: this comes on HTTPS check client cert and if paired already
+    pt::ptree xml;
+
+    xml.put("root.paired", 1);
+    xml.put("root.<xmlattr>.status_code", 200);
+
+    send_xml<T>(response, SimpleWeb::StatusCode::success_ok, xml);
+    return;
+  }
+
+  logs::log(logs::warning, "Unable to match pair with any phase, you can retry pairing from Moonlight");
 }
 
 } // namespace endpoints

@@ -10,6 +10,7 @@ struct PairCache : moonlight::PairedClients {
 
   // Followings will be filled later on during the pair process
   std::optional<std::string> server_secret;
+  std::optional<std::string> server_challenge;
   std::optional<std::string> client_hash;
 };
 

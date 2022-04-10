@@ -57,13 +57,15 @@ std::string gen_aes_key(const std::string &salt, const std::string &pin);
  *   - the signature of our X509 serverCert
  *   - a server secret that we generate (in order to be checked later on)
  *
- * @return std::pair<pt::ptree, std::string> the response and the generated server_secret
+ * @return std::pair<pt::ptree, std::pair<std::string, std::string>> the response and the generated:
+ * server_secret, server_challenge
  */
-std::pair<pt::ptree, std::string> pair_send_server_challenge(const std::string &aes_key,
-                                                             const std::string &client_challenge,
-                                                             const std::string &server_cert_signature,
-                                                             const std::string &server_secret = crypto::random(16),
-                                                             const std::string &server_challenge = crypto::random(16));
+std::pair<pt::ptree, std::pair<std::string, std::string>>
+pair_send_server_challenge(const std::string &aes_key,
+                           const std::string &client_challenge,
+                           const std::string &server_cert_signature,
+                           const std::string &server_secret = crypto::random(16),
+                           const std::string &server_challenge = crypto::random(16));
 
 /**
  * @brief Pair, phase 3:
@@ -81,7 +83,7 @@ std::pair<pt::ptree, std::string> pair_get_client_hash(const std::string &aes_ke
  * @brief Pair, phase 4 (final)
  * We now have to use everything we exchanged before in order to verify and finally pair the clients
  * We can finally check the client_hash obtained at phase 3 it should contain the following:
- *   - The original server_secret
+ *   - The original server_challenge
  *   - The signature of the X509 client_cert
  *   - The unencrypted client_pairing_secret
  * Then using the client_cert we should be able to verify that client_pairing_secret has been signed by Moonlight
@@ -89,9 +91,10 @@ std::pair<pt::ptree, std::string> pair_get_client_hash(const std::string &aes_ke
  * @return pt::ptree if all checks are fine it'll send paired = 1 else will send back paired = 0
  */
 pt::ptree pair_client_pair(const std::string &aes_key,
-                           const std::string &server_secret,
+                           const std::string &server_challenge,
                            const std::string &client_hash,
                            const std::string &client_pairing_secret,
-                           const X509 &client_cert);
+                           const std::string &client_public_cert_signature,
+                           const std::string &client_cert_public_key);
 
 } // namespace moonlight
