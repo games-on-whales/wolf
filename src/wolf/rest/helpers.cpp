@@ -3,7 +3,7 @@
 #include <string_view>
 using namespace std::literals;
 
-#include <helpers/logger.cpp>
+#include <helpers/logger.hpp>
 
 #include <Simple-Web-Server/server_http.hpp>
 #include <Simple-Web-Server/server_https.hpp>

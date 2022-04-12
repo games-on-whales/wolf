@@ -1,7 +1,7 @@
 #pragma once
 
 #include <pipewire/pipewire.h>
-#include <helpers/logger.cpp>
+#include <helpers/logger.hpp>
 
 void init() {
   logs::log(logs::debug,

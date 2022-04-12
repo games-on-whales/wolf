@@ -1,6 +1,6 @@
 #pragma once
 
-#include <helpers/config.hpp>
+#include <moonlight/config.hpp>
 #include <moonlight/data-structures.hpp>
 #include <openssl/x509.h>
 #include <unordered_map>

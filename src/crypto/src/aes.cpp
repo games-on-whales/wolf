@@ -1,10 +1,8 @@
-#include <cstring>
+#include <crypto/utils.hpp>
 #include <memory>
 #include <openssl/aes.h>
 #include <openssl/evp.h>
 #include <openssl/rand.h>
-
-#include "utils.hpp"
 
 namespace aes {
 using CIPHER_CTX_ptr = std::unique_ptr<EVP_CIPHER_CTX, decltype(&::EVP_CIPHER_CTX_free)>;

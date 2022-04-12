@@ -14,10 +14,13 @@ FetchContent_Declare(
 
 FetchContent_MakeAvailable(fmtlib)
 
+find_package(Boost REQUIRED COMPONENTS log_setup log)
+include_directories(${Boost_INCLUDE_DIRS})
+
 # Tests need to be added as executables first
 add_executable(wolflib testMoonlight.cpp testCrypto.cpp)
 
-target_include_directories(wolflib PUBLIC ./ ../apps/)
+target_include_directories(wolflib PUBLIC ./ ../src/wolf)
 
 # I'm using C++17 in the test
 target_compile_features(wolflib PRIVATE cxx_std_17)
@@ -28,6 +31,7 @@ target_link_libraries(wolflib PRIVATE
         ${CMAKE_DL_LIBS}
         ${CMAKE_THREAD_LIBS_INIT}
         moonlight
+        wolf_crypto
         fmt::fmt
         Catch2::Catch2WithMain)
 

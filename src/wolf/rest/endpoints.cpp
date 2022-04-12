@@ -1,11 +1,10 @@
 #pragma once
 
-#include <moonlight/crypto.hpp>
+#include <crypto/crypto.hpp>
 #include <moonlight/protocol.hpp>
 
-#include <data-structures.hpp>
-#include <helpers.cpp>
-#include <x509.cpp>
+#include <rest/helpers.cpp>
+#include <state/data-structures.hpp>
 
 #include <Simple-Web-Server/server_http.hpp>
 #include <Simple-Web-Server/server_https.hpp>
@@ -39,7 +38,7 @@ void not_found(std::shared_ptr<typename SimpleWeb::ServerBase<T>::Response> resp
 }
 
 /**
- * @brief Moonlight protocol phase 1: GET /serverinfo
+ * @brief Moonlight moonlight phase 1: GET /serverinfo
  */
 template <class T>
 void serverinfo(std::shared_ptr<typename SimpleWeb::ServerBase<T>::Response> response,
@@ -65,7 +64,7 @@ void serverinfo(std::shared_ptr<typename SimpleWeb::ServerBase<T>::Response> res
 }
 
 /**
- * @brief Moonlight protocol phase 2: GET /pair
+ * @brief Moonlight moonlight phase 2: GET /pair
  */
 template <class T>
 void pair(std::shared_ptr<typename SimpleWeb::ServerBase<T>::Response> response,
@@ -86,7 +85,8 @@ void pair(std::shared_ptr<typename SimpleWeb::ServerBase<T>::Response> response,
     std::cout << "Insert pin:" << std::endl;
     std::getline(std::cin, user_pin); // TODO: async PIN?
 
-    auto [xml, aes_key] = moonlight::pair_get_server_cert(user_pin, salt.value(), *state.server_cert);
+    auto server_pem = x509::get_cert_pem(*state.server_cert);
+    auto [xml, aes_key] = moonlight::pair::get_server_cert(user_pin, salt.value(), server_pem);
 
     auto client_cert_parsed = crypto::hex_to_str(client_cert_str.value(), true);
 
@@ -110,7 +110,7 @@ void pair(std::shared_ptr<typename SimpleWeb::ServerBase<T>::Response> response,
 
     auto server_cert_signature = x509::get_cert_signature(state.server_cert);
     auto [xml, server_secret_pair] =
-        moonlight::pair_send_server_challenge(client_cache.aes_key, client_challenge.value(), server_cert_signature);
+        moonlight::pair::send_server_challenge(client_cache.aes_key, client_challenge.value(), server_cert_signature);
 
     auto [server_secret, server_challenge] = server_secret_pair;
     client_cache.server_secret = server_secret;
@@ -125,7 +125,7 @@ void pair(std::shared_ptr<typename SimpleWeb::ServerBase<T>::Response> response,
   auto server_challenge = get_header(headers, "serverchallengeresp");
   if (server_challenge && client_cache.server_secret) {
 
-    auto [xml, client_hash] = moonlight::pair_get_client_hash(
+    auto [xml, client_hash] = moonlight::pair::get_client_hash(
         client_cache.aes_key,
         client_cache.server_secret.value(),
         server_challenge.value(),
@@ -143,12 +143,12 @@ void pair(std::shared_ptr<typename SimpleWeb::ServerBase<T>::Response> response,
   if (client_secret && client_cache.server_challenge && client_cache.client_hash) {
     auto client_cert = x509::cert_from_string(client_cache.client_cert);
 
-    auto xml = moonlight::pair_client_pair(client_cache.aes_key,
-                                           client_cache.server_challenge.value(),
-                                           client_cache.client_hash.value(),
-                                           client_secret.value(),
-                                           x509::get_cert_signature(client_cert),
-                                           x509::get_cert_public_key(client_cert));
+    auto xml = moonlight::pair::client_pair(client_cache.aes_key,
+                                            client_cache.server_challenge.value(),
+                                            client_cache.client_hash.value(),
+                                            client_secret.value(),
+                                            x509::get_cert_signature(client_cert),
+                                            x509::get_cert_public_key(client_cert));
 
     send_xml<T>(response, SimpleWeb::StatusCode::success_ok, xml);
 

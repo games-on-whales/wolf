@@ -1,10 +1,10 @@
 #include <vector>
 
-#include <data-structures.hpp>
-#include <helpers/config.hpp>
-#include <helpers/logger.cpp>
+#include <state/data-structures.hpp>
+#include <moonlight/config.hpp>
+#include <helpers/logger.hpp>
 #include <moonlight/data-structures.hpp>
-#include <servers.cpp>
+#include <rest/servers.cpp>
 
 /**
  * @brief Will try to load the config file and fallback to defaults

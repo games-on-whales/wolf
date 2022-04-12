@@ -1,12 +1,9 @@
-#include "crypto/aes.cpp"
-#include "crypto/sign.cpp"
-#include <moonlight/crypto.hpp>
-
-#include <openssl/pem.h>
-#include <openssl/sha.h>
-
+#include "aes.cpp"
+#include "sign.cpp"
 #include <algorithm>
 #include <iomanip>
+#include <openssl/pem.h>
+#include <openssl/sha.h>
 #include <sstream>
 #include <stdexcept>
 
@@ -25,17 +22,6 @@ std::string sha256(const std::string &str) {
   return ss.str();
 }
 
-std::string pem(const X509 &x509) {
-  X509 *cert_ptr = const_cast<X509 *>(&x509);
-  BIO *bio_out = BIO_new(BIO_s_mem());
-  PEM_write_bio_X509(bio_out, cert_ptr);
-  BUF_MEM *bio_buf;
-  BIO_get_mem_ptr(bio_out, &bio_buf);
-  std::string pem = std::string(bio_buf->data, bio_buf->length);
-  BIO_free(bio_out);
-  return pem;
-}
-
 std::string str_to_hex(const std::string &input) {
   static const char hex_digits[] = "0123456789ABCDEF";
 
@@ -48,10 +34,6 @@ std::string str_to_hex(const std::string &input) {
   return output;
 }
 
-/**
- * @brief Takes an HEX vector and returns a string representation of it.
- * Taken from Sunshine, TODO: refactor and better understanding of this
- */
 std::string hex_to_str(const std::string &hex, bool reverse) {
   std::string buf;
 

@@ -1,7 +1,6 @@
 #include <algorithm>
-#include <array>
 #include <catch2/catch_test_macros.hpp>
-#include <moonlight/crypto.hpp>
+#include <crypto/crypto.hpp>
 #include <moonlight/protocol.hpp>
 #include <string>
 
@@ -87,7 +86,7 @@ TEST_CASE("AES", "[Crypto]") {
     auto pin = "5338";
     auto client_challenge = "c05930ac81d7bd426344235436046018";
 
-    auto aes_key = moonlight::gen_aes_key(salt, pin);
+    auto aes_key = moonlight::pair::gen_aes_key(salt, pin);
     REQUIRE(crypto::str_to_hex(aes_key) == "5EA186FFBA663C75AEC82187CE502647");
 
     auto client_challenge_hex = crypto::hex_to_str(client_challenge, true);

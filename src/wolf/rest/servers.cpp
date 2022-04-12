@@ -4,11 +4,8 @@
 #include <memory>
 #include <utility>
 
-#include <x509.cpp>
-
-#include <data-structures.hpp>
-#include <endpoints.cpp>
-#include <helpers.cpp>
+#include <rest/endpoints.cpp>
+#include <rest/helpers.cpp>
 #include <Simple-Web-Server/server_http.hpp>
 #include <Simple-Web-Server/server_https.hpp>
 
@@ -55,7 +52,7 @@ template <typename T> std::thread startServer(SimpleWeb::Server<T> *server, cons
   server->default_resource["GET"] = endpoints::not_found<T>;
   server->default_resource["POST"] = endpoints::not_found<T>;
 
-  // Moonlight protocol
+  // Moonlight moonlight
   server->resource["^/serverinfo$"]["GET"] = [&state](auto resp, auto req) {
     endpoints::serverinfo<T>(resp, req, state);
   };

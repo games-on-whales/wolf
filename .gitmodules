@@ -1,3 +1,3 @@
-[submodule "apps/libraries/Simple-Web-Server"]
-	path = apps/libraries/Simple-Web-Server
-	url = https://gitlab.com/eidheim/Simple-Web-Server
+[submodule "src/wolf/libraries/Simple-Web-Server"]
+	path = src/wolf/libraries/Simple-Web-Server
+	url = https://gitlab.com/eidheim/Simple-Web-Server/

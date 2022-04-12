@@ -1,32 +1,18 @@
-/**
- * @brief Wrappers on top of OpenSSL methods in order to deal with x509 certificates
- *
- * Adapted from: https://gist.github.com/nathan-osman/5041136
- */
-#pragma once
-
 #include <cstdio>
+#include <cstring>
+#include <fstream>
 #include <memory>
-
 #include <openssl/pem.h>
 #include <openssl/x509.h>
-
-#include <boost/filesystem.hpp>
-
-#include <helpers/logger.cpp>
+#include <stdexcept>
+#include <string>
 
 namespace x509 {
 
-/**
- * @brief Generates a 2048-bit RSA key.
- *
- * @return safe_ptr<EVP_PKEY>: a safe unique_ptr to a private key
- */
 EVP_PKEY *generate_key() {
   auto pkey = EVP_PKEY_new();
   if (!pkey) {
-    logs::log(logs::error, "Unable to create EVP_PKEY structure.");
-    return nullptr;
+    throw std::runtime_error("Unable to create EVP_PKEY structure.");
   }
 
   auto big_num = BN_new();
@@ -34,26 +20,17 @@ EVP_PKEY *generate_key() {
   BN_set_word(big_num, RSA_F4);
   RSA_generate_key_ex(rsa, 2048, big_num, nullptr);
   if (!EVP_PKEY_assign_RSA(pkey, rsa)) {
-    logs::log(logs::error, "Unable to generate 2048-bit RSA key.");
-    EVP_PKEY_free(pkey);
-    return nullptr;
+    throw std::runtime_error("Unable to generate 2048-bit RSA key.");
   }
 
   return pkey;
 }
 
-/**
- * @brief Generates a self-signed x509 certificate.
- *
- * @param pkey: a private key generated with generate_key()
- * @return X509*: a pointer to a x509 certificate
- */
 X509 *generate_x509(EVP_PKEY *pkey) {
   /* Allocate memory for the X509 structure. */
   X509 *x509 = X509_new();
   if (!x509) {
-    logs::log(logs::error, "Unable to create X509 structure.");
-    return nullptr;
+    throw std::runtime_error("Unable to create X509 structure.");
   }
 
   /* Set the serial number. */
@@ -78,17 +55,12 @@ X509 *generate_x509(EVP_PKEY *pkey) {
 
   /* Actually sign the certificate with our key. */
   if (!X509_sign(x509, pkey, EVP_sha256())) {
-    logs::log(logs::error, "Error signing certificate.");
-    X509_free(x509);
-    return nullptr;
+    throw std::runtime_error("Error signing certificate.");
   }
 
   return x509;
 }
 
-/**
- * @brief Reads a X509 certificate string
- */
 X509 *cert_from_string(const std::string &cert) {
   BIO *bio;
   X509 *certificate;
@@ -101,17 +73,13 @@ X509 *cert_from_string(const std::string &cert) {
   return certificate;
 }
 
-/**
- * @brief Reads a X509 certificate from file
- */
 X509 *cert_from_file(const std::string &cert_path) {
   X509 *certificate;
   BIO *bio;
 
   bio = BIO_new(BIO_s_file());
   if (BIO_read_filename(bio, cert_path.c_str()) <= 0) {
-    logs::log(logs::error, "Error reading certificate: {}.", cert_path);
-    return nullptr;
+    throw std::runtime_error("Error reading certificate");
   }
   certificate = PEM_read_bio_X509(bio, nullptr, nullptr, nullptr);
 
@@ -119,17 +87,13 @@ X509 *cert_from_file(const std::string &cert_path) {
   return certificate;
 }
 
-/**
- * @brief Reads a private key from file
- */
 EVP_PKEY *pkey_from_file(const std::string &pkey_path) {
   EVP_PKEY *pkey;
   BIO *bio;
 
   bio = BIO_new(BIO_s_file());
   if (BIO_read_filename(bio, pkey_path.c_str()) <= 0) {
-    logs::log(logs::error, "Error reading certificate: {}.", pkey_path);
-    return nullptr;
+    throw std::runtime_error("Error reading private key");
   }
   pkey = PEM_read_bio_PrivateKey(bio, nullptr, nullptr, nullptr);
 
@@ -137,22 +101,11 @@ EVP_PKEY *pkey_from_file(const std::string &pkey_path) {
   return pkey;
 }
 
-/**
- * @brief Write cert and key to disk
- *
- * @param pkey: a private key generated with generate_key()
- * @param pkey_filename: the name of the key file to be saved
- * @param x509: a certificate generated with generate_x509()
- * @param cert_filename: the name of the cert file to be saved
- * @return true when both pkey and x509 are stored on disk
- * @return false when one or both failed
- */
 bool write_to_disk(EVP_PKEY *pkey, const std::string &pkey_filename, X509 *x509, const std::string &cert_filename) {
   /* Open the PEM file for writing the key to disk. */
   FILE *pkey_file = fopen(pkey_filename.c_str(), "wb");
   if (!pkey_file) {
-    logs::log(logs::error, "Unable to open {} for writing.", pkey_filename);
-    return false;
+    throw std::runtime_error("Unable write file to disk.");
   }
 
   /* Write the key to disk. */
@@ -160,15 +113,13 @@ bool write_to_disk(EVP_PKEY *pkey, const std::string &pkey_filename, X509 *x509,
   fclose(pkey_file);
 
   if (!ret) {
-    logs::log(logs::error, "Unable to write {} to disk.", pkey_filename);
-    return false;
+    throw std::runtime_error("Unable to write file to disk.");
   }
 
   /* Open the PEM file for writing the certificate to disk. */
   FILE *x509_file = fopen(cert_filename.c_str(), "wb");
   if (!x509_file) {
-    logs::log(logs::error, "Unable to open {} for writing", cert_filename);
-    return false;
+    throw std::runtime_error("Unable to write file to disk.");
   }
 
   /* Write the certificate to disk. */
@@ -176,30 +127,34 @@ bool write_to_disk(EVP_PKEY *pkey, const std::string &pkey_filename, X509 *x509,
   fclose(x509_file);
 
   if (!ret) {
-    logs::log(logs::error, "Unable to write {} to disk.", cert_filename);
-    return false;
+    throw std::runtime_error("Unable to write {} to disk.");
   }
 
   return true;
 }
 
-/**
- * @param pkey_filename: the name of the key file to be saved
- * @param cert_filename: the name of the cert file to be saved
- * @return true when both files are present
- */
 bool cert_exists(const std::string &pkey_filename, const std::string &cert_filename) {
-  return boost::filesystem::exists(pkey_filename) && boost::filesystem::exists(cert_filename);
+  std::fstream pkey_fs(pkey_filename);
+  std::fstream cert_fs(cert_filename);
+  return pkey_fs.good() && cert_fs.good();
 }
 
-/**
- * @return the certificate signature
- */
 std::string get_cert_signature(const X509 *cert) {
   const ASN1_BIT_STRING *asn1 = nullptr;
   X509_get0_signature(&asn1, nullptr, cert);
 
   return {(const char *)asn1->data, (std::size_t)asn1->length};
+}
+
+std::string get_cert_pem(const X509 &x509) {
+  X509 *cert_ptr = const_cast<X509 *>(&x509);
+  BIO *bio_out = BIO_new(BIO_s_mem());
+  PEM_write_bio_X509(bio_out, cert_ptr);
+  BUF_MEM *bio_buf;
+  BIO_get_mem_ptr(bio_out, &bio_buf);
+  std::string pem = std::string(bio_buf->data, bio_buf->length);
+  BIO_free(bio_out);
+  return pem;
 }
 
 std::string get_key_content(EVP_PKEY *pkey, bool private_key) {
@@ -223,30 +178,15 @@ std::string get_key_content(EVP_PKEY *pkey, bool private_key) {
   return {key, static_cast<size_t>(keylen)};
 }
 
-/**
- * @return the private key content
- */
 std::string get_pkey_content(EVP_PKEY *pkey) {
   return get_key_content(pkey, true);
 }
 
-/**
- *
- * @return the certificate public key content
- */
 std::string get_cert_public_key(X509 *cert) {
   auto pkey = X509_get_pubkey(cert);
   return get_key_content(pkey, false);
 }
 
-/**
- * @brief: cleanup pointers after use
- *
- * TODO: replace with smart pointers?
- *
- * @param pkey: a private key generated with generate_key()
- * @param x509: a certificate generated with generate_x509()
- */
 void cleanup(EVP_PKEY *pkey, X509 *cert) {
   EVP_PKEY_free(pkey);
   X509_free(cert);

@@ -12,17 +12,20 @@ FetchContent_Declare(
 
 FetchContent_MakeAvailable(fmtlib)
 
+find_package(Boost REQUIRED COMPONENTS log_setup log)
+include_directories(${Boost_INCLUDE_DIRS})
+
 # Some libraries don't work with FetchContent_Declare out of the box
 # We have to manually git clone them and adding them into `libraries`
-target_include_directories(wolf PRIVATE libraries rest state)
+target_include_directories(wolf PRIVATE libraries .)
 
 target_link_libraries(
         wolf PRIVATE
+        moonlight
         ${Boost_LIBRARIES}
         ${CMAKE_DL_LIBS}
         ${CMAKE_THREAD_LIBS_INIT}
         fmt::fmt
-        moonlight
 )
 
 if (UNIX AND NOT APPLE)

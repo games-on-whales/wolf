@@ -1,5 +1,4 @@
-#include "utils.hpp"
-#include <cstring>
+#include <crypto/utils.hpp>
 #include <openssl/evp.h>
 #include <openssl/pem.h>
 

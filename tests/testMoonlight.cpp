@@ -1,9 +1,10 @@
+#define CATCH_CONFIG_MAIN  // This tells Catch to provide a main() - only do this in one cpp file
+
 #include <boost/property_tree/xml_parser.hpp>
 #include <catch2/catch_test_macros.hpp>
 #include <catch2/matchers/catch_matchers_all.hpp>
-#include <moonlight/crypto.hpp>
+#include <crypto/crypto.hpp>
 #include <moonlight/protocol.hpp>
-#include <rest/x509.cpp>
 
 using namespace moonlight;
 
@@ -73,7 +74,7 @@ TEST_CASE("Mocked serverinfo", "[MoonlightProtocol]") {
   }
 }
 
-TEST_CASE("Pairing protocol", "[MoonlightProtocol]") {
+TEST_CASE("Pairing moonlight", "[MoonlightProtocol]") {
   // Stuff generated from Moonlight
   auto pin = "7284";
   auto salt = "a0c288cfb0ea624ec3e5cc54d6ab7e38";
@@ -156,13 +157,14 @@ TEST_CASE("Pairing protocol", "[MoonlightProtocol]") {
                      "-----END PRIVATE KEY-----";
 
   // PHASE 1
-  auto [xml_p1, aes_key] = moonlight::pair_get_server_cert(pin, salt, *server_cert);
+  auto server_cert_pem = x509::get_cert_pem(*server_cert);
+  auto [xml_p1, aes_key] = moonlight::pair::get_server_cert(pin, salt, server_cert_pem);
   REQUIRE(crypto::str_to_hex(aes_key) == "8A0191F59F31950D5DE3396901AA585D");
 
   // PHASE 2
   auto server_cert_sig = x509::get_cert_signature(server_cert);
   auto [xml_p2, server_secret_pair] =
-      moonlight::pair_send_server_challenge(aes_key, client_challenge, server_cert_sig, server_secret, server_secret);
+      moonlight::pair::send_server_challenge(aes_key, client_challenge, server_cert_sig, server_secret, server_secret);
   auto [server_secret_ret, server_challenge_ret] = server_secret_pair;
   REQUIRE(server_secret == server_secret_ret);
   REQUIRE(server_secret == server_challenge_ret);
@@ -171,7 +173,7 @@ TEST_CASE("Pairing protocol", "[MoonlightProtocol]") {
 
   // PHASE 3
   auto [xml_p3, client_hash] =
-      moonlight::pair_get_client_hash(aes_key, server_secret, server_challenge_resp, server_pkey);
+      moonlight::pair::get_client_hash(aes_key, server_secret, server_challenge_resp, server_pkey);
   REQUIRE(crypto::str_to_hex(client_hash) == "3875FFF759355205355EFE5D3065CD776A06A806CAAE0CEFAEF22475D593CEA4");
   auto pairing_secret = xml_p3.get<std::string>("root.pairingsecret");
   REQUIRE(
@@ -186,11 +188,11 @@ TEST_CASE("Pairing protocol", "[MoonlightProtocol]") {
   auto client_cert = x509::cert_from_string(crypto::hex_to_str(client_cert_base64, true));
   auto client_public_cert_signature = x509::get_cert_signature(client_cert);
   auto client_cert_public_key = x509::get_cert_public_key(client_cert);
-  auto xml_p4 = moonlight::pair_client_pair(aes_key,
-                                            server_challenge_ret,
-                                            client_hash,
-                                            client_pairing_secret,
-                                            client_public_cert_signature,
-                                            client_cert_public_key);
+  auto xml_p4 = moonlight::pair::client_pair(aes_key,
+                                             server_challenge_ret,
+                                             client_hash,
+                                             client_pairing_secret,
+                                             client_public_cert_signature,
+                                             client_cert_public_key);
   REQUIRE(xml_p4.get<int>("root.paired") == 1);
 }
