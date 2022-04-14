@@ -59,7 +59,9 @@ cmake g++-10 gcc-10 libpipewire-0.3-dev libboost-thread-dev libboost-filesystem-
 
 ## Acknowledgements
 
-- @loki-47-6F-64 for creating and sharing [Sunshine](https://github.com/loki-47-6F-64/sunshine)
+- [@loki-47-6F-64](https://github.com/loki-47-6F-64) for creating and
+  sharing [Sunshine](https://github.com/loki-47-6F-64/sunshine)
 - All the guys at the [Moonlight](https://moonlight-stream.org/) Discord channel, for the tireless help they provide to
   anyone
-- @ReenigneArcher for beying the first stargazer of the project and taking care of keeping [Sunshine alive](https://github.com/SunshineStream/Sunshine)
+- [@ReenigneArcher](https://github.com/ReenigneArcher) for beying the first stargazer of the project and taking care of
+  keeping [Sunshine alive](https://github.com/SunshineStream/Sunshine)

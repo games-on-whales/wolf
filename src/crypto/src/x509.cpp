@@ -4,6 +4,7 @@
 #include <memory>
 #include <openssl/pem.h>
 #include <openssl/x509.h>
+#include <optional>
 #include <stdexcept>
 #include <string>
 
@@ -190,6 +191,57 @@ std::string get_cert_public_key(X509 *cert) {
 void cleanup(EVP_PKEY *pkey, X509 *cert) {
   EVP_PKEY_free(pkey);
   X509_free(cert);
+}
+
+/**
+ * @brief: adapted from Sunshine
+ */
+static int openssl_verify_cb(int ok, X509_STORE_CTX *ctx) {
+  int err_code = X509_STORE_CTX_get_error(ctx);
+
+  switch (err_code) {
+  // TODO: Checking for X509_V_ERR_UNABLE_TO_GET_ISSUER_CERT_LOCALLY is a temporary workaround to get
+  // moonlight-embedded to work on the raspberry pi
+  case X509_V_ERR_UNABLE_TO_GET_ISSUER_CERT_LOCALLY:
+    return 1;
+
+  // Expired or not-yet-valid certificates are fine. Sometimes Moonlight is running on embedded devices
+  // that don't have accurate clocks (or haven't yet synchronized by the time Moonlight first runs).
+  // This behavior also matches what GeForce Experience does.
+  case X509_V_ERR_CERT_NOT_YET_VALID:
+  case X509_V_ERR_CERT_HAS_EXPIRED:
+    return 1;
+
+  default:
+    return ok;
+  }
+}
+
+/**
+ * @brief: adapted from Sunshine
+ */
+std::optional<std::string> verification_error(X509 *paired_cert, X509 *untrusted_cert) {
+  auto x509_store{X509_STORE_new()};
+  X509_STORE_add_cert(x509_store, paired_cert);
+
+  auto _cert_ctx{X509_STORE_CTX_new()};
+
+  X509_STORE_CTX_init(_cert_ctx, x509_store, untrusted_cert, nullptr);
+  X509_STORE_CTX_set_verify_cb(_cert_ctx, openssl_verify_cb);
+
+  // We don't care to validate the entire chain for the purposes of client auth.
+  // Some versions of clients forked from Moonlight Embedded produce client certs
+  // that OpenSSL doesn't detect as self-signed due to some X509v3 extensions.
+  X509_STORE_CTX_set_flags(_cert_ctx, X509_V_FLAG_PARTIAL_CHAIN);
+
+  auto err = X509_verify_cert(_cert_ctx);
+
+  if (err == 1) {
+    return std::nullopt;
+  }
+
+  int err_code = X509_STORE_CTX_get_error(_cert_ctx);
+  return X509_verify_cert_error_string(err_code);
 }
 
 } // namespace x509

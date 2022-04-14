@@ -2,6 +2,7 @@
 
 #include <openssl/aes.h>
 #include <openssl/x509.h>
+#include <optional>
 #include <string>
 
 namespace crypto {
@@ -154,6 +155,12 @@ std::string get_cert_pem(const X509 &x509);
  * @return the certificate public key content
  */
 std::string get_cert_public_key(X509 *cert);
+
+/**
+ * Checks that the paired_cert is a valid chain for untrusted_cert.
+ * @return std::nullopt if the verification runs fine, else the error message
+ */
+std::optional<std::string> verification_error(X509 *paired_cert, X509 *untrusted_cert);
 
 /**
  * @brief: cleanup pointers after use

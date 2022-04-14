@@ -77,7 +77,15 @@ void pair(std::shared_ptr<typename SimpleWeb::ServerBase<T>::Response> response,
   auto salt = get_header(headers, "salt");
   auto client_cert_str = get_header(headers, "clientcert");
   auto client_id = get_header(headers, "uniqueid");
-  auto client_ip = request->local_endpoint().address().to_string();
+  auto client_ip = request->remote_endpoint().address().to_string();
+
+  if (!client_id) {
+    logs::log(logs::warning, "Received pair request without uniqueid, stopping.");
+    return;
+  }
+
+  /* client_id is hardcoded in Moonlight, we add the IP so that different users can pair at the same time */
+  auto cache_key = client_id.value() + "@" + client_ip;
 
   // PHASE 1
   if (client_id && salt && client_cert_str) {
@@ -90,14 +98,14 @@ void pair(std::shared_ptr<typename SimpleWeb::ServerBase<T>::Response> response,
 
     auto client_cert_parsed = crypto::hex_to_str(client_cert_str.value(), true);
 
-    (*state.pairing_cache)[client_id.value() + client_ip] =
+    (*state.pairing_cache)[cache_key] =
         PairCache{client_id.value(), client_cert_parsed, aes_key, std::nullopt, std::nullopt};
 
     send_xml<T>(response, SimpleWeb::StatusCode::success_ok, xml);
     return;
   }
 
-  auto client_cache_it = state.pairing_cache->find(client_id.value() + client_ip);
+  auto client_cache_it = state.pairing_cache->find(cache_key);
   if (client_cache_it == state.pairing_cache->end()) {
     logs::log(logs::warning, "Unable to find {} {} in the pairing cache", client_id.value(), client_ip);
     return;
@@ -115,7 +123,7 @@ void pair(std::shared_ptr<typename SimpleWeb::ServerBase<T>::Response> response,
     auto [server_secret, server_challenge] = server_secret_pair;
     client_cache.server_secret = server_secret;
     client_cache.server_challenge = server_challenge;
-    (*state.pairing_cache)[client_id.value() + client_ip] = client_cache;
+    (*state.pairing_cache)[cache_key] = client_cache;
 
     send_xml<T>(response, SimpleWeb::StatusCode::success_ok, xml);
     return;
@@ -132,7 +140,7 @@ void pair(std::shared_ptr<typename SimpleWeb::ServerBase<T>::Response> response,
         x509::get_pkey_content(const_cast<EVP_PKEY *>(state.server_pkey)));
 
     client_cache.client_hash = client_hash;
-    (*state.pairing_cache)[client_id.value() + client_ip] = client_cache;
+    (*state.pairing_cache)[cache_key] = client_cache;
 
     send_xml<T>(response, SimpleWeb::StatusCode::success_ok, xml);
     return;
@@ -165,7 +173,6 @@ void pair(std::shared_ptr<typename SimpleWeb::ServerBase<T>::Response> response,
   // PHASE 5 (over HTTPS)
   auto phrase = get_header(headers, "phrase");
   if (phrase && phrase.value() == "pairchallenge") {
-    // TODO: this comes on HTTPS check client cert and if paired already
     pt::ptree xml;
 
     xml.put("root.paired", 1);

@@ -15,7 +15,7 @@ struct PairCache : moonlight::PairedClients {
 };
 
 struct LocalState {
-  const std::shared_ptr<Config> config;
+  const std::shared_ptr<moonlight::Config> config;
   const std::shared_ptr<std::vector<moonlight::DisplayMode>> display_modes;
 
   const X509 *server_cert;

@@ -15,6 +15,8 @@ namespace pt = boost::property_tree;
 #include <moonlight/data-structures.hpp>
 #include <sstream>
 
+namespace moonlight {
+
 /**
  * @brief Configuration class, an abstraction on top of the config.json file
  */
@@ -58,7 +60,7 @@ public:
    */
   std::uint16_t map_port(VALID_PORTS port) const {
     auto base_port = _state.get<int>("base_port", 47989);
-    return (std::uint16_t)(base_port + port);
+    return (uint16_t)(base_port + port);
   }
 
   std::string external_ip() const {
@@ -77,8 +79,8 @@ public:
   // Pair methods
   ////////
 
-  std::vector<moonlight::PairedClients> get_paired_clients() const {
-    std::vector<moonlight::PairedClients> r;
+  std::vector<PairedClients> get_paired_clients() const {
+    std::vector<PairedClients> r;
     auto paired_clients = _state.get_child_optional("paired_clients");
     if (!paired_clients)
       return {};
@@ -97,7 +99,7 @@ public:
   std::optional<std::string> get_client_cert(const std::string &clientID) const {
     auto paired_clients = get_paired_clients();
     auto search_result =
-        std::find_if(paired_clients.begin(), paired_clients.end(), [clientID](moonlight::PairedClients &pair_client) {
+        std::find_if(paired_clients.begin(), paired_clients.end(), [clientID](PairedClients &pair_client) {
           return pair_client.client_id == clientID;
         });
     if (search_result != paired_clients.end())
@@ -153,3 +155,4 @@ private:
     return ss.str();
   }
 };
+} // namespace moonlight
