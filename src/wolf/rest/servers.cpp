@@ -15,28 +15,6 @@ using HttpServer = SimpleWeb::Server<SimpleWeb::HTTP>;
 namespace HTTPServers {
 
 /**
- * @brief Create an HTTPS server
- *
- * @param pkey_filename
- * @param cert_filename
- * @return std::unique_ptr<HttpsServer>
- */
-std::unique_ptr<HttpsServer> createHTTPS(const std::string &pkey_filename,
-                                         const std::string &cert_filename,
-                                         const std::shared_ptr<moonlight::Config> &config) {
-  return std::make_unique<HttpsServer>(cert_filename, pkey_filename, config);
-}
-
-/**
- * @brief Create an HTTP server
- *
- * @return std::unique_ptr<HttpServer>
- */
-std::unique_ptr<HttpServer> createHTTP() {
-  return std::make_unique<HttpServer>();
-}
-
-/**
  * @brief Start the generic server on the specified port
  * @return std::thread: the thread where this server will run
  */

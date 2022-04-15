@@ -54,7 +54,7 @@ Unit tests will live under `tests/`, they'll be focused on testing the library p
 ## Dependencies
 
 ```
-cmake g++-10 gcc-10 libpipewire-0.3-dev libboost-thread-dev libboost-filesystem-dev libboost-log-dev libssl-dev
+cmake g++-10 gcc-10 libpipewire-0.3-dev libboost-thread-dev libboost-filesystem-dev libboost-log-dev libssl-dev libboost-stacktrace-dev
 ```
 
 ## Acknowledgements

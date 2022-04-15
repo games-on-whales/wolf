@@ -12,8 +12,30 @@ FetchContent_Declare(
 
 FetchContent_MakeAvailable(fmtlib)
 
-find_package(Boost REQUIRED COMPONENTS log_setup log)
+find_package(Boost
+        REQUIRED COMPONENTS
+        log_setup
+        log
+        stacktrace_basic)
 include_directories(${Boost_INCLUDE_DIRS})
+
+
+### Boost stacktrace exception handling
+# adapted from https://github.com/jschueller/boost-stacktrace-example/blob/master/CMakeLists.txt
+# also see: https://www.boost.org/doc/libs/develop/doc/html/stacktrace/configuration_and_build.html
+find_library(BOOST_STACKTRACE_BACKTRACE_LIBRARY NAMES boost_stacktrace_backtrace)
+if (UNIX)
+    message(STATUS "Using Boost::stacktrace/addr2line")
+    add_definitions(-D_GNU_SOURCE=1)
+    target_compile_definitions(wolf PRIVATE BOOST_STACKTRACE_USE_ADDR2LINE)
+    target_link_libraries(wolf PRIVATE dl)
+elseif (MINGW AND BOOST_STACKTRACE_BACKTRACE_LIBRARY)
+    message(STATUS "Using Boost::stacktrace/backtrace")
+    target_compile_definitions(wolf PRIVATE BOOST_STACKTRACE_USE_BACKTRACE)
+    target_link_libraries(wolf PRIVATE boost_stacktrace_backtrace backtrace)
+else ()
+    message(STATUS "Using Boost::stacktrace/basic")
+endif ()
 
 # Some libraries don't work with FetchContent_Declare out of the box
 # We have to manually git clone them and adding them into `libraries`
