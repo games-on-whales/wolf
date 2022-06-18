@@ -12,5 +12,5 @@ _deps
 build
 .vscode
 .idea
-cmake-build-debug
-cmake-build-debug-debian-vm
+cmake-build-*
+DartConfiguration.tcl

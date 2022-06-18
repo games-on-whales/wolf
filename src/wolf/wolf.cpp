@@ -5,6 +5,7 @@
 #include <moonlight/config.hpp>
 #include <moonlight/data-structures.hpp>
 #include <rest/servers.cpp>
+#include <streaming/streaming.cpp>
 #include <vector>
 
 /**
@@ -106,6 +107,10 @@ int main(int argc, char *argv[]) {
   auto http_thread = HTTPServers::startServer(http_server.get(),
                                               *local_state,
                                               local_state->config->map_port(moonlight::Config::HTTP_PORT));
+
+  streaming::init(argc, argv);
+  logs::log(logs::debug, "Initialised gstreamer: {}", streaming::version());
+  streaming::play("videotestsrc", "autovideosink");
 
   // Exception and termination handling
   shutdown_handler = [&](int signum) {

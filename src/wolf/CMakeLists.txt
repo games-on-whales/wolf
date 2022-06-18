@@ -44,6 +44,7 @@ target_include_directories(wolf PRIVATE libraries .)
 target_link_libraries(
         wolf PRIVATE
         moonlight
+        streaming
         ${Boost_LIBRARIES}
         ${CMAKE_DL_LIBS}
         ${CMAKE_THREAD_LIBS_INIT}
