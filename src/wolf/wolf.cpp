@@ -88,11 +88,16 @@ void check_exceptions() {
   }
 }
 
+const char *get_env(const char *tag, const char *def = nullptr) noexcept {
+  const char *ret = std::getenv(tag);
+  return ret ? ret : def;
+}
+
 /**
  * @brief here's where the magic starts
  */
 int main(int argc, char *argv[]) {
-  logs::init(logs::trace);
+  logs::init(logs::parse_level(get_env("LOG_LEVEL", "INFO")));
   check_exceptions();
 
   auto config_file = "config.json";

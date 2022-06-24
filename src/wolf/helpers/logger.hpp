@@ -63,4 +63,22 @@ template <typename S, typename... Args> void log(severity_level lv, const S &for
 
   BOOST_LOG_SEV(lg, lv) << msg;
 }
+
+logs::severity_level parse_level(const std::string &level) {
+  std::string lvl = level;
+  std::transform(level.begin(), level.end(), lvl.begin(), [](unsigned char c) { return std::toupper(c); });
+  if (lvl == "TRACE") {
+    return logs::trace;
+  } else if (lvl == "DEBUG") {
+    return logs::debug;
+  } else if (lvl == "INFO") {
+    return logs::info;
+  } else if (lvl == "WARNING") {
+    return logs::warning;
+  } else if (lvl == "ERROR") {
+    return logs::error;
+  } else {
+    return logs::fatal;
+  }
+}
 } // namespace logs
