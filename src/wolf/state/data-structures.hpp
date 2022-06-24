@@ -5,7 +5,7 @@
 #include <openssl/x509.h>
 #include <unordered_map>
 
-struct PairCache : moonlight::PairedClients {
+struct PairCache : moonlight::PairedClient {
   std::string aes_key;
 
   // Followings will be filled later on during the pair process

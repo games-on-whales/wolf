@@ -185,4 +185,17 @@ void pair(std::shared_ptr<typename SimpleWeb::ServerBase<T>::Response> response,
   logs::log(logs::warning, "Unable to match pair with any phase, you can retry pairing from Moonlight");
 }
 
+template <class T>
+void applist(std::shared_ptr<typename SimpleWeb::ServerBase<T>::Response> response,
+             std::shared_ptr<typename SimpleWeb::ServerBase<T>::Request> request,
+             const LocalState &state) {
+  log_req<T>(request);
+
+  // TODO: check if pair successful?
+
+  auto xml = moonlight::applist(*state.config);
+
+  send_xml<T>(response, SimpleWeb::StatusCode::success_ok, xml);
+}
+
 } // namespace endpoints

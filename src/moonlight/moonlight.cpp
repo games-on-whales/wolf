@@ -135,4 +135,24 @@ pt::ptree client_pair(const std::string &aes_key,
   return resp;
 }
 } // namespace pair
+
+pt::ptree applist(const Config &config) {
+  pt::ptree resp;
+  auto &apps = resp.add_child("root", pt::ptree{});
+
+  apps.put("<xmlattr>.status_code", 200);
+
+  int x = 0;
+  for (auto &app : config.get_apps()) {
+    pt::ptree app_t;
+
+    app_t.put("IsHdrSupported", app.support_hdr ? 1 : 0);
+    app_t.put("AppTitle", app.title);
+    app_t.put("ID", app.id);
+
+    apps.push_back(std::make_pair("App", std::move(app_t)));
+  }
+
+  return resp;
+}
 } // namespace moonlight

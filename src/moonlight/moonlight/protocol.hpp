@@ -120,4 +120,6 @@ pt::ptree client_pair(const std::string &aes_key,
                       const std::string &client_public_cert_signature,
                       const std::string &client_cert_public_key);
 } // namespace pair
+
+pt::ptree applist(const Config &config);
 } // namespace moonlight

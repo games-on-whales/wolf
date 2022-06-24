@@ -9,9 +9,17 @@ struct DisplayMode {
   const int refreshRate;
 };
 
-struct PairedClients {
+struct PairedClient {
   std::string client_id;
   std::string client_cert;
+};
+
+struct App {
+  const std::string title;
+  const std::string id;
+  const bool support_hdr;
+  // TODO: launch command or something similar
+  // TODO: icon
 };
 
 } // namespace moonlight

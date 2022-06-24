@@ -22,6 +22,13 @@ std::shared_ptr<moonlight::Config> load_config(const std::string &config_file) {
     defaults.put("base_port", 47989);
     // TODO: external_ip, local_ip, mac_address
 
+    pt::ptree default_apps, app_desktop;
+    app_desktop.put("title", "Desktop");
+    app_desktop.put("id", "1");
+    app_desktop.put("support_hdr", true);
+    default_apps.push_back({"", app_desktop});
+    defaults.add_child("apps", default_apps);
+
     return std::make_shared<moonlight::Config>(defaults);
   }
 }
@@ -113,9 +120,10 @@ int main(int argc, char *argv[]) {
                                               *local_state,
                                               local_state->config->map_port(moonlight::Config::HTTP_PORT));
 
-  streaming::init(argc, argv);
-  logs::log(logs::debug, "Initialised gstreamer: {}", streaming::version());
-  streaming::play("videotestsrc", "autovideosink");
+  // GStreamer test
+  //  streaming::init(argc, argv);
+  //  logs::log(logs::debug, "Initialised gstreamer: {}", streaming::version());
+  //  streaming::play("videotestsrc", "autovideosink");
 
   // Exception and termination handling
   shutdown_handler = [&](int signum) {

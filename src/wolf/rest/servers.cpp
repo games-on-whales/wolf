@@ -32,7 +32,7 @@ template <typename T> std::thread startServer(SimpleWeb::Server<T> *server, cons
 
   // HTTPS will have more endpoints
   if (port == state.config->map_port(moonlight::Config::HTTPS_PORT)) {
-    // https_server.resource["^/applist$"]["GET"]
+    server->resource["^/applist$"]["GET"] = [&state](auto resp, auto req) { endpoints::applist<T>(resp, req, state); };
     // https_server.resource["^/appasset$"]["GET"]
     // https_server.resource["^/launch$"]["GET"]
     // https_server.resource["^/resume$"]["GET"]
