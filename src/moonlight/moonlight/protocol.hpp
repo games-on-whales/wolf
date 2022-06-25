@@ -121,5 +121,20 @@ pt::ptree client_pair(const std::string &aes_key,
                       const std::string &client_cert_public_key);
 } // namespace pair
 
+/**
+ * After pairing and selecting the host Moonlight will show a list of applications that can be started,
+ * here we just return a list of the names.
+ *
+ * @param config: local state where we store the available apps in the current host
+ * @return ptree: The XML response, a list of apps
+ */
 pt::ptree applist(const Config &config);
+
+/**
+ * After the user selects an app to launch we have to negotiate the IP and PORT for the RTSP session
+ *
+ * @param config: local state
+ * @return:
+ */
+pt::ptree launch(const Config &config);
 } // namespace moonlight

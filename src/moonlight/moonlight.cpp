@@ -138,11 +138,8 @@ pt::ptree client_pair(const std::string &aes_key,
 
 pt::ptree applist(const Config &config) {
   pt::ptree resp;
-  auto &apps = resp.add_child("root", pt::ptree{});
+  resp.put("root.<xmlattr>.status_code", 200);
 
-  apps.put("<xmlattr>.status_code", 200);
-
-  int x = 0;
   for (auto &app : config.get_apps()) {
     pt::ptree app_t;
 
@@ -150,9 +147,21 @@ pt::ptree applist(const Config &config) {
     app_t.put("AppTitle", app.title);
     app_t.put("ID", app.id);
 
-    apps.push_back(std::make_pair("App", std::move(app_t)));
+    resp.push_back(std::make_pair("App", std::move(app_t)));
   }
 
   return resp;
 }
+
+pt::ptree launch(const Config &config) {
+  pt::ptree resp;
+
+  resp.put("root.<xmlattr>.status_code", 200);
+  resp.put("root.sessionUrl0",
+           "rtsp://" + config.local_ip() + ":" + std::to_string(config.map_port(Config::RTSP_SETUP_PORT)));
+  resp.put("root.gamesession", 1);
+
+  return resp;
+}
+
 } // namespace moonlight

@@ -42,6 +42,10 @@ public:
   enum VALID_PORTS {
     HTTPS_PORT = -5,
     HTTP_PORT = 0,
+    VIDEO_STREAM_PORT = 9,
+    CONTROL_PORT = 10,
+    AUDIO_STREAM_PORT = 11,
+    RTSP_SETUP_PORT = 21
   };
 
   std::string hostname() const {
