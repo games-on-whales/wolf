@@ -198,4 +198,17 @@ void applist(std::shared_ptr<typename SimpleWeb::ServerBase<T>::Response> respon
   send_xml<T>(response, SimpleWeb::StatusCode::success_ok, xml);
 }
 
+template <class T>
+void launch(std::shared_ptr<typename SimpleWeb::ServerBase<T>::Response> response,
+            std::shared_ptr<typename SimpleWeb::ServerBase<T>::Request> request,
+            const LocalState &state) {
+  log_req<T>(request);
+
+  // TODO: check if pair successful?
+  // TODO: actually start launch app (get app_id)?
+  auto xml = moonlight::launch(*state.config);
+
+  send_xml<T>(response, SimpleWeb::StatusCode::success_ok, xml);
+}
+
 } // namespace endpoints
