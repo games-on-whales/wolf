@@ -1,8 +1,8 @@
+#include "state/config.hpp"
 #include <boost/filesystem.hpp>
 #include <boost/stacktrace.hpp>
 #include <csignal>
 #include <helpers/logger.hpp>
-#include <moonlight/config.hpp>
 #include <moonlight/data-structures.hpp>
 #include <rest/servers.cpp>
 #include <streaming/streaming.cpp>
@@ -11,10 +11,10 @@
 /**
  * @brief Will try to load the config file and fallback to defaults
  */
-std::shared_ptr<moonlight::Config> load_config(const std::string &config_file) {
+std::shared_ptr<state::JSONConfig> load_config(const std::string &config_file) {
   logs::log(logs::info, "Reading config file from: {}", config_file);
   try {
-    return std::make_shared<moonlight::Config>(config_file);
+    return std::make_shared<state::JSONConfig>(config_file);
   } catch (const std::exception &e) {
     logs::log(logs::warning, "Unable to open config file: {}, using defaults", config_file);
     pt::ptree defaults;
@@ -29,7 +29,7 @@ std::shared_ptr<moonlight::Config> load_config(const std::string &config_file) {
     default_apps.push_back({"", app_desktop});
     defaults.add_child("apps", default_apps);
 
-    return std::make_shared<moonlight::Config>(defaults);
+    return std::make_shared<state::JSONConfig>(defaults);
   }
 }
 
@@ -45,7 +45,7 @@ std::shared_ptr<std::vector<moonlight::DisplayMode>> getDisplayModes() {
 /**
  * @brief Local state initialization
  */
-std::shared_ptr<LocalState>
+std::shared_ptr<state::LocalState>
 initialize(const std::string &config_file, const std::string &pkey_filename, const std::string &cert_filename) {
   auto config = load_config(config_file);
   auto display_modes = getDisplayModes();
@@ -62,10 +62,10 @@ initialize(const std::string &config_file, const std::string &pkey_filename, con
     x509::write_to_disk(server_pkey, pkey_filename, server_cert, cert_filename);
   }
 
-  auto pair_cache =
-      std::make_shared<std::unordered_map<std::string, PairCache>>(std::unordered_map<std::string, PairCache>());
-  LocalState state = {config, display_modes, server_cert, server_pkey, pair_cache};
-  return std::make_shared<LocalState>(state);
+  auto pair_cache = std::make_shared<std::unordered_map<std::string, state::PairCache>>(
+      std::unordered_map<std::string, state::PairCache>());
+  state::LocalState state = {config, display_modes, server_cert, server_pkey, pair_cache};
+  return std::make_shared<state::LocalState>(state);
 }
 
 /**
@@ -115,10 +115,10 @@ int main(int argc, char *argv[]) {
 
   auto https_thread = HTTPServers::startServer(https_server.get(),
                                                *local_state,
-                                               local_state->config->map_port(moonlight::Config::HTTPS_PORT));
+                                               local_state->config->map_port(state::JSONConfig::HTTPS_PORT));
   auto http_thread = HTTPServers::startServer(http_server.get(),
                                               *local_state,
-                                              local_state->config->map_port(moonlight::Config::HTTP_PORT));
+                                              local_state->config->map_port(state::JSONConfig::HTTP_PORT));
 
   // GStreamer test
   //  streaming::init(argc, argv);

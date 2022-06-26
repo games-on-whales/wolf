@@ -6,8 +6,10 @@
 #include <crypto/crypto.hpp>
 #include <iostream>
 #include <moonlight/protocol.hpp>
+#include <state/config.hpp>
 
 using namespace moonlight;
+using namespace state;
 
 std::string tree_to_str(const pt::ptree &t) {
   std::stringstream ss;
@@ -16,7 +18,7 @@ std::string tree_to_str(const pt::ptree &t) {
 }
 
 TEST_CASE("LocalState load JSON", "[LocalState]") {
-  auto state = new Config("config.json");
+  auto state = new JSONConfig("config.json");
   REQUIRE(state->hostname() == "test_wolf");
   REQUIRE(state->get_uuid() == "uid-12345");
   REQUIRE(state->external_ip() == "192.168.99.1");
@@ -24,12 +26,12 @@ TEST_CASE("LocalState load JSON", "[LocalState]") {
   REQUIRE(state->mac_address() == "AA:BB:CC:DD");
 
   SECTION("Port mapping") {
-    REQUIRE(state->map_port(Config::HTTP_PORT) == 3000);
-    REQUIRE(state->map_port(Config::HTTPS_PORT) == 2995);
-    REQUIRE(state->map_port(Config::VIDEO_STREAM_PORT) == 3009);
-    REQUIRE(state->map_port(Config::CONTROL_PORT) == 3010);
-    REQUIRE(state->map_port(Config::AUDIO_STREAM_PORT) == 3011);
-    REQUIRE(state->map_port(Config::RTSP_SETUP_PORT) == 3021);
+    REQUIRE(state->map_port(JSONConfig::HTTP_PORT) == 3000);
+    REQUIRE(state->map_port(JSONConfig::HTTPS_PORT) == 2995);
+    REQUIRE(state->map_port(JSONConfig::VIDEO_STREAM_PORT) == 3009);
+    REQUIRE(state->map_port(JSONConfig::CONTROL_PORT) == 3010);
+    REQUIRE(state->map_port(JSONConfig::AUDIO_STREAM_PORT) == 3011);
+    REQUIRE(state->map_port(JSONConfig::RTSP_SETUP_PORT) == 3021);
   }
 
   SECTION("Apps") {
@@ -38,7 +40,7 @@ TEST_CASE("LocalState load JSON", "[LocalState]") {
 }
 
 TEST_CASE("LocalState pairing information", "[LocalState]") {
-  auto state = new Config("config.json");
+  auto state = new JSONConfig("config.json");
   auto clientID = "0123456789ABCDEF";
   auto a_client_cert = "A DUMP OF A VALID CERTIFICATE";
 
@@ -69,21 +71,59 @@ TEST_CASE("LocalState pairing information", "[LocalState]") {
 }
 
 TEST_CASE("Mocked serverinfo", "[MoonlightProtocol]") {
-  auto state = new Config("config.json");
+  auto state = new JSONConfig("config.json");
   std::vector<DisplayMode> displayModes = {{1920, 1080, 60}, {1024, 768, 30}};
 
   SECTION("server_info conforms with the expected server_info_response.xml") {
-    auto result = serverinfo(*state, false, 0, displayModes, "001122");
-    pt::ptree expectedResult;
-    pt::read_xml("server_info_response.xml", expectedResult, boost::property_tree::xml_parser::trim_whitespace);
+    auto result = serverinfo(false,
+                             0,
+                             state::JSONConfig::HTTPS_PORT,
+                             state::JSONConfig::HTTP_PORT,
+                             state->get_uuid(),
+                             state->hostname(),
+                             state->mac_address(),
+                             state->external_ip(),
+                             state->local_ip(),
+                             displayModes,
+                             state->isPaired("001122"));
 
-    REQUIRE(result == expectedResult);
+    REQUIRE(tree_to_str(result) ==
+            "<?xml version=\"1.0\" encoding=\"utf-8\"?>\n"
+            "<root status_code=\"200\">"
+            "<hostname>test_wolf</hostname>"
+            "<appversion>7.1.431.0</appversion>"
+            "<GfeVersion>3.23.0.74</GfeVersion>"
+            "<uniqueid>uid-12345</uniqueid>"
+            "<MaxLumaPixelsHEVC>0</MaxLumaPixelsHEVC>"
+            "<ServerCodecModeSupport>3</ServerCodecModeSupport>"
+            "<HttpsPort>-5</HttpsPort>"
+            "<ExternalPort>0</ExternalPort>"
+            "<mac>AA:BB:CC:DD</mac>"
+            "<ExternalIP>192.168.99.1</ExternalIP>"
+            "<LocalIP>192.168.1.1</LocalIP>"
+            "<SupportedDisplayMode>"
+            "<DisplayMode><Width>1920</Width><Height>1080</Height><RefreshRate>60</RefreshRate></DisplayMode>"
+            "<DisplayMode><Width>1024</Width><Height>768</Height><RefreshRate>30</RefreshRate></DisplayMode>"
+            "</SupportedDisplayMode><PairStatus>0</PairStatus>"
+            "<currentgame>0</currentgame>"
+            "<state>SUNSHINE_SERVER_FREE</state>"
+            "</root>");
     REQUIRE(result.get<bool>("root.PairStatus") == false);
   }
 
   SECTION("does pairing change the returned serverinfo?") {
     state->pair("001122", "");
-    auto result = serverinfo(*state, false, 0, displayModes, "001122");
+    auto result = serverinfo(false,
+                             0,
+                             state::JSONConfig::HTTPS_PORT,
+                             state::JSONConfig::HTTP_PORT,
+                             state->get_uuid(),
+                             state->hostname(),
+                             state->mac_address(),
+                             state->external_ip(),
+                             state->local_ip(),
+                             displayModes,
+                             state->isPaired("001122"));
 
     REQUIRE(result.get<bool>("root.PairStatus") == true);
   }
@@ -213,8 +253,8 @@ TEST_CASE("Pairing moonlight", "[MoonlightProtocol]") {
 }
 
 TEST_CASE("applist", "[MoonlightProtocol]") {
-  auto state = new Config("config.json");
-  auto result = applist(*state);
+  auto state = new JSONConfig("config.json");
+  auto result = applist(state->get_apps());
   REQUIRE(tree_to_str(result) == "<?xml version=\"1.0\" encoding=\"utf-8\"?>"
                                  "\n<root status_code=\"200\"/>"
                                  "<App>"
@@ -225,8 +265,8 @@ TEST_CASE("applist", "[MoonlightProtocol]") {
 }
 
 TEST_CASE("launch", "[MoonlightProtocol]") {
-  auto state = new Config("config.json");
-  auto result = launch(*state);
+  auto state = new JSONConfig("config.json");
+  auto result = launch_success(state->local_ip(), std::to_string(state->map_port(JSONConfig::RTSP_SETUP_PORT)));
   REQUIRE(tree_to_str(result) == "<?xml version=\"1.0\" encoding=\"utf-8\"?>\n"
                                  "<root status_code=\"200\">"
                                  "<sessionUrl0>rtsp://192.168.1.1:3021</sessionUrl0>"

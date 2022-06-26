@@ -5,30 +5,35 @@ namespace pt = boost::property_tree;
 
 namespace moonlight {
 
-pt::ptree serverinfo(const Config &config,
-                     bool isServerBusy,
+pt::ptree serverinfo(bool isServerBusy,
                      int current_appid,
+                     int https_port,
+                     int http_port,
+                     const std::string &uuid,
+                     const std::string &hostname,
+                     const std::string &mac_address,
+                     const std::string &external_ip,
+                     const std::string &local_ip,
                      const std::vector<DisplayMode> &display_modes,
-                     const std::string &clientID) {
-  int pair_status = config.isPaired(clientID);
+                     int pair_status) {
   pt::ptree resp;
 
   resp.put("root.<xmlattr>.status_code", 200);
-  resp.put("root.hostname", config.hostname());
+  resp.put("root.hostname", hostname);
 
   resp.put("root.appversion", M_VERSION);
   resp.put("root.GfeVersion", M_GFE_VERSION);
-  resp.put("root.uniqueid", config.get_uuid());
+  resp.put("root.uniqueid", uuid);
 
   resp.put("root.MaxLumaPixelsHEVC", "0");
   // TODO: resp.put("root.MaxLumaPixelsHEVC",config::video.hevc_mode > 1 ? "1869449984" : "0");
   resp.put("root.ServerCodecModeSupport", "3"); // TODO: what are the modes here?
 
-  resp.put("root.HttpsPort", config.map_port(config.HTTPS_PORT));
-  resp.put("root.ExternalPort", config.map_port(config.HTTP_PORT));
-  resp.put("root.mac", config.mac_address());
-  resp.put("root.ExternalIP", config.external_ip());
-  resp.put("root.LocalIP", config.local_ip());
+  resp.put("root.HttpsPort", https_port);
+  resp.put("root.ExternalPort", http_port);
+  resp.put("root.mac", mac_address);
+  resp.put("root.ExternalIP", external_ip);
+  resp.put("root.LocalIP", local_ip);
 
   pt::ptree display_nodes;
   for (auto mode : display_modes) {
@@ -136,11 +141,11 @@ pt::ptree client_pair(const std::string &aes_key,
 }
 } // namespace pair
 
-pt::ptree applist(const Config &config) {
+pt::ptree applist(const std::vector<App> &apps) {
   pt::ptree resp;
   resp.put("root.<xmlattr>.status_code", 200);
 
-  for (auto &app : config.get_apps()) {
+  for (auto &app : apps) {
     pt::ptree app_t;
 
     app_t.put("IsHdrSupported", app.support_hdr ? 1 : 0);
@@ -153,15 +158,32 @@ pt::ptree applist(const Config &config) {
   return resp;
 }
 
-pt::ptree launch(const Config &config) {
+pt::ptree launch_success(const std::string &local_ip, const std::string &rtsp_port) {
+  // TODO: implement resume
+  // TODO: implement error on launch
+  // TODO: return GCM key
   pt::ptree resp;
 
   resp.put("root.<xmlattr>.status_code", 200);
-  resp.put("root.sessionUrl0",
-           "rtsp://" + config.local_ip() + ":" + std::to_string(config.map_port(Config::RTSP_SETUP_PORT)));
+  resp.put("root.sessionUrl0", "rtsp://" + local_ip + ":" + rtsp_port);
   resp.put("root.gamesession", 1);
 
   return resp;
 }
+
+// TODO: implement key derivation
+// stream::launch_session_t make_launch_session(bool host_audio, const args_t &args) {
+//  stream::launch_session_t launch_session;
+//
+//  launch_session.host_audio = host_audio;
+//  launch_session.gcm_key    = util::from_hex<crypto::aes_t>(args.at("rikey"s), true);
+//  uint32_t prepend_iv       = util::endian::big<uint32_t>(util::from_view(args.at("rikeyid"s)));
+//  auto prepend_iv_p         = (uint8_t *)&prepend_iv;
+//
+//  auto next = std::copy(prepend_iv_p, prepend_iv_p + sizeof(prepend_iv), std::begin(launch_session.iv));
+//  std::fill(next, std::end(launch_session.iv), 0);
+//
+//  return launch_session;
+//}
 
 } // namespace moonlight

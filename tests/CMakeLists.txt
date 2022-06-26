@@ -31,6 +31,7 @@ target_link_libraries(wolflib PRIVATE
         ${CMAKE_DL_LIBS}
         ${CMAKE_THREAD_LIBS_INIT}
         moonlight
+        wolf
         wolf_crypto
         fmt::fmt
         Catch2::Catch2WithMain)

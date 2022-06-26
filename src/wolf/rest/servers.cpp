@@ -18,7 +18,7 @@ namespace HTTPServers {
  * @brief Start the generic server on the specified port
  * @return std::thread: the thread where this server will run
  */
-template <typename T> std::thread startServer(SimpleWeb::Server<T> *server, const LocalState &state, int port) {
+template <typename T> std::thread startServer(SimpleWeb::Server<T> *server, const state::LocalState &state, int port) {
   server->config.port = port;
   server->config.address = {"0.0.0.0"};
   server->default_resource["GET"] = endpoints::not_found<T>;
@@ -31,7 +31,7 @@ template <typename T> std::thread startServer(SimpleWeb::Server<T> *server, cons
   server->resource["^/pair$"]["GET"] = [&state](auto resp, auto req) { endpoints::pair<T>(resp, req, state); };
 
   // HTTPS will have more endpoints
-  if (port == state.config->map_port(moonlight::Config::HTTPS_PORT)) {
+  if (port == state.config->map_port(state::JSONConfig::HTTPS_PORT)) {
     server->resource["^/applist$"]["GET"] = [&state](auto resp, auto req) { endpoints::applist<T>(resp, req, state); };
     server->resource["^/launch"]["GET"] = [&state](auto resp, auto req) { endpoints::launch<T>(resp, req, state); };
 

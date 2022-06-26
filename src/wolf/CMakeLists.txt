@@ -51,6 +51,10 @@ target_link_libraries(
         fmt::fmt
 )
 
+# The following is needed in order to import this into the test suite
+set_property(TARGET wolf PROPERTY ENABLE_EXPORTS 1)
+
+
 if (UNIX AND NOT APPLE)
     add_compile_definitions(WOLF_PLATFORM="linux")
 

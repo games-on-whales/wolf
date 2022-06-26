@@ -12,7 +12,7 @@ target_include_directories(moonlight PUBLIC .)
 set_target_properties(moonlight PROPERTIES PUBLIC_HEADER .)
 set_target_properties(moonlight PROPERTIES OUTPUT_NAME "moonlight")
 
-find_package(Boost REQUIRED COMPONENTS log)
+find_package(Boost REQUIRED)
 
 # This depends on (header only) boost
 target_link_libraries(

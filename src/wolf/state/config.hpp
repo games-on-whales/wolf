@@ -15,18 +15,22 @@ namespace pt = boost::property_tree;
 #include <moonlight/data-structures.hpp>
 #include <sstream>
 
-namespace moonlight {
+namespace state {
+struct PairedClient {
+  std::string client_id;
+  std::string client_cert;
+};
 
 /**
  * @brief Configuration class, an abstraction on top of the config.json file
  */
-class Config {
+class JSONConfig {
 public:
-  explicit Config(const pt::ptree &state) : _state(state) {
+  explicit JSONConfig(const pt::ptree &state) : _state(state) {
     init_uuid();
   }
 
-  explicit Config(const std::string &config_file) {
+  explicit JSONConfig(const std::string &config_file) {
     pt::read_json(config_file, _state);
     init_uuid();
   }
@@ -138,8 +142,8 @@ public:
   // Apps
   ////////
 
-  std::vector<App> get_apps() const {
-    std::vector<App> r;
+  std::vector<moonlight::App> get_apps() const {
+    std::vector<moonlight::App> r;
     auto apps = _state.get_child_optional("apps");
     if (!apps)
       return {};
@@ -176,4 +180,4 @@ private:
     return ss.str();
   }
 };
-} // namespace moonlight
+} // namespace state

@@ -1,5 +1,4 @@
 #pragma once
-#include "config.hpp"
 #include "data-structures.hpp"
 #include <boost/property_tree/ptree.hpp>
 
@@ -13,19 +12,30 @@ constexpr auto M_GFE_VERSION = "3.23.0.74";
 /**
  * @brief Step 1: GET server status
  *
- * @param config: local state: ip, mac address, already paired clients.
  * @param isServerBusy: true if we are already running a streaming session
  * @param current_appid: -1 if no app is running, otherwise the ID as defined in the app list
- * @param display_modes: a list of supported display modes for the current server
- * @param clientID: used to check if it's already paired
- *
+ * @param uuid
+ * @param hostname
+ * @param https_port
+ * @param http_port
+ * @param mac_address
+ * @param external_ip
+ * @param local_ip
+ * @param display_modes
+ * @param pair_status: true if the client is already paired
  * @return ptree the XML response to be sent
  */
-pt::ptree serverinfo(const Config &config,
-                     bool isServerBusy,
+pt::ptree serverinfo(bool isServerBusy,
                      int current_appid,
+                     int https_port,
+                     int http_port,
+                     const std::string &uuid,
+                     const std::string &hostname,
+                     const std::string &mac_address,
+                     const std::string &external_ip,
+                     const std::string &local_ip,
                      const std::vector<DisplayMode> &display_modes,
-                     const std::string &clientID);
+                     int pair_status);
 
 /**
  * @brief Step 2: PAIR a new client
@@ -125,10 +135,10 @@ pt::ptree client_pair(const std::string &aes_key,
  * After pairing and selecting the host Moonlight will show a list of applications that can be started,
  * here we just return a list of the names.
  *
- * @param config: local state where we store the available apps in the current host
+ * @param apps: a list of available apps
  * @return ptree: The XML response, a list of apps
  */
-pt::ptree applist(const Config &config);
+pt::ptree applist(const std::vector<App> &apps);
 
 /**
  * After the user selects an app to launch we have to negotiate the IP and PORT for the RTSP session
@@ -136,5 +146,6 @@ pt::ptree applist(const Config &config);
  * @param config: local state
  * @return:
  */
-pt::ptree launch(const Config &config);
+pt::ptree launch_success(const std::string &local_ip, const std::string &rtsp_port);
+// TODO: launch_error()
 } // namespace moonlight

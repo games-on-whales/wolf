@@ -43,7 +43,7 @@ void not_found(std::shared_ptr<typename SimpleWeb::ServerBase<T>::Response> resp
 template <class T>
 void serverinfo(std::shared_ptr<typename SimpleWeb::ServerBase<T>::Response> response,
                 std::shared_ptr<typename SimpleWeb::ServerBase<T>::Request> request,
-                const LocalState &state) {
+                const state::LocalState &state) {
   log_req<T>(request);
 
   SimpleWeb::CaseInsensitiveMultimap headers = request->parse_query_string();
@@ -54,11 +54,18 @@ void serverinfo(std::shared_ptr<typename SimpleWeb::ServerBase<T>::Response> res
     return;
   }
 
-  auto xml = moonlight::serverinfo(*state.config,
-                                   false, // TODO: isServerBusy
+  auto cfg = state.config;
+  auto xml = moonlight::serverinfo(false, // TODO: isServerBusy
                                    -1,    // TODO: current_appid
+                                   cfg->map_port(state::JSONConfig::HTTPS_PORT),
+                                   cfg->map_port(state::JSONConfig::HTTP_PORT),
+                                   cfg->get_uuid(),
+                                   cfg->hostname(),
+                                   cfg->mac_address(),
+                                   cfg->external_ip(),
+                                   cfg->local_ip(),
                                    *state.display_modes,
-                                   client_id.value());
+                                   cfg->isPaired(client_id.value()));
 
   send_xml<T>(response, SimpleWeb::StatusCode::success_ok, xml);
 }
@@ -69,7 +76,7 @@ void serverinfo(std::shared_ptr<typename SimpleWeb::ServerBase<T>::Response> res
 template <class T>
 void pair(std::shared_ptr<typename SimpleWeb::ServerBase<T>::Response> response,
           std::shared_ptr<typename SimpleWeb::ServerBase<T>::Request> request,
-          const LocalState &state) {
+          const state::LocalState &state) {
   log_req<T>(request);
 
   SimpleWeb::CaseInsensitiveMultimap headers = request->parse_query_string();
@@ -99,7 +106,7 @@ void pair(std::shared_ptr<typename SimpleWeb::ServerBase<T>::Response> response,
     auto client_cert_parsed = crypto::hex_to_str(client_cert_str.value(), true);
 
     (*state.pairing_cache)[cache_key] =
-        PairCache{client_id.value(), client_cert_parsed, aes_key, std::nullopt, std::nullopt};
+        state::PairCache{client_id.value(), client_cert_parsed, aes_key, std::nullopt, std::nullopt};
 
     send_xml<T>(response, SimpleWeb::StatusCode::success_ok, xml);
     return;
@@ -110,7 +117,7 @@ void pair(std::shared_ptr<typename SimpleWeb::ServerBase<T>::Response> response,
     logs::log(logs::warning, "Unable to find {} {} in the pairing cache", client_id.value(), client_ip);
     return;
   }
-  PairCache client_cache = client_cache_it->second;
+  state::PairCache client_cache = client_cache_it->second;
 
   // PHASE 2
   auto client_challenge = get_header(headers, "clientchallenge");
@@ -188,12 +195,10 @@ void pair(std::shared_ptr<typename SimpleWeb::ServerBase<T>::Response> response,
 template <class T>
 void applist(std::shared_ptr<typename SimpleWeb::ServerBase<T>::Response> response,
              std::shared_ptr<typename SimpleWeb::ServerBase<T>::Request> request,
-             const LocalState &state) {
+             const state::LocalState &state) {
   log_req<T>(request);
 
-  // TODO: check if pair successful?
-
-  auto xml = moonlight::applist(*state.config);
+  auto xml = moonlight::applist(state.config->get_apps());
 
   send_xml<T>(response, SimpleWeb::StatusCode::success_ok, xml);
 }
@@ -201,12 +206,16 @@ void applist(std::shared_ptr<typename SimpleWeb::ServerBase<T>::Response> respon
 template <class T>
 void launch(std::shared_ptr<typename SimpleWeb::ServerBase<T>::Response> response,
             std::shared_ptr<typename SimpleWeb::ServerBase<T>::Request> request,
-            const LocalState &state) {
+            const state::LocalState &state) {
   log_req<T>(request);
 
-  // TODO: check if pair successful?
   // TODO: actually start launch app (get app_id)?
-  auto xml = moonlight::launch(*state.config);
+  // Header: {("additionalStates", "1"), ("uniqueid", "0123456789ABCDEF"), ("rikeyid", "-228339149"),
+  // ("remoteControllersBitmap", "0"), ("sops", "1"), ("appid", "1"), ("rikey", "9d804e47a6aa6624b7d4b502b32cc522"),
+  // ("surroundAudioInfo", "196610"), ("uuid", "0f691f13730748328a22a6952a5ac3a2"), ("mode", "1920x1080x60"), ("gcmap",
+  // "0"), ("localAudioPlayMode", "0")}
+  auto xml = moonlight::launch_success(state.config->local_ip(),
+                                       std::to_string(state.config->map_port(state::JSONConfig::RTSP_SETUP_PORT)));
 
   send_xml<T>(response, SimpleWeb::StatusCode::success_ok, xml);
 }

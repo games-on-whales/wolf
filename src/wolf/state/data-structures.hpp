@@ -1,11 +1,12 @@
 #pragma once
 
-#include <moonlight/config.hpp>
 #include <moonlight/data-structures.hpp>
 #include <openssl/x509.h>
+#include <state/config.hpp>
 #include <unordered_map>
 
-struct PairCache : moonlight::PairedClient {
+namespace state {
+struct PairCache : state::PairedClient {
   std::string aes_key;
 
   // Followings will be filled later on during the pair process
@@ -15,7 +16,7 @@ struct PairCache : moonlight::PairedClient {
 };
 
 struct LocalState {
-  const std::shared_ptr<moonlight::Config> config;
+  const std::shared_ptr<state::JSONConfig> config;
   const std::shared_ptr<std::vector<moonlight::DisplayMode>> display_modes;
 
   const X509 *server_cert;
@@ -24,3 +25,4 @@ struct LocalState {
   /* Holds temporary results in order to achieve the multistep pairing process */
   const std::shared_ptr<std::unordered_map<std::string, PairCache>> pairing_cache;
 };
+} // namespace state

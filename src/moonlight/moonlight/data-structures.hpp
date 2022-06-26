@@ -9,11 +9,6 @@ struct DisplayMode {
   const int refreshRate;
 };
 
-struct PairedClient {
-  std::string client_id;
-  std::string client_cert;
-};
-
 struct App {
   const std::string title;
   const std::string id;
