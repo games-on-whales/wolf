@@ -90,12 +90,29 @@ std::string random(int length) {
 
 std::string aes_encrypt_ecb(const std::string &msg, const std::string &enc_key, const std::string &iv, bool padding) {
   auto ctx = aes::init(EVP_aes_128_ecb(), enc_key, iv, true, padding);
-  return aes::encrypt(ctx.get(), msg);
+  return aes::encrypt_symmetric(ctx.get(), msg);
 }
 
 std::string aes_decrypt_ecb(const std::string &msg, const std::string &enc_key, const std::string &iv, bool padding) {
   auto ctx = aes::init(EVP_aes_128_ecb(), enc_key, iv, false, padding);
-  return aes::decrypt(ctx.get(), msg);
+  return aes::decrypt_symmetric(ctx.get(), msg);
+}
+
+std::pair<std::string, std::string> aes_encrypt_gcm(const std::string &msg,
+                                                    const std::string &enc_key,
+                                                    const std::string &iv = random(AES_BLOCK_SIZE),
+                                                    bool padding = false) {
+  auto ctx = aes::init(EVP_aes_128_gcm(), enc_key, iv, false, padding);
+  return aes::encrypt_authenticated(ctx.get(), msg);
+}
+
+std::string aes_decrypt_gcm(const std::string &msg,
+                            const std::string &enc_key,
+                            const std::string &tag,
+                            const std::string &iv = random(AES_BLOCK_SIZE),
+                            bool padding = false) {
+  auto ctx = aes::init(EVP_aes_128_gcm(), enc_key, iv, false, padding);
+  return aes::decrypt_authenticated(ctx.get(), msg, tag);
 }
 
 std::string sign(const std::string &msg, const std::string &private_key) {

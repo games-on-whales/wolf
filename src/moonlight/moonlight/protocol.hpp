@@ -50,7 +50,7 @@ namespace pair {
  * Moonlight will send a salt and client certificate, we'll also need the user provided pin.
  *
  * PIN and SALT will be used to derive a shared AES key that needs to be stored
- * in order to be used to decrypt in the next phases (see `gen_aes_key`).
+ * in order to be used to decrypt_symmetric in the next phases (see `gen_aes_key`).
  *
  * At this stage we only have to send back our public certificate (`plaincert`).
  *
@@ -62,7 +62,7 @@ get_server_cert(const std::string &user_pin, const std::string &salt, const std:
 /**
  * @brief will derive a common AES key given the salt and the user provided pin
  *
- * This method needs to match what Moonlight is doing internally otherwise we wouldn't be able to decrypt the
+ * This method needs to match what Moonlight is doing internally otherwise we wouldn't be able to decrypt_symmetric the
  * client challenge.
  *
  * @return `SHA256(SALT + PIN)[0:16]`
@@ -72,7 +72,7 @@ std::string gen_aes_key(const std::string &salt, const std::string &pin);
 /**
  * @brief Pair, phase 2
  *
- * Using the AES key that we generated in the phase 1 we have to decrypt the client challenge,
+ * Using the AES key that we generated in the phase 1 we have to decrypt_symmetric the client challenge,
  *
  * We generate a SHA256 hash with the following:
  *  - Decrypted challenge
