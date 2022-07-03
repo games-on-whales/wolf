@@ -2,4 +2,4 @@
 
 WIP documentation for Wolf and Moonlight.
 
-See: link:protocols/index.adoc[protocols]
+See: link:protocols/index[protocols]

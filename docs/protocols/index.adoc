@@ -7,7 +7,7 @@ There are 6 main protocols involved in the current GameStream protocol:
 
 * HTTP (TCP 47989)
 ** unencrypted 🔓
-** used to exchanged public information needed to start link:pairing.adoc[pairing clients]
+** used to exchanged public information needed to start link:pairing[pairing clients]
 * HTTPS (TCP 47984)
 ** encrypted 🔐
 ** only available to paired clients
@@ -25,4 +25,4 @@ There are 6 main protocols involved in the current GameStream protocol:
 
 == Where to go next
 
-* See how link:pairing.adoc[pairing works].
+* See how link:pairing[pairing works].

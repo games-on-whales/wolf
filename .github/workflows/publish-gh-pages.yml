@@ -15,8 +15,5 @@ jobs:
       with:
         pdf_build: true
         source_dir: docs/ # default is .
-        # asciidoctor_params: --attribute=nofooter
-        # adoc_file_ext: .ascii # default is .adoc
-        # slides_build: true
-        # pre_build:
-        # post_build:
+        asciidoctor_params: "-r asciidoctor-diagram" # add support for diagrams
+        post_build: "git add -f *.png" # see: https://github.com/manoelcampos/asciidoctor-ghpages-action/issues/16
