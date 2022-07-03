@@ -1,3 +1,6 @@
 [submodule "src/wolf/libraries/Simple-Web-Server"]
 	path = src/wolf/libraries/Simple-Web-Server
 	url = https://gitlab.com/eidheim/Simple-Web-Server/
+[submodule "src/moonlight/moonlight-common-c"]
+	path = src/moonlight/moonlight-common-c
+	url = https://github.com/moonlight-stream/moonlight-common-c
