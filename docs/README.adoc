@@ -2,4 +2,4 @@
 
 WIP documentation for Wolf and Moonlight.
 
-See: link:protocols/index[protocols]
+Uses https://docs.antora.org/antora/latest/[Antora] for building, hosted at https://games-on-whales.github.io/wolf/[https://games-on-whales.github.io/wolf/]
