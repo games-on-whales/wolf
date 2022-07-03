@@ -1,0 +1,5 @@
+= Wolf
+
+WIP documentation for Wolf and Moonlight.
+
+See: link:protocols/index.adoc[protocols]
