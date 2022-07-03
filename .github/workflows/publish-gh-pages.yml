@@ -1,4 +1,4 @@
-name: GitHub Pages Publish
+name: GitHub Pages Build
 
 on:
   push:
@@ -16,4 +16,10 @@ jobs:
         pdf_build: true
         source_dir: docs/ # default is .
         asciidoctor_params: "-r asciidoctor-diagram" # add support for diagrams
-        post_build: "git add -f *.png" # see: https://github.com/manoelcampos/asciidoctor-ghpages-action/issues/16
+        post_build: "git add -f *.png"
+        pre_build: |
+         apk add --no-cache npm udev ttf-freefont chromium && \
+         export PUPPETEER_SKIP_CHROMIUM_DOWNLOAD="true" && \
+         export CHROME_BIN="/usr/bin/chromium-browser" && \
+         npm install -g @mermaid-js/mermaid-cli puppeteer@1.10.0 && \
+         export PATH=${PATH}:/root/node_modules/.bin
