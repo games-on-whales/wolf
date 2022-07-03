@@ -72,7 +72,7 @@ std::string gen_aes_key(const std::string &salt, const std::string &pin);
 /**
  * @brief Pair, phase 2
  *
- * Using the AES key that we generated in the phase 1 we have to decrypt_symmetric the client challenge,
+ * Using the AES key that we generated in the phase 1 we have to decrypt the client challenge,
  *
  * We generate a SHA256 hash with the following:
  *  - Decrypted challenge
