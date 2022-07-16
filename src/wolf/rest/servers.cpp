@@ -7,7 +7,7 @@
 #include <rest/custom-https.cpp>
 #include <rest/endpoints.cpp>
 #include <rest/helpers.cpp>
-#include <Simple-Web-Server/server_http.hpp>
+#include <server_http.hpp>
 
 using HttpsServer = HTTPSCustomCert;
 using HttpServer = SimpleWeb::Server<SimpleWeb::HTTP>;

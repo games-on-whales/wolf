@@ -15,6 +15,10 @@ namespace pt = boost::property_tree;
 #include <moonlight/data-structures.hpp>
 #include <sstream>
 
+#include <range/v3/view.hpp>
+
+using namespace ranges;
+
 namespace state {
 struct PairedClient {
   std::string client_id;
@@ -88,21 +92,21 @@ public:
   ////////
 
   std::vector<PairedClient> get_paired_clients() const {
-    std::vector<PairedClient> r;
     auto paired_clients = _state.get_child_optional("paired_clients");
     if (!paired_clients)
       return {};
 
-    for (const pt::ptree::value_type &item : paired_clients.get())
-      r.push_back({
-          item.second.get<std::string>("client_id"),
-          item.second.get<std::string>("client_cert"),
-      });
-    return r;
+    return paired_clients.get()                                                  //
+           | views::transform([](const pt::ptree::value_type &item) {            //
+               return PairedClient{item.second.get<std::string>("client_id"),    //
+                                   item.second.get<std::string>("client_cert")}; //
+             })                                                                  //
+           | to<std::vector>();                                                  //
   }
 
   /**
-   * @return If the given clientID is found, will return the client certificate associated with it
+   * @return If the given clientID is found, will return the client certificate
+   * associated with it
    */
   std::optional<std::string> get_client_cert(const std::string &clientID) const {
     auto paired_clients = get_paired_clients();
@@ -159,7 +163,8 @@ private:
   pt::ptree _state;
 
   /**
-   * @brief: we need a stable server UUID otherwise we'll generate a new on on each new request
+   * @brief: we need a stable server UUID otherwise we'll generate a new on on each
+   * new request
    */
   void init_uuid() {
     auto saved_uuid = _state.get_optional<std::string>("uid");

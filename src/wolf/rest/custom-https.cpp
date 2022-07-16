@@ -1,7 +1,7 @@
 #include "state/config.hpp"
 #include <crypto/crypto.hpp>
 #include <helpers/logger.hpp>
-#include <Simple-Web-Server/server_https.hpp>
+#include <server_https.hpp>
 
 /**
  * Override default SimpleWeb::HTTPS by adding custom SSL cert validation that

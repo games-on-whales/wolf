@@ -6,8 +6,8 @@
 #include <rest/helpers.cpp>
 #include <state/data-structures.hpp>
 
-#include <Simple-Web-Server/server_http.hpp>
-#include <Simple-Web-Server/server_https.hpp>
+#include <server_http.hpp>
+#include <server_https.hpp>
 
 #include <boost/property_tree/ptree.hpp>
 namespace pt = boost::property_tree;

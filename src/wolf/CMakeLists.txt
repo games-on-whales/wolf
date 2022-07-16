@@ -1,16 +1,64 @@
 add_executable(wolf wolf.cpp)
 target_compile_features(wolf PRIVATE cxx_std_17)
 
-find_package(Threads REQUIRED)
-find_package(OpenSSL REQUIRED)
+##############################
+# External deps via GIT
+####
 
 # Formatting library
 FetchContent_Declare(
         fmtlib
         GIT_REPOSITORY https://github.com/fmtlib/fmt.git
         GIT_TAG 5.3.0)
+FetchContent_MakeAvailable(fmtlib) # Download and build
 
-FetchContent_MakeAvailable(fmtlib)
+# HTTP server library
+FetchContent_Declare(
+        simplewebserver
+        GIT_REPOSITORY https://gitlab.com/eidheim/Simple-Web-Server.git
+        GIT_TAG bdb1057
+        CONFIGURE_COMMAND ""
+        BUILD_COMMAND "")
+
+# Immutable datastructures
+FetchContent_Declare(
+        immer
+        GIT_REPOSITORY https://github.com/arximboldi/immer.git
+        GIT_TAG e02cbd795e9424a8405a8cb01f659ad61c0cbbc7
+        CONFIGURE_COMMAND ""
+        BUILD_COMMAND "")
+
+# Additional algorithms for dealing with containers
+FetchContent_Declare(
+        range
+        GIT_REPOSITORY https://github.com/ericniebler/range-v3.git
+        GIT_TAG 0.12.0
+        CONFIGURE_COMMAND ""
+        BUILD_COMMAND "")
+
+# Header only, we are only going to fetch it without compiling
+FetchContent_GetProperties(range)
+if (NOT range_POPULATED)
+    FetchContent_Populate(range)
+    target_include_directories(wolf PUBLIC ${range_SOURCE_DIR}/include/)
+endif ()
+
+FetchContent_GetProperties(simplewebserver)
+if (NOT simplewebserver_POPULATED)
+    FetchContent_Populate(simplewebserver)
+    target_include_directories(wolf PUBLIC ${simplewebserver_SOURCE_DIR})
+endif ()
+
+FetchContent_GetProperties(immer)
+if (NOT immer_POPULATED)
+    FetchContent_Populate(immer)
+    target_include_directories(wolf PUBLIC ${immer_SOURCE_DIR})
+endif ()
+
+##############################
+
+find_package(Threads REQUIRED)
+find_package(OpenSSL REQUIRED)
 
 find_package(Boost
         REQUIRED COMPONENTS
@@ -18,7 +66,6 @@ find_package(Boost
         log
         stacktrace_basic)
 include_directories(${Boost_INCLUDE_DIRS})
-
 
 ### Boost stacktrace exception handling
 # adapted from https://github.com/jschueller/boost-stacktrace-example/blob/master/CMakeLists.txt
@@ -37,12 +84,10 @@ else ()
     message(STATUS "Using Boost::stacktrace/basic")
 endif ()
 
-# Some libraries don't work with FetchContent_Declare out of the box
-# We have to manually git clone them and adding them into `libraries`
-target_include_directories(wolf PRIVATE libraries .)
+target_include_directories(wolf PUBLIC .)
 
 target_link_libraries(
-        wolf PRIVATE
+        wolf PUBLIC
         moonlight
         streaming
         ${Boost_LIBRARIES}
