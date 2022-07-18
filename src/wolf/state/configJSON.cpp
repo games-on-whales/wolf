@@ -83,8 +83,8 @@ template <class S> Config load_or_default(const S &source) {
 
 template <class S> void save(const Config &cfg, const S &dest) {
   Json json;
-  json.put("uuid", cfg.uuid.get());
-  json.put("hostname", cfg.hostname.get());
+  json.put("uuid", cfg.uuid);
+  json.put("hostname", cfg.hostname);
   json.put("base_port", cfg.base_port);
 
   Json p_clients;

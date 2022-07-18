@@ -19,8 +19,8 @@ std::string tree_to_str(const pt::ptree &t) {
 
 TEST_CASE("LocalState load JSON", "[LocalState]") {
   auto state = state::load_or_default("config.json");
-  REQUIRE(state.hostname.get() == "wolf");
-  REQUIRE(state.uuid.get() == "b826c049-1c9f-445d-8442-1f86e559d607");
+  REQUIRE(state.hostname == "wolf");
+  REQUIRE(state.uuid == "b826c049-1c9f-445d-8442-1f86e559d607");
   REQUIRE(state.base_port == 47989);
 
   SECTION("Apps") {

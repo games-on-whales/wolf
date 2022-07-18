@@ -20,8 +20,8 @@ struct PairedClient {
  * The stored (and user modifiable) configuration
  */
 struct Config {
-  immer::box<std::string> uuid;
-  immer::box<std::string> hostname;
+  std::string uuid;
+  std::string hostname;
   int base_port;
 
   /**
@@ -44,9 +44,9 @@ struct Host {
   const X509 *server_cert;
   const EVP_PKEY *server_pkey;
 
-  immer::box<std::string> external_ip;
-  immer::box<std::string> internal_ip;
-  immer::box<std::string> mac_address;
+  std::string external_ip;
+  std::string internal_ip;
+  std::string mac_address;
 };
 
 /**

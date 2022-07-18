@@ -174,10 +174,6 @@ void pair(std::shared_ptr<typename SimpleWeb::ServerBase<T>::Response> response,
     auto is_paired = xml.template get<int>("root.paired");
     if (is_paired == 1) {
       state::pair(state->config, {client_id.value(), client_cache.client_cert});
-      // Cleanup temporary pairing_cache
-      state->pairing_cache.update([&cache_key](const immer::map<std::string, state::PairCache> &pairing_cache) {
-        return pairing_cache.erase(cache_key);
-      });
       logs::log(logs::info, "Succesfully paired {}", client_ip);
     } else {
       logs::log(logs::warning, "Failed pairing with {}", client_ip);
@@ -192,6 +188,11 @@ void pair(std::shared_ptr<typename SimpleWeb::ServerBase<T>::Response> response,
 
     xml.put("root.paired", 1);
     xml.put("root.<xmlattr>.status_code", 200);
+
+    // Cleanup temporary pairing_cache
+    state->pairing_cache.update([&cache_key](const immer::map<std::string, state::PairCache> &pairing_cache) {
+      return pairing_cache.erase(cache_key);
+    });
 
     send_xml<T>(response, SimpleWeb::StatusCode::success_ok, xml);
     return;
