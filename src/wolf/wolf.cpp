@@ -1,58 +1,35 @@
-#include "state/config.hpp"
 #include <boost/filesystem.hpp>
 #include <boost/stacktrace.hpp>
 #include <csignal>
 #include <helpers/logger.hpp>
+#include <immer/array.hpp>
+#include <memory>
 #include <moonlight/data-structures.hpp>
 #include <rest/servers.cpp>
-#include <streaming/streaming.cpp>
+#include <state/config.hpp>
 #include <vector>
 
 /**
  * @brief Will try to load the config file and fallback to defaults
  */
-std::shared_ptr<state::JSONConfig> load_config(const std::string &config_file) {
+auto load_config(const std::string &config_file) {
   logs::log(logs::info, "Reading config file from: {}", config_file);
-  try {
-    return std::make_shared<state::JSONConfig>(config_file);
-  } catch (const std::exception &e) {
-    logs::log(logs::warning, "Unable to open config file: {}, using defaults", config_file);
-    pt::ptree defaults;
-
-    defaults.put("base_port", 47989);
-    // TODO: external_ip, local_ip, mac_address
-
-    pt::ptree default_apps, app_desktop;
-    app_desktop.put("title", "Desktop");
-    app_desktop.put("id", "1");
-    app_desktop.put("support_hdr", true);
-    default_apps.push_back({"", app_desktop});
-    defaults.add_child("apps", default_apps);
-
-    return std::make_shared<state::JSONConfig>(defaults);
-  }
+  return state::load_or_default(config_file);
 }
 
 /**
  * @brief Get the Display Modes
- * TODO: get them using pipewire
+ * TODO: get them from the host properly
  */
-std::shared_ptr<std::vector<moonlight::DisplayMode>> getDisplayModes() {
-  std::vector<moonlight::DisplayMode> displayModes = {{1920, 1080, 60}, {1024, 768, 30}};
-  return std::make_shared<std::vector<moonlight::DisplayMode>>(displayModes);
+immer::array<moonlight::DisplayMode> getDisplayModes() {
+  return {{1920, 1080, 60}, {1024, 768, 30}};
 }
 
-/**
- * @brief Local state initialization
- */
-std::shared_ptr<state::LocalState>
-initialize(const std::string &config_file, const std::string &pkey_filename, const std::string &cert_filename) {
-  auto config = load_config(config_file);
-  auto display_modes = getDisplayModes();
-
-  x509_st *server_cert;
-  evp_pkey_st *server_pkey;
+state::Host get_host_config(const std::string &pkey_filename, const std::string &cert_filename) {
+  X509 *server_cert;
+  EVP_PKEY *server_pkey;
   if (x509::cert_exists(pkey_filename, cert_filename)) {
+    logs::log(logs::debug, "Loading server certificates from disk...");
     server_cert = x509::cert_from_file(cert_filename);
     server_pkey = x509::pkey_from_file(pkey_filename);
   } else {
@@ -62,10 +39,25 @@ initialize(const std::string &config_file, const std::string &pkey_filename, con
     x509::write_to_disk(server_pkey, pkey_filename, server_cert, cert_filename);
   }
 
-  auto pair_cache = std::make_shared<std::unordered_map<std::string, state::PairCache>>(
-      std::unordered_map<std::string, state::PairCache>());
-  state::LocalState state = {config, display_modes, server_cert, server_pkey, pair_cache};
-  return std::make_shared<state::LocalState>(state);
+  // TODO: get network info from the host
+  auto external_ip = "";
+  auto internal_ip = "";
+  auto mac_address = "";
+
+  return {getDisplayModes(), server_cert, server_pkey, external_ip, internal_ip, mac_address};
+}
+
+/**
+ * @brief Local state initialization
+ */
+auto initialize(const std::string &config_file, const std::string &pkey_filename, const std::string &cert_filename) {
+  auto config = load_config(config_file);
+  auto display_modes = getDisplayModes();
+
+  auto host = get_host_config(pkey_filename, cert_filename);
+  auto atom = new immer::atom<immer::map<std::string, state::PairCache>>();
+  state::AppState state = {config, host, *atom};
+  return std::make_shared<state::AppState>(state);
 }
 
 /**
@@ -110,15 +102,14 @@ int main(int argc, char *argv[]) {
   auto config_file = "config.json";
   auto local_state = initialize(config_file, "key.pem", "cert.pem");
 
-  auto https_server = std::make_unique<HttpsServer>("cert.pem", "key.pem", local_state->config);
+  auto https_server = std::make_unique<HttpsServer>("cert.pem", "key.pem", local_state);
   auto http_server = std::make_unique<HttpServer>();
 
-  auto https_thread = HTTPServers::startServer(https_server.get(),
-                                               *local_state,
-                                               local_state->config->map_port(state::JSONConfig::HTTPS_PORT));
-  auto http_thread = HTTPServers::startServer(http_server.get(),
-                                              *local_state,
-                                              local_state->config->map_port(state::JSONConfig::HTTP_PORT));
+  auto https_port = local_state->config.base_port + state::HTTPS_PORT;
+  auto https_thread = HTTPServers::startServer(https_server.get(), local_state, https_port);
+
+  auto http_port = local_state->config.base_port + state::HTTP_PORT;
+  auto http_thread = HTTPServers::startServer(http_server.get(), local_state, http_port);
 
   // GStreamer test
   //  streaming::init(argc, argv);
@@ -126,7 +117,7 @@ int main(int argc, char *argv[]) {
   //  streaming::play("videotestsrc", "autovideosink");
 
   // Exception and termination handling
-  shutdown_handler = [&](int signum) {
+  shutdown_handler = [&local_state, &config_file](int signum) {
     logs::log(logs::info, "Received interrupt signal {}, clean exit", signum);
     if (signum == SIGABRT || signum == SIGSEGV) {
       auto trace_file = "./backtrace.dump";
@@ -135,7 +126,7 @@ int main(int argc, char *argv[]) {
     }
 
     logs::log(logs::info, "Saving back current configuration to file: {}", config_file);
-    local_state->config->saveCurrentConfig(config_file);
+    state::save(local_state->config, config_file);
 
     exit(signum);
   };

@@ -1,16 +1,13 @@
 #pragma once
 
-#include <string_view>
-using namespace std::literals;
-
-#include <helpers/logger.hpp>
-
-#include <server_http.hpp>
-#include <server_https.hpp>
-
 #include <boost/property_tree/ptree.hpp>
 #include <boost/property_tree/xml_parser.hpp>
+#include <helpers/logger.hpp>
+#include <server_http.hpp>
+#include <server_https.hpp>
+#include <string_view>
 
+using namespace std::literals;
 namespace pt = boost::property_tree;
 
 /**

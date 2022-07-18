@@ -5,18 +5,18 @@ namespace pt = boost::property_tree;
 
 namespace moonlight {
 
-pt::ptree serverinfo(bool isServerBusy,
-                     int current_appid,
-                     int https_port,
-                     int http_port,
-                     const std::string &uuid,
-                     const std::string &hostname,
-                     const std::string &mac_address,
-                     const std::string &external_ip,
-                     const std::string &local_ip,
-                     const std::vector<DisplayMode> &display_modes,
-                     int pair_status) {
-  pt::ptree resp;
+XML serverinfo(bool isServerBusy,
+               int current_appid,
+               int https_port,
+               int http_port,
+               const std::string &uuid,
+               const std::string &hostname,
+               const std::string &mac_address,
+               const std::string &external_ip,
+               const std::string &local_ip,
+               const immer::array<DisplayMode> &display_modes,
+               int pair_status) {
+  XML resp;
 
   resp.put("root.<xmlattr>.status_code", 200);
   resp.put("root.hostname", hostname);
@@ -35,9 +35,9 @@ pt::ptree serverinfo(bool isServerBusy,
   resp.put("root.ExternalIP", external_ip);
   resp.put("root.LocalIP", local_ip);
 
-  pt::ptree display_nodes;
+  XML display_nodes;
   for (auto mode : display_modes) {
-    pt::ptree display_node;
+    XML display_node;
     display_node.put("Width", mode.width);
     display_node.put("Height", mode.height);
     display_node.put("RefreshRate", mode.refreshRate);
@@ -53,9 +53,9 @@ pt::ptree serverinfo(bool isServerBusy,
 }
 
 namespace pair {
-std::pair<pt::ptree, std::string>
+std::pair<XML, std::string>
 get_server_cert(const std::string &user_pin, const std::string &salt, const std::string &server_cert_pem) {
-  pt::ptree resp;
+  XML resp;
 
   auto key = gen_aes_key(salt, user_pin);
   auto cert_hex = crypto::str_to_hex(server_cert_pem);
@@ -74,13 +74,12 @@ std::string gen_aes_key(const std::string &salt, const std::string &pin) {
   return aes_key;
 }
 
-std::pair<pt::ptree, std::pair<std::string, std::string>>
-send_server_challenge(const std::string &aes_key,
-                      const std::string &client_challenge,
-                      const std::string &server_cert_signature,
-                      const std::string &server_secret,
-                      const std::string &server_challenge) {
-  pt::ptree resp;
+std::pair<XML, std::pair<std::string, std::string>> send_server_challenge(const std::string &aes_key,
+                                                                          const std::string &client_challenge,
+                                                                          const std::string &server_cert_signature,
+                                                                          const std::string &server_secret,
+                                                                          const std::string &server_challenge) {
+  XML resp;
 
   auto client_challenge_hex = crypto::hex_to_str(client_challenge, true);
   auto decrypted_challenge = crypto::aes_decrypt_ecb(client_challenge_hex, aes_key);
@@ -95,11 +94,11 @@ send_server_challenge(const std::string &aes_key,
   return std::make_pair(resp, std::make_pair(server_secret, server_challenge));
 }
 
-std::pair<pt::ptree, std::string> get_client_hash(const std::string &aes_key,
-                                                  const std::string &server_secret,
-                                                  const std::string &server_challenge_resp,
-                                                  const std::string &server_cert_private_key) {
-  pt::ptree resp;
+std::pair<XML, std::string> get_client_hash(const std::string &aes_key,
+                                            const std::string &server_secret,
+                                            const std::string &server_challenge_resp,
+                                            const std::string &server_cert_private_key) {
+  XML resp;
 
   auto server_challenge_hex = crypto::hex_to_str(server_challenge_resp, true);
   auto decrypted_challenge = crypto::aes_decrypt_ecb(server_challenge_hex, aes_key);
@@ -112,13 +111,13 @@ std::pair<pt::ptree, std::string> get_client_hash(const std::string &aes_key,
   return std::make_pair(resp, decrypted_challenge);
 }
 
-pt::ptree client_pair(const std::string &aes_key,
-                      const std::string &server_challenge,
-                      const std::string &client_hash,
-                      const std::string &client_pairing_secret,
-                      const std::string &client_public_cert_signature,
-                      const std::string &client_cert_public_key) {
-  pt::ptree resp;
+XML client_pair(const std::string &aes_key,
+                const std::string &server_challenge,
+                const std::string &client_hash,
+                const std::string &client_pairing_secret,
+                const std::string &client_public_cert_signature,
+                const std::string &client_cert_public_key) {
+  XML resp;
   resp.put("root.<xmlattr>.status_code", 200);
   auto digest_size = 256;
 
@@ -141,12 +140,12 @@ pt::ptree client_pair(const std::string &aes_key,
 }
 } // namespace pair
 
-pt::ptree applist(const std::vector<App> &apps) {
-  pt::ptree resp;
+XML applist(const immer::vector<App> &apps) {
+  XML resp;
   resp.put("root.<xmlattr>.status_code", 200);
 
   for (auto &app : apps) {
-    pt::ptree app_t;
+    XML app_t;
 
     app_t.put("IsHdrSupported", app.support_hdr ? 1 : 0);
     app_t.put("AppTitle", app.title);
@@ -158,11 +157,11 @@ pt::ptree applist(const std::vector<App> &apps) {
   return resp;
 }
 
-pt::ptree launch_success(const std::string &local_ip, const std::string &rtsp_port) {
+XML launch_success(const std::string &local_ip, const std::string &rtsp_port) {
   // TODO: implement resume
   // TODO: implement error on launch
   // TODO: return GCM key
-  pt::ptree resp;
+  XML resp;
 
   resp.put("root.<xmlattr>.status_code", 200);
   resp.put("root.sessionUrl0", "rtsp://" + local_ip + ":" + rtsp_port);

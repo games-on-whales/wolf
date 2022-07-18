@@ -1,16 +1,13 @@
 #pragma once
 
+#include <boost/property_tree/ptree.hpp>
 #include <crypto/crypto.hpp>
 #include <moonlight/protocol.hpp>
-
 #include <rest/helpers.cpp>
+#include <server_http.hpp>
 #include <state/data-structures.hpp>
 
-#include <server_http.hpp>
-#include <server_https.hpp>
-
-#include <boost/property_tree/ptree.hpp>
-namespace pt = boost::property_tree;
+using XML = moonlight::XML;
 
 namespace endpoints {
 
@@ -18,7 +15,7 @@ namespace endpoints {
  * @brief server error will be the default response when something goes wrong
  */
 template <class T> void server_error(std::shared_ptr<typename SimpleWeb::ServerBase<T>::Response> response) {
-  pt::ptree xml;
+  XML xml;
   xml.put("root.<xmlattr>.status_code", 400);
   send_xml<T>(response, SimpleWeb::StatusCode::client_error_bad_request, xml);
 }
@@ -32,7 +29,7 @@ void not_found(std::shared_ptr<typename SimpleWeb::ServerBase<T>::Response> resp
                std::shared_ptr<typename SimpleWeb::ServerBase<T>::Request> request) {
   log_req<T>(request);
 
-  pt::ptree xml;
+  XML xml;
   xml.put("root.<xmlattr>.status_code", 404);
   send_xml<T>(response, SimpleWeb::StatusCode::client_error_not_found, xml);
 }
@@ -43,7 +40,7 @@ void not_found(std::shared_ptr<typename SimpleWeb::ServerBase<T>::Response> resp
 template <class T>
 void serverinfo(std::shared_ptr<typename SimpleWeb::ServerBase<T>::Response> response,
                 std::shared_ptr<typename SimpleWeb::ServerBase<T>::Request> request,
-                const state::LocalState &state) {
+                const std::shared_ptr<state::AppState> &state) {
   log_req<T>(request);
 
   SimpleWeb::CaseInsensitiveMultimap headers = request->parse_query_string();
@@ -54,18 +51,19 @@ void serverinfo(std::shared_ptr<typename SimpleWeb::ServerBase<T>::Response> res
     return;
   }
 
-  auto cfg = state.config;
+  auto cfg = state->config;
+  auto host = state->host;
   auto xml = moonlight::serverinfo(false, // TODO: isServerBusy
                                    -1,    // TODO: current_appid
-                                   cfg->map_port(state::JSONConfig::HTTPS_PORT),
-                                   cfg->map_port(state::JSONConfig::HTTP_PORT),
-                                   cfg->get_uuid(),
-                                   cfg->hostname(),
-                                   cfg->mac_address(),
-                                   cfg->external_ip(),
-                                   cfg->local_ip(),
-                                   *state.display_modes,
-                                   cfg->isPaired(client_id.value()));
+                                   cfg.base_port + state::HTTPS_PORT,
+                                   cfg.base_port + state::HTTP_PORT,
+                                   cfg.uuid,
+                                   cfg.hostname,
+                                   host.mac_address,
+                                   host.external_ip,
+                                   host.internal_ip,
+                                   host.display_modes,
+                                   state::is_paired(cfg, client_id.value()));
 
   send_xml<T>(response, SimpleWeb::StatusCode::success_ok, xml);
 }
@@ -76,11 +74,10 @@ void serverinfo(std::shared_ptr<typename SimpleWeb::ServerBase<T>::Response> res
 template <class T>
 void pair(std::shared_ptr<typename SimpleWeb::ServerBase<T>::Response> response,
           std::shared_ptr<typename SimpleWeb::ServerBase<T>::Request> request,
-          const state::LocalState &state) {
+          const std::shared_ptr<state::AppState> &state) {
   log_req<T>(request);
 
   SimpleWeb::CaseInsensitiveMultimap headers = request->parse_query_string();
-
   auto salt = get_header(headers, "salt");
   auto client_cert_str = get_header(headers, "clientcert");
   auto client_id = get_header(headers, "uniqueid");
@@ -100,37 +97,41 @@ void pair(std::shared_ptr<typename SimpleWeb::ServerBase<T>::Response> response,
     std::cout << "Insert pin:" << std::endl;
     std::getline(std::cin, user_pin); // TODO: async PIN?
 
-    auto server_pem = x509::get_cert_pem(*state.server_cert);
-    auto [xml, aes_key] = moonlight::pair::get_server_cert(user_pin, salt.value(), server_pem);
+    auto server_pem = x509::get_cert_pem(*state->host.server_cert);
+    auto result = moonlight::pair::get_server_cert(user_pin, salt.value(), server_pem);
 
     auto client_cert_parsed = crypto::hex_to_str(client_cert_str.value(), true);
 
-    (*state.pairing_cache)[cache_key] =
-        state::PairCache{client_id.value(), client_cert_parsed, aes_key, std::nullopt, std::nullopt};
+    state->pairing_cache.update([&](const immer::map<std::string, state::PairCache> &pairing_cache) {
+      return pairing_cache.set(cache_key,
+                               {client_id.value(), client_cert_parsed, result.second, std::nullopt, std::nullopt});
+    });
 
-    send_xml<T>(response, SimpleWeb::StatusCode::success_ok, xml);
+    send_xml<T>(response, SimpleWeb::StatusCode::success_ok, result.first);
     return;
   }
 
-  auto client_cache_it = state.pairing_cache->find(cache_key);
-  if (client_cache_it == state.pairing_cache->end()) {
+  auto client_cache_it = state->pairing_cache.load()->find(cache_key);
+  if (client_cache_it == nullptr) {
     logs::log(logs::warning, "Unable to find {} {} in the pairing cache", client_id.value(), client_ip);
     return;
   }
-  state::PairCache client_cache = client_cache_it->second;
+  auto client_cache = *client_cache_it;
 
   // PHASE 2
   auto client_challenge = get_header(headers, "clientchallenge");
   if (client_challenge) {
 
-    auto server_cert_signature = x509::get_cert_signature(state.server_cert);
+    auto server_cert_signature = x509::get_cert_signature(state->host.server_cert);
     auto [xml, server_secret_pair] =
         moonlight::pair::send_server_challenge(client_cache.aes_key, client_challenge.value(), server_cert_signature);
 
     auto [server_secret, server_challenge] = server_secret_pair;
     client_cache.server_secret = server_secret;
     client_cache.server_challenge = server_challenge;
-    (*state.pairing_cache)[cache_key] = client_cache;
+    state->pairing_cache.update([&](const immer::map<std::string, state::PairCache> &pairing_cache) {
+      return pairing_cache.set(cache_key, client_cache);
+    });
 
     send_xml<T>(response, SimpleWeb::StatusCode::success_ok, xml);
     return;
@@ -144,10 +145,13 @@ void pair(std::shared_ptr<typename SimpleWeb::ServerBase<T>::Response> response,
         client_cache.aes_key,
         client_cache.server_secret.value(),
         server_challenge.value(),
-        x509::get_pkey_content(const_cast<EVP_PKEY *>(state.server_pkey)));
+        x509::get_pkey_content(const_cast<EVP_PKEY *>(state->host.server_pkey)));
 
     client_cache.client_hash = client_hash;
-    (*state.pairing_cache)[cache_key] = client_cache;
+
+    state->pairing_cache.update([&](const immer::map<std::string, state::PairCache> &pairing_cache) {
+      return pairing_cache.set(cache_key, client_cache);
+    });
 
     send_xml<T>(response, SimpleWeb::StatusCode::success_ok, xml);
     return;
@@ -167,9 +171,13 @@ void pair(std::shared_ptr<typename SimpleWeb::ServerBase<T>::Response> response,
 
     send_xml<T>(response, SimpleWeb::StatusCode::success_ok, xml);
 
-    auto is_paired = xml.get<int>("root.paired") == 1;
-    if (is_paired) {
-      state.config->pair(client_id.value(), client_cache.client_cert);
+    auto is_paired = xml.template get<int>("root.paired");
+    if (is_paired == 1) {
+      state::pair(state->config, {client_id.value(), client_cache.client_cert});
+      // Cleanup temporary pairing_cache
+      state->pairing_cache.update([&cache_key](const immer::map<std::string, state::PairCache> &pairing_cache) {
+        return pairing_cache.erase(cache_key);
+      });
       logs::log(logs::info, "Succesfully paired {}", client_ip);
     } else {
       logs::log(logs::warning, "Failed pairing with {}", client_ip);
@@ -180,7 +188,7 @@ void pair(std::shared_ptr<typename SimpleWeb::ServerBase<T>::Response> response,
   // PHASE 5 (over HTTPS)
   auto phrase = get_header(headers, "phrase");
   if (phrase && phrase.value() == "pairchallenge") {
-    pt::ptree xml;
+    XML xml;
 
     xml.put("root.paired", 1);
     xml.put("root.<xmlattr>.status_code", 200);
@@ -192,13 +200,15 @@ void pair(std::shared_ptr<typename SimpleWeb::ServerBase<T>::Response> response,
   logs::log(logs::warning, "Unable to match pair with any phase, you can retry pairing from Moonlight");
 }
 
+namespace https {
+
 template <class T>
 void applist(std::shared_ptr<typename SimpleWeb::ServerBase<T>::Response> response,
              std::shared_ptr<typename SimpleWeb::ServerBase<T>::Request> request,
-             const state::LocalState &state) {
+             const std::shared_ptr<state::AppState> &state) {
   log_req<T>(request);
 
-  auto xml = moonlight::applist(state.config->get_apps());
+  auto xml = moonlight::applist(state->config.apps);
 
   send_xml<T>(response, SimpleWeb::StatusCode::success_ok, xml);
 }
@@ -206,18 +216,19 @@ void applist(std::shared_ptr<typename SimpleWeb::ServerBase<T>::Response> respon
 template <class T>
 void launch(std::shared_ptr<typename SimpleWeb::ServerBase<T>::Response> response,
             std::shared_ptr<typename SimpleWeb::ServerBase<T>::Request> request,
-            const state::LocalState &state) {
+            const std::shared_ptr<state::AppState> &state) {
   log_req<T>(request);
 
   // TODO: actually start launch app (get app_id)?
   // Header: {("additionalStates", "1"), ("uniqueid", "0123456789ABCDEF"), ("rikeyid", "-228339149"),
   // ("remoteControllersBitmap", "0"), ("sops", "1"), ("appid", "1"), ("rikey", "9d804e47a6aa6624b7d4b502b32cc522"),
-  // ("surroundAudioInfo", "196610"), ("uuid", "0f691f13730748328a22a6952a5ac3a2"), ("mode", "1920x1080x60"), ("gcmap",
-  // "0"), ("localAudioPlayMode", "0")}
-  auto xml = moonlight::launch_success(state.config->local_ip(),
-                                       std::to_string(state.config->map_port(state::JSONConfig::RTSP_SETUP_PORT)));
+  // ("surroundAudioInfo", "196610"), ("uuid", "0f691f13730748328a22a6952a5ac3a2"), ("mode", "1920x1080x60"),
+  // ("gcmap", "0"), ("localAudioPlayMode", "0")}
+  auto xml = moonlight::launch_success(state->host.external_ip,
+                                       std::to_string(state->config.base_port + state::RTSP_SETUP_PORT));
 
   send_xml<T>(response, SimpleWeb::StatusCode::success_ok, xml);
 }
+} // namespace https
 
 } // namespace endpoints

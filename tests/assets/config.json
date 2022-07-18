@@ -1,10 +1,13 @@
 {
-  "hostname": "test_wolf",
-  "uid": "uid-12345",
-  "base_port": 3000,
-  "external_ip": "192.168.99.1",
-  "local_ip": "192.168.1.1",
-  "mac_address": "AA:BB:CC:DD",
+  "uuid": "b826c049-1c9f-445d-8442-1f86e559d607",
+  "hostname": "wolf",
+  "base_port": "47989",
+  "paired_clients": [
+    {
+      "client_id": "0123456789ABCDEF",
+      "client_cert": "-----BEGIN CERTIFICATE-----\nMIICvzCCAaegAwIBAgIBADANBgkqhkiG9w0BAQsFADAjMSEwHwYDVQQDDBhOVklE\nSUEgR2FtZVN0cmVhbSBDbGllbnQwHhcNMjEwNzEwMDgzNjE3WhcNNDEwNzA1MDgz\nNjE3WjAjMSEwHwYDVQQDDBhOVklESUEgR2FtZVN0cmVhbSBDbGllbnQwggEiMA0G\nCSqGSIb3DQEBAQUAA4IBDwAwggEKAoIBAQC1c49oJxPkIGjUNSwEpNuvNZB\/hRoe\nDZPMe3gZ1abOSJFyK3VbQNSOVK6qEfBrHqQgNVMtXZVS5XDfDRW9E37QcAl5Apex\n\/NAG2fNHYAvO6P6Gj+\/m0XBWcVREzjGCdKJI+9ToNeB6dQtKw26LvlIbHfprBZ+1\nQPr3DuUuTCIdxacJrSoUyqakswGr82j3+Dt3dU0LWCquVeeOMhMVN+EFzjFbDJbz\n+sNLTM2E7HeKNeIr\/0oFhyA2b5Kb4vd+z1GfW38o85gDU8ni6FOmEaFTi3TdZ1yR\nRxdKKd9k+myCNHLiyBA9K4Q2JYuUkYxZzsZrKVH7LWfH79qaMvj87iEnAgMBAAEw\nDQYJKoZIhvcNAQELBQADggEBADVm005jqiFEGuH6JfTKRcZU3PMmFrEmJTmvPiyh\na4b75jai0hLRCzNDu6bSzlXH346YK\/x7AVkSZIoD2hTpujVlHIHLoSJzkrmMxIFR\nsZRjh0EGaAmvDuEXADUE0MGpoWLUQumiDWwuSbEzPyr7BID68A3Q6jKwd65D2+ut\nsnLzlErTl5fgHkLWV6plelcMgPSo4T+E7APm4LHlP5uxiixAfnhDlzuAeD5r1rsD\nUkrNfMfXnRzPSwXiNYHZ+UoQuchoMCSAa+kcsQ+zsdPwAJ3stwQGcfpvYhdZv1a1\noPJpyCigkmv0uH4CeJ09A\/6Da2uY+HIwVq85qteMVSUTtV0=\n-----END CERTIFICATE-----\n"
+    }
+  ],
   "apps": [
     {
       "title": "Desktop",

@@ -14,7 +14,7 @@ TEST_CASE("sha256", "[Crypto]") {
 
 TEST_CASE("str and hex", "[Crypto]") {
   SECTION("str to hex") {
-    REQUIRE(crypto::str_to_hex("") == "");
+    REQUIRE(crypto::str_to_hex("").empty());
     REQUIRE(crypto::str_to_hex("-----BEGIN CERTIFICATE-----") ==
             "2D2D2D2D2D424547494E2043455254494649434154452D2D2D2D2D");
   }

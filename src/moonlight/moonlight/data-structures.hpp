@@ -4,9 +4,9 @@
 namespace moonlight {
 
 struct DisplayMode {
-  const int width;
-  const int height;
-  const int refreshRate;
+  int width;
+  int height;
+  int refreshRate;
 };
 
 struct App {
