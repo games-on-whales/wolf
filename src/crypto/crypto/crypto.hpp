@@ -41,6 +41,36 @@ std::string aes_decrypt_ecb(const std::string &msg,
                             bool padding = false);
 
 /**
+ * Encrypt the given msg using AES gcm at 128 bit
+ *
+ * @param msg: the message to be encrypted
+ * @param enc_key: the key used for encryption
+ * @param iv: optional, if not provided a random one will be generated
+ * @param padding: optional, enables or disables padding
+ * @return: A pair of: the encrypted string and the MAC tag
+ */
+std::pair<std::string, std::string> aes_encrypt_gcm(const std::string &msg,
+                                                    const std::string &enc_key,
+                                                    const std::string &iv = random(AES_BLOCK_SIZE),
+                                                    bool padding = false);
+
+/**
+ * Decrypt the given msg using AES gcm at 128 bit
+ *
+ * @param msg: the message to be encrypted
+ * @param enc_key: the key used for encryption
+ * @param tag: The MAC tag, ensure that the data is not accidentally altered or maliciously tampered during transmission
+ * @param iv: optional, if not provided a random one will be generated
+ * @param padding: optional, enables or disables padding
+ * @return: the decrypted string
+ */
+std::string aes_decrypt_gcm(const std::string &msg,
+                            const std::string &enc_key,
+                            const std::string &tag,
+                            const std::string &iv = random(AES_BLOCK_SIZE),
+                            bool padding = false);
+
+/**
  * Will sign the given message using the private key
  * @param msg: the message to be signed
  * @param private_key: the key used for signing
