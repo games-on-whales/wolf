@@ -270,13 +270,14 @@ TEST_CASE("Pairing moonlight", "[MoonlightProtocol]") {
 TEST_CASE("applist", "[MoonlightProtocol]") {
   auto cfg = state::load_or_default("config.json");
   auto result = applist(cfg.apps);
-  REQUIRE(tree_to_str(result) == "<?xml version=\"1.0\" encoding=\"utf-8\"?>"
-                                 "\n<root status_code=\"200\"/>"
+  REQUIRE(tree_to_str(result) == "<?xml version=\"1.0\" encoding=\"utf-8\"?>\n"
+                                 "<root status_code=\"200\">"
                                  "<App>"
                                  "<IsHdrSupported>1</IsHdrSupported>"
                                  "<AppTitle>Desktop</AppTitle>"
                                  "<ID>1</ID>"
-                                 "</App>");
+                                 "</App>"
+                                 "</root>");
 }
 
 TEST_CASE("launch", "[MoonlightProtocol]") {

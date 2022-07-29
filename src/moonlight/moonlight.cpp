@@ -142,7 +142,8 @@ XML client_pair(const std::string &aes_key,
 
 XML applist(const immer::vector<App> &apps) {
   XML resp;
-  resp.put("root.<xmlattr>.status_code", 200);
+  auto &apps_xml = resp.add_child("root", pt::ptree{});
+  apps_xml.put("<xmlattr>.status_code", 200);
 
   for (auto &app : apps) {
     XML app_t;
@@ -151,7 +152,7 @@ XML applist(const immer::vector<App> &apps) {
     app_t.put("AppTitle", app.title);
     app_t.put("ID", app.id);
 
-    resp.push_back(std::make_pair("App", std::move(app_t)));
+    apps_xml.push_back(std::make_pair("App", std::move(app_t)));
   }
 
   return resp;
