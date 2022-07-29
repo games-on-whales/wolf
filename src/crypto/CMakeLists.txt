@@ -2,7 +2,7 @@
 # show up in IDEs unless they are listed in add_library.
 
 # Optionally glob, but only for CMake 3.12 or later:
-file(GLOB HEADER_LIST CONFIGURE_DEPENDS "${wolf_SOURCE_DIR}/src/crypto/crypto/*.hpp")
+file(GLOB HEADER_LIST CONFIGURE_DEPENDS "${wolf_SOURCE_DIR}/src/crypto/crypto/*.hpp" "${wolf_SOURCE_DIR}/src/crypto/src/*.hpp")
 file(GLOB CRYPTO_LIST SRCS "${wolf_SOURCE_DIR}/src/crypto/src/*.cpp")
 # set(HEADER_LIST "${wolf_SOURCE_DIR}/include/moonlight/moonlight.hpp")
 

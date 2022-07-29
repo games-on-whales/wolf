@@ -1,3 +1,5 @@
+#pragma once
+
 #include <crypto/utils.hpp>
 #include <openssl/aes.h>
 #include <openssl/evp.h>

@@ -1,7 +1,6 @@
 #include <cstdio>
 #include <cstring>
 #include <fstream>
-#include <memory>
 #include <openssl/pem.h>
 #include <openssl/x509.h>
 #include <optional>

@@ -1,5 +1,5 @@
-#include "aes.cpp"
-#include "sign.cpp"
+#include "aes.hpp"
+#include "sign.hpp"
 #include <algorithm>
 #include <iomanip>
 #include <openssl/pem.h>
