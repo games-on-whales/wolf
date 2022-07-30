@@ -1,21 +1,14 @@
 #define CATCH_CONFIG_MAIN // This tells Catch to provide a main() - only do this in one cpp file
 
-#include <boost/property_tree/xml_parser.hpp>
 #include <catch2/catch_test_macros.hpp>
 #include <catch2/matchers/catch_matchers_all.hpp>
 #include <crypto/crypto.hpp>
-#include <iostream>
 #include <moonlight/protocol.hpp>
+#include <rest/helpers.cpp>
 #include <state/configJSON.cpp>
 
 using namespace moonlight;
 using namespace state;
-
-std::string tree_to_str(const pt::ptree &t) {
-  std::stringstream ss;
-  boost::property_tree::write_xml(ss, t);
-  return ss.str();
-}
 
 TEST_CASE("LocalState load JSON", "[LocalState]") {
   auto state = state::load_or_default("config.json");
@@ -78,7 +71,7 @@ TEST_CASE("Mocked serverinfo", "[MoonlightProtocol]") {
                              displayModes,
                              state::is_paired(cfg, "001122"));
 
-    REQUIRE(tree_to_str(result) ==
+    REQUIRE(xml_to_str(result) ==
             "<?xml version=\"1.0\" encoding=\"utf-8\"?>\n"
             "<root status_code=\"200\">"
             "<hostname>wolf</hostname>"
@@ -270,22 +263,22 @@ TEST_CASE("Pairing moonlight", "[MoonlightProtocol]") {
 TEST_CASE("applist", "[MoonlightProtocol]") {
   auto cfg = state::load_or_default("config.json");
   auto result = applist(cfg.apps);
-  REQUIRE(tree_to_str(result) == "<?xml version=\"1.0\" encoding=\"utf-8\"?>\n"
-                                 "<root status_code=\"200\">"
-                                 "<App>"
-                                 "<IsHdrSupported>1</IsHdrSupported>"
-                                 "<AppTitle>Desktop</AppTitle>"
-                                 "<ID>1</ID>"
-                                 "</App>"
-                                 "</root>");
+  REQUIRE(xml_to_str(result) == "<?xml version=\"1.0\" encoding=\"utf-8\"?>\n"
+                                "<root status_code=\"200\">"
+                                "<App>"
+                                "<IsHdrSupported>1</IsHdrSupported>"
+                                "<AppTitle>Desktop</AppTitle>"
+                                "<ID>1</ID>"
+                                "</App>"
+                                "</root>");
 }
 
 TEST_CASE("launch", "[MoonlightProtocol]") {
   auto cfg = state::load_or_default("config.json");
   auto result = launch_success("192.168.1.1", "3021");
-  REQUIRE(tree_to_str(result) == "<?xml version=\"1.0\" encoding=\"utf-8\"?>\n"
-                                 "<root status_code=\"200\">"
-                                 "<sessionUrl0>rtsp://192.168.1.1:3021</sessionUrl0>"
-                                 "<gamesession>1</gamesession>"
-                                 "</root>");
+  REQUIRE(xml_to_str(result) == "<?xml version=\"1.0\" encoding=\"utf-8\"?>\n"
+                                "<root status_code=\"200\">"
+                                "<sessionUrl0>rtsp://192.168.1.1:3021</sessionUrl0>"
+                                "<gamesession>1</gamesession>"
+                                "</root>");
 }

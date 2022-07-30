@@ -3,7 +3,6 @@
 #include <future>
 #include <rest/custom-https.cpp>
 #include <rest/endpoints.cpp>
-#include <rest/helpers.cpp>
 #include <server_http.hpp>
 
 using HttpsServer = HTTPSCustomCert;
@@ -45,7 +44,7 @@ std::thread startServer(SimpleWeb::Server<T> *server, const std::shared_ptr<stat
     // Start server
     server->start([&server_port](unsigned short port) { server_port.set_value(port); });
   });
-  logs::log(logs::debug, "{} server listening on port: {} ", tunnel<T>::to_string, server_port.get_future().get());
+  logs::log(logs::info, "{} server listening on port: {} ", tunnel<T>::to_string, server_port.get_future().get());
 
   return server_thread;
 }

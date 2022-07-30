@@ -9,7 +9,7 @@ target_compile_features(wolf PRIVATE cxx_std_17)
 FetchContent_Declare(
         fmtlib
         GIT_REPOSITORY https://github.com/fmtlib/fmt.git
-        GIT_TAG 5.3.0)
+        GIT_TAG 8.1.1)
 FetchContent_MakeAvailable(fmtlib) # Download and build
 
 # HTTP server library

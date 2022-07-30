@@ -125,7 +125,7 @@ int main(int argc, char *argv[]) {
       boost::stacktrace::safe_dump_to(trace_file);
     }
 
-    logs::log(logs::info, "Saving back current configuration to file: {}", config_file);
+    logs::log(logs::debug, "Saving back current configuration to file: {}", config_file);
     state::save(local_state->config, config_file);
 
     exit(signum);

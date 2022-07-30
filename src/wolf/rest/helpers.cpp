@@ -22,7 +22,7 @@ template <> struct tunnel<SimpleWeb::HTTP> {
   static auto constexpr to_string = "http"sv;
 };
 
-std::string xml_to_str(const XML &xml) {
+std::string xml_to_str(const XML xml) {
   std::stringstream ss;
   pt::write_xml(ss, xml);
   return ss.str();
