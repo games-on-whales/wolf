@@ -56,7 +56,7 @@ auto initialize(const std::string &config_file, const std::string &pkey_filename
 
   auto host = get_host_config(pkey_filename, cert_filename);
   auto atom = new immer::atom<immer::map<std::string, state::PairCache>>();
-  state::AppState state = {config, host, *atom};
+  state::AppState state = {config, host, *atom, std::make_shared<dp::event_bus>()};
   return std::make_shared<state::AppState>(state);
 }
 
@@ -92,6 +92,13 @@ const char *get_env(const char *tag, const char *def = nullptr) noexcept {
   return ret ? ret : def;
 }
 
+void user_pin_handler(state::PairSignal pair_request) {
+  std::string user_pin;
+  std::cout << "Insert pin:" << std::endl;
+  std::getline(std::cin, user_pin);
+  pair_request.user_pin.set_value(user_pin);
+}
+
 /**
  * @brief here's where the magic starts
  */
@@ -101,6 +108,8 @@ int main(int argc, char *argv[]) {
 
   auto config_file = "config.json";
   auto local_state = initialize(config_file, "key.pem", "cert.pem");
+
+  auto pair_signal_handler = local_state->event_bus->register_handler<state::PairSignal>(&user_pin_handler);
 
   auto https_server = std::make_unique<HttpsServer>("cert.pem", "key.pem", local_state);
   auto http_server = std::make_unique<HttpServer>();
@@ -121,7 +130,7 @@ int main(int argc, char *argv[]) {
     logs::log(logs::info, "Received interrupt signal {}, clean exit", signum);
     if (signum == SIGABRT || signum == SIGSEGV) {
       auto trace_file = "./backtrace.dump";
-      logs::log(logs::info, "Dumping stacktrace to {}", trace_file);
+      logs::log(logs::error, "Runtime error, dumping stacktrace to {}", trace_file);
       boost::stacktrace::safe_dump_to(trace_file);
     }
 

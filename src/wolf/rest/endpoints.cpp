@@ -93,9 +93,10 @@ void pair(std::shared_ptr<typename SimpleWeb::ServerBase<T>::Response> response,
 
   // PHASE 1
   if (client_id && salt && client_cert_str) {
-    std::string user_pin;
-    std::cout << "Insert pin:" << std::endl;
-    std::getline(std::cin, user_pin); // TODO: async PIN?
+    auto future_pin = std::promise<std::string>();
+    state::PairSignal signal = {client_id.value(), client_ip, future_pin};
+    state->event_bus->fire_event(signal); // Emit a signal and wait for a response
+    auto user_pin = future_pin.get_future().get();
 
     auto server_pem = x509::get_cert_pem(*state->host.server_cert);
     auto result = moonlight::pair::get_server_cert(user_pin, salt.value(), server_pem);

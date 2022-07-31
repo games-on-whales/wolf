@@ -12,6 +12,13 @@ FetchContent_Declare(
         GIT_TAG 8.1.1)
 FetchContent_MakeAvailable(fmtlib) # Download and build
 
+FetchContent_Declare(
+        eventbus
+        GIT_REPOSITORY https://github.com/DeveloperPaul123/eventbus
+        GIT_TAG 0.10.1
+)
+FetchContent_MakeAvailable(eventbus)
+
 # HTTP server library
 FetchContent_Declare(
         simplewebserver
@@ -94,6 +101,7 @@ target_link_libraries(
         ${CMAKE_DL_LIBS}
         ${CMAKE_THREAD_LIBS_INIT}
         fmt::fmt
+        dp::eventbus
 )
 
 # The following is needed in order to import this into the test suite

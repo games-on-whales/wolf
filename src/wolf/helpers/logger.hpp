@@ -80,7 +80,7 @@ void init(severity_level min_log_level) {
 
   /* console sink */
   auto consoleSink = boost::log::add_console_log(std::clog);
-  consoleSink->set_formatter([&](boost::log::record_view const &rec, boost::log::formatting_ostream &strm) {
+  consoleSink->set_formatter([](boost::log::record_view const &rec, boost::log::formatting_ostream &strm) {
     auto severity = rec[boost::log::trivial::severity];
     auto msg = rec[boost::log::expressions::smessage];
     auto now = std::chrono::system_clock::now();

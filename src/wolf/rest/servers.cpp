@@ -33,7 +33,7 @@ std::thread startServer(SimpleWeb::Server<T> *server, const std::shared_ptr<stat
 
     server->resource["^/applist$"]["GET"] = [&state](auto resp, auto req) { applist<T>(resp, req, state); };
     server->resource["^/launch"]["GET"] = [&state](auto resp, auto req) { launch<T>(resp, req, state); };
-
+    // TODO: add missing
     // https_server.resource["^/appasset$"]["GET"]
     // https_server.resource["^/resume$"]["GET"]
     // https_server.resource["^/cancel$"]["GET"]

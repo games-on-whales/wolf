@@ -1,5 +1,7 @@
 #pragma once
 
+#include <eventbus/event_bus.hpp>
+#include <future>
 #include <immer/array.hpp>
 #include <immer/atom.hpp>
 #include <immer/box.hpp>
@@ -14,6 +16,12 @@ namespace state {
 struct PairedClient {
   std::string client_id;
   std::string client_cert;
+};
+
+struct PairSignal {
+  std::string client_id;
+  std::string client_ip;
+  std::promise<std::string> &user_pin;
 };
 
 /**
@@ -91,5 +99,10 @@ struct AppState {
    * Mutable temporary results in order to achieve the multistep pairing process
    */
   immer::atom<immer::map<std::string, PairCache>> &pairing_cache;
+
+  /**
+   * A shared bus of events so that we can decouple modules
+   */
+  std::shared_ptr<dp::event_bus> event_bus;
 };
 } // namespace state
