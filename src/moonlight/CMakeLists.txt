@@ -1,11 +1,19 @@
 # Note that headers are optional, and do not affect add_library, but they will not
 # show up in IDEs unless they are listed in add_library.
+project(moonlight)
 
 # Optionally glob, but only for CMake 3.12 or later:
 file(GLOB HEADER_LIST CONFIGURE_DEPENDS "${wolf_SOURCE_DIR}/src/moonlight/moonlight/*.hpp")
+set(MOONLIGHT_HEADERS
+        ./moonlight-common-c/reedsolomon/rs.c
+        ./moonlight-common-c/reedsolomon/rs.h
+        ./moonlight-common-c/src/Input.h
+        ./moonlight-common-c/src/Rtsp.h
+        ./moonlight-common-c/src/RtspParser.c
+        ./moonlight-common-c/src/Video.h)
 
 # Make an automatic library - will be static or dynamic based on user setting
-add_library(moonlight moonlight.cpp ${HEADER_LIST})
+add_library(moonlight moonlight.cpp ${HEADER_LIST} ${MOONLIGHT_HEADERS})
 
 # Immutable datastructures
 FetchContent_Declare(
@@ -40,6 +48,12 @@ endif ()
 target_include_directories(moonlight PUBLIC .)
 set_target_properties(moonlight PROPERTIES PUBLIC_HEADER .)
 set_target_properties(moonlight PROPERTIES OUTPUT_NAME "moonlight")
+
+# moonlight-common-c
+add_subdirectory(./moonlight-common-c/enet/)
+include_directories(
+        ./moonlight-common-c/enet/include
+        ./moonlight-common-c/reedsolomon)
 
 find_package(Boost REQUIRED)
 

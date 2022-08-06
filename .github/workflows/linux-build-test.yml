@@ -8,6 +8,7 @@ jobs:
     name: ${{matrix.cxx}}, C++${{matrix.std}}, ${{matrix.build_type}}
     runs-on: ubuntu-20.04
     strategy:
+      fail-fast: false
       matrix:
         cxx:
           - g++-9
@@ -37,7 +38,7 @@ jobs:
     steps:
       - uses: actions/checkout@v2
         with:
-          submodules: true
+          submodules: recursive
 
       - name: Prepare environment
         run: sudo apt-get install -y ninja-build ${{matrix.other_pkgs}}

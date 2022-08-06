@@ -6,6 +6,7 @@
 #include <memory>
 #include <moonlight/data-structures.hpp>
 #include <rest/servers.cpp>
+#include <rtsp/rtsp.cpp>
 #include <state/config.hpp>
 #include <vector>
 
@@ -23,6 +24,15 @@ auto load_config(const std::string &config_file) {
  */
 immer::array<moonlight::DisplayMode> getDisplayModes() {
   return {{1920, 1080, 60}, {1024, 768, 30}};
+}
+
+/**
+ * @brief Get the Audio Modes
+ * TODO: get them from the host properly
+ */
+immer::array<state::AudioMode> getAudioModes() {
+  // Stereo
+  return {{2, 1, 1, {state::AudioMode::FRONT_LEFT, state::AudioMode::FRONT_RIGHT}}};
 }
 
 state::Host get_host_config(const std::string &pkey_filename, const std::string &cert_filename) {
@@ -44,7 +54,7 @@ state::Host get_host_config(const std::string &pkey_filename, const std::string 
   auto internal_ip = "";
   auto mac_address = "";
 
-  return {getDisplayModes(), server_cert, server_pkey, external_ip, internal_ip, mac_address};
+  return {getDisplayModes(), getAudioModes(), server_cert, server_pkey, external_ip, internal_ip, mac_address};
 }
 
 /**
@@ -109,7 +119,7 @@ int main(int argc, char *argv[]) {
   auto config_file = "config.json";
   auto local_state = initialize(config_file, "key.pem", "cert.pem");
 
-  auto pair_signal_handler = local_state->event_bus->register_handler<state::PairSignal>(&user_pin_handler);
+  auto pair_signal = local_state->event_bus->register_handler<state::PairSignal>(&user_pin_handler);
 
   auto https_server = std::make_unique<HttpsServer>("cert.pem", "key.pem", local_state);
   auto http_server = std::make_unique<HttpServer>();
@@ -119,6 +129,13 @@ int main(int argc, char *argv[]) {
 
   auto http_port = local_state->config.base_port + state::HTTP_PORT;
   auto http_thread = HTTPServers::startServer(http_server.get(), local_state, http_port);
+
+  std::vector<std::thread> thread_pool;
+  auto rtsp_launch_signal = local_state->event_bus->register_handler<immer::box<state::StreamSession>>(
+      [&thread_pool](immer::box<state::StreamSession> stream_session) {
+        int port = stream_session->rtsp_port;
+        thread_pool.push_back(rtsp::start_server(port, std::move(stream_session)));
+      });
 
   // GStreamer test
   //  streaming::init(argc, argv);

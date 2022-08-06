@@ -2,6 +2,7 @@
 
 #include <boost/property_tree/ptree.hpp>
 #include <crypto/crypto.hpp>
+#include <helpers/utils.hpp>
 #include <moonlight/protocol.hpp>
 #include <rest/helpers.cpp>
 #include <server_http.hpp>
@@ -221,14 +222,39 @@ void launch(std::shared_ptr<typename SimpleWeb::ServerBase<T>::Response> respons
             const std::shared_ptr<state::AppState> &state) {
   log_req<T>(request);
 
-  // TODO: actually start launch app (get app_id)?
-  // Header: {("additionalStates", "1"), ("uniqueid", "0123456789ABCDEF"), ("rikeyid", "-228339149"),
-  // ("remoteControllersBitmap", "0"), ("sops", "1"), ("appid", "1"), ("rikey", "9d804e47a6aa6624b7d4b502b32cc522"),
-  // ("surroundAudioInfo", "196610"), ("uuid", "0f691f13730748328a22a6952a5ac3a2"), ("mode", "1920x1080x60"),
-  // ("gcmap", "0"), ("localAudioPlayMode", "0")}
-  auto xml = moonlight::launch_success(state->host.external_ip,
-                                       std::to_string(state->config.base_port + state::RTSP_SETUP_PORT));
+  // TODO: check if this stuff is valid?
+  SimpleWeb::CaseInsensitiveMultimap headers = request->parse_query_string();
+  auto display_mode_str = utils::split(get_header(headers, "mode").value(), 'x');
+  moonlight::DisplayMode display_mode = {std::stoi(display_mode_str[0].data()),
+                                         std::stoi(display_mode_str[1].data()),
+                                         std::stoi(display_mode_str[2].data())};
 
+  // stereo TODO: what should we select here?
+  state::AudioMode audio_mode = {2, 1, 1, {state::AudioMode::FRONT_LEFT, state::AudioMode::FRONT_RIGHT}};
+
+  auto client_ip = request->remote_endpoint().address().to_string();
+
+  auto rtsp_port = state->config.base_port + state::RTSP_SETUP_PORT;
+
+  state::StreamSession session = {display_mode,
+                                  audio_mode,
+                                  get_header(headers, "appid").value(),
+                                  // gcm encryption keys
+                                  crypto::hex_to_str(get_header(headers, "rikey").value(), true),
+                                  std::stoul(get_header(headers, "rikeyid").value()),
+                                  // client info
+                                  get_header(headers, "uuid").value(),
+                                  client_ip,
+                                  // ports
+                                  rtsp_port,
+                                  state->config.base_port + state::CONTROL_PORT,
+                                  state->config.base_port + state::AUDIO_STREAM_PORT,
+                                  state->config.base_port + state::VIDEO_STREAM_PORT};
+  immer::box<state::StreamSession> shared_session = {session};
+
+  state->event_bus->fire_event(shared_session); // Anyone listening for this even will be called
+
+  auto xml = moonlight::launch_success(state->host.external_ip, std::to_string(rtsp_port));
   send_xml<T>(response, SimpleWeb::StatusCode::success_ok, xml);
 }
 } // namespace https

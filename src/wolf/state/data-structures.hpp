@@ -44,11 +44,33 @@ struct Config {
   immer::vector<moonlight::App> apps;
 };
 
+struct AudioMode {
+
+  enum Speakers {
+    FRONT_LEFT,
+    FRONT_RIGHT,
+    FRONT_CENTER,
+    LOW_FREQUENCY,
+    BACK_LEFT,
+    BACK_RIGHT,
+    SIDE_LEFT,
+    SIDE_RIGHT,
+    MAX_SPEAKERS,
+  };
+
+  int channels{};
+  int streams{};
+  int coupled_streams{};
+  immer::array<Speakers> speakers;
+};
+
 /**
  * Host information like network, certificates and displays
  */
 struct Host {
   immer::array<moonlight::DisplayMode> display_modes;
+  immer::array<AudioMode> audio_modes;
+
   const X509 *server_cert;
   const EVP_PKEY *server_pkey;
 
@@ -97,6 +119,7 @@ struct AppState {
 
   /**
    * Mutable temporary results in order to achieve the multistep pairing process
+   * It's shared between the two HTTP/HTTPS threads
    */
   immer::atom<immer::map<std::string, PairCache>> &pairing_cache;
 
@@ -104,5 +127,29 @@ struct AppState {
    * A shared bus of events so that we can decouple modules
    */
   std::shared_ptr<dp::event_bus> event_bus;
+};
+
+/**
+ * A StreamSession is created when a Moonlight user call `launch`
+ *
+ * This will then be fired up in the event_bus so that the rtsp, command, audio and video threads
+ * can start working their magic.
+ */
+struct StreamSession {
+  moonlight::DisplayMode display_mode;
+  AudioMode audio_mode;
+
+  std::string app_id;
+
+  std::string gcm_key;
+  unsigned long gcm_iv{};
+
+  std::string unique_id;
+  std::string ip;
+
+  int rtsp_port{};
+  int control_port{};
+  int audio_port{};
+  int video_port{};
 };
 } // namespace state

@@ -7,6 +7,7 @@ struct DisplayMode {
   int width;
   int height;
   int refreshRate;
+  bool hevc_supported = false;
 };
 
 struct App {

@@ -17,6 +17,7 @@ FetchContent_Declare(
         GIT_REPOSITORY https://github.com/DeveloperPaul123/eventbus
         GIT_TAG 0.10.1
 )
+set(EVENTBUS_BUILD_TESTS OFF)
 FetchContent_MakeAvailable(eventbus)
 
 # HTTP server library
