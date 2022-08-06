@@ -21,24 +21,21 @@ public:
 
   void run(std::string_view raw_msg, std::function<void(std::optional<msg_t> /* response */)> on_response) {
     auto send_msg = parse_rtsp_msg(raw_msg, (int)raw_msg.size());
-    REQUIRE(send_msg);
 
     send_message(std::move(send_msg.value()), [self = shared_from_this(), on_response](auto bytes) {
       self->receive_message([self = self->shared_from_this(), on_response](auto raw_message, auto bytes) {
-        self->socket().close();
         on_response(std::move(self->interpret_message(raw_message, bytes)));
+        self->socket().close();
       });
     });
 
-    run_thread().join();
+    run_context();
   }
 
-  std::thread run_thread() {
-    return std::thread([ioc = &ioc, self = shared_from_this()]() {
-      while (self->socket().is_open()) {
-        ioc->run_one();
-      }
-    });
+  void run_context() {
+    while (socket().is_open()) {
+      ioc.run_one();
+    }
   }
 
 protected:

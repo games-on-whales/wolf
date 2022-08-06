@@ -63,13 +63,11 @@ public:
   void
   receive_message(std::function<void(std::string_view /* raw_message */, int /* bytes_transferred */)> on_msg_read) {
 
-    asio::steady_timer deadline_(ioc);
-
-    deadline_.async_wait([&deadline_, self = shared_from_this()](auto error) {
-      if (!error && deadline_.expiry() <= asio::steady_timer::clock_type::now()) { // The deadline has passed
+    deadline_.async_wait([self = shared_from_this()](auto error) {
+      if (!error && self->deadline_.expiry() <= asio::steady_timer::clock_type::now()) { // The deadline has passed
         logs::log(logs::trace, "[RTSP] deadline over");
         self->socket_.cancel();
-        deadline_.cancel();
+        self->deadline_.cancel();
       }
     });
     deadline_.expires_after(std::chrono::milliseconds(timeout_millis));
@@ -78,14 +76,14 @@ public:
         socket(),
         streambuf_,
         boost::asio::transfer_at_least(1),
-        [self = shared_from_this(), on_msg_read, &deadline_](auto error_code, auto bytes_transferred) {
+        [self = shared_from_this(), on_msg_read](auto error_code, auto bytes_transferred) {
           if (error_code &&
               error_code != boost::asio::error::operation_aborted) { // it'll be aborted when the deadline expires
             logs::log(logs::error, "[RTSP] error during transmission: {}", error_code.message());
             self->send_message(std::move(create_error_msg(400, "BAD REQUEST")), [](auto bytes) {});
             return;
           }
-          deadline_.cancel();
+          self->deadline_.cancel();
           auto raw_msg = self->append_stream_to_buffer(bytes_transferred);
           on_msg_read(raw_msg, bytes_transferred);
         });
@@ -146,7 +144,7 @@ public:
 protected:
   explicit tcp_connection(boost::asio::io_context &io_context, immer::box<state::StreamSession> state)
       : socket_(io_context), ioc(io_context), buffer_size(0), msg_buffer_(max_msg_size), streambuf_(max_msg_size),
-        stream_session(std::move(state)) {}
+        deadline_(io_context), stream_session(std::move(state)) {}
   tcp::socket socket_;
 
   static constexpr auto max_msg_size = 2048;
@@ -155,6 +153,7 @@ protected:
   boost::asio::io_context &ioc;
   std::vector<char> msg_buffer_;
   boost::asio::streambuf streambuf_;
+  asio::steady_timer deadline_;
   long buffer_size;
 
   immer::box<state::StreamSession> stream_session;
