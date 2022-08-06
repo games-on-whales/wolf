@@ -5,7 +5,7 @@ using namespace rtsp;
 
 /**
  * In order to test rtsp::tcp_connection we create a derived class that does the opposite:
- * instead of waiting for a message; it'll first send a message and then wait for a response
+ * instead of waiting for a message; it'll first send a message and then wait for a response.
  */
 class tcp_tester : public tcp_connection {
 
@@ -24,7 +24,7 @@ public:
 
     send_message(std::move(send_msg.value()), [self = shared_from_this(), on_response](auto bytes) {
       self->receive_message([self = self->shared_from_this(), on_response](auto raw_message, auto bytes) {
-        on_response(std::move(self->interpret_message(raw_message, bytes)));
+        on_response(std::move(parse_rtsp_msg(raw_message, bytes)));
         self->socket().close();
       });
     });
@@ -40,7 +40,9 @@ public:
 
 protected:
   explicit tcp_tester(asio::io_context &io_context, immer::box<StreamSession> session)
-      : tcp_connection(io_context, std::move(session)) {}
+      : tcp_connection(io_context, std::move(session)), ioc(io_context) {}
+
+  boost::asio::io_context &ioc;
 };
 
 TEST_CASE("utilities methods", "[RTSP]") {

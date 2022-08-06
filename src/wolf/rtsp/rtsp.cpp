@@ -14,15 +14,18 @@ using asio::ip::tcp;
 using namespace std::string_view_literals;
 
 /**
- * A wrapper on top of the basic boost socket
- * see the tutorial at: https://www.boost.org/doc/libs/1_79_0/doc/html/boost_asio/tutorial/tutdaytime3.html
+ * A wrapper on top of the basic boost socket, it'll be in charge of sending and receiving RTSP messages
+ * based on the tutorial at: https://www.boost.org/doc/libs/1_79_0/doc/html/boost_asio/tutorial/tutdaytime3.html
+ *
+ * Bear in mind that the basic methods of this class can be trivially used to also implement the RTSP client, see the
+ * testRTSP class for an example client implementation.
  */
 class tcp_connection : public boost::enable_shared_from_this<tcp_connection> {
 public:
   typedef boost::shared_ptr<tcp_connection> pointer;
 
   static pointer create(boost::asio::io_context &io_context, immer::box<state::StreamSession> state) {
-    return pointer(new tcp_connection(io_context, state));
+    return pointer(new tcp_connection(io_context, std::move(state)));
   }
 
   auto &socket() {
@@ -39,7 +42,8 @@ public:
   void start() {
     logs::log(logs::trace, "[RTSP] received connection from IP: {}", socket().remote_endpoint().address().to_string());
     receive_message([self = shared_from_this()](auto raw_message, auto bytes_transferred) {
-      if (auto parsed_msg = self->interpret_message(raw_message, bytes_transferred)) {
+      logs::log(logs::trace, "[RTSP] received message {} bytes \n{}", bytes_transferred, raw_message);
+      if (auto parsed_msg = parse_rtsp_msg(raw_message, bytes_transferred)) {
         auto response = commands::message_handler(std::move(parsed_msg.value()), self->stream_session);
         self->send_message(std::move(response), [](auto bytes) {});
       } else {
@@ -84,43 +88,9 @@ public:
             return;
           }
           self->deadline_.cancel();
-          auto raw_msg = self->append_stream_to_buffer(bytes_transferred);
+          std::string raw_msg = {std::istreambuf_iterator<char>(&self->streambuf_), {}};
           on_msg_read(raw_msg, bytes_transferred);
         });
-  }
-
-  /**
-   * APPEND the current transferred data to the msg_buffer,
-   * this is needed because some messages are multipart, see the recursion at `interpret_message()`
-   *
-   * side effects:
-   *  - streambuf_ will be read and cleaned out after
-   *  - msg_buffer_ will append streambuf_ content
-   *  - buffer_size will be incremented by bytes_transferred
-   *
-   *  @returns a string representation of the resulting msg_buffer
-   */
-  std::string_view append_stream_to_buffer(int bytes_transferred) {
-    boost::asio::buffer_copy(boost::asio::buffer(&msg_buffer_.front() + buffer_size, bytes_transferred),
-                             streambuf_.data(),
-                             bytes_transferred);
-    streambuf_.consume(bytes_transferred); // clear up the streambuffer
-    buffer_size += bytes_transferred;
-    return {msg_buffer_.data(), (size_t)buffer_size};
-  }
-
-  /**
-   * Given a raw sequence of characters read from the socket we'll parse it in a `msg_t` structure
-   *
-   * @returns the parsed msg (if possible and valid), null otherwise
-   */
-  static std::optional<msg_t> interpret_message(std::string_view raw_msg, int bytes_transferred) {
-    logs::log(logs::trace, "[RTSP] read message {} bytes \n{}", bytes_transferred, raw_msg);
-    if (auto parsed_msg = parse_rtsp_msg(raw_msg, bytes_transferred)) {
-      return std::move(parsed_msg.value());
-    } else {
-      return {};
-    }
   }
 
   /**
@@ -143,18 +113,14 @@ public:
 
 protected:
   explicit tcp_connection(boost::asio::io_context &io_context, immer::box<state::StreamSession> state)
-      : socket_(io_context), ioc(io_context), buffer_size(0), msg_buffer_(max_msg_size), streambuf_(max_msg_size),
-        deadline_(io_context), stream_session(std::move(state)) {}
+      : socket_(io_context), streambuf_(max_msg_size), deadline_(io_context), stream_session(std::move(state)) {}
   tcp::socket socket_;
 
   static constexpr auto max_msg_size = 2048;
   static constexpr auto timeout_millis = 1500;
 
-  boost::asio::io_context &ioc;
-  std::vector<char> msg_buffer_;
   boost::asio::streambuf streambuf_;
   asio::steady_timer deadline_;
-  long buffer_size;
 
   immer::box<state::StreamSession> stream_session;
 };
@@ -203,6 +169,11 @@ private:
   immer::box<state::StreamSession> stream_session;
 };
 
+/**
+ * Starts a new RTSP server in a separate Thread at the given port
+ *
+ * @return the thread instance
+ */
 std::thread start_server(int port, immer::box<state::StreamSession> state) {
   auto thread = std::thread([port, state = std::move(state)]() {
     try {
