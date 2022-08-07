@@ -23,8 +23,8 @@ public:
     auto send_msg = parse_rtsp_msg(raw_msg, (int)raw_msg.size());
 
     send_message(std::move(send_msg.value()), [self = shared_from_this(), on_response](auto bytes) {
-      self->receive_message([self = self->shared_from_this(), on_response](auto raw_message, auto bytes) {
-        on_response(std::move(parse_rtsp_msg(raw_message, bytes)));
+      self->receive_message([self = self->shared_from_this(), on_response](auto reply_msg) {
+        on_response(std::move(reply_msg));
         self->socket().close();
       });
     });
@@ -239,6 +239,60 @@ TEST_CASE("Commands", "[RTSP]") {
                        opt = opt->next;
                        REQUIRE_THAT(opt->option, Equals("Transport"));
                        REQUIRE_THAT(opt->content, Equals(fmt::format(" {}", state->control_port)));
+                     });
+  }
+
+  SECTION("ANNOUNCE control") {
+    // This is a very long message, it'll kick the recursion in receive_message()
+    wolf_client->run("ANNOUNCE streamid=control/13/0 RTSP/1.0\n"
+                     "CSeq: 6\n"
+                     "X-GS-ClientVersion: 14\n"
+                     "Host: 0.0.0.0\n"
+                     "Session:  DEADBEEFCAFE\n"
+                     "Content-type: application/sdp\n"
+                     "Content-length: 1308"
+                     "\r\n\r\n"
+                     "v=0\n"
+                     "o=android 0 14 IN IPv4 0.0.0.0\n"
+                     "s=NVIDIA Streaming Client\n"
+                     "a=x-nv-video[0].clientViewportWd:1920 \n"
+                     "a=x-nv-video[0].clientViewportHt:1080 \n"
+                     "a=x-nv-video[0].maxFPS:60 \n"
+                     "a=x-nv-video[0].packetSize:1024 \n"
+                     "a=x-nv-video[0].rateControlMode:4 \n"
+                     "a=x-nv-video[0].timeoutLengthMs:7000 \n"
+                     "a=x-nv-video[0].framesWithInvalidRefThreshold:0 \n"
+                     "a=x-nv-video[0].initialBitrateKbps:15500 \n"
+                     "a=x-nv-video[0].initialPeakBitrateKbps:15500 \n"
+                     "a=x-nv-vqos[0].bw.minimumBitrateKbps:15500 \n"
+                     "a=x-nv-vqos[0].bw.maximumBitrateKbps:15500 \n"
+                     "a=x-nv-vqos[0].fec.enable:1 \n"
+                     "a=x-nv-vqos[0].videoQualityScoreUpdateTime:5000 \n"
+                     "a=x-nv-vqos[0].qosTrafficType:0 \n"
+                     "a=x-nv-aqos.qosTrafficType:0 \n"
+                     "a=x-nv-general.featureFlags:167 \n"
+                     "a=x-nv-general.useReliableUdp:13 \n"
+                     "a=x-nv-vqos[0].fec.minRequiredFecPackets:2 \n"
+                     "a=x-nv-vqos[0].drc.enable:0 \n"
+                     "a=x-nv-general.enableRecoveryMode:0 \n"
+                     "a=x-nv-video[0].videoEncoderSlicesPerFrame:1 \n"
+                     "a=x-nv-clientSupportHevc:0 \n"
+                     "a=x-nv-vqos[0].bitStreamFormat:0 \n"
+                     "a=x-nv-video[0].dynamicRangeMode:0 \n"
+                     "a=x-nv-video[0].maxNumReferenceFrames:1 \n"
+                     "a=x-nv-video[0].clientRefreshRateX100:0 \n"
+                     "a=x-nv-audio.surround.numChannels:2 \n"
+                     "a=x-nv-audio.surround.channelMask:3 \n"
+                     "a=x-nv-audio.surround.enable:0 \n"
+                     "a=x-nv-audio.surround.AudioQuality:0 \n"
+                     "a=x-nv-aqos.packetDuration:5 \n"
+                     "a=x-nv-video[0].encoderCscMode:0 \n"
+                     "t=0 0\n"
+                     "m=video 47998 \n"sv,
+                     [](std::optional<msg_t> response) {
+                       REQUIRE(response);
+                       REQUIRE(response.value()->message.response.statusCode == 404); // TODO!
+                       REQUIRE(response.value()->sequenceNumber == 6);
                      });
   }
 }

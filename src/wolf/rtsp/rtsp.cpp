@@ -41,32 +41,32 @@ public:
    */
   void start() {
     logs::log(logs::trace, "[RTSP] received connection from IP: {}", socket().remote_endpoint().address().to_string());
-    receive_message([self = shared_from_this()](auto raw_message, auto bytes_transferred) {
-      logs::log(logs::trace, "[RTSP] received message {} bytes \n{}", bytes_transferred, raw_message);
-      if (auto parsed_msg = parse_rtsp_msg(raw_message, bytes_transferred)) {
+    receive_message([self = shared_from_this()](auto parsed_msg) {
+      if (parsed_msg) {
         auto response = commands::message_handler(std::move(parsed_msg.value()), self->stream_session);
         self->send_message(std::move(response), [](auto bytes) {});
       } else {
-        logs::log(logs::error, "[RTSP] error parsing message: {}", raw_message);
+        logs::log(logs::error, "[RTSP] error parsing message");
         self->send_message(std::move(create_error_msg(400, "BAD REQUEST")), [](auto bytes) {});
       }
     });
   }
 
   /**
-   * We have no way to know the size of the message (no content-length param) and there's no special sequence of
-   * characters to delimit the end.
-   * So we'll try to read everything that has been sent, we enforce a max message size AND a timeout in order to avoid
-   * stalling.
+   * We have no way to know the size of the message and there's no special sequence of characters to delimit the very
+   * end (including payload). So we'll try to read everything that has been sent, we enforce a max message size AND a
+   * timeout in order to avoid stalling.
    *
    * Timeout is adapted from:
    * https://www.boost.org/doc/libs/1_79_0/doc/html/boost_asio/example/cpp11/timeouts/async_tcp_client.cpp
    *
    * @return Will call the callback passing a string representation of the message and the transferred bytes
+   *
+   * @note: ANNOUNCE messages will be bigger than the default 512 bytes that boost reads, fortunately we receive an
+   * option in the message: Content-length which represent the size in bytes of the payload. We'll keep recursively call
+   * receive_message() until our payload size matches the specified Content-length
    */
-  void
-  receive_message(std::function<void(std::string_view /* raw_message */, int /* bytes_transferred */)> on_msg_read) {
-
+  void receive_message(std::function<void(std::optional<msg_t>)> on_msg_read) {
     deadline_.async_wait([self = shared_from_this()](auto error) {
       if (!error && self->deadline_.expiry() <= asio::steady_timer::clock_type::now()) { // The deadline has passed
         logs::log(logs::trace, "[RTSP] deadline over");
@@ -87,9 +87,28 @@ public:
             self->send_message(std::move(create_error_msg(400, "BAD REQUEST")), [](auto bytes) {});
             return;
           }
-          self->deadline_.cancel();
+          self->deadline_.cancel(); // stop the deadline
           std::string raw_msg = {std::istreambuf_iterator<char>(&self->streambuf_), {}};
-          on_msg_read(raw_msg, bytes_transferred);
+          logs::log(logs::trace, "[RTSP] received message {} bytes \n{}", bytes_transferred, raw_msg);
+
+          auto full_raw_msg = self->prev_read_ + raw_msg;
+          auto total_bytes_transferred = self->prev_read_bytes_ + bytes_transferred;
+          auto msg = parse_rtsp_msg(full_raw_msg, total_bytes_transferred);
+          if (msg) {
+            for (auto option = msg.value()->options; option != nullptr; option = option->next) {
+              if ("Content-length"sv == option->option) {
+                int total_length = std::stoi(option->content);
+                if (total_bytes_transferred < total_length) { // TODO: should we check msg.payloadLength instead?
+                  self->prev_read_ = full_raw_msg;
+                  self->prev_read_bytes_ += bytes_transferred;
+                  return self->receive_message(on_msg_read);
+                }
+              }
+            }
+          }
+          self->prev_read_ = "";
+          self->prev_read_bytes_ = 0;
+          on_msg_read(std::move(msg));
         });
   }
 
@@ -113,7 +132,8 @@ public:
 
 protected:
   explicit tcp_connection(boost::asio::io_context &io_context, immer::box<state::StreamSession> state)
-      : socket_(io_context), streambuf_(max_msg_size), deadline_(io_context), stream_session(std::move(state)) {}
+      : socket_(io_context), streambuf_(max_msg_size), deadline_(io_context), stream_session(std::move(state)),
+        prev_read_(""), prev_read_bytes_(0) {}
   tcp::socket socket_;
 
   static constexpr auto max_msg_size = 2048;
@@ -121,6 +141,8 @@ protected:
 
   boost::asio::streambuf streambuf_;
   asio::steady_timer deadline_;
+  std::string prev_read_;
+  int prev_read_bytes_;
 
   immer::box<state::StreamSession> stream_session;
 };
