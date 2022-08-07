@@ -1,4 +1,4 @@
-= Pairing
+= HTTP/S Pairing
 :toc:
 
 == Overview

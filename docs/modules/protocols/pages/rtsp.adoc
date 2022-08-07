@@ -1,0 +1,46 @@
+= RTSP
+
+:toc:
+
+== Overview
+
+The RTSP protocol starts when a Moonlight user launch an app, and it's used to exchange information about the next streams (video, audio, control).
+
+[plantuml,format=svg]
+....
+title: RTSP protocol
+autonumber
+
+participant Moonlight as M
+participant Wolf as W
+
+
+group OPTIONS
+    M->W
+    return
+end
+
+group DESCRIBE
+    M->W
+    return: audio/video additional params
+end
+
+group SETUP
+    M->W++: streamid=audio
+    return: audio stream port
+    M->W++: streamid=video
+    return: video stream port
+    M->W++: streamid=control
+    return: control stream port
+end
+
+group ANNOUNCE
+    M->W++: specific configs about all streams
+    return
+end
+
+group PLAY
+    M->W: TODO!!
+    return
+end
+....

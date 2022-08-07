@@ -1,2 +1,4 @@
 * xref:index.adoc[Protocols]
-** xref:pairing.adoc[]
+** xref:pairing.adoc[HTTP/S pairing]
+** xref:rtsp.adoc[RTSP]
+*** xref:rtsp-specs.adoc[RTSP specs]

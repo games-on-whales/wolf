@@ -1,0 +1,80 @@
+= RTSP specifications
+
+:toc:
+
+== Overview
+
+RTSP messages are plaintext packets of variable size over TCP.
+
+There are two types of message: _request_ and _response_
+
+Unless otherwise specified all names used here follows the Moonlight specification at https://github.com/moonlight-stream/moonlight-common-c/blob/bf22101c7d11cd1fe36409fe5c12b38cbfa8dd06/src/Rtsp.h#L35[moonlight-common-c/Rtsp.h]
+
+=== Request message
+
+All messages have the following structure:
+
+* *message*: required
+* *options*: optional, zero or more key value options separated by newline
+* *payload*: optional, extra unstructured data that needs to be passed.
+
+.An example request message
+....
+OPTIONS rtsp://192.168.1.100:48010 RTSP/1.0 //<1>
+CSeq:  1 // <2>
+X-GS-ClientVersion: 14 // <3>
+// <4>
+a=fmtp:97 surround-params=21101 //<5>
+....
+
+<1> message:
+<2> option 1
+<3> option 2
+<4> empty new line (end of options)
+<5> payload
+
+==== Message
+
+The message part is the first line, it's delimited by the newline character (`\r\n`) , and it's composed by:
+
+* *command*: the first string, delimited by `<space>`, the command to be executed on the backend; one of: `[OPTIONS, DESCRIBE, SETUP, ANNOUNCE, PLAY]`
+* *target*: the second string, delimited by `<space>`, specifies the ip address and port that is the target of the session.
+* *protocol*: last string, delimited by `<space>`, the RTSP protocol in use.
+
+==== Options
+
+Optional additional key values to be passed, delimited by the newline character (`\r\n`).
+The end of the options section is marked by an extra newline character (`\r\n`).
+
+Honorable mention goes to `CSeq` which is always present and represent the sequence number.
+
+==== Payload
+
+Any extra unstructured text that it's added after the end of the options before the end of the message will be parsed as the payload.
+
+=== Response message
+
+Like requests, responses have a message, zero or more options and an optional payload.
+The main difference is in the format of the message.
+
+You can easily identify a response package by looking at the command part which is always `RTSP`.
+
+.An example response message
+....
+RTSP/1.0 200 OK //<1>
+CSeq: 1 //<2>
+
+a=fmtp:97 surround-params=21101 //<3>
+....
+
+<1> message
+<2> option
+<3> payload
+
+==== Message
+
+Unlike requests a message in a response is composed by different parts:
+
+ * protocol: it's always `RTSP/*` and it's the easiest way to discriminate between request and response messages.
+ * status code: follows the HTTP status codes specification
+ * status string: follows the HTTP status codes specification
