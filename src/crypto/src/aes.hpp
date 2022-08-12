@@ -10,8 +10,8 @@ using CIPHER_CTX_ptr = std::unique_ptr<EVP_CIPHER_CTX, decltype(&::EVP_CIPHER_CT
 const int AES_GCM_TAG_SIZE = 16;
 
 CIPHER_CTX_ptr init(const evp_cipher_st *chiper,
-                    const std::string &key_data,
-                    const std::string &iv,
+                    std::string_view key_data,
+                    std::string_view iv,
                     bool is_encryption,
                     bool padding = true) {
   CIPHER_CTX_ptr ctx(EVP_CIPHER_CTX_new(), ::EVP_CIPHER_CTX_free);
@@ -38,7 +38,7 @@ CIPHER_CTX_ptr init(const evp_cipher_st *chiper,
   return ctx;
 }
 
-std::string encrypt_symmetric(EVP_CIPHER_CTX *ctx, const std::string &plaintext) {
+std::string encrypt_symmetric(EVP_CIPHER_CTX *ctx, std::string_view plaintext) {
   /* max ciphertext len for a n bytes of plaintext is n + AES_BLOCK_SIZE -1 bytes */
   auto len = (int)plaintext.size();
   int c_len = len + AES_BLOCK_SIZE;
@@ -59,7 +59,7 @@ std::string encrypt_symmetric(EVP_CIPHER_CTX *ctx, const std::string &plaintext)
   return uc_to_str(ciphertext, len);
 }
 
-std::string decrypt_symmetric(EVP_CIPHER_CTX *ctx, const std::string &ciphertext) {
+std::string decrypt_symmetric(EVP_CIPHER_CTX *ctx, std::string_view ciphertext) {
   int len;
   auto cipher_length = (int)ciphertext.length();
   /* plaintext will always be equal to or lesser than length of ciphertext*/
@@ -80,7 +80,7 @@ std::string decrypt_symmetric(EVP_CIPHER_CTX *ctx, const std::string &ciphertext
   return uc_to_str(plaintext, plaintext_len);
 }
 
-std::pair<std::string, std::string> encrypt_authenticated(EVP_CIPHER_CTX *ctx, const std::string &plaintext) {
+std::pair<std::string, std::string> encrypt_authenticated(EVP_CIPHER_CTX *ctx, std::string_view plaintext) {
   /* max ciphertext len for a n bytes of plaintext is n + AES_BLOCK_SIZE -1 bytes */
   auto len = (int)plaintext.size();
   int c_len = len + AES_BLOCK_SIZE;
@@ -109,7 +109,7 @@ std::pair<std::string, std::string> encrypt_authenticated(EVP_CIPHER_CTX *ctx, c
   return {encrypted_str, tag};
 }
 
-std::string decrypt_authenticated(EVP_CIPHER_CTX *ctx, const std::string &ciphertext, const std::string &tag) {
+std::string decrypt_authenticated(EVP_CIPHER_CTX *ctx, std::string_view ciphertext, std::string_view tag) {
   int len;
   auto cipher_length = (int)ciphertext.length();
   /* plaintext will always be equal to or lesser than length of ciphertext*/

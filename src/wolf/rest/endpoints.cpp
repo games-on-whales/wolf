@@ -162,7 +162,7 @@ void pair(std::shared_ptr<typename SimpleWeb::ServerBase<T>::Response> response,
   // PHASE 4
   auto client_secret = get_header(headers, "clientpairingsecret");
   if (client_secret && client_cache.server_challenge && client_cache.client_hash) {
-    auto client_cert = x509::cert_from_string(client_cache.client_cert);
+    auto client_cert = x509::cert_from_string({client_cache.client_cert});
 
     auto xml = moonlight::pair::client_pair(client_cache.aes_key,
                                             client_cache.server_challenge.value(),
@@ -236,20 +236,20 @@ void launch(std::shared_ptr<typename SimpleWeb::ServerBase<T>::Response> respons
 
   auto rtsp_port = state->config.base_port + state::RTSP_SETUP_PORT;
 
-  state::StreamSession session = {display_mode,
+  state::StreamSession session = {state->event_bus,
+                                  display_mode,
                                   audio_mode,
                                   get_header(headers, "appid").value(),
                                   // gcm encryption keys
                                   crypto::hex_to_str(get_header(headers, "rikey").value(), true),
-                                  std::stoul(get_header(headers, "rikeyid").value()),
                                   // client info
                                   get_header(headers, "uuid").value(),
                                   client_ip,
                                   // ports
-                                  rtsp_port,
-                                  state->config.base_port + state::CONTROL_PORT,
-                                  state->config.base_port + state::AUDIO_STREAM_PORT,
-                                  state->config.base_port + state::VIDEO_STREAM_PORT};
+                                  static_cast<std::uint16_t>(rtsp_port),
+                                  static_cast<std::uint16_t>(state->config.base_port + state::CONTROL_PORT),
+                                  static_cast<std::uint16_t>(state->config.base_port + state::AUDIO_STREAM_PORT),
+                                  static_cast<std::uint16_t>(state->config.base_port + state::VIDEO_STREAM_PORT)};
   immer::box<state::StreamSession> shared_session = {session};
 
   state->event_bus->fire_event(shared_session); // Anyone listening for this even will be called

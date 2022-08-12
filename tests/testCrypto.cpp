@@ -97,7 +97,7 @@ TEST_CASE("AES gcm", "[Crypto]") {
   auto iv = "12345678"s;
 
   auto [encrypted, tag] = crypto::aes_encrypt_gcm(msg, key, iv, true);
-  REQUIRE(crypto::aes_decrypt_gcm(encrypted, key, tag, iv, true) == msg);
+  REQUIRE(crypto::aes_decrypt_gcm(encrypted, key, tag, iv, -1, true) == msg);
 }
 
 TEST_CASE("OpenSSL sign", "[Crypto]") {

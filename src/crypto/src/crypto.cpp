@@ -9,11 +9,11 @@
 
 namespace crypto {
 
-std::string sha256(const std::string &str) {
+std::string sha256(std::string_view str) {
   unsigned char hash[SHA256_DIGEST_LENGTH];
   SHA256_CTX sha256;
   SHA256_Init(&sha256);
-  SHA256_Update(&sha256, str.c_str(), str.size());
+  SHA256_Update(&sha256, str.data(), str.size());
   SHA256_Final(hash, &sha256);
   std::stringstream ss;
   for (unsigned char i : hash) {
@@ -22,7 +22,7 @@ std::string sha256(const std::string &str) {
   return ss.str();
 }
 
-std::string str_to_hex(const std::string &input) {
+std::string str_to_hex(std::string_view input) {
   static const char hex_digits[] = "0123456789ABCDEF";
 
   std::string output;
@@ -34,7 +34,7 @@ std::string str_to_hex(const std::string &input) {
   return output;
 }
 
-std::string hex_to_str(const std::string &hex, bool reverse) {
+std::string hex_to_str(std::string_view hex, bool reverse = true) {
   std::string buf;
 
   static char constexpr shift_bit = 'a' - 'A';
@@ -88,39 +88,55 @@ std::string random(int length) {
   return rnd;
 }
 
-std::string aes_encrypt_ecb(const std::string &msg, const std::string &enc_key, const std::string &iv, bool padding) {
+std::string aes_encrypt_ecb(std::string_view msg, std::string_view enc_key, std::string_view iv, bool padding) {
   auto ctx = aes::init(EVP_aes_128_ecb(), enc_key, iv, true, padding);
   return aes::encrypt_symmetric(ctx.get(), msg);
 }
 
-std::string aes_decrypt_ecb(const std::string &msg, const std::string &enc_key, const std::string &iv, bool padding) {
+std::string aes_decrypt_ecb(std::string_view msg, std::string_view enc_key, std::string_view iv, bool padding) {
   auto ctx = aes::init(EVP_aes_128_ecb(), enc_key, iv, false, padding);
   return aes::decrypt_symmetric(ctx.get(), msg);
 }
 
-std::pair<std::string, std::string> aes_encrypt_gcm(const std::string &msg,
-                                                    const std::string &enc_key,
-                                                    const std::string &iv = random(AES_BLOCK_SIZE),
+std::pair<std::string, std::string> aes_encrypt_gcm(std::string_view msg,
+                                                    std::string_view enc_key,
+                                                    std::string_view iv = random(AES_BLOCK_SIZE),
                                                     bool padding = false) {
   auto ctx = aes::init(EVP_aes_128_gcm(), enc_key, iv, false, padding);
   return aes::encrypt_authenticated(ctx.get(), msg);
 }
 
-std::string aes_decrypt_gcm(const std::string &msg,
-                            const std::string &enc_key,
-                            const std::string &tag,
-                            const std::string &iv = random(AES_BLOCK_SIZE),
+std::string aes_decrypt_gcm(std::string_view msg,
+                            std::string_view enc_key,
+                            std::string_view tag,
+                            std::string_view iv = random(AES_BLOCK_SIZE),
+                            int iv_size = -1,
                             bool padding = false) {
   auto ctx = aes::init(EVP_aes_128_gcm(), enc_key, iv, false, padding);
+
+  if (iv_size != -1) {
+    if (EVP_CIPHER_CTX_ctrl(ctx.get(), EVP_CTRL_GCM_SET_IVLEN, iv_size, nullptr) != 1)
+      handle_openssl_error("EVP_CTRL_GCM_SET_IVLEN failed");
+
+    if (EVP_DecryptInit_ex(ctx.get(),
+                           nullptr,
+                           nullptr,
+                           (const std::uint8_t *)enc_key.data(),
+                           (const std::uint8_t *)iv.data()) != 1)
+      handle_openssl_error("EVP_DecryptInit_ex (2) failed");
+
+    EVP_CIPHER_CTX_set_padding(ctx.get(), padding);
+  }
+
   return aes::decrypt_authenticated(ctx.get(), msg, tag);
 }
 
-std::string sign(const std::string &msg, const std::string &private_key) {
+std::string sign(std::string_view msg, std::string_view private_key) {
   auto p_key = signature::create_key(private_key, true);
   return signature::sign(msg, p_key.get(), EVP_sha256());
 }
 
-bool verify(const std::string &msg, const std::string &signature, const std::string &public_key) {
+bool verify(std::string_view msg, std::string_view signature, std::string_view public_key) {
   auto p_key = signature::create_key(public_key, false);
   return signature::verify(msg, signature, p_key.get(), EVP_sha256());
 }

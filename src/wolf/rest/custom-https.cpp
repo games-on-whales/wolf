@@ -9,10 +9,10 @@
  */
 class HTTPSCustomCert : public SimpleWeb::Server<SimpleWeb::HTTPS> {
 public:
-  HTTPSCustomCert(const std::string &certification_file,
-                  const std::string &private_key_file,
+  HTTPSCustomCert(std::string_view certification_file,
+                  std::string_view private_key_file,
                   const std::shared_ptr<state::AppState> &state)
-      : SimpleWeb::Server<SimpleWeb::HTTPS>(certification_file, private_key_file, std::string()) {
+      : SimpleWeb::Server<SimpleWeb::HTTPS>(certification_file.data(), private_key_file.data(), std::string()) {
     context.set_verify_mode(boost::asio::ssl::verify_peer | boost::asio::ssl::verify_fail_if_no_peer_cert |
                             boost::asio::ssl::verify_client_once);
 

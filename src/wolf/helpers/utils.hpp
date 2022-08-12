@@ -30,9 +30,9 @@ std::string_view sub_string(std::string_view str, char begin, char end) {
  * Splits the given string into an array of strings at any given separator
  */
 std::vector<std::string_view> split(std::string_view str, char separator) {
-  return str                                                                                             //
-         | view::split(separator)                                                                        //
-         | view::transform([](auto &&ptrs) { return std::string_view(&*ptrs.begin(), distance(ptrs)); }) //
+  return str                                                                                              //
+         | views::split(separator)                                                                        //
+         | views::transform([](auto &&ptrs) { return std::string_view(&*ptrs.begin(), distance(ptrs)); }) //
          | to_vector;                                                                                    //
 }
 

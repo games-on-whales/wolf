@@ -12,9 +12,10 @@ add_library(wolf_crypto src/crypto.cpp ${CRYPTO_LIST} ${HEADER_LIST})
 # We need this directory, and users of our library will need it too
 target_include_directories(wolf_crypto PUBLIC .)
 
+#set(OPENSSL_USE_STATIC_LIBS TRUE)
 find_package(OpenSSL REQUIRED)
 
-# This depends on (header only) boost
+# This depends on OpenSSL
 target_link_libraries(
         wolf_crypto PUBLIC
         OpenSSL::SSL

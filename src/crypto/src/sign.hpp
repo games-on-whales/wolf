@@ -7,7 +7,7 @@
 namespace signature {
 using EVP_MD_CTX_ptr = std::unique_ptr<EVP_MD_CTX, decltype(&::EVP_MD_CTX_free)>;
 
-std::string sign(const std::string &msg, EVP_PKEY *key_data, const EVP_MD *digest_type) {
+std::string sign(std::string_view msg, EVP_PKEY *key_data, const EVP_MD *digest_type) {
   EVP_MD_CTX_ptr ctx(EVP_MD_CTX_create(), ::EVP_MD_CTX_free);
   int msg_size = (int)msg.size();
 
@@ -26,7 +26,7 @@ std::string sign(const std::string &msg, EVP_PKEY *key_data, const EVP_MD *diges
   return {reinterpret_cast<char *>(digest), digest_size};
 }
 
-bool verify(const std::string &msg, const std::string &signature, EVP_PKEY *key_data, const EVP_MD *digest_type) {
+bool verify(std::string_view msg, std::string_view signature, EVP_PKEY *key_data, const EVP_MD *digest_type) {
   EVP_MD_CTX_ptr ctx(EVP_MD_CTX_create(), ::EVP_MD_CTX_free);
   int msg_size = (int)msg.size();
 
@@ -42,7 +42,7 @@ bool verify(const std::string &msg, const std::string &signature, EVP_PKEY *key_
 
 using EVP_PKEY_ptr = std::unique_ptr<EVP_PKEY, decltype(&::EVP_PKEY_free)>;
 
-EVP_PKEY_ptr create_key(const std::string &k, bool is_private) {
+EVP_PKEY_ptr create_key(std::string_view k, bool is_private) {
   BIO *bio = BIO_new(BIO_s_mem());
 
   if (BIO_write(bio, k.data(), k.size()) <= 0)

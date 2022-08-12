@@ -61,24 +61,24 @@ X509 *generate_x509(EVP_PKEY *pkey) {
   return x509;
 }
 
-X509 *cert_from_string(const std::string &cert) {
+X509 *cert_from_string(std::string_view cert) {
   BIO *bio;
   X509 *certificate;
 
   bio = BIO_new(BIO_s_mem());
-  BIO_puts(bio, cert.c_str());
+  BIO_puts(bio, cert.data());
   certificate = PEM_read_bio_X509(bio, nullptr, nullptr, nullptr);
 
   BIO_free(bio);
   return certificate;
 }
 
-X509 *cert_from_file(const std::string &cert_path) {
+X509 *cert_from_file(std::string_view cert_path) {
   X509 *certificate;
   BIO *bio;
 
   bio = BIO_new(BIO_s_file());
-  if (BIO_read_filename(bio, cert_path.c_str()) <= 0) {
+  if (BIO_read_filename(bio, cert_path.data()) <= 0) {
     throw std::runtime_error("Error reading certificate");
   }
   certificate = PEM_read_bio_X509(bio, nullptr, nullptr, nullptr);
@@ -87,12 +87,12 @@ X509 *cert_from_file(const std::string &cert_path) {
   return certificate;
 }
 
-EVP_PKEY *pkey_from_file(const std::string &pkey_path) {
+EVP_PKEY *pkey_from_file(std::string_view pkey_path) {
   EVP_PKEY *pkey;
   BIO *bio;
 
   bio = BIO_new(BIO_s_file());
-  if (BIO_read_filename(bio, pkey_path.c_str()) <= 0) {
+  if (BIO_read_filename(bio, pkey_path.data()) <= 0) {
     throw std::runtime_error("Error reading private key");
   }
   pkey = PEM_read_bio_PrivateKey(bio, nullptr, nullptr, nullptr);
@@ -101,9 +101,9 @@ EVP_PKEY *pkey_from_file(const std::string &pkey_path) {
   return pkey;
 }
 
-bool write_to_disk(EVP_PKEY *pkey, const std::string &pkey_filename, X509 *x509, const std::string &cert_filename) {
+bool write_to_disk(EVP_PKEY *pkey, std::string_view pkey_filename, X509 *x509, std::string_view cert_filename) {
   /* Open the PEM file for writing the key to disk. */
-  FILE *pkey_file = fopen(pkey_filename.c_str(), "wb");
+  FILE *pkey_file = fopen(pkey_filename.data(), "wb");
   if (!pkey_file) {
     throw std::runtime_error("Unable write file to disk.");
   }
@@ -117,7 +117,7 @@ bool write_to_disk(EVP_PKEY *pkey, const std::string &pkey_filename, X509 *x509,
   }
 
   /* Open the PEM file for writing the certificate to disk. */
-  FILE *x509_file = fopen(cert_filename.c_str(), "wb");
+  FILE *x509_file = fopen(cert_filename.data(), "wb");
   if (!x509_file) {
     throw std::runtime_error("Unable to write file to disk.");
   }
@@ -133,9 +133,9 @@ bool write_to_disk(EVP_PKEY *pkey, const std::string &pkey_filename, X509 *x509,
   return true;
 }
 
-bool cert_exists(const std::string &pkey_filename, const std::string &cert_filename) {
-  std::fstream pkey_fs(pkey_filename);
-  std::fstream cert_fs(cert_filename);
+bool cert_exists(std::string_view pkey_filename, std::string_view cert_filename) {
+  std::fstream pkey_fs(pkey_filename.data());
+  std::fstream cert_fs(cert_filename.data());
   return pkey_fs.good() && cert_fs.good();
 }
 
