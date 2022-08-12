@@ -40,7 +40,7 @@ group ANNOUNCE
 end
 
 group PLAY
-    M->W: TODO!!
+    M->W: nothing interesting here
     return
 end
 ....

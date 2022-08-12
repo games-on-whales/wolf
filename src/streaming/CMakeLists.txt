@@ -12,7 +12,7 @@ FetchContent_Declare(
         GIT_TAG 8.1.1)
 
 FetchContent_MakeAvailable(fmtlib)
-target_link_libraries(streaming PUBLIC fmt::fmt)
+target_link_libraries(streaming PUBLIC fmt::fmt-header-only)
 
 find_package(PkgConfig)
 
@@ -25,6 +25,8 @@ if (NOT (GSTREAMER_FOUND))
     message(FATAL_ERROR "Please Install Gstreamer Dev: CMake will Exit")
 endif ()
 
+# See here for a guide on how to statically link gstreamer:
+# https://www.collabora.com/news-and-blog/news-and-events/generate-mininal-gstreamer-build-tailored-to-your-needs.html
 target_link_libraries(streaming PUBLIC
         ${GOBJECT_LIBRARIES}
         ${GLIB2_LIBRARIES}

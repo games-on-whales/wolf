@@ -112,11 +112,11 @@ TEST_CASE("utilities methods", "[RTSP]") {
 }
 
 immer::box<StreamSession> test_init_state() {
-  StreamSession session = {{1920, 1080, 60},
+  StreamSession session = {std::make_shared<dp::event_bus>(),
+                           {1920, 1080, 60},
                            {2, 1, 1, {state::AudioMode::FRONT_LEFT, state::AudioMode::FRONT_RIGHT}},
                            "app_id_1",
                            crypto::hex_to_str("9d804e47a6aa6624b7d4b502b32cc522", true),
-                           static_cast<unsigned long>(-228339149),
                            "0f691f13730748328a22a6952a5ac3a2",
                            "192.168.1.1",
                            1,
@@ -251,7 +251,7 @@ TEST_CASE("Commands", "[RTSP]") {
                      "Session:  DEADBEEFCAFE\n"
                      "Content-type: application/sdp\n"
                      "Content-length: 1308"
-                     "\r\n\r\n"
+                     "\r\n\r\n" // start of payload
                      "v=0\n"
                      "o=android 0 14 IN IPv4 0.0.0.0\n"
                      "s=NVIDIA Streaming Client\n"
@@ -291,7 +291,7 @@ TEST_CASE("Commands", "[RTSP]") {
                      "m=video 47998 \n"sv,
                      [](std::optional<msg_t> response) {
                        REQUIRE(response);
-                       REQUIRE(response.value()->message.response.statusCode == 404); // TODO!
+                       REQUIRE(response.value()->message.response.statusCode == 200);
                        REQUIRE(response.value()->sequenceNumber == 6);
                      });
   }

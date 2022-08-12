@@ -1,5 +1,6 @@
 #include <boost/filesystem.hpp>
 #include <boost/stacktrace.hpp>
+#include <control/control.cpp>
 #include <csignal>
 #include <helpers/logger.hpp>
 #include <immer/array.hpp>
@@ -13,9 +14,9 @@
 /**
  * @brief Will try to load the config file and fallback to defaults
  */
-auto load_config(const std::string &config_file) {
+auto load_config(std::string_view config_file) {
   logs::log(logs::info, "Reading config file from: {}", config_file);
-  return state::load_or_default(config_file);
+  return state::load_or_default(config_file.data());
 }
 
 /**
@@ -35,7 +36,7 @@ immer::array<state::AudioMode> getAudioModes() {
   return {{2, 1, 1, {state::AudioMode::FRONT_LEFT, state::AudioMode::FRONT_RIGHT}}};
 }
 
-state::Host get_host_config(const std::string &pkey_filename, const std::string &cert_filename) {
+state::Host get_host_config(std::string_view pkey_filename, std::string_view cert_filename) {
   X509 *server_cert;
   EVP_PKEY *server_pkey;
   if (x509::cert_exists(pkey_filename, cert_filename)) {
@@ -60,7 +61,7 @@ state::Host get_host_config(const std::string &pkey_filename, const std::string 
 /**
  * @brief Local state initialization
  */
-auto initialize(const std::string &config_file, const std::string &pkey_filename, const std::string &cert_filename) {
+auto initialize(std::string_view config_file, std::string_view pkey_filename, std::string_view cert_filename) {
   auto config = load_config(config_file);
   auto display_modes = getDisplayModes();
 
@@ -119,7 +120,7 @@ int main(int argc, char *argv[]) {
   auto config_file = "config.json";
   auto local_state = initialize(config_file, "key.pem", "cert.pem");
 
-  auto pair_signal = local_state->event_bus->register_handler<state::PairSignal>(&user_pin_handler);
+  auto pair_sig = local_state->event_bus->register_handler<state::PairSignal>(&user_pin_handler);
 
   auto https_server = std::make_unique<HttpsServer>("cert.pem", "key.pem", local_state);
   auto http_server = std::make_unique<HttpServer>();
@@ -131,10 +132,16 @@ int main(int argc, char *argv[]) {
   auto http_thread = HTTPServers::startServer(http_server.get(), local_state, http_port);
 
   std::vector<std::thread> thread_pool;
-  auto rtsp_launch_signal = local_state->event_bus->register_handler<immer::box<state::StreamSession>>(
+  auto rtsp_launch_sig = local_state->event_bus->register_handler<immer::box<state::StreamSession>>(
       [&thread_pool](immer::box<state::StreamSession> stream_session) {
-        int port = stream_session->rtsp_port;
+        auto port = stream_session->rtsp_port;
         thread_pool.push_back(rtsp::start_server(port, std::move(stream_session)));
+      });
+
+  control::init(); // Need to initialise enet once
+  auto ctrl_launch_sig = local_state->event_bus->register_handler<immer::box<state::ControlSession>>(
+      [&thread_pool](immer::box<state::ControlSession> control_sess) {
+        thread_pool.push_back(control::start_service(std::move(control_sess)));
       });
 
   // GStreamer test

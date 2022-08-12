@@ -11,9 +11,11 @@ set(MOONLIGHT_HEADERS
         ./moonlight-common-c/src/Rtsp.h
         ./moonlight-common-c/src/RtspParser.c
         ./moonlight-common-c/src/Video.h)
+file(GLOB ENET_SRCS SRCS "${wolf_SOURCE_DIR}/src/moonlight/moonlight-common-c/enet/*.c")
+
 
 # Make an automatic library - will be static or dynamic based on user setting
-add_library(moonlight moonlight.cpp ${HEADER_LIST} ${MOONLIGHT_HEADERS})
+add_library(moonlight moonlight.cpp ${HEADER_LIST} ${MOONLIGHT_HEADERS} ${ENET_SRCS})
 
 # Immutable datastructures
 FetchContent_Declare(
@@ -49,9 +51,8 @@ target_include_directories(moonlight PUBLIC .)
 set_target_properties(moonlight PROPERTIES PUBLIC_HEADER .)
 set_target_properties(moonlight PROPERTIES OUTPUT_NAME "moonlight")
 
-# moonlight-common-c
-add_subdirectory(./moonlight-common-c/enet/)
-include_directories(
+# moonlight-common-c dependencies
+target_include_directories(moonlight PUBLIC
         ./moonlight-common-c/enet/include
         ./moonlight-common-c/reedsolomon)
 

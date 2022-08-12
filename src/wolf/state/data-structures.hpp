@@ -1,5 +1,6 @@
 #pragma once
 
+#include <chrono>
 #include <eventbus/event_bus.hpp>
 #include <future>
 #include <immer/array.hpp>
@@ -12,6 +13,7 @@
 #include <optional>
 
 namespace state {
+using namespace std::chrono_literals;
 
 struct PairedClient {
   std::string client_id;
@@ -136,20 +138,37 @@ struct AppState {
  * can start working their magic.
  */
 struct StreamSession {
+  std::shared_ptr<dp::event_bus> event_bus;
+
   moonlight::DisplayMode display_mode;
   AudioMode audio_mode;
 
   std::string app_id;
 
   std::string gcm_key;
-  unsigned long gcm_iv{};
 
   std::string unique_id;
   std::string ip;
 
-  int rtsp_port{};
-  int control_port{};
-  int audio_port{};
-  int video_port{};
+  std::uint16_t rtsp_port{};
+  std::uint16_t control_port{};
+  std::uint16_t audio_port{};
+  std::uint16_t video_port{};
 };
+
+/**
+ * A ControlSessions is created after the param exchange over RTSP
+ */
+struct ControlSession {
+  std::uint16_t port;
+  std::size_t peers;
+
+  int protocol_type;
+
+  std::string gcm_key;
+
+  std::chrono::milliseconds timeout = 150ms;
+  std::string host = "0.0.0.0";
+};
+
 } // namespace state

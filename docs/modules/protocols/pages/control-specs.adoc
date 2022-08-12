@@ -1,0 +1,77 @@
+= Control specifications
+
+:toc:
+
+== Overview
+
+The control stream runs over UDP via a https://github.com/cgutman/enet/tree/4cde9cc3dcc5c30775a80da1de87f39f98672a31[custom fork] of https://github.com/lsalzman/enet[ENET] that supports IPV4 and IPV6.
+
+All the exchanged messages are encrypted using AES GCM 128 bit. +
+In order to decrypt you'll have to use the keys that are exchanged during the `HTTP launch` phase.
+
+== Encrypted packet format
+
+https://en.wikipedia.org/wiki/Galois/Counter_Mode[AES GCM] not only provides confidentiality by encrypting the message but, by using the GCM TAG, it also guarantees that no one has tampered the original payload.
+
+.The format of encrypted packets in bytes
+[packetdiag,format=svg,align="center"]
+....
+{
+  colwidth = 8
+  node_height = 50
+  node_width = 70
+
+  0-1: Type
+  2-3: Len
+  4-7: Seq
+  8-23: AES GCM TAG
+  24-31: encrypted payload
+}
+....
+
+[%autowidth.stretch]
+|===
+|Element |Size in bytes |C++ type |Description
+
+|Type
+|2
+|unsigned short int
+|The type of message, fixed at `0x0001` for this type of packet
+
+|Len
+|2
+|unsigned short int
+|The size of the rest of the message in bytes (Seq + TAG + Payload)
+
+|Seq
+|4
+|unsigned int
+|Monotonically increasing sequence number (used as IV for AES-GCM)
+
+|GCM TAG
+|16
+|char *
+|The AES GCM TAG
+
+|Payload
+|until Len
+|char *
+|The AES encrypted payload
+|===
+
+TIP: All data is https://en.wikipedia.org/wiki/Endianness[little-endian] encoded
+
+== Decrypted payload
+
+The first two bytes of the decrypted payload represent the *type* of the message; the following types are encoded:
+
+* START_A (`0x0305`)
+* START_B (`0x0307`)
+* INVALIDATE_REF_FRAMES (`0x0301`)
+* LOSS_STATS (`0x0201`)
+* FRAME_STATS (`0x0204`)
+* INPUT_DATA (`0x0206`)
+* RUMBLE_DATA (`0x010b`)
+* TERMINATION (`0x0100`)
+* PERIODIC_PING (`0x0200`)
+* IDR_FRAME (`0x0302`)

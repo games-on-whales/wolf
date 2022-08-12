@@ -101,8 +101,9 @@ target_link_libraries(
         ${Boost_LIBRARIES}
         ${CMAKE_DL_LIBS}
         ${CMAKE_THREAD_LIBS_INIT}
-        fmt::fmt
+        fmt::fmt-header-only
         dp::eventbus
+        #-static # enable to statically link all libraries
 )
 
 # The following is needed in order to import this into the test suite

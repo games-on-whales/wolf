@@ -197,18 +197,20 @@ private:
  * @return the thread instance
  */
 std::thread start_server(int port, immer::box<state::StreamSession> state) {
-  auto thread = std::thread([port, state = std::move(state)]() {
-    try {
-      boost::asio::io_context io_context;
-      tcp_server server(io_context, port, state);
+  auto thread = std::thread(
+      [port](immer::box<state::StreamSession> state) {
+        try {
+          boost::asio::io_context io_context;
+          tcp_server server(io_context, port, state);
 
-      logs::log(logs::info, "RTSP server started on port: {}", port);
+          logs::log(logs::info, "RTSP server started on port: {}", port);
 
-      io_context.run();
-    } catch (std::exception &e) {
-      logs::log(logs::error, "Unable to create RTSP server on port: {} ex: {}", port, e.what());
-    }
-  });
+          io_context.run();
+        } catch (std::exception &e) {
+          logs::log(logs::error, "Unable to create RTSP server on port: {} ex: {}", port, e.what());
+        }
+      },
+      std::move(state));
 
   return thread;
 }
