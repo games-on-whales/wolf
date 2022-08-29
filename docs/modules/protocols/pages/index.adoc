@@ -1,7 +1,27 @@
 = Moonlight Protocols
-:toc:
 
 == Overview
+
+.High level overview of the protocols flow
+[plantuml,format=svg]
+....
+| HTTP |
+  :pair user;
+| HTTPS |
+  :app list;
+  :start app;
+| RTSP |
+  :exchange next procols info;
+  :PLAY;
+| Control |
+  repeat
+    :get user inputs;
+    :Video/Audio stream data;
+  repeat while (connected?) is (yes)
+  -> no;
+
+stop
+....
 
 There are 6 main protocols involved in the current GameStream protocol:
 
@@ -12,17 +32,13 @@ There are 6 main protocols involved in the current GameStream protocol:
 ** encrypted 🔐
 ** only available to paired clients
 ** used to exchange available apps and trigger the start
-* RTSP (TCP 48010)
+* link:rtsp[RTSP] (TCP 48010)
 ** unencrypted 🔓
 ** Used to exchange ports and settings for the next 3 streams
-* Control over ENet (UDP 47999)
+* link:control-specs[Control] over ENet (UDP 47999)
 ** encrypted 🔐 (using AES GCM 128 bit)
 ** Used to exchange user input data and extra stream information
 * Video over RTP (UDP 47998)
 ** unencrypted 🔓 (needs checking)
 * Audio over RTP (UDP 48000)
 ** could be encrypted 🔒 (needs checking)
-
-== Where to go next
-
-* See how link:pairing[pairing works].

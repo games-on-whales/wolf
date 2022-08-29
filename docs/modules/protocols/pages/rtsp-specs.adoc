@@ -1,7 +1,5 @@
 = RTSP specifications
 
-:toc:
-
 == Overview
 
 RTSP messages are plaintext packets of variable size over TCP.

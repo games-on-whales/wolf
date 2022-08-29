@@ -1,0 +1,30 @@
+= Code Structure
+
+The code is written in order to be as readable as possible **with no side effects** and **no global objects/variables**.
+
+We (try to) follow a functional approach where all the methods take immutable inputs and returns new outputs. +
+This way the core of the protocol is fully decoupled from the underlying platform/HTTP server of choice and can be re-used by other projects, also, it enables us to *easily* test most of the methods in isolation.
+
+We are trying to isolate the Moonlight protocol from the actual implementation so that we can create a portable C++ library of stateless methods, where possible, the code has been separated in logical modules.
+
+== src/crypto
+
+The crypto module depends on OpenSSL and provides an interface (https://github.com/games-on-whales/wolf/blob/HEAD/src/crypto/crypto/crypto.hpp[crypto.hpp]) to all the crypto related methods that are used by the other modules.
+
+== src/moonlight
+
+Here we define the moonlight protocol interface (https://github.com/games-on-whales/wolf/blob/HEAD/src/moonlight/moonlight/protocol.hpp[protocol.hpp]) and the implementation (https://github.com/games-on-whales/wolf/blob/HEAD/src/moonlight/moonlight.cpp[moonlight.cpp]).
+
+== src/streaming
+
+This module implements a https://gstreamer.freedesktop.org/[gstreamer] plugin in order to encode video/audio streams into the Moonlight RDP format. +
+You can read more about our implementation in the xref:gstreamer.adoc[gstreamer page].
+
+== src/wolf
+
+The wolf module defines the glue code in order to make the moonlight protocols to work over TCP/UDP. +
+Here will also live all the platform dependent code and the result will be an executable binary: `wolf`.
+
+== tests
+
+Unit tests will live under `tests/`, we are implementing unit tests for most of the methods and, where possible, also mocking packets/requests like on a real Moonlight session.

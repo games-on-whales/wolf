@@ -1,7 +1,5 @@
 = RTSP
 
-:toc:
-
 == Overview
 
 The RTSP protocol starts when a Moonlight user launch an app, and it's used to exchange information about the next streams (video, audio, control).

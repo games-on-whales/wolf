@@ -1,6 +1,7 @@
-* xref:index.adoc[Protocols]
-** xref:pairing.adoc[HTTP/S pairing]
-** xref:rtsp.adoc[RTSP]
-*** xref:rtsp-specs.adoc[RTSP specs]
+* xref:index.adoc[]
+** xref:pairing.adoc[]
+** xref:rtsp.adoc[]
+*** xref:rtsp-specs.adoc[]
 ** Control (via ENET)
-*** xref:control-specs.adoc[Control specs]
+*** xref:control-specs.adoc[]
+** xref:rtp-h264.adoc[]

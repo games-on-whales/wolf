@@ -1,7 +1,5 @@
 = Control specifications
 
-:toc:
-
 == Overview
 
 The control stream runs over UDP via a https://github.com/cgutman/enet/tree/4cde9cc3dcc5c30775a80da1de87f39f98672a31[custom fork] of https://github.com/lsalzman/enet[ENET] that supports IPV4 and IPV6.

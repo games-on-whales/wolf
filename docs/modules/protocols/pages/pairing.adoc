@@ -1,5 +1,4 @@
 = HTTP/S Pairing
-:toc:
 
 == Overview
 
@@ -12,7 +11,7 @@ How can we securely authenticate an untrusted client over an insecure network?
 
 This involves quite a bit of cryptography and a few steps between the client (Moonlight) and the server (Wolf).
 
-[plantuml, format=svg]
+[plantuml,format=svg]
 ....
 title: Moonlight Pairing protocol
 autonumber
@@ -54,7 +53,7 @@ end
 
 == Phase 1
 
-[plantuml, format=svg]
+[plantuml,format=svg]
 ....
 title: Pairing - Phase 1
 
@@ -77,7 +76,7 @@ At this stage we only have to send back our public certificate (`plaincert`).
 
 == Phase 2
 
-[plantuml, format=svg]
+[plantuml,format=svg]
 ....
 title: Pairing - Phase 2
 
@@ -103,7 +102,7 @@ The hash + server_challenge will then be AES encrypted and sent as the `challeng
 
 == Phase 3
 
-[plantuml, format=svg]
+[plantuml,format=svg]
 ....
 title: Pairing - Phase 3
 
@@ -119,7 +118,7 @@ using our private key we have to sign the certificate_signature + server_secret 
 
 == Phase 4
 
-[plantuml, format=svg]
+[plantuml,format=svg]
 ....
 title: Pairing - Phase 4
 
@@ -151,7 +150,7 @@ The response will contain:
 
 == Phase 5 (HTTPS)
 
-[plantuml, format=svg]
+[plantuml,format=svg]
 ....
 title: Pairing - Phase 5
 

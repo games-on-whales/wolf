@@ -1,0 +1,44 @@
+= GStreamer
+
+"GStreamer is a library for constructing graphs of media-handling components.
+The applications it supports range from simple Ogg/Vorbis playback, audio/video streaming to complex audio (mixing) and video (non-linear editing) processing."
+-- https://gstreamer.freedesktop.org/[gstreamer.freedesktop.org]
+
+== Overview
+
+We implemented a custom plugin that turns a stream of bytes into valid Moonlight RTP packets.
+This way users will be able to compose Gstreamer pipelines in any form or shape and, near the end, plug our plugin so that it can be streamed to Moonlight. +
+Here are a few simple examples that will be available out of the box:
+
+* Grab the screen
+- pipe the same video to a file if you wish to save it locally too.
+* Grab a video from a local file (or the network)
+* Grab a webcam stream from the local network and send it via Moonlight
+
+== The plugin
+
+.Our plugin sits between the encoded video bitestream and a downstream UDP sink that will send the RTP packets to Moonlight
+[mermaid,format=svg]
+....
+flowchart LR
+  V[Encoded video] -- sink --> P[RTP moonlight payloader] -- src --> U[UDP sink]
+....
+
+Given that this is a direct transformation from one input buffer to another output buffer we decided to use https://gstreamer.freedesktop.org/documentation/base/gstbasetransform.html?gi-language=c[GstBaseTransform] as the base class.
+This will implement a lot of boilerplate code for us so that we can focus on the main https://gstreamer.freedesktop.org/documentation/base/gstbasetransform.html?gi-language=c#GstBaseTransformClass::transform[`_transform`] virtual method implementation.
+
+Following the nomenclature used in the https://gstreamer.freedesktop.org/documentation/rtp/index.html?gi-language=c[official GStreamer RTP plugins] we called it `rtpmoonlightpay` as in RTP Moonlight Payloader.
+
+.A full example pipeline for video encoding and streaming
+[mermaid,format=svg]
+....
+flowchart LR
+ A[videotestsrc] --> B[videoscale] --> C[videoconvert] --> D[x264enc] --> E[rtpmoonlightpay] --> F[udpsink]
+....
+
+== Code
+
+GStreamer uses GObjects: a mechanism to retrofit Objects into C.
+I suggest you to get a bit familiar with it before diving into the code; http://sgros.blogspot.com/2016/01/few-tips-about-gobject-for-oo.html[here's a great and simple tutorial].
+
+Following the official docs at https://gstreamer.freedesktop.org/documentation/plugin-development/basics/boiler.html?gi-language=c[Plugin Write's Guide] we started off with the https://github.com/GStreamer/gst-plugins-bad/blob/ca8068c6d793d7aaa6f2e2cc6324fdedfe2f33fa/tools/gst-element-maker[official bash script] that creates the boilerplate code from the selected base class.

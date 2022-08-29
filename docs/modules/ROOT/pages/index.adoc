@@ -1,3 +1,23 @@
 = Wolf
 
-WIP documentation for Wolf and Moonlight.
+image:https://github.com/games-on-whales/wolf/actions/workflows/linux-build-test.yml/badge.svg[Build badge]
+image:https://img.shields.io/discord/856434175455133727.svg?label=&logo=discord&logoColor=ffffff&color=7389D8&labelColor=6A7EC2[Discord link]
+image:https://img.shields.io/github/license/games-on-whales/wolf[License MIT]
+
+[quote,Matshona Dhliwayo.]
+An intelligent wolf is better than a foolish lion.
+
+== Rationale
+
+The goal is to create an open source backend for https://moonlight-stream.org/[Moonlight] based on https://gstreamer.freedesktop.org/[GStreamer].
+
+In the process we would like to create a **platform-agnostic** C++ library that clearly defines the protocol and that can be used in other projects.
+While doing so, we are working on documenting and testing the protocol.
+
+At the beginning it'll be focused on running in Docker so that we can replace https://github.com/LizardByte/Sunshine[Sunshine] in https://github.com/games-on-whales/gow[GOW] but the code is already structured in order to support multiple platforms.
+
+== Acknowledgements
+
+- https://github.com/loki-47-6F-64[@loki-47-6F-64] for creating and sharing https://github.com/loki-47-6F-64/sunshine[Sunshine]
+- All the guys at the https://moonlight-stream.org/[Moonlight] Discord channel, for the tireless help they provide to anyone
+- https://github.com/ReenigneArcher[@ReenigneArcher] for beying the first stargazer of the project and taking care of keeping https://github.com/SunshineStream/Sunshine[Sunshine alive]
