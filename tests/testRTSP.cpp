@@ -190,7 +190,7 @@ TEST_CASE("Commands", "[RTSP]") {
 
                        opt = opt->next;
                        REQUIRE_THAT(opt->option, Equals("Transport"));
-                       REQUIRE_THAT(opt->content, Equals(fmt::format(" {}", state->audio_port)));
+                       REQUIRE_THAT(opt->content, Equals(fmt::format(" server_port={}", state->audio_port)));
                      });
   }
 
@@ -214,7 +214,7 @@ TEST_CASE("Commands", "[RTSP]") {
 
                        opt = opt->next;
                        REQUIRE_THAT(opt->option, Equals("Transport"));
-                       REQUIRE_THAT(opt->content, Equals(fmt::format(" {}", state->video_port)));
+                       REQUIRE_THAT(opt->content, Equals(fmt::format(" server_port={}", state->video_port)));
                      });
   }
 
@@ -238,7 +238,7 @@ TEST_CASE("Commands", "[RTSP]") {
 
                        opt = opt->next;
                        REQUIRE_THAT(opt->option, Equals("Transport"));
-                       REQUIRE_THAT(opt->content, Equals(fmt::format(" {}", state->control_port)));
+                       REQUIRE_THAT(opt->content, Equals(fmt::format(" server_port={}", state->control_port)));
                      });
   }
 

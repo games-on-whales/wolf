@@ -58,7 +58,7 @@ msg_t setup(msg_t req, const state::StreamSession &session) {
   auto session_opt = "DEADBEEFCAFE;timeout = 90"s;
   std::vector<RTSP_MESSAGE_OPTION> options = {{"CSeq", std::to_string(req->sequenceNumber)},
                                               {"Session", session_opt},
-                                              {"Transport", std::to_string(service_port)}};
+                                              {"Transport", "server_port=" + std::to_string(service_port)}};
 
   return create_rtsp_msg(options, 200, "OK", req->sequenceNumber, {});
 }
