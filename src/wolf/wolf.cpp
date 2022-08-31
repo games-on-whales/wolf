@@ -122,7 +122,7 @@ int main(int argc, char *argv[]) {
 
   auto pair_sig = local_state->event_bus->register_handler<state::PairSignal>(&user_pin_handler);
 
-  auto https_server = std::make_unique<HttpsServer>("cert.pem", "key.pem", local_state);
+  auto https_server = std::make_unique<HttpsServer>("cert.pem", "key.pem");
   auto http_server = std::make_unique<HttpServer>();
 
   auto https_port = local_state->config.base_port + state::HTTPS_PORT;

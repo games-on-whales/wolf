@@ -2,23 +2,11 @@
 #include <boost/property_tree/xml_parser.hpp>
 #include <helpers/logger.hpp>
 #include <server_http.hpp>
-#include <server_https.hpp>
 #include <string_view>
 
 using namespace std::literals;
 using XML = moonlight::XML;
 namespace pt = boost::property_tree;
-
-/**
- * @brief C++ way to get which kind of tunnel T is used (http or https)
- */
-template <class T> struct tunnel;
-template <> struct tunnel<SimpleWeb::HTTPS> {
-  static auto constexpr to_string = "https"sv;
-};
-template <> struct tunnel<SimpleWeb::HTTP> {
-  static auto constexpr to_string = "http"sv;
-};
 
 std::string xml_to_str(const XML xml) {
   std::stringstream ss;
@@ -33,7 +21,7 @@ template <class T> void log_req(std::shared_ptr<typename SimpleWeb::ServerBase<T
   logs::log(logs::debug,
             "[{}] {}://{}{}",
             request->method,
-            tunnel<T>::to_string,
+            std::is_same_v<SimpleWeb::HTTP, T> ? "HTTP" : "HTTPS",
             request->local_endpoint(),
             request->path);
   logs::log(logs::trace, "Header: {}", request->parse_query_string());

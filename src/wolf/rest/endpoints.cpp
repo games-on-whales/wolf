@@ -45,15 +45,10 @@ void serverinfo(std::shared_ptr<typename SimpleWeb::ServerBase<T>::Response> res
   log_req<T>(request);
 
   SimpleWeb::CaseInsensitiveMultimap headers = request->parse_query_string();
-  auto client_id = get_header(headers, "uniqueid");
-  if (!client_id) {
-    logs::log(logs::warning, "Received serverinfo request without uuid");
-    server_error<T>(response);
-    return;
-  }
 
   auto cfg = state->config;
   auto host = state->host;
+  bool is_https = std::is_same_v<SimpleWeb::HTTPS, T>;
   auto xml = moonlight::serverinfo(false, // TODO: isServerBusy
                                    -1,    // TODO: current_appid
                                    cfg.base_port + state::HTTPS_PORT,
@@ -64,7 +59,7 @@ void serverinfo(std::shared_ptr<typename SimpleWeb::ServerBase<T>::Response> res
                                    host.external_ip,
                                    host.internal_ip,
                                    host.display_modes,
-                                   state::is_paired(cfg, client_id.value()));
+                                   is_https);
 
   send_xml<T>(response, SimpleWeb::StatusCode::success_ok, xml);
 }
