@@ -11,20 +11,39 @@
 #include <moonlight/data-structures.hpp>
 #include <openssl/x509.h>
 #include <optional>
+#include <streaming/data-structures.hpp>
 
 namespace state {
 using namespace std::chrono_literals;
 
+/**
+ * All ports are derived from a base port, default: 47989
+ */
+enum STANDARD_PORTS_MAPPING {
+  HTTPS_PORT = 47984,
+  HTTP_PORT = 47989,
+  VIDEO_STREAM_PORT = 47998,
+  CONTROL_PORT = 47999,
+  AUDIO_STREAM_PORT = 48000,
+  RTSP_SETUP_PORT = 48010
+};
+
 struct PairedClient {
   std::string client_id;
   std::string client_cert;
+
+  unsigned short rtsp_port = RTSP_SETUP_PORT;
+  unsigned short control_port = CONTROL_PORT;
+  unsigned short video_port = VIDEO_STREAM_PORT;
+  unsigned short audio_port = AUDIO_STREAM_PORT;
 };
 
 struct PairSignal {
-  std::string client_id;
   std::string client_ip;
   std::promise<std::string> &user_pin;
 };
+
+using PairedClientList = immer::vector<immer::box<PairedClient>>;
 
 /**
  * The stored (and user modifiable) configuration
@@ -32,13 +51,12 @@ struct PairSignal {
 struct Config {
   std::string uuid;
   std::string hostname;
-  int base_port;
 
   /**
    * Mutable, paired_clients will be loaded up on startup
    * but can be added at runtime
    */
-  immer::atom<immer::vector<PairedClient>> &paired_clients;
+  immer::atom<PairedClientList> &paired_clients;
 
   /**
    * List of available Apps
@@ -79,18 +97,6 @@ struct Host {
   std::string external_ip;
   std::string internal_ip;
   std::string mac_address;
-};
-
-/**
- * All ports are derived from a base port, default: 47989
- */
-enum STANDARD_PORTS_MAPPING {
-  HTTPS_PORT = -5,
-  HTTP_PORT = 0,
-  VIDEO_STREAM_PORT = 9,
-  CONTROL_PORT = 10,
-  AUDIO_STREAM_PORT = 11,
-  RTSP_SETUP_PORT = 21
 };
 
 /**

@@ -89,11 +89,29 @@ msg_t announce(msg_t req, const state::StreamSession &session) {
               | views::transform(parse_arg_line)                        // turns an arg line into a pair
               | to<std::map<std::string_view, std::optional<int>>>;     // to map
 
+  // Control session
   state::ControlSession ctrl = {session.control_port,
                                 4, // TODO: peers from config?
                                 args["x-nv-general.useReliableUdp"].value_or(0),
                                 session.gcm_key};
   session.event_bus->fire_event(immer::box<state::ControlSession>(ctrl));
+
+  // Video session
+  state::VideoSession video = {args["x-nv-video[0].clientViewportWd"].value(),
+                               args["x-nv-video[0].clientViewportHt"].value(),
+                               args["x-nv-video[0].maxFPS"].value(),
+                               static_cast<bool>(args["x-nv-clientSupportHevc"].value()),
+
+                               session.video_port,
+                               std::chrono::milliseconds(args["x-nv-video[0].timeoutLengthMs"].value()),
+                               args["x-nv-video[0].packetSize"].value(),
+                               args["x-nv-video[0].framesWithInvalidRefThreshold"].value(),
+                               20, // fec percentage TODO: make it a config
+                               args["x-nv-vqos[0].fec.minRequiredFecPackets"].value_or(0),
+                               args["x-nv-video[0].initialBitrateKbps"].value(),
+
+                               session.ip};
+  session.event_bus->fire_event(immer::box<state::VideoSession>(video));
 
   return create_rtsp_msg({options}, 200, "OK", req->sequenceNumber, {});
 }

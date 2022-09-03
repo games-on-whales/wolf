@@ -51,8 +51,8 @@ void serverinfo(std::shared_ptr<typename SimpleWeb::ServerBase<T>::Response> res
   bool is_https = std::is_same_v<SimpleWeb::HTTPS, T>;
   auto xml = moonlight::serverinfo(false, // TODO: isServerBusy
                                    -1,    // TODO: current_appid
-                                   cfg.base_port + state::HTTPS_PORT,
-                                   cfg.base_port + state::HTTP_PORT,
+                                   state::HTTPS_PORT,
+                                   state::HTTP_PORT,
                                    cfg.uuid,
                                    cfg.hostname,
                                    host.mac_address,
@@ -90,7 +90,7 @@ void pair(std::shared_ptr<typename SimpleWeb::ServerBase<T>::Response> response,
   // PHASE 1
   if (client_id && salt && client_cert_str) {
     auto future_pin = std::promise<std::string>();
-    state::PairSignal signal = {client_id.value(), client_ip, future_pin};
+    state::PairSignal signal = {client_ip, future_pin};
     state->event_bus->fire_event(signal); // Emit a signal and wait for a response
     auto user_pin = future_pin.get_future().get();
 
@@ -101,7 +101,15 @@ void pair(std::shared_ptr<typename SimpleWeb::ServerBase<T>::Response> response,
 
     state->pairing_cache.update([&](const immer::map<std::string, state::PairCache> &pairing_cache) {
       return pairing_cache.set(cache_key,
-                               {client_id.value(), client_cert_parsed, result.second, std::nullopt, std::nullopt});
+                               {client_id.value(),
+                                client_cert_parsed,
+                                state::RTSP_SETUP_PORT,
+                                state::CONTROL_PORT,
+                                state::VIDEO_STREAM_PORT,
+                                state::AUDIO_STREAM_PORT,
+                                result.second,
+                                std::nullopt,
+                                std::nullopt});
     });
 
     send_xml<T>(response, SimpleWeb::StatusCode::success_ok, result.first);
@@ -214,6 +222,7 @@ void applist(std::shared_ptr<typename SimpleWeb::ServerBase<T>::Response> respon
 template <class T>
 void launch(std::shared_ptr<typename SimpleWeb::ServerBase<T>::Response> response,
             std::shared_ptr<typename SimpleWeb::ServerBase<T>::Request> request,
+            const state::PairedClient &current_client,
             const std::shared_ptr<state::AppState> &state) {
   log_req<T>(request);
 
@@ -229,8 +238,6 @@ void launch(std::shared_ptr<typename SimpleWeb::ServerBase<T>::Response> respons
 
   auto client_ip = request->remote_endpoint().address().to_string();
 
-  auto rtsp_port = state->config.base_port + state::RTSP_SETUP_PORT;
-
   state::StreamSession session = {state->event_bus,
                                   display_mode,
                                   audio_mode,
@@ -241,15 +248,15 @@ void launch(std::shared_ptr<typename SimpleWeb::ServerBase<T>::Response> respons
                                   get_header(headers, "uuid").value(),
                                   client_ip,
                                   // ports
-                                  static_cast<std::uint16_t>(rtsp_port),
-                                  static_cast<std::uint16_t>(state->config.base_port + state::CONTROL_PORT),
-                                  static_cast<std::uint16_t>(state->config.base_port + state::AUDIO_STREAM_PORT),
-                                  static_cast<std::uint16_t>(state->config.base_port + state::VIDEO_STREAM_PORT)};
+                                  current_client.rtsp_port,
+                                  current_client.control_port,
+                                  current_client.audio_port,
+                                  current_client.video_port};
   immer::box<state::StreamSession> shared_session = {session};
 
-  state->event_bus->fire_event(shared_session); // Anyone listening for this even will be called
+  state->event_bus->fire_event(shared_session); // Anyone listening for this event will be called
 
-  auto xml = moonlight::launch_success(state->host.external_ip, std::to_string(rtsp_port));
+  auto xml = moonlight::launch_success(state->host.external_ip, std::to_string(current_client.rtsp_port));
   send_xml<T>(response, SimpleWeb::StatusCode::success_ok, xml);
 }
 } // namespace https

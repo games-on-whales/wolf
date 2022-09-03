@@ -16,20 +16,24 @@ template <class S> Config load_or_default(const S &source);
 template <class S> void save(const Config &cfg, const S &dest);
 
 /**
- * @brief Based only on the client_id returns True if there's already a paired client in Config.
- *
- * Bear in mind that even if the HTTP endpoint can return paired == true just by looking at the client_id,
- * on the HTTPS endpoint we'll also check the actual provided certificate to see if it's valid; see: HTTPSCustomCert
- */
-bool is_paired(const Config &cfg, const std::string &client_id);
-
-/**
  * Side effect, will atomically update the paired clients list in cfg
  */
 void pair(const Config &cfg, const PairedClient &client);
 
 /**
- * Returns the first PairedClient with the given client_id
+ * Side effect, will atomically remove the client from the list of paired clients
  */
-std::optional<PairedClient> find_by_id(const Config &cfg, const std::string &client_id);
+void unpair(const Config &cfg, const PairedClient &client);
+
+/**
+ * Returns the first PairedClient with the given client_cert
+ */
+std::optional<PairedClient> get_client_via_ssl(const Config &cfg, x509_st *client_cert);
+
+/**
+ * Returns the first PairedClient with the given client_cert
+ */
+std::optional<PairedClient> get_client_via_ssl(const Config &cfg, const std::string &client_cert) {
+  return get_client_via_ssl(cfg, x509::cert_from_string(client_cert));
+}
 } // namespace state

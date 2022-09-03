@@ -29,6 +29,21 @@ startServer(SimpleWeb::Server<SimpleWeb::HTTP> *server, const std::shared_ptr<st
     endpoints::pair<SimpleWeb::HTTP>(resp, req, state);
   };
 
+  server->resource["^/unpair$"]["GET"] = [&state](auto resp, auto req) {
+    SimpleWeb::CaseInsensitiveMultimap headers = req->parse_query_string();
+    auto client_id = get_header(headers, "uniqueid");
+    auto client_ip = req->remote_endpoint().address().to_string();
+    auto cache_key = client_id.value() + "@" + client_ip;
+
+    state->pairing_cache.update([&cache_key](const immer::map<std::string, state::PairCache> &pairing_cache) {
+      return pairing_cache.erase(cache_key);
+    });
+
+    XML xml;
+    xml.put("root.<xmlattr>.status_code", 200);
+    send_xml<SimpleWeb::HTTP>(resp, SimpleWeb::StatusCode::success_ok, xml);
+  };
+
   std::thread server_thread(
       [](auto server) {
         // Start server
@@ -43,16 +58,7 @@ std::optional<state::PairedClient>
 get_client_if_paired(const std::shared_ptr<state::AppState> &state,
                      const std::shared_ptr<typename SimpleWeb::ServerBase<SimpleWeb::HTTPS>::Request> &request) {
   auto client_cert = SimpleWeb::Server<SimpleWeb::HTTPS>::get_client_cert(request);
-  for (const auto &client : state->config.paired_clients.load().get()) {
-    auto paired_cert = x509::cert_from_string(client.client_cert);
-    auto valid_error = x509::verification_error(paired_cert, client_cert);
-    if (valid_error) {
-      logs::log(logs::debug, "SSL certification validation error: {}", valid_error.value());
-    } else { // validation successful!
-      return client;
-    }
-  }
-  return {};
+  return state::get_client_via_ssl(state->config, client_cert);
 }
 
 void reply_unauthorized(const std::shared_ptr<typename SimpleWeb::ServerBase<SimpleWeb::HTTPS>::Request> &request,
@@ -90,6 +96,7 @@ startServer(SimpleWeb::Server<SimpleWeb::HTTPS> *server, const std::shared_ptr<s
       reply_unauthorized(req, resp);
     }
   };
+
   server->resource["^/applist$"]["GET"] = [&state](auto resp, auto req) {
     if (get_client_if_paired(state, req)) {
       endpoints::https::applist<SimpleWeb::HTTPS>(resp, req, state);
@@ -97,9 +104,10 @@ startServer(SimpleWeb::Server<SimpleWeb::HTTPS> *server, const std::shared_ptr<s
       reply_unauthorized(req, resp);
     }
   };
+
   server->resource["^/launch"]["GET"] = [&state](auto resp, auto req) {
     if (auto client = get_client_if_paired(state, req)) {
-      endpoints::https::launch<SimpleWeb::HTTPS>(resp, req, state);
+      endpoints::https::launch<SimpleWeb::HTTPS>(resp, req, client.value(), state);
     } else {
       reply_unauthorized(req, resp);
     }

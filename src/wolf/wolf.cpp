@@ -9,6 +9,7 @@
 #include <rest/servers.cpp>
 #include <rtsp/rtsp.cpp>
 #include <state/config.hpp>
+#include <streaming/streaming.cpp>
 #include <vector>
 
 /**
@@ -125,10 +126,10 @@ int main(int argc, char *argv[]) {
   auto https_server = std::make_unique<HttpsServer>("cert.pem", "key.pem");
   auto http_server = std::make_unique<HttpServer>();
 
-  auto https_port = local_state->config.base_port + state::HTTPS_PORT;
+  auto https_port = state::HTTPS_PORT;
   auto https_thread = HTTPServers::startServer(https_server.get(), local_state, https_port);
 
-  auto http_port = local_state->config.base_port + state::HTTP_PORT;
+  auto http_port = state::HTTP_PORT;
   auto http_thread = HTTPServers::startServer(http_server.get(), local_state, http_port);
 
   std::vector<std::thread> thread_pool;
@@ -144,10 +145,14 @@ int main(int argc, char *argv[]) {
         thread_pool.push_back(control::start_service(std::move(control_sess)));
       });
 
-  // GStreamer test
-  //  streaming::init(argc, argv);
-  //  logs::log(logs::debug, "Initialised gstreamer: {}", streaming::version());
-  //  streaming::play("videotestsrc", "autovideosink");
+  // GStreamer video
+  streaming::init(argc, argv);
+  auto video_launch_sig = local_state->event_bus->register_handler<immer::box<state::VideoSession>>(
+      [&thread_pool](immer::box<state::VideoSession> video_sess) {
+        thread_pool.push_back(streaming::start_streaming(std::move(video_sess)));
+      });
+  //  state::VideoSession test_args = {1920, 1080, 60, false, 1234, 1000ms, 1024, 0, 20, 2, 1000, "10.1.2.97"};
+  //  thread_pool.push_back(streaming::start_streaming({test_args}));
 
   // Exception and termination handling
   shutdown_handler = [&local_state, &config_file](int signum) {
