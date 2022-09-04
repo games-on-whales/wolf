@@ -90,7 +90,10 @@ msg_t announce(msg_t req, const state::StreamSession &session) {
               | to<std::map<std::string_view, std::optional<int>>>;     // to map
 
   // Control session
-  state::ControlSession ctrl = {session.control_port,
+  state::ControlSession ctrl = {session.session_id,
+                                session.event_bus,
+
+                                session.control_port,
                                 4, // TODO: peers from config?
                                 args["x-nv-general.useReliableUdp"].value_or(0),
                                 session.gcm_key};
@@ -101,6 +104,9 @@ msg_t announce(msg_t req, const state::StreamSession &session) {
                                args["x-nv-video[0].clientViewportHt"].value(),
                                args["x-nv-video[0].maxFPS"].value(),
                                static_cast<bool>(args["x-nv-clientSupportHevc"].value()),
+
+                               session.session_id,
+                               session.event_bus,
 
                                session.video_port,
                                std::chrono::milliseconds(args["x-nv-video[0].timeoutLengthMs"].value()),

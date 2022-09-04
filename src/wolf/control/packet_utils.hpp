@@ -3,22 +3,11 @@
 #include <boost/endian/conversion.hpp>
 #include <crypto/crypto.hpp>
 #include <enet/enet.h>
+#include <moonlight/data-structures.hpp>
 
 namespace control {
 
-enum PACKET_TYPE {
-  START_A = 0x0305,
-  START_B = 0x0307,
-  INVALIDATE_REF_FRAMES = 0x0301,
-  LOSS_STATS = 0x0201,
-  FRAME_STATS = 0x0204,
-  INPUT_DATA = 0x0206,
-  RUMBLE_DATA = 0x010b,
-  TERMINATION = 0x0100,
-  PERIODIC_PING = 0x0200,
-  IDR_FRAME = 0x0302,
-  ENCRYPTED = 0x0001
-};
+using namespace moonlight::control;
 
 static constexpr int GCM_TAG_SIZE = 16;
 

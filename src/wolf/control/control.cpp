@@ -110,6 +110,9 @@ std::thread start_service(immer::box<state::ControlSession> control_sess, int ti
                         "[ENET] decrypted sub_type: {} HEX: {}",
                         packet_type_to_str(sub_type),
                         crypto::str_to_hex(decrypted));
+
+              auto ev = moonlight::control::ControlEvent{control_sess->session_id, sub_type, decrypted};
+              control_sess->event_bus->fire_event(immer::box<moonlight::control::ControlEvent>{ev});
             }
 
             // TODO: read and parse payload

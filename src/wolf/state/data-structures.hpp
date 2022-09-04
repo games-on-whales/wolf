@@ -144,6 +144,9 @@ struct AppState {
  * can start working their magic.
  */
 struct StreamSession {
+  // A unique ID that identifies this session
+  std::size_t session_id;
+
   std::shared_ptr<dp::event_bus> event_bus;
 
   moonlight::DisplayMode display_mode;
@@ -166,6 +169,11 @@ struct StreamSession {
  * A ControlSessions is created after the param exchange over RTSP
  */
 struct ControlSession {
+  // A unique ID that identifies this session
+  std::size_t session_id;
+
+  std::shared_ptr<dp::event_bus> event_bus;
+
   std::uint16_t port;
   std::size_t peers;
 

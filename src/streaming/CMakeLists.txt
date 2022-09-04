@@ -12,7 +12,32 @@ FetchContent_Declare(
         GIT_TAG 8.1.1)
 
 FetchContent_MakeAvailable(fmtlib)
-target_link_libraries(streaming PUBLIC fmt::fmt-header-only)
+
+FetchContent_Declare(
+        eventbus
+        GIT_REPOSITORY https://github.com/DeveloperPaul123/eventbus
+        GIT_TAG 0.10.1
+)
+set(EVENTBUS_BUILD_TESTS OFF)
+FetchContent_MakeAvailable(eventbus)
+
+# Immutable datastructures
+FetchContent_Declare(
+        immer
+        GIT_REPOSITORY https://github.com/arximboldi/immer.git
+        GIT_TAG e02cbd795e9424a8405a8cb01f659ad61c0cbbc7
+        CONFIGURE_COMMAND ""
+        BUILD_COMMAND "")
+
+FetchContent_GetProperties(immer)
+if (NOT immer_POPULATED)
+    FetchContent_Populate(immer)
+    target_include_directories(wolf PUBLIC ${immer_SOURCE_DIR})
+endif ()
+
+target_link_libraries(streaming PUBLIC
+        fmt::fmt-header-only
+        dp::eventbus)
 
 find_package(PkgConfig)
 
@@ -20,7 +45,7 @@ pkg_check_modules(GST REQUIRED gstreamer-1.0)
 
 find_package(GLIB2)
 find_package(GObject)
-find_package(GStreamer COMPONENTS app audio video pbutils fft)
+find_package(GStreamer COMPONENTS app audio video)
 if (NOT (GSTREAMER_FOUND))
     message(FATAL_ERROR "Please Install Gstreamer Dev: CMake will Exit")
 endif ()
@@ -28,6 +53,7 @@ endif ()
 # See here for a guide on how to statically link gstreamer:
 # https://www.collabora.com/news-and-blog/news-and-events/generate-mininal-gstreamer-build-tailored-to-your-needs.html
 target_link_libraries(streaming PUBLIC
+        moonlight
         ${GOBJECT_LIBRARIES}
         ${GLIB2_LIBRARIES}
         ${GSTREAMER_LIBRARIES}

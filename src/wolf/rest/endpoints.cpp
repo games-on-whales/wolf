@@ -2,6 +2,7 @@
 
 #include <boost/property_tree/ptree.hpp>
 #include <crypto/crypto.hpp>
+#include <functional>
 #include <helpers/utils.hpp>
 #include <moonlight/protocol.hpp>
 #include <rest/helpers.cpp>
@@ -237,8 +238,10 @@ void launch(std::shared_ptr<typename SimpleWeb::ServerBase<T>::Response> respons
   state::AudioMode audio_mode = {2, 1, 1, {state::AudioMode::FRONT_LEFT, state::AudioMode::FRONT_RIGHT}};
 
   auto client_ip = request->remote_endpoint().address().to_string();
+  auto session_id = std::hash<std::string>{}(current_client.client_cert);
 
-  state::StreamSession session = {state->event_bus,
+  state::StreamSession session = {session_id,
+                                  state->event_bus,
                                   display_mode,
                                   audio_mode,
                                   get_header(headers, "appid").value(),

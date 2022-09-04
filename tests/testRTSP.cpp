@@ -112,7 +112,8 @@ TEST_CASE("utilities methods", "[RTSP]") {
 }
 
 immer::box<StreamSession> test_init_state() {
-  StreamSession session = {std::make_shared<dp::event_bus>(),
+  StreamSession session = {1234,
+                           std::make_shared<dp::event_bus>(),
                            {1920, 1080, 60},
                            {2, 1, 1, {state::AudioMode::FRONT_LEFT, state::AudioMode::FRONT_RIGHT}},
                            "app_id_1",

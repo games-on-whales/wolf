@@ -7,6 +7,7 @@
 #include <memory>
 #include <moonlight/data-structures.hpp>
 #include <rest/servers.cpp>
+#include <rtp/udp-ping.cpp>
 #include <rtsp/rtsp.cpp>
 #include <state/config.hpp>
 #include <streaming/streaming.cpp>
@@ -121,39 +122,6 @@ int main(int argc, char *argv[]) {
   auto config_file = "config.json";
   auto local_state = initialize(config_file, "key.pem", "cert.pem");
 
-  auto pair_sig = local_state->event_bus->register_handler<state::PairSignal>(&user_pin_handler);
-
-  auto https_server = std::make_unique<HttpsServer>("cert.pem", "key.pem");
-  auto http_server = std::make_unique<HttpServer>();
-
-  auto https_port = state::HTTPS_PORT;
-  auto https_thread = HTTPServers::startServer(https_server.get(), local_state, https_port);
-
-  auto http_port = state::HTTP_PORT;
-  auto http_thread = HTTPServers::startServer(http_server.get(), local_state, http_port);
-
-  std::vector<std::thread> thread_pool;
-  auto rtsp_launch_sig = local_state->event_bus->register_handler<immer::box<state::StreamSession>>(
-      [&thread_pool](immer::box<state::StreamSession> stream_session) {
-        auto port = stream_session->rtsp_port;
-        thread_pool.push_back(rtsp::start_server(port, std::move(stream_session)));
-      });
-
-  control::init(); // Need to initialise enet once
-  auto ctrl_launch_sig = local_state->event_bus->register_handler<immer::box<state::ControlSession>>(
-      [&thread_pool](immer::box<state::ControlSession> control_sess) {
-        thread_pool.push_back(control::start_service(std::move(control_sess)));
-      });
-
-  // GStreamer video
-  streaming::init(argc, argv);
-  auto video_launch_sig = local_state->event_bus->register_handler<immer::box<state::VideoSession>>(
-      [&thread_pool](immer::box<state::VideoSession> video_sess) {
-        thread_pool.push_back(streaming::start_streaming(std::move(video_sess)));
-      });
-  //  state::VideoSession test_args = {1920, 1080, 60, false, 1234, 1000ms, 1024, 0, 20, 2, 1000, "10.1.2.97"};
-  //  thread_pool.push_back(streaming::start_streaming({test_args}));
-
   // Exception and termination handling
   shutdown_handler = [&local_state, &config_file](int signum) {
     logs::log(logs::info, "Received interrupt signal {}, clean exit", signum);
@@ -173,6 +141,42 @@ int main(int argc, char *argv[]) {
   std::signal(SIGQUIT, signal_handler);
   std::signal(SIGSEGV, signal_handler);
   std::signal(SIGABRT, signal_handler);
+
+  // REST HTTP/S APIs
+  auto pair_sig = local_state->event_bus->register_handler<state::PairSignal>(&user_pin_handler);
+
+  auto https_server = std::make_unique<HttpsServer>("cert.pem", "key.pem");
+  auto http_server = std::make_unique<HttpServer>();
+
+  auto https_thread = HTTPServers::startServer(https_server.get(), local_state, state::HTTPS_PORT);
+  auto http_thread = HTTPServers::startServer(http_server.get(), local_state, state::HTTP_PORT);
+
+  std::vector<std::thread> thread_pool; // TODO: manage this pool? Cleanup at the end? Force quit?
+
+  auto rtsp_launch_sig = local_state->event_bus->register_handler<immer::box<state::StreamSession>>(
+      [&thread_pool](immer::box<state::StreamSession> stream_session) {
+        auto port = stream_session->rtsp_port;
+        thread_pool.push_back(rtsp::start_server(port, std::move(stream_session)));
+      });
+
+  control::init(); // Need to initialise enet once
+  auto ctrl_launch_sig = local_state->event_bus->register_handler<immer::box<state::ControlSession>>(
+      [&thread_pool](immer::box<state::ControlSession> control_sess) {
+        thread_pool.push_back(control::start_service(std::move(control_sess)));
+      });
+
+  // GStreamer video
+  streaming::init(argc, argv);
+  auto video_launch_sig = local_state->event_bus->register_handler<immer::box<state::VideoSession>>(
+      [&thread_pool](immer::box<state::VideoSession> video_sess) {
+        auto video_thread = std::thread(
+            [](auto video_sess) {
+              auto client_port = rtp::wait_for_ping(video_sess->port);
+              streaming::start_streaming(std::move(video_sess), client_port);
+            },
+            std::move(video_sess));
+        thread_pool.push_back(std::move(video_thread));
+      });
 
   https_thread.join();
   http_thread.join();
