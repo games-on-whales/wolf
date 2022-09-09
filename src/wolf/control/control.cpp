@@ -8,6 +8,7 @@
 namespace control {
 
 using namespace ranges;
+using namespace moonlight::control;
 
 void free_host(ENetHost *host) {
   std::for_each(host->peers, host->peers + host->peerCount, [](ENetPeer &peer_ref) {
@@ -75,7 +76,8 @@ std::thread start_service(immer::box<state::ControlSession> control_sess, int ti
         logs::log(logs::info, "Control server started on port: {}", control_sess->port);
 
         ENetEvent event;
-        while (enet_host_service(host.get(), &event, timeout_millis) > 0) {
+        bool terminated = false;
+        while (!terminated && enet_host_service(host.get(), &event, timeout_millis) > 0) {
           auto [client_ip, client_port] = get_ip((sockaddr *)&event.peer->address.address);
 
           switch (event.type) {
@@ -86,7 +88,8 @@ std::thread start_service(immer::box<state::ControlSession> control_sess, int ti
             break;
           case ENET_EVENT_TYPE_DISCONNECT:
             logs::log(logs::debug, "[ENET] disconnected client: {}:{}", client_ip, client_port);
-            // TODO: if there are no more clients connected, end it!
+            control_sess->event_bus->fire_event(immer::box<ControlEvent>{control_sess->session_id, TERMINATION, ""});
+            terminated = true;
             break;
           case ENET_EVENT_TYPE_RECEIVE:
             enet_packet packet = {event.packet, enet_packet_destroy};
@@ -111,8 +114,8 @@ std::thread start_service(immer::box<state::ControlSession> control_sess, int ti
                         packet_type_to_str(sub_type),
                         crypto::str_to_hex(decrypted));
 
-              auto ev = moonlight::control::ControlEvent{control_sess->session_id, sub_type, decrypted};
-              control_sess->event_bus->fire_event(immer::box<moonlight::control::ControlEvent>{ev});
+              auto ev = ControlEvent{control_sess->session_id, sub_type, decrypted};
+              control_sess->event_bus->fire_event(immer::box<ControlEvent>{ev});
             }
 
             // TODO: read and parse payload

@@ -2,14 +2,11 @@
 #include <boost/stacktrace.hpp>
 #include <control/control.cpp>
 #include <csignal>
-#include <helpers/logger.hpp>
 #include <immer/array.hpp>
 #include <memory>
-#include <moonlight/data-structures.hpp>
 #include <rest/servers.cpp>
 #include <rtp/udp-ping.cpp>
 #include <rtsp/rtsp.cpp>
-#include <state/config.hpp>
 #include <streaming/streaming.cpp>
 #include <vector>
 
@@ -113,6 +110,97 @@ void user_pin_handler(state::PairSignal pair_request) {
 }
 
 /**
+ * A bit tricky here: on a basic level we want a map of [session_id] -> std::thread
+ *
+ * Unfortunately std::thread doesn't have a copy constructor AND `.join()` is not marked as `const`
+ * So we wrap the thread with a immer box in order to be able to store it in the vector (copy constructor)
+ * AND we wrap it in a unique_ptr so that we can access it without `const` (.join())
+ */
+typedef immer::atom<immer::map<std::size_t, immer::vector<immer::box<std::unique_ptr<std::thread>>>>> TreadsMapAtom;
+
+/**
+ * Glue code in order to start the sessions in response to events fired in the bus
+ *
+ * @param event_bus: the shared bus where the handlers will be registered
+ * @param threads: holds reference to all running threads, grouped by session_id
+ *
+ * @returns a list of signals handlers that have been created
+ */
+auto setup_sessions_handlers(std::shared_ptr<dp::event_bus> &event_bus, TreadsMapAtom &threads) {
+  // HTTP PIN
+  auto pair_sig = event_bus->register_handler<state::PairSignal>(&user_pin_handler);
+
+  // RTSP
+  auto rtsp_launch_sig = event_bus->register_handler<immer::box<state::StreamSession>>(
+      [&threads](immer::box<state::StreamSession> stream_session) {
+        auto thread = rtsp::start_server(stream_session->rtsp_port, stream_session);
+        auto thread_ptr = std::make_unique<std::thread>(std::move(thread));
+
+        threads.update([&thread_ptr, sess_id = stream_session->session_id](auto t_map) {
+          return t_map.update(sess_id, [&thread_ptr](auto t_vec) { return t_vec.push_back(std::move(thread_ptr)); });
+        });
+      });
+
+  // Control thread
+  control::init(); // Need to initialise enet once
+  auto ctrl_launch_sig = event_bus->register_handler<immer::box<state::ControlSession>>(
+      [&threads](immer::box<state::ControlSession> control_sess) {
+        auto thread = control::start_service(control_sess);
+        auto thread_ptr = std::make_unique<std::thread>(std::move(thread));
+
+        threads.update([&thread_ptr, sess_id = control_sess->session_id](auto t_map) {
+          return t_map.update(sess_id, [&thread_ptr](auto t_vec) { return t_vec.push_back(std::move(thread_ptr)); });
+        });
+      });
+
+  // GStreamer video
+  streaming::init(NULL, NULL); // Need to initialise streaming once
+  auto video_launch_sig = event_bus->register_handler<immer::box<state::VideoSession>>(
+      [&threads](immer::box<state::VideoSession> video_sess) {
+        auto thread = std::thread(
+            [](auto video_sess) {
+              auto client_port = rtp::wait_for_ping(video_sess->port);
+              streaming::start_streaming(std::move(video_sess), client_port);
+            },
+            video_sess);
+        auto thread_ptr = std::make_unique<std::thread>(std::move(thread));
+
+        threads.update([&thread_ptr, sess_id = video_sess->session_id](auto t_map) {
+          return t_map.update(sess_id, [&thread_ptr](auto t_vec) { return t_vec.push_back(std::move(thread_ptr)); });
+        });
+      });
+
+  // On control session end, let's wait for all threads to finish then clean them up
+  auto ctrl_handler = event_bus->register_handler<immer::box<moonlight::control::ControlEvent>>(
+      [&threads](immer::box<moonlight::control::ControlEvent> event) {
+        if (event->type == moonlight::control::TERMINATION) {
+          // Events are dispatched from the calling thread; in this case it'll be the control stream thread.
+          // We have to create a new thread to process the cleaning and detach it from the original thread
+          auto cleanup_thread = std::thread([&threads, sess_id = event->session_id]() {
+            auto t_vec = std::move(threads.load()->at(sess_id));
+
+            logs::log(logs::debug, "Terminated session: {}, waiting for {} threads to finish", sess_id, t_vec.size());
+
+            for (auto t_ptr : t_vec) {
+              auto thread = std::move(t_ptr->get());
+              thread->join(); // Wait for the thread to be over
+            }
+
+            logs::log(logs::debug, "Removing session: {}", sess_id);
+            threads.update([sess_id](auto t_map) { return t_map.erase(sess_id); });
+          });
+          cleanup_thread.detach();
+        }
+      });
+
+  return immer::array<immer::box<dp::handler_registration>>{std::move(pair_sig),
+                                                            std::move(rtsp_launch_sig),
+                                                            std::move(ctrl_launch_sig),
+                                                            std::move(video_launch_sig),
+                                                            std::move(ctrl_handler)};
+}
+
+/**
  * @brief here's where the magic starts
  */
 int main(int argc, char *argv[]) {
@@ -122,6 +210,18 @@ int main(int argc, char *argv[]) {
   auto config_file = "config.json";
   auto local_state = initialize(config_file, "key.pem", "cert.pem");
 
+  // REST HTTP/S APIs
+  auto http_server = std::make_unique<HttpServer>();
+  auto http_thread = HTTPServers::startServer(http_server.get(), local_state, state::HTTP_PORT);
+
+  auto https_server = std::make_unique<HttpsServer>("cert.pem", "key.pem");
+  auto https_thread = HTTPServers::startServer(https_server.get(), local_state, state::HTTPS_PORT);
+
+  // Holds reference to all running threads, grouped by session_id
+  auto threads = TreadsMapAtom{};
+  // RTSP, RTP, Control and all the rest of Moonlight protocol will be started/stopped on demand via HTTPS
+  auto sess_handlers = setup_sessions_handlers(local_state->event_bus, threads);
+
   // Exception and termination handling
   shutdown_handler = [&local_state, &config_file](int signum) {
     logs::log(logs::info, "Received interrupt signal {}, clean exit", signum);
@@ -130,6 +230,8 @@ int main(int argc, char *argv[]) {
       logs::log(logs::error, "Runtime error, dumping stacktrace to {}", trace_file);
       boost::stacktrace::safe_dump_to(trace_file);
     }
+
+    // TODO: should we cleanup here threads and handlers?
 
     logs::log(logs::debug, "Saving back current configuration to file: {}", config_file);
     state::save(local_state->config, config_file);
@@ -142,42 +244,7 @@ int main(int argc, char *argv[]) {
   std::signal(SIGSEGV, signal_handler);
   std::signal(SIGABRT, signal_handler);
 
-  // REST HTTP/S APIs
-  auto pair_sig = local_state->event_bus->register_handler<state::PairSignal>(&user_pin_handler);
-
-  auto https_server = std::make_unique<HttpsServer>("cert.pem", "key.pem");
-  auto http_server = std::make_unique<HttpServer>();
-
-  auto https_thread = HTTPServers::startServer(https_server.get(), local_state, state::HTTPS_PORT);
-  auto http_thread = HTTPServers::startServer(http_server.get(), local_state, state::HTTP_PORT);
-
-  std::vector<std::thread> thread_pool; // TODO: manage this pool? Cleanup at the end? Force quit?
-
-  auto rtsp_launch_sig = local_state->event_bus->register_handler<immer::box<state::StreamSession>>(
-      [&thread_pool](immer::box<state::StreamSession> stream_session) {
-        auto port = stream_session->rtsp_port;
-        thread_pool.push_back(rtsp::start_server(port, std::move(stream_session)));
-      });
-
-  control::init(); // Need to initialise enet once
-  auto ctrl_launch_sig = local_state->event_bus->register_handler<immer::box<state::ControlSession>>(
-      [&thread_pool](immer::box<state::ControlSession> control_sess) {
-        thread_pool.push_back(control::start_service(std::move(control_sess)));
-      });
-
-  // GStreamer video
-  streaming::init(argc, argv);
-  auto video_launch_sig = local_state->event_bus->register_handler<immer::box<state::VideoSession>>(
-      [&thread_pool](immer::box<state::VideoSession> video_sess) {
-        auto video_thread = std::thread(
-            [](auto video_sess) {
-              auto client_port = rtp::wait_for_ping(video_sess->port);
-              streaming::start_streaming(std::move(video_sess), client_port);
-            },
-            std::move(video_sess));
-        thread_pool.push_back(std::move(video_thread));
-      });
-
+  // Let's park the main thread over here, HTTP/S should never stop
   https_thread.join();
   http_thread.join();
 }

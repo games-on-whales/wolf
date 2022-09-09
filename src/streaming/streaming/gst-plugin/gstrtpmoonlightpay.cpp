@@ -274,8 +274,7 @@ static GstBuffer *gst_buffer_list_unfold(GstBufferList *buffer_list) {
 /**
  * Creates an RTP header and returns a GstBuffer to it
  */
-static GstBuffer *
-create_rtp_header(const gst_rtp_moonlight_pay &rtpmoonlightpay, int packet_nr, int tot_packets, GstClockTime pts) {
+static GstBuffer *create_rtp_header(const gst_rtp_moonlight_pay &rtpmoonlightpay, int packet_nr, int tot_packets) {
   constexpr auto rtp_header_size = sizeof(state::VideoRTPHeaders);
   GstBuffer *buf = gst_buffer_new_and_fill(rtp_header_size, 0x00);
 
@@ -314,8 +313,7 @@ create_rtp_header(const gst_rtp_moonlight_pay &rtpmoonlightpay, int packet_nr, i
 /**
  * Split the input buffer into packets, will prepend the RTP header and append any padding if needed
  */
-static GstBufferList *
-generate_rtp_packets(const gst_rtp_moonlight_pay &rtpmoonlightpay, GstBuffer *inbuf, GstClockTime pts) {
+static GstBufferList *generate_rtp_packets(const gst_rtp_moonlight_pay &rtpmoonlightpay, GstBuffer *inbuf) {
   constexpr auto video_payload_header_size = 8;
   GstBuffer *video_header = gst_buffer_new_and_fill(video_payload_header_size, "\0017charss");
   inbuf = gst_buffer_append(video_header, inbuf);
@@ -330,7 +328,7 @@ generate_rtp_packets(const gst_rtp_moonlight_pay &rtpmoonlightpay, GstBuffer *in
     auto remaining = in_buf_size - begin;
     auto packet_payload_size = MIN(remaining, payload_size);
 
-    GstBuffer *header = create_rtp_header(rtpmoonlightpay, packet_nr, tot_packets, pts);
+    GstBuffer *header = create_rtp_header(rtpmoonlightpay, packet_nr, tot_packets);
 
     GstBuffer *payload = gst_buffer_copy_region(inbuf, GST_BUFFER_COPY_ALL, begin, packet_payload_size);
     GstBuffer *rtp_packet = gst_buffer_append(header, payload);
@@ -353,8 +351,7 @@ generate_rtp_packets(const gst_rtp_moonlight_pay &rtpmoonlightpay, GstBuffer *in
  * Returns a list of GstBuffer that contains the input rtp_packets + the newly created FEC packets.
  * Will also add FEC info to the RTP headers of the original packets
  */
-static GstBufferList *
-generate_fec_packets(const gst_rtp_moonlight_pay &rtpmoonlightpay, GstBufferList *rtp_packets, GstClockTime pts) {
+static GstBufferList *generate_fec_packets(const gst_rtp_moonlight_pay &rtpmoonlightpay, GstBufferList *rtp_packets) {
   GstMapInfo info;
   GstBuffer *rtp_payload = gst_buffer_list_unfold(rtp_packets);
 
@@ -433,11 +430,9 @@ static GstFlowReturn gst_rtp_moonlight_pay_generate_output(GstBaseTransform *tra
   if (inbuf == nullptr)
     return GST_FLOW_OK;
 
-  auto pts = GST_BUFFER_PTS(inbuf);
-
-  GstBufferList *rtp_packets = generate_rtp_packets(*rtpmoonlightpay, inbuf, pts);
+  GstBufferList *rtp_packets = generate_rtp_packets(*rtpmoonlightpay, inbuf);
   if (rtpmoonlightpay->fec_percentage > 0) {
-    rtp_packets = generate_fec_packets(*rtpmoonlightpay, rtp_packets, pts);
+    rtp_packets = generate_fec_packets(*rtpmoonlightpay, rtp_packets);
   }
   rtpmoonlightpay->cur_seq_number += (int)gst_buffer_list_length(rtp_packets);
   rtpmoonlightpay->frame_num++;
