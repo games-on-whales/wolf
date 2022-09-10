@@ -463,9 +463,7 @@ static GstFlowReturn gst_rtp_moonlight_pay_generate_output(GstBaseTransform *tra
 }
 
 static gboolean plugin_init(GstPlugin *plugin) {
-
-  /* FIXME Remember to set the rank if it's an element that is meant to be autoplugged by decodebin. */
-  return gst_element_register(plugin, "rtpmoonlightpay", GST_RANK_NONE, gst_TYPE_rtp_moonlight_pay);
+  return gst_element_register(plugin, "rtpmoonlightpay", GST_RANK_PRIMARY, gst_TYPE_rtp_moonlight_pay);
 }
 
 /* FIXME: these are normally defined by the GStreamer build system.
@@ -494,5 +492,3 @@ GST_PLUGIN_DEFINE(GST_VERSION_MAJOR,
                   "LGPL",
                   PACKAGE_NAME,
                   GST_PACKAGE_ORIGIN)
-
-GST_ELEMENT_REGISTER_DEFINE(rtpmoonlightpay, "rtpmoonlightpay", GST_RANK_PRIMARY, gst_TYPE_rtp_moonlight_pay)

@@ -6,7 +6,7 @@ on: [ push, pull_request ]
 jobs:
   build:
     name: ${{matrix.cxx}}, C++${{matrix.std}}, ${{matrix.build_type}}
-    runs-on: ubuntu-20.04
+    runs-on: ubuntu-latest
     strategy:
       fail-fast: false
       matrix:
@@ -19,21 +19,56 @@ jobs:
         std: [ 17 ]
         include:
           - cxx: g++-9
-            other_pkgs: g++-9 libboost-thread-dev libboost-filesystem-dev libboost-log-dev libssl-dev libboost-stacktrace-dev libgstreamer1.0-dev libgstreamer-plugins-base1.0-dev gstreamer1.0-plugins-base gstreamer1.0-gl
+            other_pkgs: [
+              g++-9
+                libboost-thread-dev libboost-filesystem-dev libboost-log-dev libboost-stacktrace-dev
+                libssl-dev
+                libgstreamer1.0-dev libgstreamer-plugins-base1.0-dev libgstreamer-plugins-bad1.0-dev
+            ]
           - cxx: g++-10
-            other_pkgs: g++-10 libboost-thread-dev libboost-filesystem-dev libboost-log-dev libssl-dev libboost-stacktrace-dev libgstreamer1.0-dev libgstreamer-plugins-base1.0-dev gstreamer1.0-plugins-base gstreamer1.0-gl
+            other_pkgs: [
+              g++-10
+                libboost-thread-dev libboost-filesystem-dev libboost-log-dev libboost-stacktrace-dev
+                libssl-dev
+                libgstreamer1.0-dev libgstreamer-plugins-base1.0-dev libgstreamer-plugins-bad1.0-dev
+            ]
+
           - cxx: clang++-9
-            other_pkgs: clang-9 libboost-thread-dev libboost-filesystem-dev libboost-log-dev libssl-dev libboost-stacktrace-dev libgstreamer1.0-dev libgstreamer-plugins-base1.0-dev gstreamer1.0-plugins-base gstreamer1.0-gl
+            other_pkgs: [
+              clang-9
+                libboost-thread-dev libboost-filesystem-dev libboost-log-dev libboost-stacktrace-dev
+                libssl-dev
+                libgstreamer1.0-dev libgstreamer-plugins-base1.0-dev libgstreamer-plugins-bad1.0-dev
+            ]
+
           - cxx: clang++-10
-            other_pkgs: clang-10 libboost-thread-dev libboost-filesystem-dev libboost-log-dev libssl-dev libboost-stacktrace-dev libgstreamer1.0-dev libgstreamer-plugins-base1.0-dev gstreamer1.0-plugins-base gstreamer1.0-gl
+            other_pkgs: [
+              clang-10
+                libboost-thread-dev libboost-filesystem-dev libboost-log-dev libboost-stacktrace-dev
+                libssl-dev
+                libgstreamer1.0-dev libgstreamer-plugins-base1.0-dev libgstreamer-plugins-bad1.0-dev
+            ]
+
           - cxx: clang++-10
             build_type: Debug
             std: 17
-            other_pkgs: clang-10 libboost-thread-dev libboost-filesystem-dev libboost-log-dev libssl-dev libboost-stacktrace-dev libgstreamer1.0-dev libgstreamer-plugins-base1.0-dev gstreamer1.0-plugins-base gstreamer1.0-gl
+            other_pkgs: [
+              clang-10
+                libboost-thread-dev libboost-filesystem-dev libboost-log-dev libboost-stacktrace-dev
+                libssl-dev
+                libgstreamer1.0-dev libgstreamer-plugins-base1.0-dev libgstreamer-plugins-bad1.0-dev
+            ]
+
           - cxx: clang++-10
             build_type: Release
             std: 17
-            other_pkgs: clang-10 libboost-thread-dev libboost-filesystem-dev libboost-log-dev libssl-dev libboost-stacktrace-dev libgstreamer1.0-dev libgstreamer-plugins-base1.0-dev gstreamer1.0-plugins-base gstreamer1.0-gl
+            other_pkgs: [
+              clang-10
+                libboost-thread-dev libboost-filesystem-dev libboost-log-dev libboost-stacktrace-dev
+                libssl-dev
+                libgstreamer1.0-dev libgstreamer-plugins-base1.0-dev libgstreamer-plugins-bad1.0-dev
+            ]
+
 
     steps:
       - uses: actions/checkout@v2
@@ -43,7 +78,7 @@ jobs:
       - name: Prepare environment
         run: |
           sudo apt-get update -y
-          sudo apt-get install -y ninja-build ${{matrix.other_pkgs}}
+          sudo apt-get install -y ninja-build ${{ join(matrix.other_pkgs, ' ') }}
 
       - name: Configure build
         working-directory: ${{runner.workspace}}

@@ -20,6 +20,10 @@ using namespace moonlight::control;
  */
 void init() {
   gst_init(nullptr, nullptr);
+
+  GstPlugin *plugin = gst_plugin_load_by_name("rtpmoonlightpay");
+  gst_element_register(plugin, "rtpmoonlightpay", GST_RANK_PRIMARY, gst_TYPE_rtp_moonlight_pay);
+
   reed_solomon_init();
 }
 
@@ -35,9 +39,6 @@ std::string version() {
 void start_streaming(immer::box<state::VideoSession> video_session, unsigned short client_port) {
   GstElement *pipeline;
   GError *error = nullptr;
-
-  GstPlugin *plugin = nullptr;
-  GST_ELEMENT_REGISTER(rtpmoonlightpay, plugin);
 
   // see an example pipeline at: https://gist.github.com/esrever10/7d39fe2d4163c5b2d7006495c3c911bb
   pipeline = gst_parse_launch(
