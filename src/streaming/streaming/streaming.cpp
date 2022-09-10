@@ -18,8 +18,8 @@ using namespace moonlight::control;
  * It is also possible to call the init function with two NULL arguments,
  * in which case no command line options will be parsed by GStreamer.
  */
-void init(int argc, char *argv[]) {
-  gst_init(&argc, &argv);
+void init() {
+  gst_init(nullptr, nullptr);
   reed_solomon_init();
 }
 
@@ -41,27 +41,28 @@ void start_streaming(immer::box<state::VideoSession> video_session, unsigned sho
 
   // see an example pipeline at: https://gist.github.com/esrever10/7d39fe2d4163c5b2d7006495c3c911bb
   pipeline = gst_parse_launch(
-      fmt::format(
-          "videotestsrc pattern=ball is-live=true ! "
-          "videoscale ! "
-          "videoconvert ! "
-          "videorate ! "
-          "video/x-raw, width={width}, height={height}, framerate={fps}/1, format=I420 ! "
-          "x264enc pass=cbr tune=zerolatency bitrate={bitrate} speed-preset=superfast byte-stream=true aud=false ! "
-          "rtpmoonlightpay name=moonlight_pay payload_size={payload_size} fec_percentage={fec_percentage} "
-          "min_required_fec_packets={min_required_fec_packets}"
-          " ! "
-          //                        "fakesink dump=true",
-          "udpsink host={client_ip} port={client_port}",
-          fmt::arg("width", video_session->width),
-          fmt::arg("height", video_session->height),
-          fmt::arg("fps", video_session->refreshRate),
-          fmt::arg("bitrate", video_session->bitrate_kbps),
-          fmt::arg("client_port", client_port),
-          fmt::arg("client_ip", video_session->client_ip),
-          fmt::arg("payload_size", video_session->packet_size),
-          fmt::arg("fec_percentage", video_session->fec_percentage),
-          fmt::arg("min_required_fec_packets", video_session->min_required_fec_packets))
+      fmt::format("videotestsrc pattern=ball is-live=true ! "
+                  "videoscale ! "
+                  "videoconvert ! "
+                  "videorate ! "
+                  "video/x-raw, width={width}, height={height}, framerate={fps}/1, format=I420 ! "
+                  "x264enc pass=qual tune=zerolatency speed-preset=superfast bitrate={bitrate} aud=false ! "
+                  "video/x-h264, profile=main, stream-format=byte-stream ! "
+                  "rtpmoonlightpay name=moonlight_pay payload_size={payload_size} fec_percentage={fec_percentage} "
+                  "min_required_fec_packets={min_required_fec_packets}"
+                  " ! "
+                  //                        "fakesink dump=true",
+                  "udpsink host={client_ip} port={client_port}",
+                  //          "vtdec ! autovideosink",
+                  fmt::arg("width", video_session->width),
+                  fmt::arg("height", video_session->height),
+                  fmt::arg("fps", video_session->refreshRate),
+                  fmt::arg("bitrate", video_session->bitrate_kbps),
+                  fmt::arg("client_port", client_port),
+                  fmt::arg("client_ip", video_session->client_ip),
+                  fmt::arg("payload_size", video_session->packet_size),
+                  fmt::arg("fec_percentage", video_session->fec_percentage),
+                  fmt::arg("min_required_fec_packets", video_session->min_required_fec_packets))
           .c_str(),
       &error);
 
@@ -93,6 +94,8 @@ void start_streaming(immer::box<state::VideoSession> video_session, unsigned sho
   /* Set the pipeline to "playing" state*/
   gst_element_set_state(pipeline, GST_STATE_PLAYING);
 
+  //  GST_DEBUG_BIN_TO_DOT_FILE(reinterpret_cast<GstBin *>(pipeline), GST_DEBUG_GRAPH_SHOW_STATES, "pipeline-start");
+
   while (!stop) {
     auto message = gst_bus_poll(GST_ELEMENT_BUS(pipeline), GST_MESSAGE_ERROR, 5 * GST_MSECOND);
 
@@ -102,6 +105,8 @@ void start_streaming(immer::box<state::VideoSession> video_session, unsigned sho
       gst_message_unref(message);
     }
   }
+
+  //  GST_DEBUG_BIN_TO_DOT_FILE(reinterpret_cast<GstBin *>(pipeline), GST_DEBUG_GRAPH_SHOW_STATES, "pipeline-end");
 
   /* Out of the main loop, clean up nicely */
   gst_element_set_state(pipeline, GST_STATE_PAUSED);

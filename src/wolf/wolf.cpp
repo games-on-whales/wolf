@@ -154,7 +154,7 @@ auto setup_sessions_handlers(std::shared_ptr<dp::event_bus> &event_bus, TreadsMa
       });
 
   // GStreamer video
-  streaming::init(NULL, NULL); // Need to initialise streaming once
+  streaming::init(); // Need to initialise streaming once
   auto video_launch_sig = event_bus->register_handler<immer::box<state::VideoSession>>(
       [&threads](immer::box<state::VideoSession> video_sess) {
         auto thread = std::thread(
@@ -243,6 +243,10 @@ int main(int argc, char *argv[]) {
   std::signal(SIGQUIT, signal_handler);
   std::signal(SIGSEGV, signal_handler);
   std::signal(SIGABRT, signal_handler);
+
+  //  streaming::start_streaming(
+  //      {1280, 720, 30, false, (std::size_t)1234, local_state->event_bus, (std::uint16_t)1234, 1000ms, 1024, 3, 0, 0,
+  //      2000, ""}, 1234);
 
   // Let's park the main thread over here, HTTP/S should never stop
   https_thread.join();

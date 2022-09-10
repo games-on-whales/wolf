@@ -5,5 +5,6 @@ using Catch::Matchers::Equals;
 
 #include "testControl.cpp"
 #include "testCrypto.cpp"
+#include "testGSTPlugin.cpp"
 #include "testMoonlight.cpp"
 #include "testRTSP.cpp"
