@@ -16,6 +16,11 @@ G_BEGIN_DECLS
 typedef struct _gst_rtp_moonlight_pay gst_rtp_moonlight_pay;
 typedef struct _gst_rtp_moonlight_payClass gst_rtp_moonlight_payClass;
 
+enum STREAM_TYPE {
+  VIDEO,
+  AUDIO
+};
+
 struct _gst_rtp_moonlight_pay {
   GstBaseTransform base_rtpmoonlightpay;
 
@@ -27,6 +32,8 @@ struct _gst_rtp_moonlight_pay {
 
   int cur_seq_number;
   uint32_t frame_num;
+
+  STREAM_TYPE stream_type;
 };
 
 struct _gst_rtp_moonlight_payClass {

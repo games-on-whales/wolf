@@ -50,7 +50,7 @@ void start_streaming(immer::box<state::VideoSession> video_session, unsigned sho
                   "x264enc pass=qual tune=zerolatency speed-preset=superfast bitrate={bitrate} aud=false ! "
                   "video/x-h264, profile=main, stream-format=byte-stream ! "
                   "rtpmoonlightpay name=moonlight_pay payload_size={payload_size} fec_percentage={fec_percentage} "
-                  "min_required_fec_packets={min_required_fec_packets}"
+                  "min_required_fec_packets={min_required_fec_packets} stream_type={stream_type}"
                   " ! "
                   //                        "fakesink dump=true",
                   "udpsink host={client_ip} port={client_port}",
@@ -63,7 +63,8 @@ void start_streaming(immer::box<state::VideoSession> video_session, unsigned sho
                   fmt::arg("client_ip", video_session->client_ip),
                   fmt::arg("payload_size", video_session->packet_size),
                   fmt::arg("fec_percentage", video_session->fec_percentage),
-                  fmt::arg("min_required_fec_packets", video_session->min_required_fec_packets))
+                  fmt::arg("min_required_fec_packets", video_session->min_required_fec_packets),
+                  fmt::arg("stream_type", "video"))
           .c_str(),
       &error);
 

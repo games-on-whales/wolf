@@ -59,7 +59,8 @@ TEST_CASE_METHOD(GStreamerTestsFixture, "Create RTP packets", "[GSTPlugin]") {
   rtpmoonlightpay->fec_percentage = 50;
 
   auto payload = gst_buffer_new_and_fill(10, "$A PAYLOAD");
-  auto rtp_packets = generate_rtp_packets(*rtpmoonlightpay, payload);
+  auto video_payload = prepend_video_header(payload);
+  auto rtp_packets = generate_rtp_packets(*rtpmoonlightpay, video_payload);
 
   // 10 bytes of actual payload + 8 bytes of payload header
   // will be splitted in two RTP packets

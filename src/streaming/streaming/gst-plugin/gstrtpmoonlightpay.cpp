@@ -22,10 +22,8 @@ extern "C" {
 
 #include "gstrtpmoonlightpay.hpp"
 #include "utils.hpp"
-#include <boost/endian/conversion.hpp>
 #include <gst/base/gstbasetransform.h>
 #include <gst/gst.h>
-#include <streaming/data-structures.hpp>
 
 GST_DEBUG_CATEGORY_STATIC(gst_rtp_moonlight_pay_debug_category);
 #define GST_CAT_DEFAULT gst_rtp_moonlight_pay_debug_category
@@ -59,8 +57,25 @@ enum {
   /**
    * Minimum number of FEC packages required by Moonlight
    */
-  PROP_MIN_REQUIRED_FEC_PACKETS = 22
+  PROP_MIN_REQUIRED_FEC_PACKETS = 22,
+
+  /**
+   * The type of stream (video/audio) will change the headers and content of packets
+   */
+  PROP_STREAM_TYPE = 23
 };
+
+GType gst_stream_type_get_type(void) {
+  static GType gst_stream_type = 0;
+
+  static const GEnumValue mpeg2enc_formats[] = {
+      {VIDEO, "Video format", "0"}, //
+      {AUDIO, "Audio format", "1"}  //
+  };
+  gst_stream_type = g_enum_register_static("GstMpeg2encFormat", mpeg2enc_formats);
+
+  return gst_stream_type;
+}
 
 /* pad templates */
 
@@ -130,6 +145,16 @@ static void gst_rtp_moonlight_pay_class_init(gst_rtp_moonlight_payClass *klass) 
                        20,
                        G_PARAM_READWRITE));
 
+  g_object_class_install_property(
+      gobject_class,
+      PROP_STREAM_TYPE,
+      g_param_spec_enum("stream_type",
+                        "stream_type",
+                        "The type of stream (video/audio) will change the headers and content of packets",
+                        gst_stream_type_get_type(),
+                        VIDEO,
+                        G_PARAM_READWRITE));
+
   g_object_class_install_property(gobject_class,
                                   PROP_MIN_REQUIRED_FEC_PACKETS,
                                   g_param_spec_int("min_required_fec_packets",
@@ -155,6 +180,8 @@ static void gst_rtp_moonlight_pay_init(gst_rtp_moonlight_pay *rtpmoonlightpay) {
 
   rtpmoonlightpay->cur_seq_number = 0;
   rtpmoonlightpay->frame_num = 0;
+
+  rtpmoonlightpay->stream_type = VIDEO;
 }
 
 void gst_rtp_moonlight_pay_set_property(GObject *object, guint property_id, const GValue *value, GParamSpec *pspec) {
@@ -165,19 +192,18 @@ void gst_rtp_moonlight_pay_set_property(GObject *object, guint property_id, cons
   switch (property_id) {
   case PROP_PAYLOAD_SIZE:
     rtpmoonlightpay->payload_size = g_value_get_int(value);
-    //    g_print("payload_size was changed to %d\n", rtpmoonlightpay->payload_size);
     break;
   case PROP_ADD_PADDING:
     rtpmoonlightpay->add_padding = g_value_get_boolean(value);
-    //    g_print("add_padding was changed to %d\n", rtpmoonlightpay->add_padding);
     break;
   case PROP_FEC_PERCENTAGE:
     rtpmoonlightpay->fec_percentage = g_value_get_int(value);
-    //    g_print("fec_percentage was changed to %d\n", rtpmoonlightpay->fec_percentage);
     break;
   case PROP_MIN_REQUIRED_FEC_PACKETS:
     rtpmoonlightpay->min_required_fec_packets = g_value_get_int(value);
-    //    g_print("min_required_fec_packets was changed to %d\n", rtpmoonlightpay->min_required_fec_packets);
+    break;
+  case PROP_STREAM_TYPE:
+    rtpmoonlightpay->stream_type = static_cast<STREAM_TYPE>(g_value_get_enum(value));
     break;
   default:
     G_OBJECT_WARN_INVALID_PROPERTY_ID(object, property_id, pspec);
@@ -193,12 +219,19 @@ void gst_rtp_moonlight_pay_get_property(GObject *object, guint property_id, GVal
   switch (property_id) {
   case PROP_PAYLOAD_SIZE:
     g_value_set_int(value, rtpmoonlightpay->payload_size);
+    break;
   case PROP_ADD_PADDING:
     g_value_set_boolean(value, rtpmoonlightpay->add_padding);
+    break;
   case PROP_FEC_PERCENTAGE:
     g_value_set_int(value, rtpmoonlightpay->fec_percentage);
+    break;
   case PROP_MIN_REQUIRED_FEC_PACKETS:
     g_value_set_int(value, rtpmoonlightpay->min_required_fec_packets);
+    break;
+  case PROP_STREAM_TYPE:
+    g_value_set_enum(value, rtpmoonlightpay->stream_type);
+    break;
   default:
     G_OBJECT_WARN_INVALID_PROPERTY_ID(object, property_id, pspec);
     break;
@@ -226,212 +259,6 @@ void gst_rtp_moonlight_pay_finalize(GObject *object) {
 }
 
 /**
- * Creates a GstBuffer and fill the memory with the given value
- */
-static GstBuffer *gst_buffer_new_and_fill(gsize size, int fill_val) {
-  GstBuffer *buf = gst_buffer_new_allocate(NULL, size, NULL);
-
-  /* get WRITE access to the memory and fill with fill_val */
-  GstMapInfo info;
-  gst_buffer_map(buf, &info, GST_MAP_WRITE);
-  memset(info.data, fill_val, info.size);
-  gst_buffer_unmap(buf, &info);
-  return buf;
-}
-
-/**
- * Creates a GstBuffer from the given array of chars
- */
-static GstBuffer *gst_buffer_new_and_fill(gsize size, const char vals[]) {
-  GstBuffer *buf = gst_buffer_new_allocate(NULL, size, NULL);
-
-  /* get WRITE access to the memory and fill with vals */
-  GstMapInfo info;
-  gst_buffer_map(buf, &info, GST_MAP_WRITE);
-  for (int i = 0; i < size; i++) {
-    info.data[i] = vals[i];
-  }
-  gst_buffer_unmap(buf, &info);
-  return buf;
-}
-
-/**
- * From a list of buffer returns a single buffer that contains them all.
- * No copy of the stored data is done
- */
-static GstBuffer *gst_buffer_list_unfold(GstBufferList *buffer_list) {
-  GstBuffer *buf = gst_buffer_new_allocate(NULL, 0, NULL);
-
-  for (int idx = 0; idx < gst_buffer_list_length(buffer_list); idx++) {
-    auto buf_idx =
-        gst_buffer_copy(gst_buffer_list_get(buffer_list, idx)); // copy here is about the buffer object, not the data
-    gst_buffer_append(buf, buf_idx);
-  }
-
-  return buf;
-}
-
-/**
- * Creates an RTP header and returns a GstBuffer to it
- */
-static GstBuffer *create_rtp_header(const gst_rtp_moonlight_pay &rtpmoonlightpay, int packet_nr, int tot_packets) {
-  constexpr auto rtp_header_size = sizeof(state::VideoRTPHeaders);
-  GstBuffer *buf = gst_buffer_new_and_fill(rtp_header_size, 0x00);
-
-  /* get WRITE access to the memory */
-  GstMapInfo info;
-  gst_buffer_map(buf, &info, GST_MAP_WRITE);
-
-  /* set RTP headers */
-  auto packet = (state::VideoRTPHeaders *)info.data;
-
-  packet->rtp.header = 0x80 | FLAG_EXTENSION;
-  packet->rtp.packetType = 0x00;
-  packet->rtp.timestamp = 0x00;
-  packet->rtp.ssrc = 0x00;
-
-  uint16_t sequence_number = rtpmoonlightpay.cur_seq_number + packet_nr;
-  packet->rtp.sequenceNumber = boost::endian::native_to_big(sequence_number);
-
-  packet->packet.frameIndex = rtpmoonlightpay.frame_num;
-  packet->packet.streamPacketIndex = ((uint32_t)sequence_number) << 8;
-
-  packet->packet.multiFecFlags = 0x10;
-  packet->packet.multiFecBlocks = 0;
-  packet->packet.fecInfo = (packet_nr << 12 | tot_packets << 22 | 0 << 4);
-
-  packet->packet.flags = FLAG_CONTAINS_PIC_DATA;
-
-  if (packet_nr == 0) {
-    packet->packet.flags |= FLAG_SOF;
-  }
-
-  if (packet_nr == tot_packets - 1) {
-    packet->packet.flags |= FLAG_EOF;
-  }
-
-  gst_buffer_unmap(buf, &info);
-
-  return buf;
-}
-
-static void gst_copy_timestamps(GstBuffer *src, GstBuffer *dest) {
-  dest->pts = src->pts;
-  dest->dts = src->dts;
-  dest->offset = src->offset;
-  dest->duration = src->duration;
-  dest->offset_end = src->offset_end;
-}
-
-/**
- * Split the input buffer into packets, will prepend the RTP header and append any padding if needed
- */
-static GstBufferList *generate_rtp_packets(const gst_rtp_moonlight_pay &rtpmoonlightpay, GstBuffer *inbuf) {
-  constexpr auto video_payload_header_size = 8;
-  GstBuffer *video_header = gst_buffer_new_and_fill(video_payload_header_size, "\0017charss");
-  auto full_payload_buf = gst_buffer_append(video_header, inbuf);
-
-  auto in_buf_size = gst_buffer_get_size(full_payload_buf);
-  auto payload_size = rtpmoonlightpay.payload_size;
-  auto tot_packets = (in_buf_size / payload_size) + 1;
-  GstBufferList *buffers = gst_buffer_list_new_sized(tot_packets);
-
-  for (int packet_nr = 0; packet_nr < tot_packets; packet_nr++) {
-    auto begin = packet_nr * payload_size;
-    auto remaining = in_buf_size - begin;
-    auto packet_payload_size = MIN(remaining, payload_size);
-
-    GstBuffer *header = create_rtp_header(rtpmoonlightpay, packet_nr, tot_packets);
-
-    GstBuffer *payload = gst_buffer_copy_region(full_payload_buf, GST_BUFFER_COPY_ALL, begin, packet_payload_size);
-    GstBuffer *rtp_packet = gst_buffer_append(header, payload);
-
-    if ((remaining < payload_size) && rtpmoonlightpay.add_padding) {
-      GstBuffer *padding = gst_buffer_new_and_fill(payload_size - remaining, 0x00);
-      gst_buffer_append(rtp_packet, padding);
-    }
-
-    gst_copy_timestamps(inbuf, rtp_packet);
-    gst_buffer_list_insert(buffers, -1, rtp_packet);
-  }
-
-  return buffers;
-}
-
-/**
- * Given the RTP packets that contains payload,
- * will generate extra RTP packets with the FEC information.
- *
- * Returns a list of GstBuffer that contains the input rtp_packets + the newly created FEC packets.
- * Will also add FEC info to the RTP headers of the original packets
- */
-static GstBufferList *
-generate_fec_packets(const gst_rtp_moonlight_pay &rtpmoonlightpay, GstBufferList *rtp_packets, GstBuffer *inbuf) {
-  GstMapInfo info;
-  GstBuffer *rtp_payload = gst_buffer_list_unfold(rtp_packets);
-
-  auto payload_size = (int)gst_buffer_get_size(rtp_payload);
-  auto blocksize = rtpmoonlightpay.payload_size + (int)sizeof(state::VideoRTPHeaders);
-  auto needs_padding = payload_size % blocksize != 0;
-
-  auto fec_percentage = rtpmoonlightpay.fec_percentage;
-  auto data_shards = payload_size / blocksize + (needs_padding ? 1 : 0);
-  auto parity_shards = (data_shards * fec_percentage + 99) / 100;
-
-  // increase the FEC percentage in order to get the min required packets
-  if (parity_shards < rtpmoonlightpay.min_required_fec_packets) {
-    parity_shards = rtpmoonlightpay.min_required_fec_packets;
-    fec_percentage = (100 * parity_shards) / data_shards;
-  }
-
-  auto nr_shards = data_shards + parity_shards;
-
-  // pads rtp_payload to blocksize
-  if (needs_padding) {
-    GstBuffer *pad = gst_buffer_new_and_fill((data_shards * blocksize) - payload_size, 0x00);
-    rtp_payload = gst_buffer_append(rtp_payload, pad);
-  }
-
-  rtp_payload = gst_buffer_append(rtp_payload, gst_buffer_new_and_fill((parity_shards * blocksize), 0x00));
-  gst_buffer_map(rtp_payload, &info, GST_MAP_WRITE);
-
-  // Reed Solomon encode the full stream of bytes
-  auto rs = reed_solomon_new(data_shards, parity_shards);
-  unsigned char *ptr[nr_shards];
-  for (int shard_idx = 0; shard_idx < nr_shards; shard_idx++) {
-    ptr[shard_idx] = info.data + (shard_idx * blocksize);
-  }
-  reed_solomon_encode(rs, ptr, nr_shards, blocksize);
-  reed_solomon_release(rs);
-
-  // Split out back into RTP packets and update FEC info
-  GstBufferList *buffers = gst_buffer_list_new_sized(nr_shards);
-  for (int shard_idx = 0; shard_idx < nr_shards; shard_idx++) {
-    auto position = shard_idx * blocksize;
-    auto rtp_packet = (state::VideoRTPHeaders *)(info.data + position);
-
-    rtp_packet->packet.frameIndex = rtpmoonlightpay.frame_num;
-
-    rtp_packet->packet.fecInfo = (shard_idx << 12 | data_shards << 22 | fec_percentage << 4);
-    rtp_packet->packet.multiFecBlocks = 0; // TODO: support multiple fec blocks?
-    rtp_packet->packet.multiFecFlags = 0x10;
-
-    rtp_packet->rtp.header = 0x80 | FLAG_EXTENSION;
-    uint16_t sequence_number = rtpmoonlightpay.cur_seq_number + shard_idx;
-    rtp_packet->rtp.sequenceNumber = boost::endian::native_to_big(sequence_number);
-
-    GstBuffer *packet_buf = gst_buffer_new_allocate(nullptr, blocksize, nullptr);
-    gst_buffer_fill(packet_buf, 0, rtp_packet, blocksize);
-    gst_copy_timestamps(inbuf, packet_buf);
-    gst_buffer_list_insert(buffers, -1, packet_buf);
-  }
-
-  gst_buffer_unmap(rtp_payload, &info);
-
-  return buffers;
-}
-
-/**
  * Overrides the default generate_output method so that we can turn the input buffer (ideally an encoded stream)
  * into a list of buffers: a series of RTP packets encoded following the Moonlight protocol specs.
  */
@@ -447,12 +274,7 @@ static GstFlowReturn gst_rtp_moonlight_pay_generate_output(GstBaseTransform *tra
   if (inbuf == nullptr)
     return GST_FLOW_OK;
 
-  GstBufferList *rtp_packets = generate_rtp_packets(*rtpmoonlightpay, inbuf);
-  if (rtpmoonlightpay->fec_percentage > 0) {
-    rtp_packets = generate_fec_packets(*rtpmoonlightpay, rtp_packets, inbuf);
-  }
-  rtpmoonlightpay->cur_seq_number += (int)gst_buffer_list_length(rtp_packets);
-  rtpmoonlightpay->frame_num++;
+  auto rtp_packets = split_into_rtp(rtpmoonlightpay, inbuf);
 
   /* Send the generated packets to any downstream listener */
   gst_pad_push_list(trans->srcpad, rtp_packets);
