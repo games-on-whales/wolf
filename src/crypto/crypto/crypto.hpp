@@ -41,6 +41,34 @@ std::string aes_decrypt_ecb(std::string_view msg,
                             bool padding = false);
 
 /**
+ * Encrypt the given msg using AES CBC at 128 bit
+ *
+ * @param msg: the message to be encrypted
+ * @param enc_key: the key used for encryption
+ * @param iv: optional, if not provided a random one will be generated
+ * @param padding: optional, enables or disables padding
+ * @return: the encrypted string
+ */
+std::string aes_encrypt_cbc(std::string_view msg,
+                            std::string_view enc_key,
+                            std::string_view iv = random(AES_BLOCK_SIZE),
+                            bool padding = false);
+
+/**
+ * Decrypt the given msg using AES CBC at 128 bit
+ *
+ * @param msg: the message to be encrypted
+ * @param enc_key: the key used for encryption
+ * @param iv: optional, if not provided a random one will be generated
+ * @param padding: optional, enables or disables padding
+ * @return: the decrypted string
+ */
+std::string aes_decrypt_cbc(std::string_view msg,
+                            std::string_view enc_key,
+                            std::string_view iv = random(AES_BLOCK_SIZE),
+                            bool padding = false);
+
+/**
  * Encrypt the given msg using AES gcm at 128 bit
  *
  * @param msg: the message to be encrypted

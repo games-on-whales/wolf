@@ -100,6 +100,15 @@ TEST_CASE("AES gcm", "[Crypto]") {
   REQUIRE(crypto::aes_decrypt_gcm(encrypted, key, tag, iv, -1, true) == msg);
 }
 
+TEST_CASE("AES cbc", "[Crypto]") {
+  auto key = "0123456789012345"s;
+  auto msg = "a message to be sent!"s;
+  auto iv = "12345678"s;
+
+  auto encrypted = crypto::aes_encrypt_cbc(msg, key, iv, true);
+  REQUIRE(crypto::aes_decrypt_cbc(encrypted, key, iv, true) == msg);
+}
+
 TEST_CASE("OpenSSL sign", "[Crypto]") {
   /* Generated using: `openssl genrsa -out mykey.pem 1024` */
   auto private_key = "-----BEGIN RSA PRIVATE KEY-----\n"

@@ -98,6 +98,16 @@ std::string aes_decrypt_ecb(std::string_view msg, std::string_view enc_key, std:
   return aes::decrypt_symmetric(ctx.get(), msg);
 }
 
+std::string aes_encrypt_cbc(std::string_view msg, std::string_view enc_key, std::string_view iv, bool padding) {
+  auto ctx = aes::init(EVP_aes_128_cbc(), enc_key, iv, true, padding);
+  return aes::encrypt_symmetric(ctx.get(), msg);
+}
+
+std::string aes_decrypt_cbc(std::string_view msg, std::string_view enc_key, std::string_view iv, bool padding) {
+  auto ctx = aes::init(EVP_aes_128_cbc(), enc_key, iv, false, padding);
+  return aes::decrypt_symmetric(ctx.get(), msg);
+}
+
 std::pair<std::string, std::string> aes_encrypt_gcm(std::string_view msg,
                                                     std::string_view enc_key,
                                                     std::string_view iv = random(AES_BLOCK_SIZE),
