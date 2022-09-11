@@ -1,12 +1,12 @@
 /**
- * SECTION:element-gstrtpmoonlightpay
+ * SECTION:element-gstrtpmoonlightpay_video
  *
- * The rtpmoonlightpay element does FIXME stuff.
+ * The rtpmoonlightpay_video element does FIXME stuff.
  *
  * <refsect2>
  * <title>Example launch line</title>
  * |[
- * gst-launch-1.0 -v fakesrc ! rtpmoonlightpay ! FIXME ! fakesink
+ * gst-launch-1.0 -v fakesrc ! rtpmoonlightpay_video ! FIXME ! fakesink
  * ]|
  * FIXME Describe what the pipeline does.
  * </refsect2>
@@ -20,23 +20,23 @@ extern "C" {
 #include <moonlight-common-c/reedsolomon/rs.h>
 }
 
-#include "gstrtpmoonlightpay.hpp"
+#include "gstrtpmoonlightpay_video.hpp"
 #include "utils.hpp"
 #include <gst/base/gstbasetransform.h>
 #include <gst/gst.h>
 
-GST_DEBUG_CATEGORY_STATIC(gst_rtp_moonlight_pay_debug_category);
-#define GST_CAT_DEFAULT gst_rtp_moonlight_pay_debug_category
+GST_DEBUG_CATEGORY_STATIC(gst_rtp_moonlight_pay_video_debug_category);
+#define GST_CAT_DEFAULT gst_rtp_moonlight_pay_video_debug_category
 
 /* prototypes */
 
 static void
-gst_rtp_moonlight_pay_set_property(GObject *object, guint property_id, const GValue *value, GParamSpec *pspec);
-static void gst_rtp_moonlight_pay_get_property(GObject *object, guint property_id, GValue *value, GParamSpec *pspec);
-static void gst_rtp_moonlight_pay_dispose(GObject *object);
-static void gst_rtp_moonlight_pay_finalize(GObject *object);
+gst_rtp_moonlight_pay_video_set_property(GObject *object, guint property_id, const GValue *value, GParamSpec *pspec);
+static void gst_rtp_moonlight_pay_video_get_property(GObject *object, guint property_id, GValue *value, GParamSpec *pspec);
+static void gst_rtp_moonlight_pay_video_dispose(GObject *object);
+static void gst_rtp_moonlight_pay_video_finalize(GObject *object);
 
-static GstFlowReturn gst_rtp_moonlight_pay_generate_output(GstBaseTransform *trans, GstBuffer **outbuf);
+static GstFlowReturn gst_rtp_moonlight_pay_video_generate_output(GstBaseTransform *trans, GstBuffer **outbuf);
 
 enum {
   /**
@@ -58,51 +58,34 @@ enum {
    * Minimum number of FEC packages required by Moonlight
    */
   PROP_MIN_REQUIRED_FEC_PACKETS = 22,
-
-  /**
-   * The type of stream (video/audio) will change the headers and content of packets
-   */
-  PROP_STREAM_TYPE = 23
 };
-
-GType gst_stream_type_get_type(void) {
-  static GType gst_stream_type = 0;
-
-  static const GEnumValue mpeg2enc_formats[] = {
-      {VIDEO, "Video format", "0"}, //
-      {AUDIO, "Audio format", "1"}  //
-  };
-  gst_stream_type = g_enum_register_static("GstMpeg2encFormat", mpeg2enc_formats);
-
-  return gst_stream_type;
-}
 
 /* pad templates */
 
-static GstStaticPadTemplate gst_rtp_moonlight_pay_src_template = GST_STATIC_PAD_TEMPLATE(
+static GstStaticPadTemplate gst_rtp_moonlight_pay_video_src_template = GST_STATIC_PAD_TEMPLATE(
     "src", GST_PAD_SRC, GST_PAD_ALWAYS, GST_STATIC_CAPS("ANY"));
 
-static GstStaticPadTemplate gst_rtp_moonlight_pay_sink_template = GST_STATIC_PAD_TEMPLATE(
+static GstStaticPadTemplate gst_rtp_moonlight_pay_video_sink_template = GST_STATIC_PAD_TEMPLATE(
     "sink", GST_PAD_SINK, GST_PAD_ALWAYS, GST_STATIC_CAPS("ANY"));
 
 /* class initialization */
 
-G_DEFINE_TYPE_WITH_CODE(gst_rtp_moonlight_pay,
-                        gst_rtp_moonlight_pay,
+G_DEFINE_TYPE_WITH_CODE(gst_rtp_moonlight_pay_video,
+                        gst_rtp_moonlight_pay_video,
                         GST_TYPE_BASE_TRANSFORM,
-                        GST_DEBUG_CATEGORY_INIT(gst_rtp_moonlight_pay_debug_category,
-                                                "rtpmoonlightpay",
+                        GST_DEBUG_CATEGORY_INIT(gst_rtp_moonlight_pay_video_debug_category,
+                                                "rtpmoonlightpay_video",
                                                 0,
-                                                "debug category for rtpmoonlightpay element"));
+                                                "debug category for rtpmoonlightpay_video element"));
 
-static void gst_rtp_moonlight_pay_class_init(gst_rtp_moonlight_payClass *klass) {
+static void gst_rtp_moonlight_pay_video_class_init(gst_rtp_moonlight_pay_videoClass *klass) {
   GObjectClass *gobject_class = G_OBJECT_CLASS(klass);
   GstBaseTransformClass *base_transform_class = GST_BASE_TRANSFORM_CLASS(klass);
 
   /* Setting up pads and setting metadata should be moved to
      base_class_init if you intend to subclass this class. */
-  gst_element_class_add_static_pad_template(GST_ELEMENT_CLASS(klass), &gst_rtp_moonlight_pay_src_template);
-  gst_element_class_add_static_pad_template(GST_ELEMENT_CLASS(klass), &gst_rtp_moonlight_pay_sink_template);
+  gst_element_class_add_static_pad_template(GST_ELEMENT_CLASS(klass), &gst_rtp_moonlight_pay_video_src_template);
+  gst_element_class_add_static_pad_template(GST_ELEMENT_CLASS(klass), &gst_rtp_moonlight_pay_video_sink_template);
 
   gst_element_class_set_static_metadata(GST_ELEMENT_CLASS(klass),
                                         "FIXME Long name",
@@ -110,8 +93,8 @@ static void gst_rtp_moonlight_pay_class_init(gst_rtp_moonlight_payClass *klass) 
                                         "FIXME Description",
                                         "FIXME <fixme@example.com>");
 
-  gobject_class->set_property = gst_rtp_moonlight_pay_set_property;
-  gobject_class->get_property = gst_rtp_moonlight_pay_get_property;
+  gobject_class->set_property = gst_rtp_moonlight_pay_video_set_property;
+  gobject_class->get_property = gst_rtp_moonlight_pay_video_get_property;
 
   g_object_class_install_property(
       gobject_class,
@@ -145,16 +128,6 @@ static void gst_rtp_moonlight_pay_class_init(gst_rtp_moonlight_payClass *klass) 
                        20,
                        G_PARAM_READWRITE));
 
-  g_object_class_install_property(
-      gobject_class,
-      PROP_STREAM_TYPE,
-      g_param_spec_enum("stream_type",
-                        "stream_type",
-                        "The type of stream (video/audio) will change the headers and content of packets",
-                        gst_stream_type_get_type(),
-                        VIDEO,
-                        G_PARAM_READWRITE));
-
   g_object_class_install_property(gobject_class,
                                   PROP_MIN_REQUIRED_FEC_PACKETS,
                                   g_param_spec_int("min_required_fec_packets",
@@ -165,45 +138,40 @@ static void gst_rtp_moonlight_pay_class_init(gst_rtp_moonlight_payClass *klass) 
                                                    2,
                                                    G_PARAM_READWRITE));
 
-  gobject_class->dispose = gst_rtp_moonlight_pay_dispose;
-  gobject_class->finalize = gst_rtp_moonlight_pay_finalize;
+  gobject_class->dispose = gst_rtp_moonlight_pay_video_dispose;
+  gobject_class->finalize = gst_rtp_moonlight_pay_video_finalize;
 
-  base_transform_class->generate_output = GST_DEBUG_FUNCPTR(gst_rtp_moonlight_pay_generate_output);
+  base_transform_class->generate_output = GST_DEBUG_FUNCPTR(gst_rtp_moonlight_pay_video_generate_output);
 }
 
-static void gst_rtp_moonlight_pay_init(gst_rtp_moonlight_pay *rtpmoonlightpay) {
-  rtpmoonlightpay->payload_size = 1008;
-  rtpmoonlightpay->add_padding = true;
+static void gst_rtp_moonlight_pay_video_init(gst_rtp_moonlight_pay_video *rtpmoonlightpay_video) {
+  rtpmoonlightpay_video->payload_size = 1008;
+  rtpmoonlightpay_video->add_padding = true;
 
-  rtpmoonlightpay->fec_percentage = 20;
-  rtpmoonlightpay->min_required_fec_packets = 2;
+  rtpmoonlightpay_video->fec_percentage = 20;
+  rtpmoonlightpay_video->min_required_fec_packets = 2;
 
-  rtpmoonlightpay->cur_seq_number = 0;
-  rtpmoonlightpay->frame_num = 0;
-
-  rtpmoonlightpay->stream_type = VIDEO;
+  rtpmoonlightpay_video->cur_seq_number = 0;
+  rtpmoonlightpay_video->frame_num = 0;
 }
 
-void gst_rtp_moonlight_pay_set_property(GObject *object, guint property_id, const GValue *value, GParamSpec *pspec) {
-  gst_rtp_moonlight_pay *rtpmoonlightpay = gst_rtp_moonlight_pay(object);
+void gst_rtp_moonlight_pay_video_set_property(GObject *object, guint property_id, const GValue *value, GParamSpec *pspec) {
+  gst_rtp_moonlight_pay_video *rtpmoonlightpay_video = gst_rtp_moonlight_pay_video(object);
 
-  GST_DEBUG_OBJECT(rtpmoonlightpay, "set_property");
+  GST_DEBUG_OBJECT(rtpmoonlightpay_video, "set_property");
 
   switch (property_id) {
   case PROP_PAYLOAD_SIZE:
-    rtpmoonlightpay->payload_size = g_value_get_int(value);
+    rtpmoonlightpay_video->payload_size = g_value_get_int(value);
     break;
   case PROP_ADD_PADDING:
-    rtpmoonlightpay->add_padding = g_value_get_boolean(value);
+    rtpmoonlightpay_video->add_padding = g_value_get_boolean(value);
     break;
   case PROP_FEC_PERCENTAGE:
-    rtpmoonlightpay->fec_percentage = g_value_get_int(value);
+    rtpmoonlightpay_video->fec_percentage = g_value_get_int(value);
     break;
   case PROP_MIN_REQUIRED_FEC_PACKETS:
-    rtpmoonlightpay->min_required_fec_packets = g_value_get_int(value);
-    break;
-  case PROP_STREAM_TYPE:
-    rtpmoonlightpay->stream_type = static_cast<STREAM_TYPE>(g_value_get_enum(value));
+    rtpmoonlightpay_video->min_required_fec_packets = g_value_get_int(value);
     break;
   default:
     G_OBJECT_WARN_INVALID_PROPERTY_ID(object, property_id, pspec);
@@ -211,26 +179,23 @@ void gst_rtp_moonlight_pay_set_property(GObject *object, guint property_id, cons
   }
 }
 
-void gst_rtp_moonlight_pay_get_property(GObject *object, guint property_id, GValue *value, GParamSpec *pspec) {
-  gst_rtp_moonlight_pay *rtpmoonlightpay = gst_rtp_moonlight_pay(object);
+void gst_rtp_moonlight_pay_video_get_property(GObject *object, guint property_id, GValue *value, GParamSpec *pspec) {
+  gst_rtp_moonlight_pay_video *rtpmoonlightpay_video = gst_rtp_moonlight_pay_video(object);
 
-  GST_DEBUG_OBJECT(rtpmoonlightpay, "get_property");
+  GST_DEBUG_OBJECT(rtpmoonlightpay_video, "get_property");
 
   switch (property_id) {
   case PROP_PAYLOAD_SIZE:
-    g_value_set_int(value, rtpmoonlightpay->payload_size);
+    g_value_set_int(value, rtpmoonlightpay_video->payload_size);
     break;
   case PROP_ADD_PADDING:
-    g_value_set_boolean(value, rtpmoonlightpay->add_padding);
+    g_value_set_boolean(value, rtpmoonlightpay_video->add_padding);
     break;
   case PROP_FEC_PERCENTAGE:
-    g_value_set_int(value, rtpmoonlightpay->fec_percentage);
+    g_value_set_int(value, rtpmoonlightpay_video->fec_percentage);
     break;
   case PROP_MIN_REQUIRED_FEC_PACKETS:
-    g_value_set_int(value, rtpmoonlightpay->min_required_fec_packets);
-    break;
-  case PROP_STREAM_TYPE:
-    g_value_set_enum(value, rtpmoonlightpay->stream_type);
+    g_value_set_int(value, rtpmoonlightpay_video->min_required_fec_packets);
     break;
   default:
     G_OBJECT_WARN_INVALID_PROPERTY_ID(object, property_id, pspec);
@@ -238,32 +203,32 @@ void gst_rtp_moonlight_pay_get_property(GObject *object, guint property_id, GVal
   }
 }
 
-void gst_rtp_moonlight_pay_dispose(GObject *object) {
-  gst_rtp_moonlight_pay *rtpmoonlightpay = gst_rtp_moonlight_pay(object);
+void gst_rtp_moonlight_pay_video_dispose(GObject *object) {
+  gst_rtp_moonlight_pay_video *rtpmoonlightpay_video = gst_rtp_moonlight_pay_video(object);
 
-  GST_DEBUG_OBJECT(rtpmoonlightpay, "dispose");
+  GST_DEBUG_OBJECT(rtpmoonlightpay_video, "dispose");
 
   /* clean up as possible.  may be called multiple times */
 
-  G_OBJECT_CLASS(gst_rtp_moonlight_pay_parent_class)->dispose(object);
+  G_OBJECT_CLASS(gst_rtp_moonlight_pay_video_parent_class)->dispose(object);
 }
 
-void gst_rtp_moonlight_pay_finalize(GObject *object) {
-  gst_rtp_moonlight_pay *rtpmoonlightpay = gst_rtp_moonlight_pay(object);
+void gst_rtp_moonlight_pay_video_finalize(GObject *object) {
+  gst_rtp_moonlight_pay_video *rtpmoonlightpay_video = gst_rtp_moonlight_pay_video(object);
 
-  GST_DEBUG_OBJECT(rtpmoonlightpay, "finalize");
+  GST_DEBUG_OBJECT(rtpmoonlightpay_video, "finalize");
 
   /* clean up object here */
 
-  G_OBJECT_CLASS(gst_rtp_moonlight_pay_parent_class)->finalize(object);
+  G_OBJECT_CLASS(gst_rtp_moonlight_pay_video_parent_class)->finalize(object);
 }
 
 /**
  * Overrides the default generate_output method so that we can turn the input buffer (ideally an encoded stream)
  * into a list of buffers: a series of RTP packets encoded following the Moonlight protocol specs.
  */
-static GstFlowReturn gst_rtp_moonlight_pay_generate_output(GstBaseTransform *trans, GstBuffer **outbuf) {
-  gst_rtp_moonlight_pay *rtpmoonlightpay = gst_rtp_moonlight_pay(trans);
+static GstFlowReturn gst_rtp_moonlight_pay_video_generate_output(GstBaseTransform *trans, GstBuffer **outbuf) {
+  gst_rtp_moonlight_pay_video *rtpmoonlightpay_video = gst_rtp_moonlight_pay_video(trans);
   GstBuffer *inbuf;
 
   /* Retrieve stashed input buffer, if the default submit_input_buffer was run. Takes ownership back from there */
@@ -274,7 +239,7 @@ static GstFlowReturn gst_rtp_moonlight_pay_generate_output(GstBaseTransform *tra
   if (inbuf == nullptr)
     return GST_FLOW_OK;
 
-  auto rtp_packets = split_into_rtp(rtpmoonlightpay, inbuf);
+  auto rtp_packets = split_into_rtp(rtpmoonlightpay_video, inbuf);
 
   /* Send the generated packets to any downstream listener */
   gst_pad_push_list(trans->srcpad, rtp_packets);
@@ -285,7 +250,7 @@ static GstFlowReturn gst_rtp_moonlight_pay_generate_output(GstBaseTransform *tra
 }
 
 static gboolean plugin_init(GstPlugin *plugin) {
-  return gst_element_register(plugin, "rtpmoonlightpay", GST_RANK_PRIMARY, gst_TYPE_rtp_moonlight_pay);
+  return gst_element_register(plugin, "rtpmoonlightpay_video", GST_RANK_PRIMARY, gst_TYPE_rtp_moonlight_pay_video);
 }
 
 /* FIXME: these are normally defined by the GStreamer build system.
@@ -307,7 +272,7 @@ static gboolean plugin_init(GstPlugin *plugin) {
 
 GST_PLUGIN_DEFINE(GST_VERSION_MAJOR,
                   GST_VERSION_MINOR,
-                  rtpmoonlightpay,
+                  rtpmoonlightpay_video,
                   "FIXME plugin description",
                   plugin_init,
                   VERSION,

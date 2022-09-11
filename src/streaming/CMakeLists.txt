@@ -1,5 +1,15 @@
 # Make an automatic library - will be static or dynamic based on user setting
-add_library(streaming streaming/streaming.cpp ${HEADER_LIST})
+
+file(GLOB HEADER_LIST CONFIGURE_DEPENDS
+        "streaming/*.hpp"
+        "streaming/gst-plugin/*.hpp")
+file(GLOB SRC_LIST SRCS
+        "streaming/*.cpp"
+        "streaming/gst-plugin/*.cpp")
+
+add_library(streaming
+        ${HEADER_LIST}
+        ${SRC_LIST})
 
 # We need this directory, and users of our library will need it too
 target_include_directories(streaming PUBLIC .)
