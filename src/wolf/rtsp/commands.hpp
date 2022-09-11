@@ -96,7 +96,8 @@ msg_t announce(msg_t req, const state::StreamSession &session) {
                                 session.control_port,
                                 4, // TODO: peers from config?
                                 args["x-nv-general.useReliableUdp"].value_or(0),
-                                session.gcm_key};
+                                session.gcm_key,
+                                session.gcm_iv_key};
   session.event_bus->fire_event(immer::box<state::ControlSession>(ctrl));
 
   // Video session
@@ -118,6 +119,24 @@ msg_t announce(msg_t req, const state::StreamSession &session) {
 
                                session.ip};
   session.event_bus->fire_event(immer::box<state::VideoSession>(video));
+
+  // Audio session
+  state::AudioSession audio = {session.session_id,
+                               session.event_bus,
+
+                               static_cast<bool>(args["x-nv-general.featureFlags"].value() & 0x20),
+                               session.gcm_key,
+                               session.gcm_iv_key,
+
+                               session.audio_port,
+                               session.ip,
+
+                               20, // fec percentage TODO: make it a config
+                               args["x-nv-vqos[0].fec.minRequiredFecPackets"].value_or(0),
+                               args["x-nv-aqos.packetDuration"].value(),
+                               args["x-nv-audio.surround.numChannels"].value(),
+                               args["x-nv-audio.surround.channelMask"].value()};
+  session.event_bus->fire_event(immer::box<state::AudioSession>(audio));
 
   return create_rtsp_msg({options}, 200, "OK", req->sequenceNumber, {});
 }

@@ -105,17 +105,21 @@ std::thread start_service(immer::box<state::ControlSession> control_sess, int ti
                       crypto::str_to_hex({(char *)packet->data, packet->dataLength}));
 
             if (type == ENCRYPTED) {
-              auto decrypted = decrypt_packet(packet->data, control_sess->gcm_key);
+              try {
+                auto decrypted = decrypt_packet(packet->data, control_sess->gcm_key);
 
-              auto sub_type = get_type(reinterpret_cast<const enet_uint8 *>(decrypted.data()));
+                auto sub_type = get_type(reinterpret_cast<const enet_uint8 *>(decrypted.data()));
 
-              logs::log(logs::trace,
-                        "[ENET] decrypted sub_type: {} HEX: {}",
-                        packet_type_to_str(sub_type),
-                        crypto::str_to_hex(decrypted));
+                logs::log(logs::trace,
+                          "[ENET] decrypted sub_type: {} HEX: {}",
+                          packet_type_to_str(sub_type),
+                          crypto::str_to_hex(decrypted));
 
-              auto ev = ControlEvent{control_sess->session_id, sub_type, decrypted};
-              control_sess->event_bus->fire_event(immer::box<ControlEvent>{ev});
+                auto ev = ControlEvent{control_sess->session_id, sub_type, decrypted};
+                control_sess->event_bus->fire_event(immer::box<ControlEvent>{ev});
+              } catch (std::runtime_error &e) {
+                logs::log(logs::error, "[ENET] Unable to decrypt incoming packet: {}", e.what());
+              }
             }
 
             // TODO: read and parse payload

@@ -53,7 +53,11 @@ std::string decrypt_packet(const enet_uint8 *packet_data, std::string_view gcm_k
   iv[0] = (std::uint8_t)boost::endian::little_to_native(header->seq);
   std::string_view iv_str{(char *)iv.data(), iv_size};
 
-  return crypto::aes_decrypt_gcm(header->encrypted_msg(), gcm_key, header->gcm_tag(), iv_str, iv_size);
+  return crypto::aes_decrypt_gcm(header->encrypted_msg(),
+                                 crypto::hex_to_str(gcm_key.data(), true),
+                                 header->gcm_tag(),
+                                 iv_str,
+                                 iv_size);
 }
 
 constexpr const char *packet_type_to_str(PACKET_TYPE p) noexcept {

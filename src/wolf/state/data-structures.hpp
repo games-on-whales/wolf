@@ -155,6 +155,7 @@ struct StreamSession {
   std::string app_id;
 
   std::string gcm_key;
+  std::string gcm_iv_key;
 
   std::string unique_id;
   std::string ip;
@@ -180,6 +181,7 @@ struct ControlSession {
   int protocol_type;
 
   std::string gcm_key;
+  std::string gcm_iv;
 
   std::chrono::milliseconds timeout = 150ms;
   std::string host = "0.0.0.0";

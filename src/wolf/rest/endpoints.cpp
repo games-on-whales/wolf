@@ -246,7 +246,8 @@ void launch(std::shared_ptr<typename SimpleWeb::ServerBase<T>::Response> respons
                                   audio_mode,
                                   get_header(headers, "appid").value(),
                                   // gcm encryption keys
-                                  crypto::hex_to_str(get_header(headers, "rikey").value(), true),
+                                  get_header(headers, "rikey").value(),
+                                  get_header(headers, "rikeyid").value(),
                                   // client info
                                   get_header(headers, "uuid").value(),
                                   client_ip,

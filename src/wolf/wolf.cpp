@@ -160,12 +160,27 @@ auto setup_sessions_handlers(std::shared_ptr<dp::event_bus> &event_bus, TreadsMa
         auto thread = std::thread(
             [](auto video_sess) {
               auto client_port = rtp::wait_for_ping(video_sess->port);
-              streaming::start_streaming(std::move(video_sess), client_port);
+              streaming::start_streaming_video(std::move(video_sess), client_port);
             },
             video_sess);
         auto thread_ptr = std::make_unique<std::thread>(std::move(thread));
 
         threads.update([&thread_ptr, sess_id = video_sess->session_id](auto t_map) {
+          return t_map.update(sess_id, [&thread_ptr](auto t_vec) { return t_vec.push_back(std::move(thread_ptr)); });
+        });
+      });
+
+  auto audio_launch_sig = event_bus->register_handler<immer::box<state::AudioSession>>(
+      [&threads](immer::box<state::AudioSession> audio_sess) {
+        auto thread = std::thread(
+            [](auto audio_sess) {
+              auto client_port = rtp::wait_for_ping(audio_sess->port);
+              //              streaming::start_streaming_audio(std::move(audio_sess), client_port);
+            },
+            audio_sess);
+        auto thread_ptr = std::make_unique<std::thread>(std::move(thread));
+
+        threads.update([&thread_ptr, sess_id = audio_sess->session_id](auto t_map) {
           return t_map.update(sess_id, [&thread_ptr](auto t_vec) { return t_vec.push_back(std::move(thread_ptr)); });
         });
       });
@@ -197,6 +212,7 @@ auto setup_sessions_handlers(std::shared_ptr<dp::event_bus> &event_bus, TreadsMa
                                                             std::move(rtsp_launch_sig),
                                                             std::move(ctrl_launch_sig),
                                                             std::move(video_launch_sig),
+                                                            std::move(audio_launch_sig),
                                                             std::move(ctrl_handler)};
 }
 
