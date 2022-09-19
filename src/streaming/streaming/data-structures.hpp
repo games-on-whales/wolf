@@ -10,7 +10,9 @@ namespace state {
 /**
  * A VideoSession is created after the param exchange over RTSP
  */
-struct VideoSession : moonlight::DisplayMode {
+struct VideoSession {
+  moonlight::DisplayMode display_mode;
+
   // A unique ID that identifies this session
   std::size_t session_id;
   std::shared_ptr<dp::event_bus> event_bus;
@@ -33,15 +35,13 @@ struct AudioSession {
   std::shared_ptr<dp::event_bus> event_bus;
 
   bool encrypt_audio;
-  std::string gcm_key;
-  std::string gcm_iv;
+  std::string aes_key;
+  std::string aes_iv;
 
   std::uint16_t port;
   std::string client_ip;
 
-  int fec_percentage;
-  int min_required_fec_packets;
-  int packetDuration;
+  int packet_duration;
   int channels;
   int mask;
   int bitrate = 48000;

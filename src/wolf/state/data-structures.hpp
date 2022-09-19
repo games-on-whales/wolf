@@ -180,8 +180,8 @@ struct ControlSession {
 
   int protocol_type;
 
-  std::string gcm_key;
-  std::string gcm_iv;
+  std::string aes_key;
+  std::string aes_iv;
 
   std::chrono::milliseconds timeout = 150ms;
   std::string host = "0.0.0.0";

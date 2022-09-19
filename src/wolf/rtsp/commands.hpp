@@ -90,52 +90,53 @@ msg_t announce(msg_t req, const state::StreamSession &session) {
               | to<std::map<std::string_view, std::optional<int>>>;     // to map
 
   // Control session
-  state::ControlSession ctrl = {session.session_id,
-                                session.event_bus,
+  state::ControlSession ctrl = {.session_id = session.session_id,
+                                .event_bus = session.event_bus,
 
-                                session.control_port,
-                                4, // TODO: peers from config?
-                                args["x-nv-general.useReliableUdp"].value_or(0),
-                                session.gcm_key,
-                                session.gcm_iv_key};
+                                .port = session.control_port,
+                                .peers = 4, // TODO: peers from config?
+                                .protocol_type = args["x-nv-general.useReliableUdp"].value_or(0),
+                                .aes_key = session.gcm_key,
+                                .aes_iv = session.gcm_iv_key};
   session.event_bus->fire_event(immer::box<state::ControlSession>(ctrl));
 
   // Video session
-  state::VideoSession video = {args["x-nv-video[0].clientViewportWd"].value(),
-                               args["x-nv-video[0].clientViewportHt"].value(),
-                               args["x-nv-video[0].maxFPS"].value(),
-                               static_cast<bool>(args["x-nv-clientSupportHevc"].value()),
+  moonlight::DisplayMode display = {
+      .width = args["x-nv-video[0].clientViewportWd"].value(),
+      .height = args["x-nv-video[0].clientViewportHt"].value(),
+      .refreshRate = args["x-nv-video[0].maxFPS"].value(),
+      .hevc_supported = static_cast<bool>(args["x-nv-clientSupportHevc"].value()),
+  };
+  state::VideoSession video = {
+      .display_mode = display,
+      .session_id = session.session_id,
+      .event_bus = session.event_bus,
 
-                               session.session_id,
-                               session.event_bus,
+      .port = session.video_port,
+      .timeout = std::chrono::milliseconds(args["x-nv-video[0].timeoutLengthMs"].value()),
+      .packet_size = args["x-nv-video[0].packetSize"].value(),
+      .frames_with_invalid_ref_threshold = args["x-nv-video[0].framesWithInvalidRefThreshold"].value(),
+      .fec_percentage = 20,
+      .min_required_fec_packets = args["x-nv-vqos[0].fec.minRequiredFecPackets"].value_or(0),
+      .bitrate_kbps = args["x-nv-video[0].initialBitrateKbps"].value(),
 
-                               session.video_port,
-                               std::chrono::milliseconds(args["x-nv-video[0].timeoutLengthMs"].value()),
-                               args["x-nv-video[0].packetSize"].value(),
-                               args["x-nv-video[0].framesWithInvalidRefThreshold"].value(),
-                               20, // fec percentage TODO: make it a config
-                               args["x-nv-vqos[0].fec.minRequiredFecPackets"].value_or(0),
-                               args["x-nv-video[0].initialBitrateKbps"].value(),
-
-                               session.ip};
+      .client_ip = session.ip};
   session.event_bus->fire_event(immer::box<state::VideoSession>(video));
 
   // Audio session
-  state::AudioSession audio = {session.session_id,
-                               session.event_bus,
+  state::AudioSession audio = {.session_id = session.session_id,
+                               .event_bus = session.event_bus,
 
-                               static_cast<bool>(args["x-nv-general.featureFlags"].value() & 0x20),
-                               session.gcm_key,
-                               session.gcm_iv_key,
+                               .encrypt_audio = static_cast<bool>(args["x-nv-general.featureFlags"].value() & 0x20),
+                               .aes_key = session.gcm_key,
+                               .aes_iv = session.gcm_iv_key,
 
-                               session.audio_port,
-                               session.ip,
+                               .port = session.audio_port,
+                               .client_ip = session.ip,
 
-                               20, // fec percentage TODO: make it a config
-                               args["x-nv-vqos[0].fec.minRequiredFecPackets"].value_or(0),
-                               args["x-nv-aqos.packetDuration"].value(),
-                               args["x-nv-audio.surround.numChannels"].value(),
-                               args["x-nv-audio.surround.channelMask"].value()};
+                               .packet_duration = args["x-nv-aqos.packetDuration"].value(),
+                               .channels = args["x-nv-audio.surround.numChannels"].value(),
+                               .mask = args["x-nv-audio.surround.channelMask"].value()};
   session.event_bus->fire_event(immer::box<state::AudioSession>(audio));
 
   return create_rtsp_msg({options}, 200, "OK", req->sequenceNumber, {});

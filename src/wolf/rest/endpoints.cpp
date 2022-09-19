@@ -240,22 +240,22 @@ void launch(std::shared_ptr<typename SimpleWeb::ServerBase<T>::Response> respons
   auto client_ip = request->remote_endpoint().address().to_string();
   auto session_id = std::hash<std::string>{}(current_client.client_cert);
 
-  state::StreamSession session = {session_id,
-                                  state->event_bus,
-                                  display_mode,
-                                  audio_mode,
-                                  get_header(headers, "appid").value(),
+  state::StreamSession session = {.session_id = session_id,
+                                  .event_bus = state->event_bus,
+                                  .display_mode = display_mode,
+                                  .audio_mode = audio_mode,
+                                  .app_id = get_header(headers, "appid").value(),
                                   // gcm encryption keys
-                                  get_header(headers, "rikey").value(),
-                                  get_header(headers, "rikeyid").value(),
+                                  .gcm_key = get_header(headers, "rikey").value(),
+                                  .gcm_iv_key = get_header(headers, "rikeyid").value(),
                                   // client info
-                                  get_header(headers, "uuid").value(),
-                                  client_ip,
+                                  .unique_id = get_header(headers, "uuid").value(),
+                                  .ip = client_ip,
                                   // ports
-                                  current_client.rtsp_port,
-                                  current_client.control_port,
-                                  current_client.audio_port,
-                                  current_client.video_port};
+                                  .rtsp_port = current_client.rtsp_port,
+                                  .control_port = current_client.control_port,
+                                  .audio_port = current_client.audio_port,
+                                  .video_port = current_client.video_port};
   immer::box<state::StreamSession> shared_session = {session};
 
   state->event_bus->fire_event(shared_session); // Anyone listening for this event will be called

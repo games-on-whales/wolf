@@ -20,10 +20,10 @@ extern "C" {
 #include <moonlight-common-c/reedsolomon/rs.h>
 }
 
-#include "gstrtpmoonlightpay_video.hpp"
-#include "utils.hpp"
 #include <gst/base/gstbasetransform.h>
 #include <gst/gst.h>
+#include <streaming/gst-plugin/gstrtpmoonlightpay_video.hpp>
+#include <streaming/gst-plugin/video.hpp>
 
 GST_DEBUG_CATEGORY_STATIC(gst_rtp_moonlight_pay_video_debug_category);
 #define GST_CAT_DEFAULT gst_rtp_moonlight_pay_video_debug_category
@@ -32,7 +32,8 @@ GST_DEBUG_CATEGORY_STATIC(gst_rtp_moonlight_pay_video_debug_category);
 
 static void
 gst_rtp_moonlight_pay_video_set_property(GObject *object, guint property_id, const GValue *value, GParamSpec *pspec);
-static void gst_rtp_moonlight_pay_video_get_property(GObject *object, guint property_id, GValue *value, GParamSpec *pspec);
+static void
+gst_rtp_moonlight_pay_video_get_property(GObject *object, guint property_id, GValue *value, GParamSpec *pspec);
 static void gst_rtp_moonlight_pay_video_dispose(GObject *object);
 static void gst_rtp_moonlight_pay_video_finalize(GObject *object);
 
@@ -155,7 +156,10 @@ static void gst_rtp_moonlight_pay_video_init(gst_rtp_moonlight_pay_video *rtpmoo
   rtpmoonlightpay_video->frame_num = 0;
 }
 
-void gst_rtp_moonlight_pay_video_set_property(GObject *object, guint property_id, const GValue *value, GParamSpec *pspec) {
+void gst_rtp_moonlight_pay_video_set_property(GObject *object,
+                                              guint property_id,
+                                              const GValue *value,
+                                              GParamSpec *pspec) {
   gst_rtp_moonlight_pay_video *rtpmoonlightpay_video = gst_rtp_moonlight_pay_video(object);
 
   GST_DEBUG_OBJECT(rtpmoonlightpay_video, "set_property");
@@ -239,7 +243,7 @@ static GstFlowReturn gst_rtp_moonlight_pay_video_generate_output(GstBaseTransfor
   if (inbuf == nullptr)
     return GST_FLOW_OK;
 
-  auto rtp_packets = split_into_rtp(rtpmoonlightpay_video, inbuf);
+  auto rtp_packets = gst_moonlight_video::split_into_rtp(rtpmoonlightpay_video, inbuf);
 
   /* Send the generated packets to any downstream listener */
   gst_pad_push_list(trans->srcpad, rtp_packets);

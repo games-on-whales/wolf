@@ -118,6 +118,7 @@ immer::box<StreamSession> test_init_state() {
                            {2, 1, 1, {state::AudioMode::FRONT_LEFT, state::AudioMode::FRONT_RIGHT}},
                            "app_id_1",
                            crypto::hex_to_str("9d804e47a6aa6624b7d4b502b32cc522", true),
+                           crypto::hex_to_str("01234567890", true),
                            "0f691f13730748328a22a6952a5ac3a2",
                            "192.168.1.1",
                            1,

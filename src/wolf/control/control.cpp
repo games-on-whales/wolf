@@ -106,7 +106,7 @@ std::thread start_service(immer::box<state::ControlSession> control_sess, int ti
 
             if (type == ENCRYPTED) {
               try {
-                auto decrypted = decrypt_packet(packet->data, control_sess->gcm_key);
+                auto decrypted = decrypt_packet(packet->data, control_sess->aes_key);
 
                 auto sub_type = get_type(reinterpret_cast<const enet_uint8 *>(decrypted.data()));
 

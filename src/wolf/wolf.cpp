@@ -175,7 +175,7 @@ auto setup_sessions_handlers(std::shared_ptr<dp::event_bus> &event_bus, TreadsMa
         auto thread = std::thread(
             [](auto audio_sess) {
               auto client_port = rtp::wait_for_ping(audio_sess->port);
-              //              streaming::start_streaming_audio(std::move(audio_sess), client_port);
+              streaming::start_streaming_audio(std::move(audio_sess), client_port);
             },
             audio_sess);
         auto thread_ptr = std::make_unique<std::thread>(std::move(thread));
