@@ -106,7 +106,8 @@ static void gst_copy_timestamps(GstBuffer *src, GstBuffer *dest) {
  */
 static std::string derive_iv(const std::string &aes_iv, int cur_seq_number) {
   auto iv = std::array<std::uint8_t, 16>{};
-  *(std::uint32_t *)iv.data() = boost::endian::native_to_big((*(std::uint32_t *)aes_iv.c_str()) + cur_seq_number);
+  std::uint32_t input_iv = std::stoul(aes_iv);
+  *(std::uint32_t *)iv.data() = boost::endian::native_to_big(input_iv + cur_seq_number);
   return {iv.begin(), iv.end()};
 }
 

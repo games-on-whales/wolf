@@ -87,8 +87,6 @@ GstBuffer *create_rtp_audio_buffer(const gst_rtp_moonlight_pay_audio &rtpmoonlig
  * @return a list of buffers, each element representing a single RTP packet
  */
 static GstBufferList *split_into_rtp(gst_rtp_moonlight_pay_audio *rtpmoonlightpay, GstBuffer *inbuf) {
-  g_print("Audio input buffer size: %lu bytes\n", gst_buffer_get_size(inbuf));
-
   bool time_to_fec = (rtpmoonlightpay->cur_seq_number + 1) % AUDIO_DATA_SHARDS == 0;
 
   GstBufferList *rtp_packets = gst_buffer_list_new_sized(time_to_fec ? 1 + AUDIO_FEC_SHARDS : 1);
@@ -115,9 +113,9 @@ static GstBufferList *split_into_rtp(gst_rtp_moonlight_pay_audio *rtpmoonlightpa
 
       GstBuffer *fec_payload_buf = gst_buffer_new_allocate(nullptr, encoded_block_size, nullptr);
       gst_buffer_fill(fec_payload_buf,
-                      0,
+                      sizeof(state::AudioRTPHeaders),
                       rtpmoonlightpay->packets_buffer[AUDIO_DATA_SHARDS + fec_packet_idx],
-                      encoded_block_size);
+                      encoded_block_size - sizeof(state::AudioRTPHeaders));
 
       auto fec_buf = gst_buffer_append(fec_packet_header, fec_payload_buf);
       gst_copy_timestamps(inbuf, fec_buf);

@@ -214,11 +214,6 @@ TEST_CASE_METHOD(GStreamerTestsFixture, "Audio RTP packet creation", "[GSTPlugin
 
   SECTION("First packet") {
     auto buf = gst_buffer_list_get(rtp_packets, 0);
-
-    auto saved_payload = std::vector<unsigned char>(rtpmoonlightpay->packets_buffer[0],
-                                                    rtpmoonlightpay->packets_buffer[0] + gst_buffer_get_size(buf));
-    REQUIRE_THAT(gst_buffer_copy_content(buf), Equals(saved_payload));
-
     auto rtp_packet = get_rtp_audio_from_buf(buf);
 
     REQUIRE(rtp_packet->rtp.ssrc == 0);
@@ -242,11 +237,6 @@ TEST_CASE_METHOD(GStreamerTestsFixture, "Audio RTP packet creation", "[GSTPlugin
 
   SECTION("Second packet") {
     auto buf = gst_buffer_list_get(rtp_packets, 0);
-
-    auto saved_payload = std::vector<unsigned char>(rtpmoonlightpay->packets_buffer[0],
-                                                    rtpmoonlightpay->packets_buffer[0] + gst_buffer_get_size(buf));
-    REQUIRE_THAT(gst_buffer_copy_content(buf), Equals(saved_payload));
-
     auto rtp_packet = get_rtp_audio_from_buf(buf);
 
     REQUIRE(rtp_packet->rtp.ssrc == 0);
