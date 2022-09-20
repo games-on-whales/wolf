@@ -33,7 +33,9 @@ public:
   }
 };
 
-/* TESTS */
+/*
+ * BASE UTILS
+ */
 
 TEST_CASE_METHOD(GStreamerTestsFixture, "Basic utils", "[GSTPlugin]") {
   auto buffer = gst_buffer_new_and_fill(10, 0);
@@ -49,6 +51,27 @@ TEST_CASE_METHOD(GStreamerTestsFixture, "Basic utils", "[GSTPlugin]") {
   gst_buffer_unref(buffer);
 }
 
+TEST_CASE_METHOD(GStreamerTestsFixture, "Encrypt GstBuffer", "[GSTPlugin]") {
+  auto payload = gst_buffer_new_and_fill(10, "$A PAYLOAD");
+  auto aes_key = "0123456789012345"s;
+  auto aes_iv = "12345678"s;
+  auto cur_seq_number = 0;
+
+  auto iv_str = derive_iv(aes_iv, cur_seq_number);
+
+  REQUIRE_THAT(iv_str, Equals("\000\274aN\000\000\000\000\000\000\000\000\000\000\000\000"s));
+
+  auto encrypted = encrypt_payload(aes_key, iv_str, payload);
+  std::string encrypted_str(get_c_str_from_buf(encrypted), gst_buffer_get_size(encrypted));
+
+  auto decrypted = crypto::aes_decrypt_cbc(encrypted_str, aes_key, iv_str, true);
+  REQUIRE_THAT(gst_buffer_copy_content(payload),
+               Equals(std::vector<unsigned char>(decrypted.begin(), decrypted.end())));
+}
+
+/*
+ * VIDEO
+ */
 TEST_CASE_METHOD(GStreamerTestsFixture, "Create RTP VIDEO packets", "[GSTPlugin]") {
   auto rtpmoonlightpay = (gst_rtp_moonlight_pay_video *)g_object_new(gst_TYPE_rtp_moonlight_pay_video, nullptr);
 
@@ -183,21 +206,9 @@ TEST_CASE_METHOD(GStreamerTestsFixture, "Create RTP VIDEO packets", "[GSTPlugin]
   }
 }
 
-TEST_CASE_METHOD(GStreamerTestsFixture, "Encrypt GstBuffer", "[GSTPlugin]") {
-  auto payload = gst_buffer_new_and_fill(10, "$A PAYLOAD");
-  auto aes_key = "0123456789012345"s;
-  auto aes_iv = "12345678"s;
-  auto cur_seq_number = 0;
-
-  auto iv_str = derive_iv(aes_iv, cur_seq_number);
-  auto encrypted = encrypt_payload(aes_key, iv_str, payload);
-  std::string encrypted_str(get_c_str_from_buf(encrypted), gst_buffer_get_size(encrypted));
-
-  auto decrypted = crypto::aes_decrypt_cbc(encrypted_str, aes_key, iv_str, true);
-  REQUIRE_THAT(gst_buffer_copy_content(payload),
-               Equals(std::vector<unsigned char>(decrypted.begin(), decrypted.end())));
-}
-
+/*
+ * AUDIO
+ */
 TEST_CASE_METHOD(GStreamerTestsFixture, "Audio RTP packet creation", "[GSTPlugin]") {
   auto rtpmoonlightpay = (gst_rtp_moonlight_pay_audio *)g_object_new(gst_TYPE_rtp_moonlight_pay_audio, nullptr);
 
@@ -261,4 +272,38 @@ TEST_CASE_METHOD(GStreamerTestsFixture, "Audio RTP packet creation", "[GSTPlugin
   rtp_packets = audio::split_into_rtp(rtpmoonlightpay, payload);
   REQUIRE(gst_buffer_list_length(rtp_packets) == 3);
   REQUIRE(rtpmoonlightpay->cur_seq_number == 4);
+
+  SECTION("REED SOLOMON") {
+    auto packet_size = gst_buffer_get_size(gst_buffer_list_get(rtp_packets, 0));
+    auto total_shards = AUDIO_TOTAL_SHARDS;
+
+    SECTION("If no package is marked nothing should change") {
+      std::vector<unsigned char> marks = {0, 0, 0, 0, 0, 0};
+
+      auto result = reed_solomon_reconstruct(rtpmoonlightpay->rs,
+                                             rtpmoonlightpay->packets_buffer.data(),
+                                             &marks.front(),
+                                             total_shards,
+                                             packet_size);
+
+      REQUIRE(result == 0);
+    }
+
+    SECTION("Missing one packet should still lead to successfully reconstruct") {
+      auto original_pkt = std::vector<unsigned char>(rtpmoonlightpay->packets_buffer[0],
+                                                     rtpmoonlightpay->packets_buffer[0] + packet_size);
+      auto missing_pkt = std::vector<unsigned char>(packet_size);
+      rtpmoonlightpay->packets_buffer[0] = &missing_pkt[0];
+      std::vector<unsigned char> marks = {1, 0, 0, 0, 0, 0};
+
+      auto result = reed_solomon_reconstruct(rtpmoonlightpay->rs,
+                                             rtpmoonlightpay->packets_buffer.data(),
+                                             &marks.front(),
+                                             total_shards,
+                                             packet_size);
+
+      REQUIRE(result == 0);
+      REQUIRE_THAT(missing_pkt, Equals(original_pkt));
+    }
+  }
 }

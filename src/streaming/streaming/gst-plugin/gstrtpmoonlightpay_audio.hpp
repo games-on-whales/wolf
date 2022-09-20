@@ -41,6 +41,7 @@ struct _gst_rtp_moonlight_pay_audio {
   int packet_duration;
 
   std::array<unsigned char *, AUDIO_TOTAL_SHARDS> packets_buffer;
+  _reed_solomon *rs;
 };
 
 struct _gst_rtp_moonlight_pay_audioClass {

@@ -151,6 +151,11 @@ static void gst_rtp_moonlight_pay_audio_init(gst_rtp_moonlight_pay_audio *rtpmoo
     auto new_array = std::array<unsigned char, AUDIO_MAX_BLOCK_SIZE>{0};
     rtpmoonlightpay_audio->packets_buffer[i] = new_array.data();
   }
+
+  auto rs = reed_solomon_new(AUDIO_DATA_SHARDS, AUDIO_FEC_SHARDS);
+  memcpy(&rs->m[16], AUDIO_FEC_PARITY, sizeof(AUDIO_FEC_PARITY));
+  memcpy(rs->parity, AUDIO_FEC_PARITY, sizeof(AUDIO_FEC_PARITY));
+  rtpmoonlightpay_audio->rs = rs;
 }
 
 void gst_rtp_moonlight_pay_audio_set_property(GObject *object,
@@ -208,6 +213,8 @@ void gst_rtp_moonlight_pay_audio_dispose(GObject *object) {
   gst_rtp_moonlight_pay_audio *rtpmoonlightpay_audio = gst_rtp_moonlight_pay_audio(object);
 
   GST_DEBUG_OBJECT(rtpmoonlightpay_audio, "dispose");
+
+  reed_solomon_release(rtpmoonlightpay_audio->rs);
 
   G_OBJECT_CLASS(gst_rtp_moonlight_pay_audio_parent_class)->dispose(object);
 }

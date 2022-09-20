@@ -138,11 +138,11 @@ void start_streaming_audio(immer::box<state::AudioSession> audio_session, unsign
   GstElement *pipeline;
   GError *error = nullptr;
 
-  pipeline = gst_parse_launch(fmt::format("audiotestsrc ! "
+  pipeline = gst_parse_launch(fmt::format("audiotestsrc wave=ticks is-live=true ! "
                                           "audioconvert ! audiorate ! audioresample ! "
                                           "audio/x-raw, channels={channels} ! "
                                           "opusenc bitrate={bitrate} bitrate-type=cbr frame-size={packet_duration} "
-                                          "bandwidth=mediumband audio-type=generic max-payload-size=1400 ! "
+                                          "bandwidth=fullband audio-type=generic max-payload-size=1400 ! "
                                           "rtpmoonlightpay_audio name=moonlight_pay "
                                           "packet_duration={packet_duration} "
                                           "encrypt={encrypt} aes_key=\"{aes_key}\" aes_iv=\"{aes_iv}\" "

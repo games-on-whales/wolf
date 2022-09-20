@@ -100,13 +100,11 @@ static GstBufferList *split_into_rtp(gst_rtp_moonlight_pay_audio *rtpmoonlightpa
 
   // Time to generate FEC based on the previous payloads
   if (time_to_fec) {
-    auto rs = reed_solomon_new(AUDIO_DATA_SHARDS, AUDIO_FEC_SHARDS);
-
-    memcpy(&rs->m[16], AUDIO_FEC_PARITY, sizeof(AUDIO_FEC_PARITY));
-    memcpy(rs->parity, AUDIO_FEC_PARITY, sizeof(AUDIO_FEC_PARITY));
-
     auto encoded_block_size = (int)gst_buffer_get_size(rtp_audio_buf);
-    reed_solomon_encode(rs, rtpmoonlightpay->packets_buffer.data(), AUDIO_TOTAL_SHARDS, encoded_block_size);
+    reed_solomon_encode(rtpmoonlightpay->rs,
+                        rtpmoonlightpay->packets_buffer.data(),
+                        AUDIO_TOTAL_SHARDS,
+                        encoded_block_size);
 
     for (auto fec_packet_idx = 0; fec_packet_idx < AUDIO_FEC_SHARDS; fec_packet_idx++) {
       auto fec_packet_header = create_rtp_fec_header(*rtpmoonlightpay, fec_packet_idx);
