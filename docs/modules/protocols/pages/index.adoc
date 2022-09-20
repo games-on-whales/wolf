@@ -29,7 +29,7 @@ There are 6 main protocols involved in the current GameStream protocol:
 ** unencrypted 🔓
 ** used to exchanged public information needed to start link:pairing[pairing clients]
 * HTTPS (TCP 47984)
-** encrypted 🔐
+** encrypted 🔐 (SSL)
 ** only available to paired clients
 ** used to exchange available apps and trigger the start
 * link:rtsp[RTSP] (TCP 48010)
@@ -39,6 +39,6 @@ There are 6 main protocols involved in the current GameStream protocol:
 ** encrypted 🔐 (using AES GCM 128 bit)
 ** Used to exchange user input data and extra stream information
 * Video over RTP (UDP 47998)
-** unencrypted 🔓 (needs checking)
+** unencrypted 🔓
 * Audio over RTP (UDP 48000)
-** could be encrypted 🔒 (needs checking)
+** encrypted 🔒 (using AES CBC 128 bit)
