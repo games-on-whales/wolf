@@ -112,19 +112,19 @@ TEST_CASE("utilities methods", "[RTSP]") {
 }
 
 immer::box<StreamSession> test_init_state() {
-  StreamSession session = {1234,
-                           std::make_shared<dp::event_bus>(),
-                           {1920, 1080, 60},
-                           {2, 1, 1, {state::AudioMode::FRONT_LEFT, state::AudioMode::FRONT_RIGHT}},
-                           "app_id_1",
-                           crypto::hex_to_str("9d804e47a6aa6624b7d4b502b32cc522", true),
-                           crypto::hex_to_str("01234567890", true),
-                           "0f691f13730748328a22a6952a5ac3a2",
-                           "192.168.1.1",
-                           1,
-                           2,
-                           3,
-                           4};
+  StreamSession session = {.session_id = 1234,
+                           .event_bus = std::make_shared<dp::event_bus>(),
+                           .display_mode = {1920, 1080, 60},
+                           .audio_mode = {2, 1, 1, {state::AudioMode::FRONT_LEFT, state::AudioMode::FRONT_RIGHT}},
+                           .app = {},
+                           .gcm_key = crypto::hex_to_str("9d804e47a6aa6624b7d4b502b32cc522", true),
+                           .gcm_iv_key = crypto::hex_to_str("01234567890", true),
+                           .unique_id = "0f691f13730748328a22a6952a5ac3a2",
+                           .ip = "192.168.1.1",
+                           .rtsp_port = 1,
+                           .control_port = 2,
+                           .audio_port = 3,
+                           .video_port = 4};
   return {session};
 }
 

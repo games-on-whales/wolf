@@ -248,7 +248,8 @@ TEST_CASE("Pairing moonlight", "[MoonlightProtocol]") {
 
 TEST_CASE("applist", "[MoonlightProtocol]") {
   auto cfg = state::load_or_default("config.json");
-  auto result = applist(cfg.apps);
+  auto base_apps = cfg.apps | views::transform([](auto app) { return app.base; }) | to<immer::vector<moonlight::App>>();
+  auto result = applist(base_apps);
   REQUIRE(xml_to_str(result) == "<?xml version=\"1.0\" encoding=\"utf-8\"?>\n"
                                 "<root status_code=\"200\">"
                                 "<App>"

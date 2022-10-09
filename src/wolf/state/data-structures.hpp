@@ -45,6 +45,41 @@ struct PairSignal {
 
 using PairedClientList = immer::vector<immer::box<PairedClient>>;
 
+constexpr std::string_view DEFAULT_H264_GST_PIPELINE =
+    "videotestsrc pattern=ball is-live=true ! "
+    "videoscale ! "
+    "videoconvert ! "
+    "videorate ! "
+    "video/x-raw, width={width}, height={height}, framerate={fps}/1, format=I420 ! "
+    "x264enc pass=qual tune=zerolatency speed-preset=superfast bitrate={bitrate} aud=false ! "
+    "video/x-h264, profile=high, stream-format=byte-stream ! "
+    "rtpmoonlightpay_video name=moonlight_pay payload_size={payload_size} fec_percentage={fec_percentage} "
+    "min_required_fec_packets={min_required_fec_packets}"
+    " ! "
+    "udpsink host={client_ip} port={client_port}";
+
+constexpr std::string_view DEFAULT_HEVC_GST_PIPELINE = DEFAULT_H264_GST_PIPELINE; // TODO: HEVC
+
+constexpr std::string_view DEFAULT_OPUS_GST_PIPELINE =
+    "audiotestsrc wave=ticks is-live=true ! "
+    "audioconvert ! audiorate ! audioresample ! "
+    "audio/x-raw, channels={channels} ! "
+    "opusenc bitrate={bitrate} bitrate-type=cbr frame-size={packet_duration} "
+    "bandwidth=fullband audio-type=generic max-payload-size=1400 ! "
+    "rtpmoonlightpay_audio name=moonlight_pay "
+    "packet_duration={packet_duration} "
+    "encrypt={encrypt} aes_key=\"{aes_key}\" aes_iv=\"{aes_iv}\" "
+    " ! "
+    "udpsink host={client_ip} port={client_port}";
+
+struct App {
+  moonlight::App base;
+
+  std::string h264_gst_pipeline;
+  std::string hevc_gst_pipeline;
+  std::string opus_gst_pipeline;
+};
+
 /**
  * The stored (and user modifiable) configuration
  */
@@ -61,7 +96,11 @@ struct Config {
   /**
    * List of available Apps
    */
-  immer::vector<moonlight::App> apps;
+  immer::vector<App> apps;
+
+  std::string default_h264_gst_pipeline = std::string(DEFAULT_H264_GST_PIPELINE);
+  std::string default_hevc_gst_pipeline = std::string(DEFAULT_HEVC_GST_PIPELINE);
+  std::string default_opus_gst_pipeline = std::string(DEFAULT_OPUS_GST_PIPELINE);
 };
 
 struct AudioMode {
@@ -152,7 +191,7 @@ struct StreamSession {
   moonlight::DisplayMode display_mode;
   AudioMode audio_mode;
 
-  std::string app_id;
+  App app;
 
   std::string gcm_key;
   std::string gcm_iv_key;

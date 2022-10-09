@@ -215,7 +215,9 @@ void applist(std::shared_ptr<typename SimpleWeb::ServerBase<T>::Response> respon
              const std::shared_ptr<state::AppState> &state) {
   log_req<T>(request);
 
-  auto xml = moonlight::applist(state->config.apps);
+  auto base_apps = state->config.apps | views::transform([](auto app) { return app.base; }) |
+                   to<immer::vector<moonlight::App>>();
+  auto xml = moonlight::applist(base_apps);
 
   send_xml<T>(response, SimpleWeb::StatusCode::success_ok, xml);
 }
@@ -244,7 +246,7 @@ void launch(std::shared_ptr<typename SimpleWeb::ServerBase<T>::Response> respons
                                   .event_bus = state->event_bus,
                                   .display_mode = display_mode,
                                   .audio_mode = audio_mode,
-                                  .app_id = get_header(headers, "appid").value(),
+                                  .app = state::get_app_by_id(state->config, get_header(headers, "appid").value()),
                                   // gcm encryption keys
                                   .gcm_key = get_header(headers, "rikey").value(),
                                   .gcm_iv_key = get_header(headers, "rikeyid").value(),

@@ -107,8 +107,12 @@ msg_t announce(msg_t req, const state::StreamSession &session) {
       .refreshRate = args["x-nv-video[0].maxFPS"].value(),
       .hevc_supported = static_cast<bool>(args["x-nv-clientSupportHevc"].value()),
   };
+  auto video_format_h264 = args["x-nv-vqos[0].bitStreamFormat"].value() == 0;
   state::VideoSession video = {
       .display_mode = display,
+      .video_format_h264 = video_format_h264,
+      .gst_pipeline = video_format_h264 ? session.app.h264_gst_pipeline : session.app.hevc_gst_pipeline,
+
       .session_id = session.session_id,
       .event_bus = session.event_bus,
 
@@ -124,7 +128,9 @@ msg_t announce(msg_t req, const state::StreamSession &session) {
   session.event_bus->fire_event(immer::box<state::VideoSession>(video));
 
   // Audio session
-  state::AudioSession audio = {.session_id = session.session_id,
+  state::AudioSession audio = {.gst_pipeline = session.app.opus_gst_pipeline,
+
+                               .session_id = session.session_id,
                                .event_bus = session.event_bus,
 
                                .encrypt_audio = static_cast<bool>(args["x-nv-general.featureFlags"].value() & 0x20),

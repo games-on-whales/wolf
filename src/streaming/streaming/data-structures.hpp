@@ -12,6 +12,8 @@ namespace state {
  */
 struct VideoSession {
   moonlight::DisplayMode display_mode;
+  bool video_format_h264; // true if h264 is requested
+  std::string_view gst_pipeline;
 
   // A unique ID that identifies this session
   std::size_t session_id;
@@ -30,6 +32,8 @@ struct VideoSession {
 };
 
 struct AudioSession {
+  std::string_view gst_pipeline;
+
   // A unique ID that identifies this session
   std::size_t session_id;
   std::shared_ptr<dp::event_bus> event_bus;

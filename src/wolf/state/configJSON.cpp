@@ -53,18 +53,35 @@ state::PairedClientList get_paired_clients(const Json &cfg) {
          | to<state::PairedClientList>();
 }
 
-immer::vector<moonlight::App> get_apps(const Json &cfg) {
+std::optional<std::string_view> get_optional(const Json &cfg, const std::string &path) {
+  auto found = cfg.get_optional<std::string>(path);
+  if (found) {
+    return std::make_optional(std::string_view(found.get()));
+  } else {
+    return {};
+  }
+}
+
+immer::vector<state::App> get_apps(const Json &cfg,
+                                   const std::string &default_h264_gst_pipeline,
+                                   const std::string &default_hevc_gst_pipeline,
+                                   const std::string &default_opus_gst_pipeline) {
   auto paired_clients = cfg.get_child_optional("apps");
   if (!paired_clients)
     return {};
 
-  return paired_clients.get()                                             //
-         | views::transform([](const pt::ptree::value_type &item) {       //
-             return moonlight::App{item.second.get<std::string>("title"), //
-                                   item.second.get<std::string>("id"),    //
-                                   item.second.get<bool>("support_hdr")}; //
-           })                                                             //
-         | to<immer::vector<moonlight::App>>();                           //
+  return paired_clients.get()                                        //
+         | views::transform([&](const pt::ptree::value_type &item) { //
+             return state::App{
+                 {item.second.get<std::string>("title"),                                       //
+                  item.second.get<std::string>("id"),                                          //
+                  item.second.get<bool>("support_hdr")},                                       //
+                 item.second.get<std::string>("h264_gst_pipeline", default_h264_gst_pipeline), //
+                 item.second.get<std::string>("hevc_gst_pipeline", default_hevc_gst_pipeline), //
+                 item.second.get<std::string>("opus_gst_pipeline", default_opus_gst_pipeline)  //
+             };
+           })                               //
+         | to<immer::vector<state::App>>(); //
 }
 
 template <class S> Config load_or_default(const S &source) {
@@ -73,12 +90,32 @@ template <class S> Config load_or_default(const S &source) {
     pt::read_json(source, json);
     auto clients = get_paired_clients(json);
     auto atom = new immer::atom<state::PairedClientList>(clients);
-    return {init_uuid(json), json.get<std::string>("hostname", "wolf"), *atom, get_apps(json)};
+
+    auto default_h264_gst_pipeline =
+        json.get<std::string>("default_h264_gst_pipeline", std::string(DEFAULT_H264_GST_PIPELINE));
+    auto default_hevc_gst_pipeline =
+        json.get<std::string>("default_hevc_gst_pipeline", std::string(DEFAULT_HEVC_GST_PIPELINE));
+    auto default_opus_gst_pipeline =
+        json.get<std::string>("default_opus_gst_pipeline", std::string(DEFAULT_OPUS_GST_PIPELINE));
+
+    return {.uuid = init_uuid(json),
+            .hostname = json.get<std::string>("hostname", "wolf"),
+            .paired_clients = *atom,
+            .apps = get_apps(json, default_h264_gst_pipeline, default_hevc_gst_pipeline, default_opus_gst_pipeline),
+            .default_h264_gst_pipeline = default_h264_gst_pipeline,
+            .default_hevc_gst_pipeline = default_hevc_gst_pipeline,
+            .default_opus_gst_pipeline = default_opus_gst_pipeline};
   } else {
     logs::log(logs::warning, "Unable to open config file: {}, using defaults", source);
     state::PairedClientList clients = {};
     auto atom = new immer::atom<state::PairedClientList>(clients);
-    return {gen_uuid(), "wolf", *atom, {{"Desktop", "1", true}}};
+    return {.uuid = gen_uuid(),
+            .hostname = "wolf",
+            .paired_clients = *atom,
+            .apps = {{"Desktop", "1", true}},
+            .default_h264_gst_pipeline = std::string(DEFAULT_H264_GST_PIPELINE),
+            .default_hevc_gst_pipeline = std::string(DEFAULT_HEVC_GST_PIPELINE),
+            .default_opus_gst_pipeline = std::string(DEFAULT_OPUS_GST_PIPELINE)};
   }
 }
 
@@ -104,12 +141,24 @@ template <class S> void save(const Config &cfg, const S &dest) {
   Json apps;
   for (const auto &app : cfg.apps) {
     Json app_json;
-    app_json.put("title", app.title);
-    app_json.put("id", app.id);
-    app_json.put("support_hdr", app.support_hdr);
+    app_json.put("title", app.base.title);
+    app_json.put("id", app.base.id);
+    app_json.put("support_hdr", app.base.support_hdr);
+
+    if (app.h264_gst_pipeline != cfg.default_h264_gst_pipeline)
+      app_json.put("h264_gst_pipeline", app.h264_gst_pipeline);
+    if (app.hevc_gst_pipeline != cfg.default_hevc_gst_pipeline)
+      app_json.put("hevc_gst_pipeline", app.hevc_gst_pipeline);
+    if (app.opus_gst_pipeline != cfg.default_opus_gst_pipeline)
+      app_json.put("opus_gst_pipeline", app.opus_gst_pipeline);
+
     apps.push_back(Json::value_type("", app_json));
   }
   json.put_child("apps", apps);
+
+  json.put("default_h264_gst_pipeline", cfg.default_h264_gst_pipeline);
+  json.put("default_hevc_gst_pipeline", cfg.default_hevc_gst_pipeline);
+  json.put("default_opus_gst_pipeline", cfg.default_opus_gst_pipeline);
 
   pt::write_json(dest, json);
 }
@@ -147,6 +196,17 @@ void unpair(const Config &cfg, const PairedClient &client) {
              })                                                         //
            | to<state::PairedClientList>();                             //
   });
+}
+
+immer::box<App> get_app_by_id(const Config &cfg, std::string_view app_id) {
+  auto search_result = std::find_if(cfg.apps.begin(), cfg.apps.end(), [&app_id](const state::App &app) {
+    return app.base.id == app_id;
+  });
+
+  if (search_result != cfg.apps.end())
+    return *search_result;
+  else
+    throw std::runtime_error(fmt::format("Unable to find app with id: {}", app_id));
 }
 
 /**

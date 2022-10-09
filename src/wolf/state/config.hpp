@@ -36,4 +36,9 @@ std::optional<PairedClient> get_client_via_ssl(const Config &cfg, x509_st *clien
 std::optional<PairedClient> get_client_via_ssl(const Config &cfg, const std::string &client_cert) {
   return get_client_via_ssl(cfg, x509::cert_from_string(client_cert));
 }
+
+/**
+ * Return the app with the given app_id, throws an exception if not found
+ */
+immer::box<App> get_app_by_id(const Config &cfg, std::string_view app_id);
 } // namespace state

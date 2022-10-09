@@ -52,32 +52,18 @@ void start_streaming_video(immer::box<state::VideoSession> video_session, unsign
   GError *error = nullptr;
 
   // see an example pipeline at: https://gist.github.com/esrever10/7d39fe2d4163c5b2d7006495c3c911bb
-  pipeline = gst_parse_launch(
-      fmt::format(
-          "videotestsrc pattern=ball is-live=true ! "
-          "videoscale ! "
-          "videoconvert ! "
-          "videorate ! "
-          "video/x-raw, width={width}, height={height}, framerate={fps}/1, format=I420 ! "
-          "x264enc pass=qual tune=zerolatency speed-preset=superfast bitrate={bitrate} aud=false ! "
-          "video/x-h264, profile=high, stream-format=byte-stream ! "
-          "rtpmoonlightpay_video name=moonlight_pay payload_size={payload_size} fec_percentage={fec_percentage} "
-          "min_required_fec_packets={min_required_fec_packets}"
-          " ! "
-          //                        "fakesink dump=true",
-          "udpsink host={client_ip} port={client_port}",
-          //          "vtdec ! autovideosink",
-          fmt::arg("width", video_session->display_mode.width),
-          fmt::arg("height", video_session->display_mode.height),
-          fmt::arg("fps", video_session->display_mode.refreshRate),
-          fmt::arg("bitrate", video_session->bitrate_kbps),
-          fmt::arg("client_port", client_port),
-          fmt::arg("client_ip", video_session->client_ip),
-          fmt::arg("payload_size", video_session->packet_size),
-          fmt::arg("fec_percentage", video_session->fec_percentage),
-          fmt::arg("min_required_fec_packets", video_session->min_required_fec_packets))
-          .c_str(),
-      &error);
+  pipeline = gst_parse_launch(fmt::format(video_session->gst_pipeline,
+                                          fmt::arg("width", video_session->display_mode.width),
+                                          fmt::arg("height", video_session->display_mode.height),
+                                          fmt::arg("fps", video_session->display_mode.refreshRate),
+                                          fmt::arg("bitrate", video_session->bitrate_kbps),
+                                          fmt::arg("client_port", client_port),
+                                          fmt::arg("client_ip", video_session->client_ip),
+                                          fmt::arg("payload_size", video_session->packet_size),
+                                          fmt::arg("fec_percentage", video_session->fec_percentage),
+                                          fmt::arg("min_required_fec_packets", video_session->min_required_fec_packets))
+                                  .c_str(),
+                              &error);
 
   if (!pipeline) {
     g_print("Parse error: %s\n", error->message);
@@ -138,16 +124,7 @@ void start_streaming_audio(immer::box<state::AudioSession> audio_session, unsign
   GstElement *pipeline;
   GError *error = nullptr;
 
-  pipeline = gst_parse_launch(fmt::format("audiotestsrc wave=ticks is-live=true ! "
-                                          "audioconvert ! audiorate ! audioresample ! "
-                                          "audio/x-raw, channels={channels} ! "
-                                          "opusenc bitrate={bitrate} bitrate-type=cbr frame-size={packet_duration} "
-                                          "bandwidth=fullband audio-type=generic max-payload-size=1400 ! "
-                                          "rtpmoonlightpay_audio name=moonlight_pay "
-                                          "packet_duration={packet_duration} "
-                                          "encrypt={encrypt} aes_key=\"{aes_key}\" aes_iv=\"{aes_iv}\" "
-                                          " ! "
-                                          "udpsink host={client_ip} port={client_port}",
+  pipeline = gst_parse_launch(fmt::format(audio_session->gst_pipeline,
                                           fmt::arg("channels", audio_session->channels),
                                           fmt::arg("bitrate", audio_session->bitrate),
                                           fmt::arg("packet_duration", audio_session->packet_duration),
