@@ -7,6 +7,17 @@
 
 namespace state {
 
+enum ColorRange {
+  JPEG,
+  MPEG
+};
+
+enum ColorSpace : int {
+  BT601,
+  BT709,
+  BT2020
+};
+
 /**
  * A VideoSession is created after the param exchange over RTSP
  */
@@ -27,6 +38,9 @@ struct VideoSession {
   int fec_percentage;
   int min_required_fec_packets;
   int bitrate_kbps;
+
+  ColorRange color_range;
+  ColorSpace color_space;
 
   std::string client_ip;
 };

@@ -51,6 +51,21 @@ void start_streaming_video(immer::box<state::VideoSession> video_session, unsign
   GstElement *pipeline;
   GError *error = nullptr;
 
+  std::string color_range = (static_cast<int>(video_session->color_range) == static_cast<int>(state::JPEG)) ? "jpeg"
+                                                                                                            : "mpeg2";
+  std::string color_space;
+  switch (static_cast<int>(video_session->color_space)) {
+  case state::BT601:
+    color_space = "bt601";
+    break;
+  case state::BT709:
+    color_space = "bt709";
+    break;
+  case state::BT2020:
+    color_space = "bt2020";
+    break;
+  }
+
   // see an example pipeline at: https://gist.github.com/esrever10/7d39fe2d4163c5b2d7006495c3c911bb
   pipeline = gst_parse_launch(fmt::format(video_session->gst_pipeline,
                                           fmt::arg("width", video_session->display_mode.width),
@@ -61,7 +76,9 @@ void start_streaming_video(immer::box<state::VideoSession> video_session, unsign
                                           fmt::arg("client_ip", video_session->client_ip),
                                           fmt::arg("payload_size", video_session->packet_size),
                                           fmt::arg("fec_percentage", video_session->fec_percentage),
-                                          fmt::arg("min_required_fec_packets", video_session->min_required_fec_packets))
+                                          fmt::arg("min_required_fec_packets", video_session->min_required_fec_packets),
+                                          fmt::arg("color_space", color_space),
+                                          fmt::arg("color_range", color_range))
                                   .c_str(),
                               &error);
 

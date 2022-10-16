@@ -107,7 +107,10 @@ msg_t announce(msg_t req, const state::StreamSession &session) {
       .refreshRate = args["x-nv-video[0].maxFPS"].value(),
       .hevc_supported = static_cast<bool>(args["x-nv-clientSupportHevc"].value()),
   };
+
   auto video_format_h264 = args["x-nv-vqos[0].bitStreamFormat"].value() == 0;
+  auto csc = args["x-nv-video[0].encoderCscMode"].value();
+
   state::VideoSession video = {
       .display_mode = display,
       .video_format_h264 = video_format_h264,
@@ -123,6 +126,9 @@ msg_t announce(msg_t req, const state::StreamSession &session) {
       .fec_percentage = 20,
       .min_required_fec_packets = args["x-nv-vqos[0].fec.minRequiredFecPackets"].value_or(0),
       .bitrate_kbps = args["x-nv-video[0].initialBitrateKbps"].value(),
+
+      .color_range = (csc & 0x1) ? state::JPEG : state::MPEG,
+      .color_space = state::ColorSpace(csc >> 1),
 
       .client_ip = session.ip};
   session.event_bus->fire_event(immer::box<state::VideoSession>(video));
