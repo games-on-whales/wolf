@@ -25,9 +25,8 @@ XML serverinfo(bool isServerBusy,
   resp.put("root.GfeVersion", M_GFE_VERSION);
   resp.put("root.uniqueid", uuid);
 
-  resp.put("root.MaxLumaPixelsHEVC", "0");
-  // TODO: resp.put("root.MaxLumaPixelsHEVC",config::video.hevc_mode > 1 ? "1869449984" : "0");
-  resp.put("root.ServerCodecModeSupport", "3"); // TODO: what are the modes here?
+  resp.put("root.MaxLumaPixelsHEVC", "1869449984");
+  resp.put("root.ServerCodecModeSupport", "259");
 
   resp.put("root.HttpsPort", https_port);
   resp.put("root.ExternalPort", http_port);

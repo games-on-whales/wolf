@@ -55,15 +55,34 @@ constexpr std::string_view DEFAULT_H264_GST_PIPELINE =
     "videorate ! "
     "video/x-raw, width={width}, height={height}, framerate={fps}/1,"
     "format=I420, chroma-site={color_range}, colorimetry={color_space} ! "
+
+    // H264 encoder
     "x264enc pass=qual tune=zerolatency speed-preset=superfast bitrate={bitrate} aud=false "
-    "sliced-threads=true threads={slices_per_frame} option-string=\"slices={slices_per_frame}\" ! "
+    "sliced-threads=true threads={slices_per_frame} option-string=\"slices={slices_per_frame}:keyint=infinite:open-gop=0\" ! "
+
     "video/x-h264, profile=high, stream-format=byte-stream ! "
     "rtpmoonlightpay_video name=moonlight_pay payload_size={payload_size} fec_percentage={fec_percentage} "
     "min_required_fec_packets={min_required_fec_packets}"
     " ! "
     "udpsink host={client_ip} port={client_port}";
 
-constexpr std::string_view DEFAULT_HEVC_GST_PIPELINE = DEFAULT_H264_GST_PIPELINE; // TODO: HEVC
+constexpr std::string_view DEFAULT_HEVC_GST_PIPELINE =
+    "videotestsrc pattern=ball is-live=true ! "
+    "videoscale ! "
+    "videoconvert ! "
+    "videorate ! "
+    "video/x-raw, width={width}, height={height}, framerate={fps}/1,"
+    "format=I420, chroma-site={color_range}, colorimetry={color_space} ! "
+
+    // H265 encoder
+    "x265enc tune=zerolatency speed-preset=superfast bitrate={bitrate} "
+    " option-string=\"info=0:keyint=-1:qp=28:repeat-headers=1:slices={slices_per_frame}:frame-threads={slices_per_frame}:aud=0:annexb=1:log-level=3:open-gop=0:bframes=0:intra-refresh=0\" ! "
+
+    "video/x-h265, profile=main, stream-format=byte-stream ! "
+    "rtpmoonlightpay_video name=moonlight_pay payload_size={payload_size} fec_percentage={fec_percentage} "
+    "min_required_fec_packets={min_required_fec_packets}"
+    " ! "
+    "udpsink host={client_ip} port={client_port}";
 
 constexpr std::string_view DEFAULT_OPUS_GST_PIPELINE =
     "audiotestsrc wave=ticks is-live=true ! "
