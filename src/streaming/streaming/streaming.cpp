@@ -77,6 +77,7 @@ void start_streaming_video(immer::box<state::VideoSession> video_session, unsign
                                           fmt::arg("payload_size", video_session->packet_size),
                                           fmt::arg("fec_percentage", video_session->fec_percentage),
                                           fmt::arg("min_required_fec_packets", video_session->min_required_fec_packets),
+                                          fmt::arg("slices_per_frame", video_session->slices_per_frame),
                                           fmt::arg("color_space", color_space),
                                           fmt::arg("color_range", color_range))
                                   .c_str(),

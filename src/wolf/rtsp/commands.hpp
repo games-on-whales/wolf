@@ -126,6 +126,7 @@ msg_t announce(msg_t req, const state::StreamSession &session) {
       .fec_percentage = 20,
       .min_required_fec_packets = args["x-nv-vqos[0].fec.minRequiredFecPackets"].value_or(0),
       .bitrate_kbps = args["x-nv-video[0].initialBitrateKbps"].value(),
+      .slices_per_frame = args["x-nv-video[0].videoEncoderSlicesPerFrame"].value_or(1),
 
       .color_range = (csc & 0x1) ? state::JPEG : state::MPEG,
       .color_space = state::ColorSpace(csc >> 1),

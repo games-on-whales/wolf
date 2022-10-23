@@ -38,6 +38,7 @@ struct VideoSession {
   int fec_percentage;
   int min_required_fec_packets;
   int bitrate_kbps;
+  int slices_per_frame;
 
   ColorRange color_range;
   ColorSpace color_space;

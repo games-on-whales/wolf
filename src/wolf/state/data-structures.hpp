@@ -45,6 +45,9 @@ struct PairSignal {
 
 using PairedClientList = immer::vector<immer::box<PairedClient>>;
 
+// see:
+// https://gstreamer.freedesktop.org/documentation/x264/index.html
+// http://www.chaneru.com/Roku/HLS/X264_Settings.htm#slices
 constexpr std::string_view DEFAULT_H264_GST_PIPELINE =
     "videotestsrc pattern=ball is-live=true ! "
     "videoscale ! "
@@ -52,7 +55,8 @@ constexpr std::string_view DEFAULT_H264_GST_PIPELINE =
     "videorate ! "
     "video/x-raw, width={width}, height={height}, framerate={fps}/1,"
     "format=I420, chroma-site={color_range}, colorimetry={color_space} ! "
-    "x264enc pass=qual tune=zerolatency speed-preset=superfast bitrate={bitrate} aud=false ! "
+    "x264enc pass=qual tune=zerolatency speed-preset=superfast bitrate={bitrate} aud=false "
+    "sliced-threads=true threads={slices_per_frame} option-string=\"slices={slices_per_frame}\" ! "
     "video/x-h264, profile=high, stream-format=byte-stream ! "
     "rtpmoonlightpay_video name=moonlight_pay payload_size={payload_size} fec_percentage={fec_percentage} "
     "min_required_fec_packets={min_required_fec_packets}"
