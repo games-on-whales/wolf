@@ -169,7 +169,8 @@ TEST_CASE("Commands", "[RTSP]") {
                        REQUIRE(response);
                        REQUIRE(response.value()->message.response.statusCode == 200);
                        REQUIRE(response.value()->sequenceNumber == 2);
-                       REQUIRE_THAT(response.value()->payload, Equals("\na=fmtp:97 surround-params=21101\n"));
+                       REQUIRE_THAT(response.value()->payload,
+                                    Equals("sprop-parameter-sets=AAAAAU\na=fmtp:97 surround-params=21101\n"));
                      });
   }
 
