@@ -5,13 +5,21 @@ project(moonlight)
 # Optionally glob, but only for CMake 3.12 or later:
 file(GLOB HEADER_LIST CONFIGURE_DEPENDS "${wolf_SOURCE_DIR}/src/moonlight/moonlight/*.hpp")
 set(MOONLIGHT_HEADERS
-        ./moonlight-common-c/reedsolomon/rs.c
-        ./moonlight-common-c/reedsolomon/rs.h
-        ./moonlight-common-c/src/Input.h
-        ./moonlight-common-c/src/Rtsp.h
-        ./moonlight-common-c/src/RtspParser.c
-        ./moonlight-common-c/src/Video.h)
-file(GLOB ENET_SRCS SRCS "${wolf_SOURCE_DIR}/src/moonlight/moonlight-common-c/enet/*.c")
+        ./reedsolomon/rs.c
+        ./reedsolomon/rs.h
+        ./rtsp/rtsp.h
+        ./rtsp/rtsp.c)
+FetchContent_Declare(
+        enet
+        GIT_REPOSITORY https://github.com/cgutman/enet
+        GIT_TAG 4cde9cc3dcc5c30775a80da1de87f39f98672a31
+        CONFIGURE_COMMAND ""
+        BUILD_COMMAND "")
+FetchContent_GetProperties(enet)
+if (NOT enet_POPULATED)
+    FetchContent_Populate(enet)
+    file(GLOB ENET_SRCS SRCS "${enet_SOURCE_DIR}/*.c")
+endif ()
 
 
 # Make an automatic library - will be static or dynamic based on user setting
@@ -53,8 +61,9 @@ set_target_properties(moonlight PROPERTIES OUTPUT_NAME "moonlight")
 
 # moonlight-common-c dependencies
 target_include_directories(moonlight PUBLIC
-        ./moonlight-common-c/enet/include
-        ./moonlight-common-c/reedsolomon)
+        ${enet_SOURCE_DIR}/include
+        ./reedsolomon
+        ./rtsp)
 
 find_package(Boost REQUIRED)
 

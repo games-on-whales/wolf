@@ -1,10 +1,11 @@
 #pragma once
 #include <helpers/logger.hpp>
 #include <memory>
+#include <moonlight/data-structures.hpp>
 #include <vector>
 
 extern "C" {
-#include <moonlight-common-c/src/Rtsp.h>
+#include <rtsp/rtsp.h>
 }
 
 namespace rtsp {

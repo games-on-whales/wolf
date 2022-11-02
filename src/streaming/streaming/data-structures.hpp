@@ -2,7 +2,6 @@
 
 #include <chrono>
 #include <eventbus/event_bus.hpp>
-#include <moonlight-common-c/src/Video.h>
 #include <moonlight/data-structures.hpp>
 
 namespace state {
@@ -68,13 +67,13 @@ struct AudioSession {
 
 struct VideoRTPHeaders {
   // headers
-  RTP_PACKET rtp;
+  moonlight::RTP_PACKET rtp;
   char reserved[4];
-  NV_VIDEO_PACKET packet;
+  moonlight::NV_VIDEO_PACKET packet;
 };
 
 struct AudioRTPHeaders {
-  RTP_PACKET rtp;
+  moonlight::RTP_PACKET rtp;
 };
 
 struct AudioFECHeader {
@@ -86,7 +85,7 @@ struct AudioFECHeader {
 };
 
 struct AudioFECPacket {
-  RTP_PACKET rtp;
+  moonlight::RTP_PACKET rtp;
   AudioFECHeader fec_header;
 };
 

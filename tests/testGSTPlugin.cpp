@@ -1,5 +1,5 @@
 extern "C" {
-#include <moonlight-common-c/reedsolomon/rs.h>
+#include <reedsolomon/rs.h>
 }
 
 #include <streaming/gst-plugin/audio.hpp>
@@ -163,8 +163,8 @@ TEST_CASE_METHOD(GStreamerTestsFixture, "Create RTP VIDEO packets", "[GSTPlugin]
       auto original = gst_buffer_list_get(rtp_packets, 0);
 
       // Is the RTP Header left untouched?
-      REQUIRE_THAT(gst_buffer_copy_content(original, 0, sizeof(RTP_PACKET)),
-                   Equals(gst_buffer_copy_content(buf, 0, sizeof(RTP_PACKET))));
+      REQUIRE_THAT(gst_buffer_copy_content(original, 0, sizeof(moonlight::RTP_PACKET)),
+                   Equals(gst_buffer_copy_content(buf, 0, sizeof(moonlight::RTP_PACKET))));
 
       // Is the payload left untouched?
       REQUIRE_THAT(gst_buffer_copy_content(original, sizeof(state::VideoRTPHeaders)),
@@ -176,8 +176,8 @@ TEST_CASE_METHOD(GStreamerTestsFixture, "Create RTP VIDEO packets", "[GSTPlugin]
       auto original = gst_buffer_list_get(rtp_packets, 1);
 
       // Is the RTP Header left untouched?
-      REQUIRE_THAT(gst_buffer_copy_content(original, 0, sizeof(RTP_PACKET)),
-                   Equals(gst_buffer_copy_content(buf, 0, sizeof(RTP_PACKET))));
+      REQUIRE_THAT(gst_buffer_copy_content(original, 0, sizeof(moonlight::RTP_PACKET)),
+                   Equals(gst_buffer_copy_content(buf, 0, sizeof(moonlight::RTP_PACKET))));
 
       // Is the payload left untouched?
       REQUIRE_THAT(gst_buffer_copy_content(original, sizeof(state::VideoRTPHeaders)),

@@ -1,7 +1,7 @@
 #pragma once
 
 extern "C" {
-#include <moonlight-common-c/reedsolomon/rs.h>
+#include <reedsolomon/rs.h>
 }
 
 #include <array>
