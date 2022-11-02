@@ -44,6 +44,14 @@ FetchContent_Declare(
         CONFIGURE_COMMAND ""
         BUILD_COMMAND "")
 
+# TOML parser (config file)
+FetchContent_Declare(
+        toml
+        GIT_REPOSITORY https://github.com/ToruNiina/toml11.git
+        GIT_TAG v3.7.1
+        CONFIGURE_COMMAND ""
+        BUILD_COMMAND "")
+
 # Header only, we are only going to fetch it without compiling
 FetchContent_GetProperties(range)
 if (NOT range_POPULATED)
@@ -62,6 +70,13 @@ if (NOT immer_POPULATED)
     FetchContent_Populate(immer)
     target_include_directories(wolf PUBLIC ${immer_SOURCE_DIR})
 endif ()
+
+FetchContent_GetProperties(toml)
+if (NOT toml_POPULATED)
+    FetchContent_Populate(toml)
+    target_include_directories(wolf PUBLIC ${toml_SOURCE_DIR})
+endif ()
+set(TOML11_COLORIZE_ERROR_MESSAGE, ON)
 
 ##############################
 

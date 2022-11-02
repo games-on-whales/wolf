@@ -1,5 +1,6 @@
 #include <boost/filesystem.hpp>
 #include <boost/stacktrace.hpp>
+#include <state/configTOML.cpp>
 #include <control/control.cpp>
 #include <csignal>
 #include <immer/array.hpp>
@@ -223,7 +224,7 @@ int main(int argc, char *argv[]) {
   logs::init(logs::parse_level(get_env("LOG_LEVEL", "INFO")));
   check_exceptions();
 
-  auto config_file = "config.json";
+  auto config_file = get_env("CFG_FILE", "config.toml");
   auto local_state = initialize(config_file, "key.pem", "cert.pem");
 
   // REST HTTP/S APIs
@@ -246,12 +247,6 @@ int main(int argc, char *argv[]) {
       logs::log(logs::error, "Runtime error, dumping stacktrace to {}", trace_file);
       boost::stacktrace::safe_dump_to(trace_file);
     }
-
-    // TODO: should we cleanup here threads and handlers?
-
-    logs::log(logs::debug, "Saving back current configuration to file: {}", config_file);
-    state::save(local_state->config, config_file);
-
     exit(signum);
   };
   std::signal(SIGINT, signal_handler);

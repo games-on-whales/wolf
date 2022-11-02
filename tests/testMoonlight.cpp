@@ -1,33 +1,56 @@
 #include <crypto/crypto.hpp>
 #include <moonlight/protocol.hpp>
+#include <range/v3/view.hpp>
 #include <rest/helpers.cpp>
-#include <state/configJSON.cpp>
+#include <state/configTOML.cpp>
+#include <state/data-structures.hpp>
 
 using namespace moonlight;
 using namespace state;
+using namespace ranges;
+using namespace gstreamer;
 
-TEST_CASE("LocalState load JSON", "[LocalState]") {
-  auto state = state::load_or_default("config.json");
-  REQUIRE(state.hostname == "wolf");
-  REQUIRE(state.uuid == "b826c049-1c9f-445d-8442-1f86e559d607");
+TEST_CASE("LocalState load TOML", "[LocalState]") {
+  auto state = state::load_or_default("config.toml");
+  REQUIRE(state.hostname == "Wolf");
+  REQUIRE(state.uuid == "16510e3e-61fd-4a85-97fa-0db82058b27a");
 
   SECTION("Apps") {
-    REQUIRE_THAT(state.apps, Catch::Matchers::SizeIs(1)); // TODO: check content
+    REQUIRE_THAT(state.apps, Catch::Matchers::SizeIs(3));
+
+    auto app = state.apps[0];
+    REQUIRE_THAT(app.base.title, Equals("Ball"));
+    REQUIRE_THAT(app.base.id, Equals("1"));
+    REQUIRE_THAT(app.h264_gst_pipeline,
+                 Equals(video::DEFAULT_SOURCE.data() + " ! "s + video::DEFAULT_PARAMS.data() + " ! "s +
+                        video::DEFAULT_H264_ENCODER.data() + " ! " + video::DEFAULT_SINK.data()));
+    REQUIRE_THAT(app.hevc_gst_pipeline,
+                 Equals(video::DEFAULT_SOURCE.data() + " ! "s + video::DEFAULT_PARAMS.data() + " ! "s +
+                        video::DEFAULT_H265_ENCODER.data() + " ! " + video::DEFAULT_SINK.data()));
   }
 
   SECTION("Paired Clients") {
-    REQUIRE_THAT(state.paired_clients.load().get(), Catch::Matchers::SizeIs(1));
+    REQUIRE_THAT(state.paired_clients.load().get(), Catch::Matchers::SizeIs(2));
 
     auto paired_client = state.paired_clients.load().get()[0];
-    REQUIRE(paired_client->rtsp_port == 1);
-    REQUIRE(paired_client->control_port == 2);
-    REQUIRE(paired_client->video_port == 3);
-    REQUIRE(paired_client->audio_port == 4);
+    REQUIRE(paired_client->rtsp_port == RTSP_SETUP_PORT);
+    REQUIRE(paired_client->control_port == CONTROL_PORT);
+    REQUIRE(paired_client->video_port == VIDEO_STREAM_PORT);
+    REQUIRE(paired_client->audio_port == AUDIO_STREAM_PORT);
+
+    paired_client = state.paired_clients.load().get()[1];
+    REQUIRE(paired_client->rtsp_port == 3000);
+    REQUIRE(paired_client->control_port == 3001);
+    REQUIRE(paired_client->video_port == 3002);
+    REQUIRE(paired_client->audio_port == 3003);
   }
 }
 
 TEST_CASE("LocalState pairing information", "[LocalState]") {
-  auto cfg = state::load_or_default("config.json");
+
+  std::remove("defaults.toml");
+
+  auto cfg = state::load_or_default("defaults.toml");
   auto a_client_cert = "-----BEGIN CERTIFICATE-----\n"
                        "MIICvzCCAaegAwIBAgIBADANBgkqhkiG9w0BAQsFADAjMSEwHwYDVQQDDBhOVklE\n"
                        "SUEgR2FtZVN0cmVhbSBDbGllbnQwHhcNMjEwNzEwMDgzNjE3WhcNNDEwNzA1MDgz\n"
@@ -47,7 +70,8 @@ TEST_CASE("LocalState pairing information", "[LocalState]") {
                        "-----END CERTIFICATE-----\n";
 
   SECTION("Checking pairing mechanism") {
-    // This client is loaded up by the config.json file
+    REQUIRE(state::get_client_via_ssl(cfg, a_client_cert).has_value() == false);
+    state::pair(cfg, {"A client", a_client_cert});
     REQUIRE(state::get_client_via_ssl(cfg, a_client_cert).has_value() == true);
 
     auto another_cert = "-----BEGIN CERTIFICATE-----\n"
@@ -78,11 +102,14 @@ TEST_CASE("LocalState pairing information", "[LocalState]") {
     REQUIRE(state::get_client_via_ssl(cfg, a_client_cert).has_value() == false);
     REQUIRE(state::get_client_via_ssl(cfg, another_cert).has_value() == true);
     REQUIRE_THAT(cfg.paired_clients.load().get(), Catch::Matchers::SizeIs(1));
+
+    state::unpair(cfg, {"", another_cert});
+    REQUIRE_THAT(cfg.paired_clients.load().get(), Catch::Matchers::SizeIs(0));
   }
 }
 
 TEST_CASE("Mocked serverinfo", "[MoonlightProtocol]") {
-  auto cfg = state::load_or_default("config.json");
+  auto cfg = state::load_or_default("config.toml");
   immer::array<DisplayMode> displayModes = {{1920, 1080, 60}, {1024, 768, 30}};
 
   SECTION("server_info conforms with the expected server_info_response.xml") {
@@ -101,10 +128,10 @@ TEST_CASE("Mocked serverinfo", "[MoonlightProtocol]") {
     REQUIRE(xml_to_str(result) ==
             "<?xml version=\"1.0\" encoding=\"utf-8\"?>\n"
             "<root status_code=\"200\">"
-            "<hostname>wolf</hostname>"
+            "<hostname>Wolf</hostname>"
             "<appversion>7.1.431.0</appversion>"
             "<GfeVersion>3.23.0.74</GfeVersion>"
-            "<uniqueid>b826c049-1c9f-445d-8442-1f86e559d607</uniqueid>"
+            "<uniqueid>16510e3e-61fd-4a85-97fa-0db82058b27a</uniqueid>"
             "<MaxLumaPixelsHEVC>1869449984</MaxLumaPixelsHEVC>"
             "<ServerCodecModeSupport>259</ServerCodecModeSupport>"
             "<HttpsPort>0</HttpsPort>"
@@ -247,21 +274,19 @@ TEST_CASE("Pairing moonlight", "[MoonlightProtocol]") {
 }
 
 TEST_CASE("applist", "[MoonlightProtocol]") {
-  auto cfg = state::load_or_default("config.json");
+  auto cfg = state::load_or_default("config.toml");
   auto base_apps = cfg.apps | views::transform([](auto app) { return app.base; }) | to<immer::vector<moonlight::App>>();
   auto result = applist(base_apps);
   REQUIRE(xml_to_str(result) == "<?xml version=\"1.0\" encoding=\"utf-8\"?>\n"
                                 "<root status_code=\"200\">"
-                                "<App>"
-                                "<IsHdrSupported>1</IsHdrSupported>"
-                                "<AppTitle>Desktop</AppTitle>"
-                                "<ID>1</ID>"
-                                "</App>"
+                                "<App><IsHdrSupported>1</IsHdrSupported><AppTitle>Ball</AppTitle><ID>1</ID></App>"
+                                "<App><IsHdrSupported>1</IsHdrSupported><AppTitle>SMPTE</AppTitle><ID>2</ID></App>"
+                                "<App><IsHdrSupported>1</IsHdrSupported><AppTitle>Desktop</AppTitle><ID>3</ID></App>"
                                 "</root>");
 }
 
 TEST_CASE("launch", "[MoonlightProtocol]") {
-  auto cfg = state::load_or_default("config.json");
+  auto cfg = state::load_or_default("config.toml");
   auto result = launch_success("192.168.1.1", "3021");
   REQUIRE(xml_to_str(result) == "<?xml version=\"1.0\" encoding=\"utf-8\"?>\n"
                                 "<root status_code=\"200\">"

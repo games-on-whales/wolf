@@ -5,6 +5,7 @@
 #include <functional>
 #include <helpers/utils.hpp>
 #include <moonlight/protocol.hpp>
+#include <range/v3/view.hpp>
 #include <rest/helpers.cpp>
 #include <server_http.hpp>
 #include <state/data-structures.hpp>
@@ -215,8 +216,9 @@ void applist(std::shared_ptr<typename SimpleWeb::ServerBase<T>::Response> respon
              const std::shared_ptr<state::AppState> &state) {
   log_req<T>(request);
 
-  auto base_apps = state->config.apps | views::transform([](auto app) { return app.base; }) |
-                   to<immer::vector<moonlight::App>>();
+  auto base_apps = state->config.apps                                            //
+                   | ranges::views::transform([](auto app) { return app.base; }) //
+                   | ranges::to<immer::vector<moonlight::App>>();
   auto xml = moonlight::applist(base_apps);
 
   send_xml<T>(response, SimpleWeb::StatusCode::success_ok, xml);

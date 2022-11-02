@@ -21,7 +21,7 @@ target_link_libraries(wolftests PRIVATE
         Catch2::Catch2WithMain)
 
 ## Test assets
-configure_file(assets/config.json ${CMAKE_CURRENT_BINARY_DIR}/config.json COPYONLY)
+configure_file(assets/config.toml ${CMAKE_CURRENT_BINARY_DIR}/config.toml COPYONLY)
 configure_file(assets/server_info_response.xml ${CMAKE_CURRENT_BINARY_DIR}/server_info_response.xml COPYONLY)
 
 # See: https://github.com/catchorg/Catch2/blob/devel/docs/cmake-integration.md

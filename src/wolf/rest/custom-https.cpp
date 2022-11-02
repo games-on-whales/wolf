@@ -1,4 +1,3 @@
-#include "state/configJSON.cpp"
 #include <boost/asio/ssl.hpp>
 #include <server_http.hpp>
 

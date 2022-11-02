@@ -1,0 +1,126 @@
+uuid = "16510e3e-61fd-4a85-97fa-0db82058b27a"
+hostname = "Wolf"
+
+#########################
+# Paired clients
+####
+
+[[paired_clients]]
+client_id = "0123456789ABCDEF"
+client_cert = """
+-----BEGIN CERTIFICATE-----
+MIICvzCCAaegAwIBAgIBADANBgkqhkiG9w0BAQsFADAjMSEwHwYDVQQDDBhOVklE
+SUEgR2FtZVN0cmVhbSBDbGllbnQwHhcNMjEwNzEwMDgzNjE3WhcNNDEwNzA1MDgz
+NjE3WjAjMSEwHwYDVQQDDBhOVklESUEgR2FtZVN0cmVhbSBDbGllbnQwggEiMA0G
+CSqGSIb3DQEBAQUAA4IBDwAwggEKAoIBAQC1c49oJxPkIGjUNSwEpNuvNZB/hRoe
+DZPMe3gZ1abOSJFyK3VbQNSOVK6qEfBrHqQgNVMtXZVS5XDfDRW9E37QcAl5Apex
+/NAG2fNHYAvO6P6Gj+/m0XBWcVREzjGCdKJI+9ToNeB6dQtKw26LvlIbHfprBZ+1
+QPr3DuUuTCIdxacJrSoUyqakswGr82j3+Dt3dU0LWCquVeeOMhMVN+EFzjFbDJbz
++sNLTM2E7HeKNeIr/0oFhyA2b5Kb4vd+z1GfW38o85gDU8ni6FOmEaFTi3TdZ1yR
+RxdKKd9k+myCNHLiyBA9K4Q2JYuUkYxZzsZrKVH7LWfH79qaMvj87iEnAgMBAAEw
+DQYJKoZIhvcNAQELBQADggEBADVm005jqiFEGuH6JfTKRcZU3PMmFrEmJTmvPiyh
+a4b75jai0hLRCzNDu6bSzlXH346YK/x7AVkSZIoD2hTpujVlHIHLoSJzkrmMxIFR
+sZRjh0EGaAmvDuEXADUE0MGpoWLUQumiDWwuSbEzPyr7BID68A3Q6jKwd65D2+ut
+snLzlErTl5fgHkLWV6plelcMgPSo4T+E7APm4LHlP5uxiixAfnhDlzuAeD5r1rsD
+UkrNfMfXnRzPSwXiNYHZ+UoQuchoMCSAa+kcsQ+zsdPwAJ3stwQGcfpvYhdZv1a1
+oPJpyCigkmv0uH4CeJ09A/6Da2uY+HIwVq85qteMVSUTtV0=
+-----END CERTIFICATE-----
+"""
+
+[[paired_clients]]
+client_id = "0123456789ABCDEF"
+client_cert = """
+-----BEGIN CERTIFICATE-----
+MIIC6zCCAdOgAwIBAgIBATANBgkqhkiG9w0BAQsFADA5MQswCQYDVQQGEwJJVDEW
+MBQGA1UECgwNR2FtZXNPbldoYWxlczESMBAGA1UEAwwJbG9jYWxob3N0MB4XDTIy
+MDgzMTA1NDIzM1oXDTQyMDgyNjA1NDIzM1owOTELMAkGA1UEBhMCSVQxFjAUBgNV
+BAoMDUdhbWVzT25XaGFsZXMxEjAQBgNVBAMMCWxvY2FsaG9zdDCCASIwDQYJKoZI
+hvcNAQEBBQADggEPADCCAQoCggEBAKYAuR+nnhekgyOvEKPhNdGiGECe5iiPo/4g
+yzrXEIKggr1oTauqmBPUhVT6sGuuKE5cR0u4pHm7bcUZAeBdssPzq8IJBKRzEgeM
+AtoWu+MsWijbq2wSKJTLe9e0/WClk0iFopvVrhyai2hbxqlWxyTyxWVxKg4iECAg
+7TT9EAAuZzS5EhfOBA6+xREdDse5TzkTLWHVSNIaDgPuJiM3DXHjt64C0ubTNklO
+VDzU5nBYwOidi64EsznpnHT7Zhj0fhB8g7rV6n4ZEi65o6vhAbC6J4IBCBXLw9R/
+s8cglKED3ebS9gGE9V+0exXkCr+X6JqQ8tnuJaWoeXIWTctatB0CAwEAATANBgkq
+hkiG9w0BAQsFAAOCAQEAnQ5+pnjzAylkoA/vi6DxxwlCxWsDS6HlPptlpY+AlY6q
+PvQMHxrRMGXYWl+70ja8GvvlfZLf0zj/wc8vjxFB/+P3mOLv00YBGdryIF5Fijg9
+h9LZ9+raPvR/xIDevubveQgX/Kcl2cX59/aaIwKPUJH4BHzRTJ2W32B8Fw1KO/sp
+CH7xDcplhPQ6YvTedFBBu1AcSiRpmGcOuo1+HMJZLj3ek7NrFOSjfptIStleYixj
+Gxy5pgOEuXuSoi3dJInrwc3dBILZBDYyBg7jPBDjRC+ld24q6/TYHBPKbmaM2iFa
+AXQMq/fmtPxEDHY0NguWUhGt3uooTiakv1u9zex/Cg==
+-----END CERTIFICATE-----
+"""
+rtsp_port = 3000
+control_port = 3001
+video_port = 3002
+audio_port = 3003
+
+#########################
+# APPS
+####
+
+[[apps]]
+title = "Ball"
+id = "1"
+support_hdr = true
+
+[[apps]]
+title = "SMPTE"
+id = "2"
+support_hdr = true
+[apps.video]
+source = "videotestsrc pattern=smpte is-live=true"
+
+[[apps]]
+title = "Desktop"
+id = "3"
+support_hdr = true
+[apps.video]
+source = "avfvideosrc capture-screen-cursor=true capture-screen=true"
+
+#########################
+# GStreamer pipelines
+####
+
+[gstreamer.video]
+
+default_source = "videotestsrc pattern=ball is-live=true"
+
+default_video_params = """\
+ videoscale ! \
+ videoconvert ! \
+ videorate ! \
+ video/x-raw, width={width}, height={height}, framerate={fps}/1,format=I420, chroma-site={color_range}, colorimetry={color_space}\
+"""
+
+default_h264_encoder = """\
+ x264enc pass=qual tune=zerolatency speed-preset=superfast b-adapt=false bframes=0 ref=1 bitrate={bitrate} aud=false sliced-threads=true threads={slices_per_frame} option-string="slices={slices_per_frame}:keyint=infinite:open-gop=0" ! \
+ video/x-h264, profile=high, stream-format=byte-stream\
+"""
+
+default_hevc_encoder = """\
+ x265enc tune=zerolatency speed-preset=superfast bitrate={bitrate} option-string="info=0:keyint=-1:qp=28:repeat-headers=1:slices={slices_per_frame}:frame-threads={slices_per_frame}:aud=0:annexb=1:log-level=3:open-gop=0:bframes=0:intra-refresh=0" ! \
+ video/x-h265, profile=main, stream-format=byte-stream\
+"""
+
+default_sink = """\
+ rtpmoonlightpay_video name=moonlight_pay payload_size={payload_size} fec_percentage={fec_percentage} min_required_fec_packets={min_required_fec_packets} ! \
+ udpsink host={client_ip} port={client_port}\
+"""
+
+[gstreamer.audio]
+
+default_source = "audiotestsrc wave=violet-noise is-live=true"
+
+default_audio_params = """\
+ audioconvert ! \
+ audiorate ! \
+ audioresample ! \
+ audio/x-raw, channels={channels}\
+"""
+
+default_opus_encoder = """\
+ opusenc bitrate={bitrate} bitrate-type=cbr frame-size={packet_duration} bandwidth=fullband audio-type=generic max-payload-size=1400"""
+
+default_sink = """\
+ rtpmoonlightpay_audio name=moonlight_pay packet_duration={packet_duration} encrypt={encrypt} aes_key="{aes_key}" aes_iv="{aes_iv}" ! \
+ udpsink host={client_ip} port={client_port}"""

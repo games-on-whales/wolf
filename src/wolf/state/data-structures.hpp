@@ -45,56 +45,47 @@ struct PairSignal {
 
 using PairedClientList = immer::vector<immer::box<PairedClient>>;
 
-// see:
-// https://gstreamer.freedesktop.org/documentation/x264/index.html
-// http://www.chaneru.com/Roku/HLS/X264_Settings.htm#slices
-constexpr std::string_view DEFAULT_H264_GST_PIPELINE =
-    "videotestsrc pattern=ball is-live=true ! "
-    "videoscale ! "
-    "videoconvert ! "
-    "videorate ! "
-    "video/x-raw, width={width}, height={height}, framerate={fps}/1,"
-    "format=I420, chroma-site={color_range}, colorimetry={color_space} ! "
+namespace gstreamer {
+namespace video {
+constexpr std::string_view DEFAULT_SOURCE = "videotestsrc pattern=ball is-live=true";
+constexpr std::string_view DEFAULT_PARAMS = "videoscale ! videoconvert ! videorate ! "
+                                            "video/x-raw, width={width}, height={height}, framerate={fps}/1,"
+                                            "format=I420, chroma-site={color_range}, colorimetry={color_space}";
 
-    // H264 encoder
-    "x264enc pass=qual tune=zerolatency speed-preset=superfast bitrate={bitrate} aud=false "
-    "sliced-threads=true threads={slices_per_frame} option-string=\"slices={slices_per_frame}:keyint=infinite:open-gop=0\" ! "
+constexpr std::string_view DEFAULT_H264_ENCODER =
+    "x264enc pass=qual tune=zerolatency speed-preset=superfast b-adapt=false bframes=0 ref=1 bitrate={bitrate} "
+    "aud=false sliced-threads=true threads={slices_per_frame} "
+    "option-string=\"slices={slices_per_frame}:keyint=infinite:open-gop=0\" ! "
+    "video/x-h264, profile=high, stream-format=byte-stream";
 
-    "video/x-h264, profile=high, stream-format=byte-stream ! "
-    "rtpmoonlightpay_video name=moonlight_pay payload_size={payload_size} fec_percentage={fec_percentage} "
-    "min_required_fec_packets={min_required_fec_packets}"
-    " ! "
-    "udpsink host={client_ip} port={client_port}";
-
-constexpr std::string_view DEFAULT_HEVC_GST_PIPELINE =
-    "videotestsrc pattern=ball is-live=true ! "
-    "videoscale ! "
-    "videoconvert ! "
-    "videorate ! "
-    "video/x-raw, width={width}, height={height}, framerate={fps}/1,"
-    "format=I420, chroma-site={color_range}, colorimetry={color_space} ! "
-
-    // H265 encoder
+constexpr std::string_view DEFAULT_H265_ENCODER =
     "x265enc tune=zerolatency speed-preset=superfast bitrate={bitrate} "
-    " option-string=\"info=0:keyint=-1:qp=28:repeat-headers=1:slices={slices_per_frame}:frame-threads={slices_per_frame}:aud=0:annexb=1:log-level=3:open-gop=0:bframes=0:intra-refresh=0\" ! "
+    "option-string=\"info=0:keyint=-1:qp=28:repeat-headers=1:slices={slices_per_frame}:frame-threads={slices_per_"
+    "frame}:aud=0:annexb=1:log-level=3:open-gop=0:bframes=0:intra-refresh=0\" ! "
+    "video/x-h265, profile=main, stream-format=byte-stream";
 
-    "video/x-h265, profile=main, stream-format=byte-stream ! "
+constexpr std::string_view DEFAULT_SINK =
     "rtpmoonlightpay_video name=moonlight_pay payload_size={payload_size} fec_percentage={fec_percentage} "
     "min_required_fec_packets={min_required_fec_packets}"
     " ! "
     "udpsink host={client_ip} port={client_port}";
+} // namespace video
 
-constexpr std::string_view DEFAULT_OPUS_GST_PIPELINE =
-    "audiotestsrc wave=ticks is-live=true ! "
-    "audioconvert ! audiorate ! audioresample ! "
-    "audio/x-raw, channels={channels} ! "
+namespace audio {
+constexpr std::string_view DEFAULT_SOURCE = "audiotestsrc wave=ticks is-live=true";
+constexpr std::string_view DEFAULT_PARAMS = "audioconvert ! audiorate ! audioresample ! "
+                                            "audio/x-raw, channels={channels}";
+constexpr std::string_view DEFAULT_OPUS_ENCODER =
     "opusenc bitrate={bitrate} bitrate-type=cbr frame-size={packet_duration} "
-    "bandwidth=fullband audio-type=generic max-payload-size=1400 ! "
-    "rtpmoonlightpay_audio name=moonlight_pay "
-    "packet_duration={packet_duration} "
-    "encrypt={encrypt} aes_key=\"{aes_key}\" aes_iv=\"{aes_iv}\" "
-    " ! "
-    "udpsink host={client_ip} port={client_port}";
+    "bandwidth=fullband audio-type=generic max-payload-size=1400";
+constexpr std::string_view DEFAULT_SINK = "rtpmoonlightpay_audio name=moonlight_pay "
+                                          "packet_duration={packet_duration} "
+                                          "encrypt={encrypt} aes_key=\"{aes_key}\" aes_iv=\"{aes_iv}\" "
+                                          " ! "
+                                          "udpsink host={client_ip} port={client_port}";
+} // namespace audio
+
+} // namespace gstreamer
 
 struct App {
   moonlight::App base;
@@ -110,6 +101,7 @@ struct App {
 struct Config {
   std::string uuid;
   std::string hostname;
+  std::string config_source;
 
   /**
    * Mutable, paired_clients will be loaded up on startup
@@ -121,10 +113,6 @@ struct Config {
    * List of available Apps
    */
   immer::vector<App> apps;
-
-  std::string default_h264_gst_pipeline = std::string(DEFAULT_H264_GST_PIPELINE);
-  std::string default_hevc_gst_pipeline = std::string(DEFAULT_HEVC_GST_PIPELINE);
-  std::string default_opus_gst_pipeline = std::string(DEFAULT_OPUS_GST_PIPELINE);
 };
 
 struct AudioMode {
