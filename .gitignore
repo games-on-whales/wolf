@@ -14,3 +14,4 @@ build
 .idea
 cmake-build-*
 DartConfiguration.tcl
+.DS_Store
