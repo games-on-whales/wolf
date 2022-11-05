@@ -6,14 +6,14 @@ namespace rtp {
 using boost::asio::ip::udp;
 
 /**
- * It'll wait for a UDP request at port.
+ * It'll wait for a UDP request at the specified port.
  * Returns the port number that has been opened by the remote client
  */
 unsigned short wait_for_ping(unsigned short port) {
   boost::asio::io_context io_context;
   udp::socket socket(io_context, udp::endpoint(udp::v4(), port));
 
-  boost::array<char, 4> recv_buf; // Will send PING (4 chars)
+  boost::array<char, 4> recv_buf{}; // Will send PING (4 chars)
   udp::endpoint remote_endpoint;
 
   // Stop over here until we receive from Moonlight

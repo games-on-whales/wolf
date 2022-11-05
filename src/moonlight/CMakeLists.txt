@@ -7,8 +7,8 @@ file(GLOB HEADER_LIST CONFIGURE_DEPENDS "${wolf_SOURCE_DIR}/src/moonlight/moonli
 set(MOONLIGHT_HEADERS
         ./reedsolomon/rs.c
         ./reedsolomon/rs.h
-        ./rtsp/rtsp.h
-        ./rtsp/rtsp.c)
+        ./rtsp/parser.hpp
+        )
 FetchContent_Declare(
         enet
         GIT_REPOSITORY https://github.com/cgutman/enet
@@ -40,6 +40,21 @@ FetchContent_Declare(
         GIT_TAG 0.12.0
         CONFIGURE_COMMAND ""
         BUILD_COMMAND "")
+
+# Formatting library
+FetchContent_Declare(
+        peglib
+        GIT_REPOSITORY https://github.com/yhirose/cpp-peglib.git
+        GIT_TAG v1.8.2)
+
+FetchContent_GetProperties(peglib)
+if (NOT peglib_POPULATED)
+    FetchContent_Populate(peglib)
+
+    add_library(peglib INTERFACE)
+    target_include_directories(peglib INTERFACE ${peglib_SOURCE_DIR})
+    target_link_libraries(moonlight PUBLIC peglib)
+endif ()
 
 # Header only, we are only going to fetch it without compiling
 FetchContent_GetProperties(range)

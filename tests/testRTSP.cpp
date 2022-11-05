@@ -1,5 +1,6 @@
+#include "rtsp/net.cpp"
 #include <boost/beast/_experimental/test/stream.hpp>
-#include <rtsp/rtsp.cpp>
+#include <rtsp/parser.hpp>
 
 using namespace rtsp;
 
@@ -10,7 +11,7 @@ using namespace rtsp;
 class tcp_tester : public tcp_connection {
 
 public:
-  static auto create_client(asio::io_context &io_context, int port, immer::box<StreamSession> session) {
+  static auto create_client(asio::io_context &io_context, int port, immer::box<state::StreamSession> session) {
     auto tester = new tcp_tester(io_context, std::move(session));
 
     tcp::resolver resolver(io_context);
@@ -19,12 +20,12 @@ public:
     return boost::shared_ptr<tcp_tester>(tester);
   }
 
-  void run(std::string_view raw_msg, std::function<void(std::optional<msg_t> /* response */)> on_response) {
-    auto send_msg = parse_rtsp_msg(raw_msg, (int)raw_msg.size());
+  void run(std::string_view raw_msg, std::function<void(std::optional<RTSP_PACKET> /* response */)> on_response) {
+    auto send_msg = rtsp::parse(raw_msg).value();
 
-    send_message(std::move(send_msg.value()), [self = shared_from_this(), on_response](auto bytes) {
+    send_message(send_msg, [self = shared_from_this(), on_response](auto bytes) {
       self->receive_message([self = self->shared_from_this(), on_response](auto reply_msg) {
-        on_response(std::move(reply_msg));
+        on_response(reply_msg);
         self->socket().close();
       });
     });
@@ -39,75 +40,151 @@ public:
   }
 
 protected:
-  explicit tcp_tester(asio::io_context &io_context, immer::box<StreamSession> session)
+  explicit tcp_tester(asio::io_context &io_context, immer::box<state::StreamSession> session)
       : tcp_connection(io_context, std::move(session)), ioc(io_context) {}
 
   boost::asio::io_context &ioc;
 };
 
-TEST_CASE("utilities methods", "[RTSP]") {
+TEST_CASE("Custom Parser", "[RTSP]") {
+  SECTION("Requests") {
+    SECTION("Non valid packet") {
+      auto parsed = rtsp::parse("OPTIONS rtsp://10.1.2.49:48010 RTSP/1.0"); // missing CSeq
+      REQUIRE(parsed.has_value() == false);
+    }
 
-  SECTION("create RTSP message") {
-    auto msg = create_rtsp_msg({}, 200, "OK", 1, "");
-    REQUIRE(msg);
-    REQUIRE(msg->sequenceNumber == 1);
-    REQUIRE(msg->message.response.statusCode == 200);
+    SECTION("Basic packet") {
+      auto payload = "MissingNo rtsp://1.1.1.1:1234 RTSP/1.0\r\n"
+                     "CSeq: 1993\r\n\r\n"s;
+      auto parsed = rtsp::parse(payload).value();
 
-    msg = create_rtsp_msg({{"CSeq", "99"}}, 200, "OK", 99, "");
-    REQUIRE(msg);
-    REQUIRE(msg->sequenceNumber == 99);
-    REQUIRE(msg->message.response.statusCode == 200);
-    REQUIRE_THAT(msg->options->option, Equals("CSeq"));
-    REQUIRE_THAT(msg->options->content, Equals("99"));
-  }
+      REQUIRE(parsed.type == REQUEST);
+      REQUIRE(parsed.request.type == TARGET_URI);
+      REQUIRE_THAT(parsed.request.cmd, Equals("MissingNo"));
+      REQUIRE_THAT(parsed.request.uri.ip, Equals("1.1.1.1"));
+      REQUIRE_THAT(parsed.request.uri.protocol, Equals("rtsp"));
+      REQUIRE(parsed.request.uri.port == 1234);
+      REQUIRE(parsed.seq_number == 1993);
 
-  SECTION("listify", "[RTSP]") {
-    auto c_list = listify({{"A", "1"}, {"B", "2"}, {"C", "3"}});
+      REQUIRE(parsed.options.empty());
+      REQUIRE(parsed.payloads.empty());
 
-    REQUIRE_THAT(c_list->option, Equals("A"));
-    REQUIRE_THAT(c_list->content, Equals("1"));
+      // Round trip
+      REQUIRE(rtsp::to_string(parsed) == rtsp::to_string(rtsp::parse(rtsp::to_string(parsed)).value()));
+    }
 
-    REQUIRE_THAT(c_list->next->option, Equals("B"));
-    REQUIRE_THAT(c_list->next->content, Equals("2"));
+    SECTION("Stream target") {
+      auto payload = "MissingNo streamid=audio/1/2/3 RTSP/1.0\r\n"
+                     "CSeq: 1993\r\n\r\n"s;
+      auto parsed = rtsp::parse(payload).value();
 
-    REQUIRE_THAT(c_list->next->next->option, Equals("C"));
-    REQUIRE_THAT(c_list->next->next->content, Equals("3"));
+      REQUIRE(parsed.type == REQUEST);
+      REQUIRE(parsed.request.type == TARGET_STREAM);
+      REQUIRE_THAT(parsed.request.cmd, Equals("MissingNo"));
+      REQUIRE_THAT(parsed.request.stream.type, Equals("audio"));
+      REQUIRE_THAT(parsed.request.stream.params, Equals("/1/2/3"));
+      REQUIRE(parsed.seq_number == 1993);
 
-    REQUIRE(c_list->next->next->next == nullptr);
-  }
+      REQUIRE(parsed.options.empty());
+      REQUIRE(parsed.payloads.empty());
 
-  SECTION("parse RTSP message", "[RTSP]") {
-    auto raw_input = "OPTIONS rtsp://10.1.2.49:48010 RTSP/1.0\n"
+      // Round trip
+      REQUIRE(rtsp::to_string(parsed) == rtsp::to_string(rtsp::parse(rtsp::to_string(parsed)).value()));
+    }
+
+    SECTION("Complete packet") {
+      auto payload = "OPTIONS rtsp://10.1.2.49:48010 RTSP/1.0\n"
                      "CSeq: 1\n"
                      "X-GS-ClientVersion: 14\n"
                      "Host: 10.1.2.49"
                      "\r\n\r\n"
-                     "here's the payload!!"s;
-    auto msg = parse_rtsp_msg(raw_input, (int)raw_input.size());
+                     "v=0\n"
+                     "o=android 0 14 IN IPv4 0.0.0.0\n"
+                     "s=NVIDIA Streaming Client\n"
+                     "a=x-nv-video[0].clientViewportWd:1920\n"
+                     "a=x-nv-video[0].clientViewportHt:1080"s;
+      auto parsed = rtsp::parse(payload).value();
 
-    REQUIRE(msg);
-    REQUIRE_THAT(msg.value()->message.request.command, Equals("OPTIONS"));
-    REQUIRE_THAT(msg.value()->message.request.target, Equals("rtsp://10.1.2.49:48010"));
-    REQUIRE_THAT(msg.value()->protocol, Equals("RTSP/1.0"));
+      REQUIRE(parsed.type == REQUEST);
+      REQUIRE_THAT(parsed.request.cmd, Equals("OPTIONS"));
+      REQUIRE(parsed.request.type == TARGET_URI);
+      REQUIRE_THAT(parsed.request.uri.ip, Equals("10.1.2.49"));
+      REQUIRE_THAT(parsed.request.uri.protocol, Equals("rtsp"));
+      REQUIRE(parsed.request.uri.port == 48010);
+      REQUIRE(parsed.seq_number == 1);
 
-    REQUIRE(msg.value()->sequenceNumber == 1);
+      // Options
+      REQUIRE_THAT(parsed.options["X-GS-ClientVersion"], Equals("14"));
+      REQUIRE_THAT(parsed.options["Host"], Equals("10.1.2.49"));
 
-    auto option = msg.value()->options;
-    REQUIRE_THAT(option->option, Equals("CSeq"));
-    REQUIRE_THAT(option->content, Equals(" 1"));
+      // Payloads
+      REQUIRE_THAT(parsed.payloads[0].second, Equals("0"));
+      REQUIRE_THAT(parsed.payloads[1].second, Equals("android 0 14 IN IPv4 0.0.0.0"));
+      REQUIRE_THAT(parsed.payloads[2].second, Equals("NVIDIA Streaming Client"));
+      REQUIRE_THAT(parsed.payloads[3].second, Equals("x-nv-video[0].clientViewportWd:1920"));
+      REQUIRE_THAT(parsed.payloads[4].second, Equals("x-nv-video[0].clientViewportHt:1080"));
 
-    option = option->next;
-    REQUIRE_THAT(option->option, Equals("X-GS-ClientVersion"));
-    REQUIRE_THAT(option->content, Equals(" 14"));
+      // Round trip
+      REQUIRE(rtsp::to_string(parsed) == rtsp::to_string(rtsp::parse(rtsp::to_string(parsed)).value()));
+    }
+  }
 
-    option = option->next;
-    REQUIRE_THAT(option->option, Equals("Host"));
-    REQUIRE_THAT(option->content, Equals(" 10.1.2.49"));
+  SECTION("Response") {
+    SECTION("Non valid packet") {
+      auto parsed = rtsp::parse("RTSP/1.0 200 OK"); // missing CSeq
+      REQUIRE(parsed.has_value() == false);
+    }
 
-    option = option->next;
-    REQUIRE(option == nullptr);
+    SECTION("Basic response") {
+      auto payload = "RTSP/1.0 200 OK\r\n"
+                     "CSeq: 123\r\n\r\n";
+      auto parsed = rtsp::parse(payload).value();
 
-    REQUIRE_THAT(msg.value()->payload, Equals("here's the payload!!"));
+      REQUIRE(parsed.type == RESPONSE);
+      REQUIRE(parsed.seq_number == 123);
+
+      REQUIRE_THAT(parsed.response.msg, Equals("OK"));
+      REQUIRE(parsed.response.status_code == 200);
+
+      REQUIRE(parsed.payloads.empty());
+      REQUIRE(parsed.options.empty());
+
+      // Round trip
+      REQUIRE(rtsp::to_string(parsed) == rtsp::to_string(rtsp::parse(rtsp::to_string(parsed)).value()));
+    }
+
+    SECTION("Complete packet") {
+      auto payload = "RTSP/1.0 404 NOT OK\n"
+                     "CSeq: 1\n"
+                     "X-GS-ClientVersion: 14\n"
+                     "Host: 10.1.2.49"
+                     "\r\n\r\n"
+                     "v=0\n"
+                     "o=android 0 14 IN IPv4 0.0.0.0\n"
+                     "s=NVIDIA Streaming Client\n"
+                     "a=x-nv-video[0].clientViewportWd:1920\n"
+                     "a=x-nv-video[0].clientViewportHt:1080"s;
+      auto parsed = rtsp::parse(payload).value();
+
+      REQUIRE(parsed.type == RESPONSE);
+      REQUIRE_THAT(parsed.response.msg, Equals("NOT OK"));
+      REQUIRE(parsed.response.status_code == 404);
+      REQUIRE(parsed.seq_number == 1);
+
+      // Options
+      REQUIRE_THAT(parsed.options["X-GS-ClientVersion"], Equals("14"));
+      REQUIRE_THAT(parsed.options["Host"], Equals("10.1.2.49"));
+
+      // Payloads
+      REQUIRE_THAT(parsed.payloads[0].second, Equals("0"));
+      REQUIRE_THAT(parsed.payloads[1].second, Equals("android 0 14 IN IPv4 0.0.0.0"));
+      REQUIRE_THAT(parsed.payloads[2].second, Equals("NVIDIA Streaming Client"));
+      REQUIRE_THAT(parsed.payloads[3].second, Equals("x-nv-video[0].clientViewportWd:1920"));
+      REQUIRE_THAT(parsed.payloads[4].second, Equals("x-nv-video[0].clientViewportHt:1080"));
+
+      // Round trip
+      REQUIRE(rtsp::to_string(parsed) == rtsp::to_string(rtsp::parse(rtsp::to_string(parsed)).value()));
+    }
   }
 }
 
@@ -138,10 +215,10 @@ TEST_CASE("Commands", "[RTSP]") {
   SECTION("MissingNo") {
     wolf_client->run("MissingNo rtsp://10.1.2.49:48010 RTSP/1.0\r\n"
                      "CSeq: 1\r\n\r\n"sv,
-                     [](std::optional<msg_t> response) {
-                       REQUIRE(response);
-                       REQUIRE(response.value()->message.response.statusCode == 404);
-                       REQUIRE(response.value()->sequenceNumber == 1);
+                     [](std::optional<RTSP_PACKET> response) {
+                       REQUIRE(response.has_value());
+                       REQUIRE(response.value().response.status_code == 404);
+                       REQUIRE(response.value().seq_number == 1);
                      });
   }
 
@@ -151,10 +228,10 @@ TEST_CASE("Commands", "[RTSP]") {
                      "X-GS-ClientVersion: 14\r\n"
                      "Host: 10.1.2.49"
                      "\r\n\r\n"sv,
-                     [](std::optional<msg_t> response) {
-                       REQUIRE(response);
-                       REQUIRE(response.value()->message.response.statusCode == 200);
-                       REQUIRE(response.value()->sequenceNumber == 1);
+                     [](std::optional<RTSP_PACKET> response) {
+                       REQUIRE(response.has_value());
+                       REQUIRE(response.value().response.status_code == 200);
+                       REQUIRE(response.value().seq_number == 1);
                      });
   }
 
@@ -165,60 +242,53 @@ TEST_CASE("Commands", "[RTSP]") {
                      "Host: 10.1.2.49\n"
                      "Accept: application/sdp"
                      "\r\n\r\n"sv,
-                     [](std::optional<msg_t> response) {
+                     [](std::optional<RTSP_PACKET> response) {
                        REQUIRE(response);
-                       REQUIRE(response.value()->message.response.statusCode == 200);
-                       REQUIRE(response.value()->sequenceNumber == 2);
-                       REQUIRE_THAT(response.value()->payload,
-                                    Equals("sprop-parameter-sets=AAAAAU\na=fmtp:97 surround-params=21101\n"));
+                       REQUIRE(response.value().response.status_code == 200);
+                       REQUIRE(response.value().seq_number == 2);
+                       REQUIRE_THAT(response.value().payloads[0].first, Equals("sprop-parameter-sets"));
+                       REQUIRE_THAT(response.value().payloads[0].second, Equals("AAAAAU"));
+                       REQUIRE_THAT(response.value().payloads[1].second, Equals("fmtp:97 surround-params=21101"));
                      });
   }
 
   SECTION("SETUP audio") {
-    wolf_client->run("SETUP streamid=audio/0/0 RTSP/1.0\n"
-                     "CSeq: 3\n"
-                     "X-GS-ClientVersion: 14\n"
-                     "Host: 10.1.2.49\n"
-                     "Transport: unicast;X-GS-ClientPort=50000-50001\n"
-                     "If-Modified-Since: Thu, 01 Jan 1970 00:00:00 GMT"
-                     "\r\n\r\n"sv,
-                     [&state](std::optional<msg_t> response) {
-                       REQUIRE(response);
-                       REQUIRE(response.value()->message.response.statusCode == 200);
-                       REQUIRE(response.value()->sequenceNumber == 3);
+    wolf_client->run(
+        "SETUP streamid=audio/0/0 RTSP/1.0\n"
+        "CSeq: 3\n"
+        "X-GS-ClientVersion: 14\n"
+        "Host: 10.1.2.49\n"
+        "Transport: unicast;X-GS-ClientPort=50000-50001\n"
+        "If-Modified-Since: Thu, 01 Jan 1970 00:00:00 GMT"
+        "\r\n\r\n"sv,
+        [&state](std::optional<RTSP_PACKET> response) {
+          REQUIRE(response.has_value());
+          REQUIRE(response.value().response.status_code == 200);
+          REQUIRE(response.value().seq_number == 3);
 
-                       auto opt = response.value()->options->next;
-                       REQUIRE_THAT(opt->option, Equals("Session"));
-                       REQUIRE_THAT(opt->content, Equals(" DEADBEEFCAFE;timeout = 90"));
-
-                       opt = opt->next;
-                       REQUIRE_THAT(opt->option, Equals("Transport"));
-                       REQUIRE_THAT(opt->content, Equals(fmt::format(" server_port={}", state->audio_port)));
-                     });
+          REQUIRE_THAT(response.value().options["Session"], Equals("DEADBEEFCAFE;timeout = 90"));
+          REQUIRE_THAT(response.value().options["Transport"], Equals(fmt::format("server_port={}", state->audio_port)));
+        });
   }
 
   SECTION("SETUP video") {
-    wolf_client->run("SETUP streamid=video/0/0 RTSP/1.0\n"
-                     "CSeq: 4\n"
-                     "X-GS-ClientVersion: 14\n"
-                     "Host: 10.1.2.49\n"
-                     "Session:  DEADBEEFCAFE\n"
-                     "Transport: unicast;X-GS-ClientPort=50000-50001\n"
-                     "If-Modified-Since: Thu, 01 Jan 1970 00:00:00 GMT"
-                     "\r\n\r\n"sv,
-                     [&state](std::optional<msg_t> response) {
-                       REQUIRE(response);
-                       REQUIRE(response.value()->message.response.statusCode == 200);
-                       REQUIRE(response.value()->sequenceNumber == 4);
+    wolf_client->run(
+        "SETUP streamid=video/0/0 RTSP/1.0\n"
+        "CSeq: 4\n"
+        "X-GS-ClientVersion: 14\n"
+        "Host: 10.1.2.49\n"
+        "Session:  DEADBEEFCAFE\n"
+        "Transport: unicast;X-GS-ClientPort=50000-50001\n"
+        "If-Modified-Since: Thu, 01 Jan 1970 00:00:00 GMT"
+        "\r\n\r\n"sv,
+        [&state](std::optional<RTSP_PACKET> response) {
+          REQUIRE(response.has_value());
+          REQUIRE(response.value().response.status_code == 200);
+          REQUIRE(response.value().seq_number == 4);
 
-                       auto opt = response.value()->options->next;
-                       REQUIRE_THAT(opt->option, Equals("Session"));
-                       REQUIRE_THAT(opt->content, Equals(" DEADBEEFCAFE;timeout = 90"));
-
-                       opt = opt->next;
-                       REQUIRE_THAT(opt->option, Equals("Transport"));
-                       REQUIRE_THAT(opt->content, Equals(fmt::format(" server_port={}", state->video_port)));
-                     });
+          REQUIRE_THAT(response.value().options["Session"], Equals("DEADBEEFCAFE;timeout = 90"));
+          REQUIRE_THAT(response.value().options["Transport"], Equals(fmt::format("server_port={}", state->video_port)));
+        });
   }
 
   SECTION("SETUP control") {
@@ -230,18 +300,14 @@ TEST_CASE("Commands", "[RTSP]") {
                      "Transport: unicast;X-GS-ClientPort=50000-50001\n"
                      "If-Modified-Since: Thu, 01 Jan 1970 00:00:00 GMT"
                      "\r\n\r\n"sv,
-                     [&state](std::optional<msg_t> response) {
-                       REQUIRE(response);
-                       REQUIRE(response.value()->message.response.statusCode == 200);
-                       REQUIRE(response.value()->sequenceNumber == 5);
+                     [&state](std::optional<RTSP_PACKET> response) {
+                       REQUIRE(response.has_value());
+                       REQUIRE(response.value().response.status_code == 200);
+                       REQUIRE(response.value().seq_number == 5);
 
-                       auto opt = response.value()->options->next;
-                       REQUIRE_THAT(opt->option, Equals("Session"));
-                       REQUIRE_THAT(opt->content, Equals(" DEADBEEFCAFE;timeout = 90"));
-
-                       opt = opt->next;
-                       REQUIRE_THAT(opt->option, Equals("Transport"));
-                       REQUIRE_THAT(opt->content, Equals(fmt::format(" server_port={}", state->control_port)));
+                       REQUIRE_THAT(response.value().options["Session"], Equals("DEADBEEFCAFE;timeout = 90"));
+                       REQUIRE_THAT(response.value().options["Transport"],
+                                    Equals(fmt::format("server_port={}", state->control_port)));
                      });
   }
 
@@ -292,10 +358,10 @@ TEST_CASE("Commands", "[RTSP]") {
                      "a=x-nv-video[0].encoderCscMode:0 \n"
                      "t=0 0\n"
                      "m=video 47998 \n"sv,
-                     [](std::optional<msg_t> response) {
-                       REQUIRE(response);
-                       REQUIRE(response.value()->message.response.statusCode == 200);
-                       REQUIRE(response.value()->sequenceNumber == 6);
+                     [](std::optional<RTSP_PACKET> response) {
+                       REQUIRE(response.has_value());
+                       REQUIRE(response.value().response.status_code == 200);
+                       REQUIRE(response.value().seq_number == 6);
                      });
   }
 }

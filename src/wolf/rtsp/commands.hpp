@@ -1,21 +1,38 @@
 #pragma once
 #include <helpers/logger.hpp>
 #include <helpers/utils.hpp>
-#include <rtsp/utils.hpp>
+#include <rtsp/parser.hpp>
 #include <state/data-structures.hpp>
 
 namespace rtsp::commands {
 
 using namespace ranges;
 
-msg_t options(msg_t req) {
-  RTSP_MESSAGE_OPTION options = {"CSeq", std::to_string(req->sequenceNumber)};
-  return create_rtsp_msg({options}, 200, "OK", req->sequenceNumber, {});
+using namespace rtsp;
+
+RTSP_PACKET error_msg(unsigned short status_code, std::string_view error_msg, int sequence_number = 0) {
+  return {.type = RESPONSE,
+          .seq_number = sequence_number,
+          .response = {.status_code = status_code, .msg = error_msg.data()}};
 }
 
-msg_t describe(msg_t req, const state::StreamSession &session) {
-  RTSP_MESSAGE_OPTION options = {"CSeq", std::to_string(req->sequenceNumber)};
+RTSP_PACKET ok_msg(int sequence_number,
+                   const std::map<std::string, std::string> &options = {},
+                   const std::vector<std::pair<std::string, std::string>> &payloads = {}) {
+  return {
+      .type = RESPONSE,                              //
+      .seq_number = sequence_number,                 //
+      .response = {.status_code = 200, .msg = "OK"}, //
+      .options = options,                            //
+      .payloads = payloads                           //
+  };
+}
 
+RTSP_PACKET options(const RTSP_PACKET &req) {
+  return ok_msg(req.seq_number);
+}
+
+RTSP_PACKET describe(const RTSP_PACKET &req, const state::StreamSession &session) {
   auto video_params = "";
   if (session.display_mode.hevc_supported) {
     video_params = "sprop-parameter-sets=AAAAAU";
@@ -25,20 +42,19 @@ msg_t describe(msg_t req, const state::StreamSession &session) {
                                | views::transform([](auto speaker) { return (char)(speaker + '0'); }) //
                                | to<std::string>;                                                     //
 
-  auto audio_params = fmt::format("a=fmtp:97 surround-params={}{}{}{}",
+  auto audio_params = fmt::format("fmtp:97 surround-params={}{}{}{}",
                                   session.audio_mode.channels,
                                   session.audio_mode.streams,
                                   session.audio_mode.coupled_streams,
                                   audio_speakers);
 
-  auto payload = fmt::format("{}\n{}\n", video_params, audio_params);
-  return create_rtsp_msg({options}, 200, "OK", req->sequenceNumber, payload);
+  return ok_msg(req.seq_number, {}, {{"", video_params}, {"a", audio_params}});
 }
 
-msg_t setup(msg_t req, const state::StreamSession &session) {
+RTSP_PACKET setup(const RTSP_PACKET &req, const state::StreamSession &session) {
 
   int service_port;
-  auto type = utils::sub_string({req->message.request.target}, '=', '/');
+  auto type = req.request.stream.type;
   logs::log(logs::trace, "[RTSP] setup type: {}", type);
 
   switch (utils::hash(type)) {
@@ -52,23 +68,24 @@ msg_t setup(msg_t req, const state::StreamSession &session) {
     service_port = session.control_port;
     break;
   default:
-    return create_error_msg(404, "NOT FOUND", req->sequenceNumber);
+    return error_msg(404, "NOT FOUND", req.seq_number);
   }
 
   auto session_opt = "DEADBEEFCAFE;timeout = 90"s;
-  std::vector<RTSP_MESSAGE_OPTION> options = {{"CSeq", std::to_string(req->sequenceNumber)},
-                                              {"Session", session_opt},
-                                              {"Transport", "server_port=" + std::to_string(service_port)}};
+  return ok_msg(req.seq_number,
+                {{"Session", session_opt}, {"Transport", "server_port=" + std::to_string(service_port)}});
+}
 
-  return create_rtsp_msg(options, 200, "OK", req->sequenceNumber, {});
+RTSP_PACKET play(const RTSP_PACKET &req) {
+  return ok_msg(req.seq_number);
 }
 
 /**
- * Ex given: a=x-nv-video[0].clientViewportWd:1920
+ * Ex given: x-nv-video[0].clientViewportWd:1920
  * returns: <x-nv-video[0].clientViewportWd, 1920>
  */
-std::pair<std::string_view, std::optional<int>> parse_arg_line(std::string_view line) {
-  auto split = utils::split(line, ':');
+std::pair<std::string, std::optional<int>> parse_arg_line(std::pair<std::string, std::string> line) {
+  auto split = utils::split(line.second, ':');
   std::optional<int> val;
   try {
     val = std::stoi(split[1].data());
@@ -76,18 +93,17 @@ std::pair<std::string_view, std::optional<int>> parse_arg_line(std::string_view 
     logs::log(logs::warning, "[RTSP] Unable to parse line: {} error: {}", line, ex.what());
     val = {};
   }
-  return std::make_pair(split[0].substr(2), // removing "a="
-                        val);
+  return std::make_pair(std::string{split[0].data(), split[0].size()}, val);
 }
 
-msg_t announce(msg_t req, const state::StreamSession &session) {
-  RTSP_MESSAGE_OPTION options = {"CSeq", std::to_string(req->sequenceNumber)};
+RTSP_PACKET announce(const RTSP_PACKET &req, const state::StreamSession &session) {
 
-  auto splitted_args = utils::split(req->payload, '\n');                // See tests for an example payload
-  auto args = splitted_args                                             //
-              | views::filter([](auto line) { return line[0] == 'a'; }) // all args start with a=
-              | views::transform(parse_arg_line)                        // turns an arg line into a pair
-              | to<std::map<std::string_view, std::optional<int>>>;     // to map
+  auto args = req.payloads //
+              | views::filter([](std::pair<std::string, std::string> line) {
+                  return line.first == "a";                    // all args start with a=
+                })                                             //
+              | views::transform(parse_arg_line)               // turns an arg line into a pair
+              | to<std::map<std::string, std::optional<int>>>; // to map
 
   // Control session
   state::ControlSession ctrl = {.session_id = session.session_id,
@@ -152,31 +168,27 @@ msg_t announce(msg_t req, const state::StreamSession &session) {
                                .mask = args["x-nv-audio.surround.channelMask"].value()};
   session.event_bus->fire_event(immer::box<state::AudioSession>(audio));
 
-  return create_rtsp_msg({options}, 200, "OK", req->sequenceNumber, {});
+  return ok_msg(req.seq_number);
 }
 
-msg_t play(msg_t req) {
-  return create_rtsp_msg({{"CSeq", std::to_string(req->sequenceNumber)}}, 200, "OK", req->sequenceNumber, {});
-}
-
-msg_t message_handler(msg_t req, const state::StreamSession &session) {
-  auto cmd = std::string_view(req.get()->message.request.command);
+RTSP_PACKET message_handler(const RTSP_PACKET &req, const state::StreamSession &session) {
+  auto cmd = req.request.cmd;
   logs::log(logs::debug, "[RTSP] received command {}", cmd);
 
   switch (utils::hash(cmd)) {
   case utils::hash("OPTIONS"):
-    return options(std::move(req));
+    return options(req);
   case utils::hash("DESCRIBE"):
-    return describe(std::move(req), session);
+    return describe(req, session);
   case utils::hash("SETUP"):
-    return setup(std::move(req), session);
+    return setup(req, session);
   case utils::hash("ANNOUNCE"):
-    return announce(std::move(req), session);
+    return announce(req, session);
   case utils::hash("PLAY"):
-    return play(std::move(req));
+    return play(req);
   default:
     logs::log(logs::warning, "[RTSP] command {} not found", cmd);
-    return create_error_msg(404, "NOT FOUND", req->sequenceNumber);
+    return error_msg(404, "NOT FOUND", req.seq_number);
   }
 }
 

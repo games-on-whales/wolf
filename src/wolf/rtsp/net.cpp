@@ -43,11 +43,11 @@ public:
     logs::log(logs::trace, "[RTSP] received connection from IP: {}", socket().remote_endpoint().address().to_string());
     receive_message([self = shared_from_this()](auto parsed_msg) {
       if (parsed_msg) {
-        auto response = commands::message_handler(std::move(parsed_msg.value()), self->stream_session);
-        self->send_message(std::move(response), [](auto bytes) {});
+        auto response = commands::message_handler(parsed_msg.value(), self->stream_session);
+        self->send_message(response, [](auto bytes) {});
       } else {
         logs::log(logs::error, "[RTSP] error parsing message");
-        self->send_message(std::move(create_error_msg(400, "BAD REQUEST")), [](auto bytes) {});
+        self->send_message((rtsp::commands::error_msg(400, "BAD REQUEST")), [](auto bytes) {});
       }
     });
   }
@@ -66,7 +66,7 @@ public:
    * option in the message: Content-length which represent the size in bytes of the payload. We'll keep recursively call
    * receive_message() until our payload size matches the specified Content-length
    */
-  void receive_message(std::function<void(std::optional<msg_t>)> on_msg_read) {
+  void receive_message(std::function<void(std::optional<RTSP_PACKET>)> on_msg_read) {
     deadline_.async_wait([self = shared_from_this()](auto error) {
       if (!error && self->deadline_.expiry() <= asio::steady_timer::clock_type::now()) { // The deadline has passed
         logs::log(logs::trace, "[RTSP] deadline over");
@@ -84,7 +84,7 @@ public:
           if (error_code &&
               error_code != boost::asio::error::operation_aborted) { // it'll be aborted when the deadline expires
             logs::log(logs::error, "[RTSP] error during transmission: {}", error_code.message());
-            self->send_message(std::move(create_error_msg(400, "BAD REQUEST")), [](auto bytes) {});
+            self->send_message(rtsp::commands::error_msg(400, "BAD REQUEST"), [](auto bytes) {});
             return;
           }
           self->deadline_.cancel(); // stop the deadline
@@ -93,11 +93,13 @@ public:
 
           auto full_raw_msg = self->prev_read_ + raw_msg;
           auto total_bytes_transferred = self->prev_read_bytes_ + bytes_transferred;
-          auto msg = parse_rtsp_msg(full_raw_msg, total_bytes_transferred);
+          full_raw_msg.resize(total_bytes_transferred);
+
+          auto msg = rtsp::parse(full_raw_msg);
           if (msg) {
-            for (auto option = msg.value()->options; option != nullptr; option = option->next) {
-              if ("Content-length"sv == option->option) {
-                int total_length = std::stoi(option->content);
+            for (const auto &option : msg.value().options) {
+              if ("Content-length"sv == option.first) {
+                int total_length = std::stoi(option.second);
                 if (total_bytes_transferred < total_length) { // TODO: should we check msg.payloadLength instead?
                   self->prev_read_ = full_raw_msg;
                   self->prev_read_bytes_ += bytes_transferred;
@@ -108,7 +110,7 @@ public:
           }
           self->prev_read_ = "";
           self->prev_read_bytes_ = 0;
-          on_msg_read(std::move(msg));
+          on_msg_read(msg);
         });
   }
 
@@ -116,8 +118,8 @@ public:
    * Will fully write back the given message to the socket
    * calls on_sent(bytes_transferred) when over
    */
-  void send_message(msg_t response, std::function<void(int /* bytes_transferred */)> on_sent) {
-    auto raw_response = serialize_rtsp_msg(std::move(response));
+  void send_message(const rtsp::RTSP_PACKET &response, std::function<void(int /* bytes_transferred */)> on_sent) {
+    auto raw_response = rtsp::to_string(response);
     logs::log(logs::trace, "[RTSP] sending reply: \n{}", raw_response);
     boost::asio::async_write(socket(),
                              boost::asio::buffer(raw_response),
