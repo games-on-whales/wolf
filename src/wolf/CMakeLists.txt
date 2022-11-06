@@ -24,59 +24,28 @@ FetchContent_MakeAvailable(eventbus)
 FetchContent_Declare(
         simplewebserver
         GIT_REPOSITORY https://gitlab.com/eidheim/Simple-Web-Server.git
-        GIT_TAG bdb1057
-        CONFIGURE_COMMAND ""
-        BUILD_COMMAND "")
-
-# Immutable datastructures
-FetchContent_Declare(
-        immer
-        GIT_REPOSITORY https://github.com/arximboldi/immer.git
-        GIT_TAG e02cbd795e9424a8405a8cb01f659ad61c0cbbc7
-        CONFIGURE_COMMAND ""
-        BUILD_COMMAND "")
-
-# Additional algorithms for dealing with containers
-FetchContent_Declare(
-        range
-        GIT_REPOSITORY https://github.com/ericniebler/range-v3.git
-        GIT_TAG 0.12.0
-        CONFIGURE_COMMAND ""
-        BUILD_COMMAND "")
+        GIT_TAG bdb1057)
+FetchContent_MakeAvailable(simplewebserver)
+target_link_libraries(wolf PUBLIC simple-web-server)
 
 # TOML parser (config file)
 FetchContent_Declare(
         toml
         GIT_REPOSITORY https://github.com/ToruNiina/toml11.git
-        GIT_TAG v3.7.1
-        CONFIGURE_COMMAND ""
-        BUILD_COMMAND "")
-
-# Header only, we are only going to fetch it without compiling
-FetchContent_GetProperties(range)
-if (NOT range_POPULATED)
-    FetchContent_Populate(range)
-    target_include_directories(wolf PUBLIC ${range_SOURCE_DIR}/include/)
-endif ()
-
-FetchContent_GetProperties(simplewebserver)
-if (NOT simplewebserver_POPULATED)
-    FetchContent_Populate(simplewebserver)
-    target_include_directories(wolf PUBLIC ${simplewebserver_SOURCE_DIR})
-endif ()
-
-FetchContent_GetProperties(immer)
-if (NOT immer_POPULATED)
-    FetchContent_Populate(immer)
-    target_include_directories(wolf PUBLIC ${immer_SOURCE_DIR})
-endif ()
-
-FetchContent_GetProperties(toml)
-if (NOT toml_POPULATED)
-    FetchContent_Populate(toml)
-    target_include_directories(wolf PUBLIC ${toml_SOURCE_DIR})
-endif ()
+        GIT_TAG v3.7.1)
 set(TOML11_COLORIZE_ERROR_MESSAGE, ON)
+FetchContent_MakeAvailable(toml)
+target_link_libraries(wolf PUBLIC toml11::toml11)
+
+# Enet
+set(CMAKE_PROJECT_INCLUDE_BEFORE "${PROJECT_SOURCE_DIR}/cmake/EnableCMP0048.cmake")
+FetchContent_Declare(
+        enet
+        GIT_REPOSITORY https://github.com/cgutman/enet
+        GIT_TAG 4cde9cc3dcc5c30775a80da1de87f39f98672a31)
+FetchContent_MakeAvailable(enet)
+target_link_libraries(wolf PUBLIC enet)
+unset(CMAKE_PROJECT_INCLUDE_BEFORE)
 
 ##############################
 
@@ -111,8 +80,8 @@ target_include_directories(wolf PUBLIC .)
 
 target_link_libraries(
         wolf PUBLIC
-        moonlight
-        streaming
+        wolf::moonlight
+        wolf::streaming
         ${Boost_LIBRARIES}
         ${CMAKE_DL_LIBS}
         ${CMAKE_THREAD_LIBS_INIT}

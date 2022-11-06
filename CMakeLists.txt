@@ -1,5 +1,5 @@
-# Works with 3.11 and tested through 3.22
-cmake_minimum_required(VERSION 3.11...3.22)
+# Works with 3.11 and tested through 3.24
+cmake_minimum_required(VERSION 3.11...3.24)
 
 # Project name and a few useful settings. Other commands can pick up the results
 project(wolf
@@ -19,6 +19,7 @@ if (CMAKE_PROJECT_NAME STREQUAL PROJECT_NAME)
     set_property(GLOBAL PROPERTY USE_FOLDERS ON)
 
     set(BUILD_SHARED_LIBS ON)
+    # set(Boost_USE_STATIC_LIBS ON)
 
     # Testing only available if this is the main app
     # Note this needs to be done in the main CMakeLists
@@ -26,6 +27,12 @@ if (CMAKE_PROJECT_NAME STREQUAL PROJECT_NAME)
     # main CMakeLists.
     include(CTest)
 endif ()
+
+find_program(CCACHE_FOUND ccache)
+if (CCACHE_FOUND)
+    set_property(GLOBAL PROPERTY RULE_LAUNCH_COMPILE ccache)
+endif (CCACHE_FOUND)
+
 
 # FetchContent added in CMake 3.11, downloads during the configure step
 include(FetchContent)

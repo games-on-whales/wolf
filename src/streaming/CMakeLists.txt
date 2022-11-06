@@ -7,9 +7,8 @@ file(GLOB SRC_LIST SRCS
         "streaming/*.cpp"
         "streaming/gst-plugin/*.cpp")
 
-add_library(streaming
-        ${HEADER_LIST}
-        ${SRC_LIST})
+add_library(streaming ${HEADER_LIST} ${SRC_LIST})
+add_library(wolf::streaming ALIAS streaming)
 
 # We need this directory, and users of our library will need it too
 target_include_directories(streaming PUBLIC .)
@@ -31,23 +30,10 @@ FetchContent_Declare(
 set(EVENTBUS_BUILD_TESTS OFF)
 FetchContent_MakeAvailable(eventbus)
 
-# Immutable datastructures
-FetchContent_Declare(
-        immer
-        GIT_REPOSITORY https://github.com/arximboldi/immer.git
-        GIT_TAG e02cbd795e9424a8405a8cb01f659ad61c0cbbc7
-        CONFIGURE_COMMAND ""
-        BUILD_COMMAND "")
-
-FetchContent_GetProperties(immer)
-if (NOT immer_POPULATED)
-    FetchContent_Populate(immer)
-    target_include_directories(wolf PUBLIC ${immer_SOURCE_DIR})
-endif ()
-
 target_link_libraries(streaming PUBLIC
         fmt::fmt-header-only
-        dp::eventbus)
+        dp::eventbus
+        immer)
 
 find_package(PkgConfig)
 
@@ -55,7 +41,7 @@ pkg_check_modules(GST REQUIRED gstreamer-1.0)
 
 find_package(GLIB2)
 find_package(GObject)
-find_package(GStreamer COMPONENTS app audio video)
+find_package(GStreamer)
 if (NOT (GSTREAMER_FOUND))
     message(FATAL_ERROR "Please Install Gstreamer Dev: CMake will Exit")
 endif ()
@@ -67,19 +53,13 @@ target_link_libraries(streaming PUBLIC
         ${GOBJECT_LIBRARIES}
         ${GLIB2_LIBRARIES}
         ${GSTREAMER_LIBRARIES}
-        ${GSTREAMER_BASE_LIBRARIES}
-        ${GSTREAMER_APP_LIBRARIES}
-        ${GSTREAMER_AUDIO_LIBRARIES}
-        ${GSTREAMER_VIDEO_LIBRARIES})
+        ${GSTREAMER_BASE_LIBRARIES})
 
 target_include_directories(streaming PUBLIC
         ${GOBJECT_INCLUDE_DIR}
         ${GLIB2_INCLUDE_DIR}
         ${GSTREAMER_INCLUDE_DIRS}
-        ${GSTREAMER_BASE_INCLUDE_DIRS}
-        ${GSTREAMER_APP_INCLUDE_DIRS}
-        ${GSTREAMER_AUDIO_INCLUDE_DIRS}
-        ${GSTREAMER_VIDEO_INCLUDE_DIRS})
+        ${GSTREAMER_BASE_INCLUDE_DIRS})
 
 
 # All users of this library will need at least C++17
