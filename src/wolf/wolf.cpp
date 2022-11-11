@@ -1,14 +1,15 @@
 #include <boost/filesystem.hpp>
 #include <boost/stacktrace.hpp>
-#include <state/configTOML.cpp>
-#include <control/control.cpp>
+#include <control/control.hpp>
 #include <csignal>
+#include <fstream>
 #include <immer/array.hpp>
 #include <memory>
-#include <rest/servers.cpp>
-#include <rtp/udp-ping.cpp>
-#include <rtsp/net.cpp>
-#include <streaming/streaming.cpp>
+#include <rest/rest.hpp>
+#include <rtp/udp-ping.hpp>
+#include <rtsp/net.hpp>
+#include <state/config.hpp>
+#include <streaming/streaming.hpp>
 #include <vector>
 
 /**

@@ -1,9 +1,11 @@
+#include "catch2/catch_all.hpp"
+using Catch::Matchers::Equals;
+
 #include <crypto/crypto.hpp>
 #include <moonlight/protocol.hpp>
 #include <range/v3/view.hpp>
-#include <rest/helpers.cpp>
-#include <state/configTOML.cpp>
-#include <state/data-structures.hpp>
+#include <rest/helpers.hpp>
+#include <state/config.hpp>
 
 using namespace moonlight;
 using namespace state;

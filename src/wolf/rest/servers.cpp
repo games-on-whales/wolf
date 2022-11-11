@@ -1,12 +1,8 @@
-#pragma once
-
 #include <future>
-#include <rest/custom-https.cpp>
-#include <rest/endpoints.cpp>
-#include <server_http.hpp>
-
-using HttpsServer = SimpleWeb::Server<SimpleWeb::HTTPS>;
-using HttpServer = SimpleWeb::Server<SimpleWeb::HTTP>;
+#include <rest/endpoints.hpp>
+#include <rest/helpers.hpp>
+#include <rest/rest.hpp>
+#include <state/config.hpp>
 
 namespace HTTPServers {
 
@@ -14,8 +10,7 @@ namespace HTTPServers {
  * @brief Start the generic server on the specified port
  * @return std::thread: the thread where this server will run
  */
-std::thread
-startServer(SimpleWeb::Server<SimpleWeb::HTTP> *server, const std::shared_ptr<state::AppState> &state, int port) {
+std::thread startServer(HttpServer *server, const std::shared_ptr<state::AppState> &state, int port) {
   server->config.port = port;
   server->config.address = "0.0.0.0";
   server->default_resource["GET"] = endpoints::not_found<SimpleWeb::HTTP>;
@@ -74,8 +69,7 @@ void reply_unauthorized(const std::shared_ptr<typename SimpleWeb::ServerBase<Sim
   send_xml<SimpleWeb::HTTPS>(response, SimpleWeb::StatusCode::client_error_unauthorized, xml);
 }
 
-std::thread
-startServer(SimpleWeb::Server<SimpleWeb::HTTPS> *server, const std::shared_ptr<state::AppState> &state, int port) {
+std::thread startServer(HttpsServer *server, const std::shared_ptr<state::AppState> &state, int port) {
   server->config.port = port;
   server->config.address = "0.0.0.0";
   server->default_resource["GET"] = endpoints::not_found<SimpleWeb::HTTPS>;

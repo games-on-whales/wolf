@@ -1,9 +1,14 @@
+#include "catch2/catch_all.hpp"
+using Catch::Matchers::Equals;
+
 extern "C" {
 #include <reedsolomon/rs.h>
 }
 
 #include <streaming/gst-plugin/audio.hpp>
 #include <streaming/gst-plugin/video.hpp>
+#include <string>
+using namespace std::string_literals;
 
 /* UTILS */
 

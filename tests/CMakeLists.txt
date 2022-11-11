@@ -2,7 +2,7 @@
 FetchContent_Declare(
         Catch2
         GIT_REPOSITORY https://github.com/catchorg/Catch2.git
-        GIT_TAG v3.0.0-preview3
+        GIT_TAG v3.1.1
 )
 
 FetchContent_MakeAvailable(Catch2)
@@ -10,12 +10,15 @@ FetchContent_MakeAvailable(Catch2)
 # Tests need to be added as executables first
 add_executable(wolftests main.cpp)
 
+file(GLOB SRC_LIST SRCS *.cpp)
+target_sources(wolftests PRIVATE ${SRC_LIST})
+
 # I'm using C++17 in the test
 target_compile_features(wolftests PRIVATE cxx_std_17)
 
 # Should be linked to the main library, as well as the Catch2 testing library
 target_link_libraries(wolftests PRIVATE
-        wolf
+        wolf::runner
         Catch2::Catch2WithMain)
 
 ## Test assets

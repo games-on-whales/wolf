@@ -1,13 +1,15 @@
 #pragma once
+
 #include <helpers/logger.hpp>
 #include <helpers/utils.hpp>
 #include <rtsp/parser.hpp>
 #include <state/data-structures.hpp>
+#include <string>
 
 namespace rtsp::commands {
 
 using namespace ranges;
-
+using namespace std::string_literals;
 using namespace rtsp;
 
 RTSP_PACKET error_msg(unsigned short status_code, std::string_view error_msg, int sequence_number = 0) {

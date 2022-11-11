@@ -1,35 +1,25 @@
 #pragma once
 
-#include <boost/property_tree/ptree.hpp>
 #include <crypto/crypto.hpp>
 #include <functional>
 #include <helpers/utils.hpp>
 #include <moonlight/protocol.hpp>
 #include <range/v3/view.hpp>
-#include <rest/helpers.cpp>
-#include <server_http.hpp>
-#include <state/data-structures.hpp>
-
-using XML = moonlight::XML;
+#include <rest/helpers.hpp>
+#include <rest/rest.hpp>
+#include <state/config.hpp>
 
 namespace endpoints {
 
-/**
- * @brief server error will be the default response when something goes wrong
- */
-template <class T> void server_error(std::shared_ptr<typename SimpleWeb::ServerBase<T>::Response> response) {
+template <class T> void server_error(std::shared_ptr<typename SimpleWeb::Server<T>::Response> response) {
   XML xml;
   xml.put("root.<xmlattr>.status_code", 400);
   send_xml<T>(response, SimpleWeb::StatusCode::client_error_bad_request, xml);
 }
 
-/**
- * @brief This is the default endpoint when no condition is matched.
- * returns a 404 response
- */
 template <class T>
-void not_found(std::shared_ptr<typename SimpleWeb::ServerBase<T>::Response> response,
-               std::shared_ptr<typename SimpleWeb::ServerBase<T>::Request> request) {
+void not_found(std::shared_ptr<typename SimpleWeb::Server<T>::Response> response,
+               std::shared_ptr<typename SimpleWeb::Server<T>::Request> request) {
   log_req<T>(request);
 
   XML xml;
@@ -37,12 +27,9 @@ void not_found(std::shared_ptr<typename SimpleWeb::ServerBase<T>::Response> resp
   send_xml<T>(response, SimpleWeb::StatusCode::client_error_not_found, xml);
 }
 
-/**
- * @brief Moonlight moonlight phase 1: GET /serverinfo
- */
 template <class T>
-void serverinfo(std::shared_ptr<typename SimpleWeb::ServerBase<T>::Response> response,
-                std::shared_ptr<typename SimpleWeb::ServerBase<T>::Request> request,
+void serverinfo(std::shared_ptr<typename SimpleWeb::Server<T>::Response> response,
+                std::shared_ptr<typename SimpleWeb::Server<T>::Request> request,
                 const std::shared_ptr<state::AppState> &state) {
   log_req<T>(request);
 
@@ -66,12 +53,9 @@ void serverinfo(std::shared_ptr<typename SimpleWeb::ServerBase<T>::Response> res
   send_xml<T>(response, SimpleWeb::StatusCode::success_ok, xml);
 }
 
-/**
- * @brief Moonlight moonlight phase 2: GET /pair
- */
 template <class T>
-void pair(std::shared_ptr<typename SimpleWeb::ServerBase<T>::Response> response,
-          std::shared_ptr<typename SimpleWeb::ServerBase<T>::Request> request,
+void pair(std::shared_ptr<typename SimpleWeb::Server<T>::Response> response,
+          std::shared_ptr<typename SimpleWeb::Server<T>::Request> request,
           const std::shared_ptr<state::AppState> &state) {
   log_req<T>(request);
 
@@ -211,8 +195,8 @@ void pair(std::shared_ptr<typename SimpleWeb::ServerBase<T>::Response> response,
 namespace https {
 
 template <class T>
-void applist(std::shared_ptr<typename SimpleWeb::ServerBase<T>::Response> response,
-             std::shared_ptr<typename SimpleWeb::ServerBase<T>::Request> request,
+void applist(std::shared_ptr<typename SimpleWeb::Server<T>::Response> response,
+             std::shared_ptr<typename SimpleWeb::Server<T>::Request> request,
              const std::shared_ptr<state::AppState> &state) {
   log_req<T>(request);
 
@@ -225,8 +209,8 @@ void applist(std::shared_ptr<typename SimpleWeb::ServerBase<T>::Response> respon
 }
 
 template <class T>
-void launch(std::shared_ptr<typename SimpleWeb::ServerBase<T>::Response> response,
-            std::shared_ptr<typename SimpleWeb::ServerBase<T>::Request> request,
+void launch(std::shared_ptr<typename SimpleWeb::Server<T>::Response> response,
+            std::shared_ptr<typename SimpleWeb::Server<T>::Request> request,
             const state::PairedClient &current_client,
             const std::shared_ptr<state::AppState> &state) {
   log_req<T>(request);

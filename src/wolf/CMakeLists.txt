@@ -1,5 +1,5 @@
-add_executable(wolf wolf.cpp)
-target_compile_features(wolf PRIVATE cxx_std_17)
+add_library(wolf_runner)
+add_library(wolf::runner ALIAS wolf_runner)
 
 ##############################
 # External deps via GIT
@@ -26,7 +26,7 @@ FetchContent_Declare(
         GIT_REPOSITORY https://gitlab.com/eidheim/Simple-Web-Server.git
         GIT_TAG bdb1057)
 FetchContent_MakeAvailable(simplewebserver)
-target_link_libraries(wolf PUBLIC simple-web-server)
+target_link_libraries(wolf_runner PUBLIC simple-web-server)
 
 # TOML parser (config file)
 FetchContent_Declare(
@@ -35,7 +35,7 @@ FetchContent_Declare(
         GIT_TAG v3.7.1)
 set(TOML11_COLORIZE_ERROR_MESSAGE, ON)
 FetchContent_MakeAvailable(toml)
-target_link_libraries(wolf PUBLIC toml11::toml11)
+target_link_libraries(wolf_runner PUBLIC toml11::toml11)
 
 # Enet
 set(CMAKE_PROJECT_INCLUDE_BEFORE "${PROJECT_SOURCE_DIR}/cmake/EnableCMP0048.cmake")
@@ -44,7 +44,7 @@ FetchContent_Declare(
         GIT_REPOSITORY https://github.com/cgutman/enet
         GIT_TAG 4cde9cc3dcc5c30775a80da1de87f39f98672a31)
 FetchContent_MakeAvailable(enet)
-target_link_libraries(wolf PUBLIC enet)
+target_link_libraries(wolf_runner PUBLIC enet)
 unset(CMAKE_PROJECT_INCLUDE_BEFORE)
 
 ##############################
@@ -66,29 +66,45 @@ find_library(BOOST_STACKTRACE_BACKTRACE_LIBRARY NAMES boost_stacktrace_backtrace
 if (UNIX)
     message(STATUS "Using Boost::stacktrace/addr2line")
     add_definitions(-D_GNU_SOURCE=1)
-    target_compile_definitions(wolf PRIVATE BOOST_STACKTRACE_USE_ADDR2LINE)
-    target_link_libraries(wolf PRIVATE dl)
+    target_compile_definitions(wolf_runner PRIVATE BOOST_STACKTRACE_USE_ADDR2LINE)
+    target_link_libraries(wolf_runner PRIVATE dl)
 elseif (MINGW AND BOOST_STACKTRACE_BACKTRACE_LIBRARY)
     message(STATUS "Using Boost::stacktrace/backtrace")
-    target_compile_definitions(wolf PRIVATE BOOST_STACKTRACE_USE_BACKTRACE)
-    target_link_libraries(wolf PRIVATE boost_stacktrace_backtrace backtrace)
+    target_compile_definitions(wolf_runner PRIVATE BOOST_STACKTRACE_USE_BACKTRACE)
+    target_link_libraries(wolf_runner PRIVATE boost_stacktrace_backtrace backtrace)
 else ()
     message(STATUS "Using Boost::stacktrace/basic")
 endif ()
 
-target_include_directories(wolf PUBLIC .)
-
 target_link_libraries(
-        wolf PUBLIC
+        wolf_runner PUBLIC
         wolf::moonlight
         wolf::streaming
         ${Boost_LIBRARIES}
         ${CMAKE_DL_LIBS}
         ${CMAKE_THREAD_LIBS_INIT}
         fmt::fmt-header-only
-        dp::eventbus
-        #-static # enable to statically link all libraries
-)
+        dp::eventbus)
 
-# The following is needed in order to import this into the test suite
-set_property(TARGET wolf PROPERTY ENABLE_EXPORTS 1)
+target_include_directories(wolf_runner PUBLIC .)
+
+file(GLOB HEADER_LIST CONFIGURE_DEPENDS */*.hpp)
+file(GLOB SRC_LIST SRCS */*.cpp)
+
+target_sources(wolf_runner
+        PRIVATE
+        ${SRC_LIST}
+
+        PUBLIC
+        ${HEADER_LIST})
+
+# All users of this library will need at least C++17
+target_compile_features(wolf_runner PUBLIC cxx_std_17)
+
+####################
+# Executable
+add_executable(wolf wolf.cpp)
+target_link_libraries(wolf wolf::runner
+        #-static # enable to statically link all libraries
+        )
+target_compile_features(wolf PRIVATE cxx_std_17)

@@ -1,5 +1,7 @@
+#include "catch2/catch_all.hpp"
+using Catch::Matchers::Equals;
+
 #include <algorithm>
-#include <catch2/catch_test_macros.hpp>
 #include <crypto/crypto.hpp>
 #include <moonlight/protocol.hpp>
 #include <string>

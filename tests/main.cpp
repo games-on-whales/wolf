@@ -1,10 +1,10 @@
-#include "catch2/catch_all.hpp"
-#include "catch2/matchers/catch_matchers_all.hpp"
-using Catch::Matchers::Equals;
 #define CATCH_CONFIG_MAIN // This tells Catch to provide a main() - only do this in one cpp file
+#include "catch2/catch_all.hpp"
 
-#include "testControl.cpp"
-#include "testCrypto.cpp"
-#include "testGSTPlugin.cpp"
-#include "testMoonlight.cpp"
-#include "testRTSP.cpp"
+/**
+ * THIS FILE NEEDS TO BE LEFT EMPTY
+ * This allows us to compile the catch main once and then,
+ * when changing any test, compiling only them without rebuild it all.
+ *
+ * Greatly decreases compilation times!!!
+ */

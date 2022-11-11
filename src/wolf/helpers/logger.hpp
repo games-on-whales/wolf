@@ -23,7 +23,7 @@ namespace logs {
 
 using namespace boost::log::trivial;
 
-auto get_color(boost::log::trivial::severity_level level) {
+inline auto get_color(boost::log::trivial::severity_level level) {
   switch (level) {
   case debug:
   case trace:
@@ -39,7 +39,7 @@ auto get_color(boost::log::trivial::severity_level level) {
   }
 }
 
-auto get_name(boost::log::trivial::severity_level level) {
+inline auto get_name(boost::log::trivial::severity_level level) {
   switch (level) {
   case trace:
     return "TRACE";
@@ -70,7 +70,7 @@ auto get_name(boost::log::trivial::severity_level level) {
  *
  * @param min_log_level: The minum log level to be reported, anything below this will not be printed
  */
-void init(severity_level min_log_level) {
+inline void init(severity_level min_log_level) {
   /* init boost log
    * 1. Add common attributes
    * 2. set log filter to trace
@@ -98,14 +98,14 @@ void init(severity_level min_log_level) {
  * @param format_str: a valid fmt::format string
  * @param args: optional additional args to be formatted
  */
-template <typename S, typename... Args> void log(severity_level lv, const S &format_str, const Args &...args) {
+template <typename S, typename... Args> inline void log(severity_level lv, const S &format_str, const Args &...args) {
   auto msg = fmt::format(format_str, args...);
   boost::log::sources::severity_logger<severity_level> lg;
 
   BOOST_LOG_SEV(lg, lv) << msg;
 }
 
-logs::severity_level parse_level(const std::string &level) {
+inline logs::severity_level parse_level(const std::string &level) {
   std::string lvl = level;
   std::transform(level.begin(), level.end(), lvl.begin(), [](unsigned char c) { return std::toupper(c); });
   if (lvl == "TRACE") {

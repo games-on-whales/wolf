@@ -1,9 +1,6 @@
+#include <control/control.hpp>
 #include <control/packet_utils.hpp>
-#include <helpers/logger.hpp>
-#include <range/v3/view.hpp>
-#include <state/data-structures.hpp>
 #include <sys/socket.h>
-#include <thread>
 
 namespace control {
 
@@ -69,7 +66,7 @@ std::pair<std::string /* ip */, int /* port */> get_ip(const sockaddr *const ip_
   return {std::string{data}, port};
 }
 
-std::thread start_service(immer::box<state::ControlSession> control_sess, int timeout_millis = 1000) {
+std::thread start_service(immer::box<state::ControlSession> control_sess, int timeout_millis) {
   return std::thread(
       [timeout_millis](immer::box<state::ControlSession> control_sess) {
         enet_host host = create_host(control_sess->host, control_sess->port, control_sess->peers);

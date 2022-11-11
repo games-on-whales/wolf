@@ -7,8 +7,15 @@ file(GLOB SRC_LIST SRCS
         "streaming/*.cpp"
         "streaming/gst-plugin/*.cpp")
 
-add_library(streaming ${HEADER_LIST} ${SRC_LIST})
+add_library(streaming)
 add_library(wolf::streaming ALIAS streaming)
+
+target_sources(streaming
+        PRIVATE
+        ${SRC_LIST}
+
+        PUBLIC
+        ${HEADER_LIST})
 
 # We need this directory, and users of our library will need it too
 target_include_directories(streaming PUBLIC .)
@@ -30,13 +37,7 @@ FetchContent_Declare(
 set(EVENTBUS_BUILD_TESTS OFF)
 FetchContent_MakeAvailable(eventbus)
 
-target_link_libraries(streaming PUBLIC
-        fmt::fmt-header-only
-        dp::eventbus
-        immer)
-
 find_package(PkgConfig)
-
 pkg_check_modules(GST REQUIRED gstreamer-1.0)
 
 find_package(GLIB2)
@@ -49,7 +50,9 @@ endif ()
 # See here for a guide on how to statically link gstreamer:
 # https://www.collabora.com/news-and-blog/news-and-events/generate-mininal-gstreamer-build-tailored-to-your-needs.html
 target_link_libraries(streaming PUBLIC
-        moonlight
+        wolf::moonlight
+        fmt::fmt-header-only
+        dp::eventbus
         ${GOBJECT_LIBRARIES}
         ${GLIB2_LIBRARIES}
         ${GSTREAMER_LIBRARIES}

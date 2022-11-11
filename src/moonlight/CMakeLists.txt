@@ -4,14 +4,22 @@ project(moonlight)
 
 # Optionally glob, but only for CMake 3.12 or later:
 file(GLOB HEADER_LIST CONFIGURE_DEPENDS
-        "./moonlight/*.hpp"
-        "./reedsolomon/rs.h"
-        "./rtsp/parser.hpp")
+        moonlight/*.hpp
+        reedsolomon/rs.h
+        rtsp/parser.hpp)
 
 
 # Make an automatic library - will be static or dynamic based on user setting
-add_library(moonlight moonlight.cpp ${HEADER_LIST} "./reedsolomon/rs.c")
+add_library(moonlight)
 add_library(wolf::moonlight ALIAS moonlight)
+
+target_sources(moonlight
+        PRIVATE
+        moonlight.cpp
+        reedsolomon/rs.c
+
+        PUBLIC
+        ${HEADER_LIST})
 
 # Immutable datastructures
 FetchContent_Declare(

@@ -1,7 +1,14 @@
-#include "rtsp/net.cpp"
+#include "catch2/catch_all.hpp"
+using Catch::Matchers::Equals;
+
+#include <rtsp/net.hpp>
+#include <state/data-structures.hpp>
 #include <boost/beast/_experimental/test/stream.hpp>
 #include <rtsp/parser.hpp>
-
+#include <string>
+#include <crypto/crypto.hpp>
+using namespace std::string_literals;
+using namespace state;
 using namespace rtsp;
 
 /**

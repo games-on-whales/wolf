@@ -1,5 +1,5 @@
 # Works with 3.11 and tested through 3.24
-cmake_minimum_required(VERSION 3.11...3.24)
+cmake_minimum_required(VERSION 3.13...3.24)
 
 # Project name and a few useful settings. Other commands can pick up the results
 project(wolf

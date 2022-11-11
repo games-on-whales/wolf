@@ -1,9 +1,20 @@
-file(GLOB HEADER_LIST CONFIGURE_DEPENDS "${wolf_SOURCE_DIR}/src/crypto/crypto/*.hpp" "${wolf_SOURCE_DIR}/src/crypto/src/*.hpp")
-file(GLOB CRYPTO_LIST SRCS "${wolf_SOURCE_DIR}/src/crypto/src/*.cpp")
+file(GLOB HEADER_LIST CONFIGURE_DEPENDS
+        "${wolf_SOURCE_DIR}/src/crypto/crypto/*.hpp"
+        "${wolf_SOURCE_DIR}/src/crypto/src/*.hpp")
+file(GLOB CRYPTO_SRCS SRCS
+        "${wolf_SOURCE_DIR}/src/crypto/src/*.cpp")
 
 # Make an automatic library - will be static or dynamic based on user setting
-add_library(wolf_crypto src/crypto.cpp ${CRYPTO_LIST} ${HEADER_LIST})
+add_library(wolf_crypto)
 add_library(wolf::crypto ALIAS wolf_crypto)
+
+target_sources(wolf_crypto
+        PRIVATE
+        ${CRYPTO_SRCS}
+        src/crypto.cpp
+
+        PUBLIC
+        ${HEADER_LIST})
 
 # We need this directory, and users of our library will need it too
 target_include_directories(wolf_crypto PUBLIC .)

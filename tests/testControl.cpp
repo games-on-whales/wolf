@@ -1,5 +1,7 @@
+#include "catch2/catch_all.hpp"
+using Catch::Matchers::Equals;
+
 #include <control/packet_utils.hpp>
-#include <crypto.hpp>
 
 TEST_CASE("Control AES Encryption", "CONTROL") {
   // A bunch of packets taken from a real session

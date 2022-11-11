@@ -2,19 +2,15 @@ extern "C" {
 #include <reedsolomon/rs.h>
 }
 
-#include <fmt/core.h>
-#include <fmt/format.h>
-#include <gst/gst.h>
 #include <immer/box.hpp>
 #include <moonlight/data-structures.hpp>
 #include <streaming/data-structures.hpp>
 #include <streaming/gst-plugin/gstrtpmoonlightpay_audio.hpp>
 #include <streaming/gst-plugin/gstrtpmoonlightpay_video.hpp>
+#include <streaming/streaming.hpp>
 #include <string>
 
 namespace streaming {
-
-using namespace moonlight::control;
 
 /**
  * GStreamer needs to be initialised once per run
@@ -33,15 +29,6 @@ void init() {
   gst_element_register(audio_plugin, "rtpmoonlightpay_audio", GST_RANK_PRIMARY, gst_TYPE_rtp_moonlight_pay_audio);
 
   reed_solomon_init();
-}
-
-/**
- * @return the Gstreamer version we are linked to
- */
-std::string version() {
-  guint major, minor, micro, nano;
-  gst_version(&major, &minor, &micro, &nano);
-  return fmt::format("{}.{}.{}-{}", major, minor, micro, nano);
 }
 
 /**
