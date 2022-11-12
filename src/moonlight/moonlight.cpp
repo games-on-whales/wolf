@@ -160,7 +160,6 @@ XML applist(const immer::vector<App> &apps) {
 XML launch_success(const std::string &local_ip, const std::string &rtsp_port) {
   // TODO: implement resume
   // TODO: implement error on launch
-  // TODO: return GCM key
   XML resp;
 
   resp.put("root.<xmlattr>.status_code", 200);
@@ -169,20 +168,5 @@ XML launch_success(const std::string &local_ip, const std::string &rtsp_port) {
 
   return resp;
 }
-
-// TODO: implement key derivation
-// stream::launch_session_t make_launch_session(bool host_audio, const args_t &args) {
-//  stream::launch_session_t launch_session;
-//
-//  launch_session.host_audio = host_audio;
-//  launch_session.gcm_key    = util::from_hex<crypto::aes_t>(args.at("rikey"s), true);
-//  uint32_t prepend_iv       = util::endian::big<uint32_t>(util::from_view(args.at("rikeyid"s)));
-//  auto prepend_iv_p         = (uint8_t *)&prepend_iv;
-//
-//  auto next = std::copy(prepend_iv_p, prepend_iv_p + sizeof(prepend_iv), std::begin(launch_session.iv));
-//  std::fill(next, std::end(launch_session.iv), 0);
-//
-//  return launch_session;
-//}
 
 } // namespace moonlight

@@ -27,26 +27,26 @@ id = "1"
 [gstreamer] #<5>
 
 [gstreamer.audio]
-default_sink = """
-rtpmoonlightpay_audio name=moonlight_pay packet_duration={packet_duration} encrypt={encrypt} aes_key="{aes_key}" aes_iv="{aes_iv}"  ! udpsink host={client_ip} port={client_port}\
+default_source = "audiotestsrc wave=ticks is-live=true"
+default_audio_params = """
+audioconvert ! audiorate ! audioresample ! audio/x-raw, \
+channels={channels}\
 """
 default_opus_encoder = """
 opusenc bitrate={bitrate} bitrate-type=cbr frame-size={p\
 acket_duration} bandwidth=fullband audio-type=generic ma\
 x-payload-size=1400\
 """
-default_audio_params = """
-audioconvert ! audiorate ! audioresample ! audio/x-raw, \
-channels={channels}\
+default_sink = """
+rtpmoonlightpay_audio name=moonlight_pay packet_duration={packet_duration} encrypt={encrypt} aes_key="{aes_key}" aes_iv="{aes_iv}"  ! udpsink host={client_ip} port={client_port}\
 """
-default_source = "audiotestsrc wave=ticks is-live=true"
 
 [gstreamer.video]
-default_sink = """
-rtpmoonlightpay_video name=moonlight_pay payload_size={payload_s\
-ize} fec_percentage={fec_percentage} min_required_fec_packets={m\
-in_required_fec_packets} ! udpsink host={client_ip} port={client\
-_port}\
+default_source = "videotestsrc pattern=ball is-live=true"
+default_video_params = """
+videoscale ! videoconvert ! videorate ! video/x-raw, wid\
+th={width}, height={height}, framerate={fps}/1,format=I4\
+20, chroma-site={color_range}, colorimetry={color_space}\
 """
 default_hevc_encoder = """
 x265enc tune=zerolatency speed-preset=superfast bitrate={bitrate} option-string="info=0:keyint=-1:qp=28:repeat-headers=1:slices={slices_per_frame}:frame-threads={slices_per_frame}:aud=0:annexb=1:log-level=3:open-gop=0:bframes=0:intra-refresh=0" ! video/x-h265, profile=main, stream-format=byte-stream\
@@ -54,11 +54,38 @@ x265enc tune=zerolatency speed-preset=superfast bitrate={bitrate} option-string=
 default_h264_encoder = """
 x264enc pass=qual tune=zerolatency speed-preset=superfast b-adapt=false bframes=0 ref=1 bitrate={bitrate} aud=false sliced-threads=true threads={slices_per_frame} option-string="slices={slices_per_frame}:keyint=infinite:open-gop=0" ! video/x-h264, profile=high, stream-format=byte-stream\
 """
-default_video_params = """
-videoscale ! videoconvert ! videorate ! video/x-raw, wid\
-th={width}, height={height}, framerate={fps}/1,format=I4\
-20, chroma-site={color_range}, colorimetry={color_space}\
+default_sink = """
+rtpmoonlightpay_video name=moonlight_pay payload_size={payload_s\
+ize} fec_percentage={fec_percentage} min_required_fec_packets={m\
+in_required_fec_packets} ! udpsink host={client_ip} port={client\
+_port}\
 """
-default_source = "videotestsrc pattern=ball is-live=true"
 
 ....
+
+<1> *paired_clients*: a list of all the Moonlight clients that have succesfully completed the pairing process; it'll be populated by Wolf and saved to this file.
+
+<2> *hostname*: this is the name that will be displayed in the list of hosts in the Moonlight UI
+
+<3> *uuid*: a randomly generated UUID, it's used by Moonlight to know if the current host has already been paired
+
+<4> *apps*: the list of apps that will be seen in Moonlight
+
+<5> *gstreamer*: here are all the default parts that compose the two video and audio pipelines.
+
+== Defining apps
+
+Apps defined here will be shown in Moonlight after successfully pairing with Wolf. +
+You can re-define parts of the Gstreamer pipeline easily, ex:
+
+[source,toml]
+....
+[[apps]]
+title = "SMPTE"
+support_hdr = true
+id = "2"
+[apps.video]
+source = "videotestsrc pattern=smpte is-live=true"
+....
+
+See more examples in the xref:gstreamer.adoc[] page.

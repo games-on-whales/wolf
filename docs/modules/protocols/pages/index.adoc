@@ -11,9 +11,9 @@
   :app list;
   :start app;
 | RTSP |
-  :exchange next procols info;
+  :exchange next protocols info;
   :PLAY;
-| Control |
+| Control/RTP |
   repeat
     :get user inputs;
     :Video/Audio stream data;
@@ -23,22 +23,34 @@
 stop
 ....
 
-There are 6 main protocols involved in the current GameStream protocol:
+[WARNING,caption=TODO]
+====
+Design a better flowchart
+====
+
+There are 6 main protocols involved in the current Moonlight protocol:
 
 * HTTP (TCP 47989)
 ** unencrypted 🔓
-** used to exchanged public information needed to start link:pairing[pairing clients]
+** used to exchanged public information needed to start xref:http-pairing.adoc[pairing clients]
 * HTTPS (TCP 47984)
 ** encrypted 🔐 (SSL)
 ** only available to paired clients
-** used to exchange available apps and trigger the start
-* link:rtsp[RTSP] (TCP 48010)
+** used to exchange available apps, encryption keys and trigger the start of a stream
+* xref:rtsp.adoc[RTSP] (TCP 48010)
 ** unencrypted 🔓
 ** Used to exchange ports and settings for the next 3 streams
-* link:control-specs[Control] over ENet (UDP 47999)
+* xref:control-specs.adoc[Control over ENet] (UDP 47999)
 ** encrypted 🔐 (using AES GCM 128 bit)
 ** Used to exchange user input data and extra stream information
-* Video over RTP (UDP 47998)
+* xref:rtp-video.adoc[Video over RTP] (UDP 47998)
 ** unencrypted 🔓
-* Audio over RTP (UDP 48000)
-** encrypted 🔒 (using AES CBC 128 bit)
+** Uses H.264 or HEVC to encode video
+* xref:rtp-opus.adoc[Audio over RTP] (UDP 48000)
+** encrypted 🔐 (using AES CBC 128 bit)
+** Uses Opus to encode audio
+
+[NOTE]
+====
+The ports specified here are the defaults, apart from HTTP/S all other ports can be dynamically set by the backend and will be correctly picked up by the Moonlight client.
+====
