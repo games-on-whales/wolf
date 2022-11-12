@@ -25,11 +25,11 @@ create_rtp_header(const gst_rtp_moonlight_pay_video &rtpmoonlightpay, int packet
   packet->rtp.timestamp = 0x00;
   packet->rtp.ssrc = 0x00;
 
-  uint16_t sequence_number = rtpmoonlightpay.cur_seq_number + packet_nr;
-  packet->rtp.sequenceNumber = boost::endian::native_to_big(sequence_number);
+  uint32_t sequence_number = rtpmoonlightpay.cur_seq_number + packet_nr;
+  packet->rtp.sequenceNumber = boost::endian::native_to_big((uint16_t)sequence_number);
 
   packet->packet.frameIndex = rtpmoonlightpay.frame_num;
-  packet->packet.streamPacketIndex = ((uint32_t)sequence_number) << 8;
+  packet->packet.streamPacketIndex = sequence_number << 8;
 
   packet->packet.multiFecFlags = 0x10;
   packet->packet.multiFecBlocks = 0;
@@ -93,36 +93,30 @@ static void update_fec_info(const gst_rtp_moonlight_pay_video &rtpmoonlightpay,
                             state::VideoRTPHeaders *rtp_packet,
                             int shard_idx,
                             int data_shards,
-                            int fec_percentage) {
+                            int fec_percentage,
+                            int block_index = 0,
+                            int last_block_index = 0) {
   rtp_packet->packet.frameIndex = rtpmoonlightpay.frame_num;
 
   rtp_packet->packet.fecInfo = (shard_idx << 12 | data_shards << 22 | fec_percentage << 4);
-  rtp_packet->packet.multiFecBlocks = 0; // TODO: support multiple fec blocks?
+  rtp_packet->packet.multiFecBlocks = (block_index << 4) | last_block_index;
   rtp_packet->packet.multiFecFlags = 0x10;
 
   rtp_packet->rtp.header = 0x80 | FLAG_EXTENSION;
-  uint16_t sequence_number = rtpmoonlightpay.cur_seq_number + shard_idx;
-  rtp_packet->rtp.sequenceNumber = boost::endian::native_to_big(sequence_number);
+  uint32_t sequence_number = rtpmoonlightpay.cur_seq_number + shard_idx;
+  rtp_packet->rtp.sequenceNumber = boost::endian::native_to_big((uint16_t)sequence_number);
 }
 
-/**
- * Given the RTP packets that contains payload,
- * will generate extra RTP packets with the FEC information.
- *
- * Returns a list of GstBuffer that contains the input rtp_packets + the newly created FEC packets.
- * Will also add FEC info to the RTP headers of the original packets
- */
-static GstBufferList *
-generate_fec_packets(const gst_rtp_moonlight_pay_video &rtpmoonlightpay, GstBufferList *rtp_packets, GstBuffer *inbuf) {
-  GstMapInfo info;
-  GstBuffer *rtp_payload = gst_buffer_list_unfold(rtp_packets);
+struct BLOCKS {
+  int block_size;
+  int data_shards;
+  int parity_shards;
+  int fec_percentage;
+};
 
-  auto payload_size = (int)gst_buffer_get_size(rtp_payload);
+static BLOCKS determine_split(const gst_rtp_moonlight_pay_video &rtpmoonlightpay, int data_shards) {
   auto blocksize = rtpmoonlightpay.payload_size + (int)sizeof(state::VideoRTPHeaders) - MAX_RTP_HEADER_SIZE;
-  auto needs_padding = payload_size % blocksize != 0;
-
   auto fec_percentage = rtpmoonlightpay.fec_percentage;
-  int data_shards = gst_buffer_list_length(rtp_packets);
   int parity_shards = (data_shards * fec_percentage + 99) / 100;
 
   // increase the FEC percentage in order to get the min required packets
@@ -131,28 +125,52 @@ generate_fec_packets(const gst_rtp_moonlight_pay_video &rtpmoonlightpay, GstBuff
     fec_percentage = (100 * parity_shards) / data_shards;
   }
 
-  auto nr_shards = data_shards + parity_shards;
+  return {.block_size = blocksize,
+          .data_shards = data_shards,
+          .parity_shards = parity_shards,
+          .fec_percentage = fec_percentage};
+}
+
+/**
+ * Given the RTP packets that contains payload,
+ * will generate extra RTP packets with the FEC information.
+ *
+ * Will modify the input rtp_packets with the correct FEC info
+ * and will append the FEC packets at the end
+ */
+static void generate_fec_packets(const gst_rtp_moonlight_pay_video &rtpmoonlightpay,
+                                 GstBufferList *rtp_packets,
+                                 int block_index = 0,
+                                 int last_block_index = 0) {
+  GstMapInfo info;
+  GstBuffer *rtp_payload = gst_buffer_list_unfold(rtp_packets);
+
+  auto payload_size = (int)gst_buffer_get_size(rtp_payload);
+  auto blocks = determine_split(rtpmoonlightpay, gst_buffer_list_length(rtp_packets));
+  auto nr_shards = blocks.data_shards + blocks.parity_shards;
 
   // pads rtp_payload to blocksize
-  if (needs_padding) {
-    GstBuffer *pad = gst_buffer_new_and_fill((data_shards * blocksize) - payload_size, 0x00);
+  if (payload_size % blocks.block_size != 0) {
+    GstBuffer *pad = gst_buffer_new_and_fill((blocks.data_shards * blocks.block_size) - payload_size, 0x00);
     rtp_payload = gst_buffer_append(rtp_payload, pad);
   }
 
-  rtp_payload = gst_buffer_append(rtp_payload, gst_buffer_new_and_fill((parity_shards * blocksize), 0x00));
+  // Allocate space for FEC packets
+  rtp_payload =
+      gst_buffer_append(rtp_payload, gst_buffer_new_and_fill((blocks.parity_shards * blocks.block_size), 0x00));
   gst_buffer_map(rtp_payload, &info, GST_MAP_WRITE);
 
   // Reed Solomon encode the full stream of bytes
-  auto rs = reed_solomon_new(data_shards, parity_shards);
+  auto rs = reed_solomon_new(blocks.data_shards, blocks.parity_shards);
   unsigned char *ptr[nr_shards];
   for (int shard_idx = 0; shard_idx < nr_shards; shard_idx++) {
-    ptr[shard_idx] = info.data + (shard_idx * blocksize);
+    ptr[shard_idx] = info.data + (shard_idx * blocks.block_size);
   }
-  reed_solomon_encode(rs, ptr, nr_shards, blocksize);
+  reed_solomon_encode(rs, ptr, nr_shards, blocks.block_size);
   reed_solomon_release(rs);
 
-  // Split out back into RTP packets and update FEC info
-  for (int shard_idx = 0; shard_idx < data_shards; shard_idx++) {
+  // update FEC info of the already created RTP packets
+  for (int shard_idx = 0; shard_idx < blocks.data_shards; shard_idx++) {
     GstMapInfo data_info;
     auto data_pkt = gst_buffer_list_get(rtp_packets, shard_idx);
     gst_buffer_map(data_pkt, &data_info, GST_MAP_WRITE);
@@ -160,27 +178,73 @@ generate_fec_packets(const gst_rtp_moonlight_pay_video &rtpmoonlightpay, GstBuff
     update_fec_info(rtpmoonlightpay,
                     (state::VideoRTPHeaders *)(data_info.data),
                     shard_idx,
-                    data_shards,
-                    fec_percentage);
+                    blocks.data_shards,
+                    blocks.fec_percentage,
+                    block_index,
+                    last_block_index);
 
     gst_buffer_unmap(data_pkt, &data_info);
   }
 
-  for (int shard_idx = data_shards; shard_idx < nr_shards; shard_idx++) {
-    auto position = shard_idx * blocksize;
+  // Push back the newly created RTP packets with the FEC info
+  for (int shard_idx = blocks.data_shards; shard_idx < nr_shards; shard_idx++) {
+    auto position = shard_idx * blocks.block_size;
     auto rtp_packet = (state::VideoRTPHeaders *)(info.data + position);
 
-    update_fec_info(rtpmoonlightpay, rtp_packet, shard_idx, data_shards, fec_percentage);
+    update_fec_info(rtpmoonlightpay,
+                    rtp_packet,
+                    shard_idx,
+                    blocks.data_shards,
+                    blocks.fec_percentage,
+                    block_index,
+                    last_block_index);
 
-    GstBuffer *packet_buf = gst_buffer_new_allocate(nullptr, blocksize, nullptr);
-    gst_buffer_fill(packet_buf, 0, rtp_packet, blocksize);
-    gst_copy_timestamps(inbuf, packet_buf);
+    GstBuffer *packet_buf = gst_buffer_new_allocate(nullptr, blocks.block_size, nullptr);
+    gst_buffer_fill(packet_buf, 0, rtp_packet, blocks.block_size);
     gst_buffer_list_insert(rtp_packets, -1, packet_buf);
   }
 
   gst_buffer_unmap(rtp_payload, &info);
+}
 
-  return rtp_packets;
+/**
+ * Given a list of RTP packets will split them in 3 macro blocks of:
+ * [Payloads + FEC], [Payloads + FEC], [Payloads + FEC]
+ *
+ * Returns a new linear list of all the blocks
+ * Will modify the input rtp_packets with the correct FEC info
+ */
+static GstBufferList *
+generate_fec_multi_blocks(gst_rtp_moonlight_pay_video *rtpmoonlightpay, GstBufferList *rtp_packets, int data_shards) {
+  auto rtp_packets_size = gst_buffer_list_length(rtp_packets);
+
+  constexpr auto nr_blocks = 3;
+  constexpr auto last_block_index = 2 << 6;
+
+  GstBufferList *final_packets = gst_buffer_list_new_sized(0); // we'll increase the size on each block iteration
+
+  auto packets_per_block = (int)std::ceil((float)data_shards / nr_blocks);
+  for (int block_idx = 0; block_idx < nr_blocks; block_idx++) {
+    auto list_start = block_idx * packets_per_block;
+    auto list_end = MIN((block_idx + 1) * packets_per_block, rtp_packets_size);
+    auto block_packets = gst_buffer_list_sub(rtp_packets, list_start, list_end);
+
+    // bear in mind that since no actual data copy is done,
+    // this will also modify the FEC information in the original rtp_packets list
+    generate_fec_packets(*rtpmoonlightpay, block_packets, block_idx, last_block_index);
+
+    // We have to copy out the additional FEC packets; we just put them all back into a new linear list
+    auto total_block_packets = gst_buffer_list_length(block_packets);
+    for (int packet_idx = 0; packet_idx < total_block_packets; packet_idx++) {
+      // copy here is about the buffer object, not the data
+      gst_buffer_list_insert(final_packets, -1, gst_buffer_copy(gst_buffer_list_get(block_packets, packet_idx)));
+    }
+
+    // This will adjust the sequenceNumber of the RTP packet
+    rtpmoonlightpay->cur_seq_number += total_block_packets;
+  }
+
+  return final_packets;
 }
 
 /**
@@ -194,12 +258,22 @@ static GstBufferList *split_into_rtp(gst_rtp_moonlight_pay_video *rtpmoonlightpa
   auto full_payload_buf = prepend_video_header(inbuf);
 
   GstBufferList *rtp_packets = generate_rtp_packets(*rtpmoonlightpay, full_payload_buf);
+  auto rtp_packets_size = gst_buffer_list_length(rtp_packets);
   if (rtpmoonlightpay->fec_percentage > 0) {
-    rtp_packets = generate_fec_packets(*rtpmoonlightpay, rtp_packets, full_payload_buf);
-  }
-  rtpmoonlightpay->cur_seq_number += (int)gst_buffer_list_length(rtp_packets);
-  rtpmoonlightpay->frame_num++;
+    auto blocks = determine_split(*rtpmoonlightpay, rtp_packets_size);
 
+    // With a fec_percentage of 255, if payload is broken up into more than a 100 data_shards
+    // it will generate greater than DATA_SHARDS_MAX shards and FEC will fail to encode.
+    if (blocks.data_shards > 90) {
+      rtp_packets = generate_fec_multi_blocks(rtpmoonlightpay, rtp_packets, blocks.data_shards);
+    } else {
+      generate_fec_packets(*rtpmoonlightpay, rtp_packets, 0, 0);
+      rtpmoonlightpay->cur_seq_number += gst_buffer_list_length(rtp_packets);
+    }
+  }
+
+  rtpmoonlightpay->frame_num++;
   return rtp_packets;
 }
+
 } // namespace gst_moonlight_video

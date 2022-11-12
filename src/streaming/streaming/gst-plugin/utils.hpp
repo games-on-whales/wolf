@@ -75,8 +75,8 @@ static GstBuffer *gst_buffer_new_and_fill(gsize size, const char vals[]) {
 }
 
 /**
- * From a list of buffer returns a single buffer that contains them all.
- * No copy of the stored data is done
+ * From a list of buffers returns a single buffer that contains them all.
+ * No copy of the stored data is performed
  */
 static GstBuffer *gst_buffer_list_unfold(GstBufferList *buffer_list) {
   GstBuffer *buf = gst_buffer_new_allocate(NULL, 0, NULL);
@@ -88,6 +88,22 @@ static GstBuffer *gst_buffer_list_unfold(GstBufferList *buffer_list) {
   }
 
   return buf;
+}
+
+/**
+ * From a list of buffers returns a sub list from start (inclusive) to end (exclusive)
+ * No copy of the stored data is performed
+ */
+static GstBufferList *gst_buffer_list_sub(GstBufferList *buffer_list, int start, int end) {
+  GstBufferList *res = gst_buffer_list_new_sized(end - start);
+
+  for (int idx = start; idx < end; idx++) {
+    auto buf_idx =
+        gst_buffer_copy(gst_buffer_list_get(buffer_list, idx)); // copy here is about the buffer object, not the data
+    gst_buffer_list_insert(res, -1, buf_idx);
+  }
+
+  return res;
 }
 
 /**

@@ -24,7 +24,7 @@ struct _gst_rtp_moonlight_pay_video {
   int fec_percentage;
   int min_required_fec_packets;
 
-  int cur_seq_number;
+  u_int32_t cur_seq_number;
   u_int32_t frame_num;
 };
 

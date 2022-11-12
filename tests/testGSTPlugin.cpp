@@ -109,6 +109,20 @@ TEST_CASE_METHOD(GStreamerTestsFixture, "RTP VIDEO Splits", "[GSTPlugin]") {
     returned_payload += std::string(buf.begin(), buf.end());
   }
   REQUIRE_THAT(returned_payload, Equals("\0017charss"s + payload_str));
+
+  SECTION("Multi block FEC") {
+    auto payload_buf_blocks = gst_buffer_new_and_fill(payload_str.size(), payload_str.c_str());
+    auto rtp_packets_blocks = gst_moonlight_video::generate_rtp_packets(*rtpmoonlightpay, payload_buf_blocks);
+    auto final_packets =
+        gst_moonlight_video::generate_fec_multi_blocks(rtpmoonlightpay, rtp_packets_blocks, payload_expected_packets);
+
+    REQUIRE(gst_buffer_list_length(final_packets) ==
+            payload_expected_packets + fec_expected_packets - 1); // TODO: why one less?
+
+    auto first_payload = gst_buffer_copy_content(gst_buffer_list_get(rtp_packets, 0), rtp_header_size);
+    REQUIRE_THAT(std::string(first_payload.begin(), first_payload.end()), Equals("\0017charssNever go"));
+    // TODO: proper check content and FEC
+  }
 }
 
 TEST_CASE_METHOD(GStreamerTestsFixture, "Create RTP VIDEO packets", "[GSTPlugin]") {
@@ -159,12 +173,12 @@ TEST_CASE_METHOD(GStreamerTestsFixture, "Create RTP VIDEO packets", "[GSTPlugin]
   }
 
   SECTION("FEC") {
-    auto rtp_fec_packets = gst_moonlight_video::generate_fec_packets(*rtpmoonlightpay, rtp_packets, payload);
+    gst_moonlight_video::generate_fec_packets(*rtpmoonlightpay, rtp_packets);
     // Will append min_required_fec_packets to the original payload packets
-    REQUIRE(gst_buffer_list_length(rtp_fec_packets) == 4);
+    REQUIRE(gst_buffer_list_length(rtp_packets) == 4);
 
     SECTION("First packet (payload)") {
-      auto buf = gst_buffer_list_get(rtp_fec_packets, 0);
+      auto buf = gst_buffer_list_get(rtp_packets, 0);
       auto original = gst_buffer_list_get(rtp_packets, 0);
 
       // Is the RTP Header left untouched?
@@ -177,7 +191,7 @@ TEST_CASE_METHOD(GStreamerTestsFixture, "Create RTP VIDEO packets", "[GSTPlugin]
     }
 
     SECTION("Second packet (payload)") {
-      auto buf = gst_buffer_list_get(rtp_fec_packets, 1);
+      auto buf = gst_buffer_list_get(rtp_packets, 1);
       auto original = gst_buffer_list_get(rtp_packets, 1);
 
       // Is the RTP Header left untouched?
@@ -190,7 +204,7 @@ TEST_CASE_METHOD(GStreamerTestsFixture, "Create RTP VIDEO packets", "[GSTPlugin]
     }
 
     SECTION("Third packet (FEC)") {
-      auto buf = gst_buffer_list_get(rtp_fec_packets, 2);
+      auto buf = gst_buffer_list_get(rtp_packets, 2);
       auto rtp_packet = get_rtp_video_from_buf(buf);
 
       REQUIRE(rtp_packet->packet.frameIndex == 0);
@@ -203,7 +217,7 @@ TEST_CASE_METHOD(GStreamerTestsFixture, "Create RTP VIDEO packets", "[GSTPlugin]
       auto packet_size = rtpmoonlightpay->payload_size + (int)sizeof(state::VideoRTPHeaders);
       auto total_shards = data_shards + parity_shards;
 
-      auto flatten_packets = gst_buffer_list_unfold(rtp_fec_packets);
+      auto flatten_packets = gst_buffer_list_unfold(rtp_packets);
       auto packets_content = gst_buffer_copy_content(flatten_packets);
 
       unsigned char *packets_ptr[total_shards];
