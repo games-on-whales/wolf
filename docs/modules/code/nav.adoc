@@ -1,3 +1,0 @@
-* Code
-** xref:structure.adoc[Structure]
-** xref:gstreamer.adoc[]

@@ -1,0 +1,52 @@
+= Code Structure
+
+The code is written in order to be as readable as possible **with no side effects** and **no global objects/variables**.
+
+We (try to) follow a *functional programming* paradigm where all the methods take *immutable* inputs and returns new outputs; this has great benefits:
+
+* Given the highly parallel nature of Wolf, we can easily share immutable data structures to multiple threads without having to deal with race conditions.
+** This gives us the power to support multiple concurrent users effortlessly.
+* Code can easily be re-used by other projects since every part is highly decoupled.
+* Enables testing most of the implemented methods in isolation.
+
+We are also trying to isolate the Moonlight protocol from the actual implementation so that we can create a portable C++ library of stateless methods, where possible, the code has been separated in logical modules.
+
+== Modules
+
+=== src/crypto
+
+The crypto module depends on OpenSSL and provides an interface (https://github.com/games-on-whales/wolf/blob/HEAD/src/crypto/crypto/crypto.hpp[crypto.hpp]) to all the crypto related methods that are used by the other modules.
+
+=== src/moonlight
+
+Here we define core Moonlight functions in order to create the foundation for a platform-agnostic portable library.
+It currently hosts the followings:
+
+* HTTP/S protocol interface: https://github.com/games-on-whales/wolf/blob/HEAD/src/moonlight/moonlight/protocol.hpp[protocol.hpp]
+* Reed Solomon FEC implementation https://github.com/games-on-whales/wolf/blob/HEAD/src/moonlight/reedsolomon/rs.h[rs.h]
+* RTSP message parser https://github.com/games-on-whales/wolf/blob/HEAD/src/moonlight/rtsp/parser.hpp[parser.hpp]
+** Built using https://github.com/yhirose/cpp-peglib[yhirose/cpp-peglib] by writing a formal PEG (Parsing Expression Grammars) definition for all messages
+
+=== src/streaming
+
+This module implements a https://gstreamer.freedesktop.org/[gstreamer] plugin in order to encode video/audio streams into the Moonlight RDP format. +
+You can read more about our implementation in the dedicated xref:gstreamer.adoc[gstreamer page].
+
+=== src/wolf
+
+The wolf module defines the glue code that wraps everything together into the final executable binary.
+It uses the following dependencies:
+
+* https://www.boost.org/[Boost]: mainly used for: logging, stacktrace, Asio (the basic building block of all network code in Wolf: HTTP/S, RTP, RTSP)
+* https://github.com/cgutman/enet[cgutman/enet] custom fork of https://github.com/lsalzman/enet[lsalzman/enet] used to run the Control stream over UDP.
+* https://github.com/arximboldi/immer[arximboldi/immer]: persistent and immutable data structures; used mainly for data that needs to be shared across threads/logical modules.
+* https://github.com/DeveloperPaul123/eventbus[DeveloperPaul123/eventbus]: used to decouple functional modules by sending (immutable) data as events to different parts of the app.
+* https://github.com/ericniebler/range-v3[ericniebler/range-v3]: modern ranges for C++
+* https://gitlab.com/eidheim/Simple-Web-Server[eidheim/Simple-Web-Server]: a simple abstraction on top of Boost Asio, used to expose the HTTP/S API
+* https://github.com/ToruNiina/toml11[ToruNiina/toml11]: used to read/write the TOML configuration file
+* https://github.com/fmtlib/fmt[fmtlib/fmt]: string formatting library
+
+=== tests
+
+Unit tests will live under `tests/` and are written using the https://github.com/catchorg/Catch2[Catch2] framework. +
+We are implementing unit tests for most of the methods and (where possible) also mocking packets/requests seen during real Moonlight sessions.

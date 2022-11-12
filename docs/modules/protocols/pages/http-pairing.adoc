@@ -161,4 +161,5 @@ M->W ++: pairchallenge
 return:  paired = 1
 ....
 
-This extra step will run over HTTPS in order to make sure that Moonlight can reach Wolf over a secure connection.
+This extra step will run over HTTPS in order to make sure that Moonlight can reach Wolf over a secure connection. +
+On the backend every HTTPS request will be checked for a valid client certificate; only clients that have been successfully paired will be allowed to call the APIs

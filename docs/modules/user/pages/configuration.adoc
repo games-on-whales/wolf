@@ -1,0 +1,64 @@
+= Configuration
+
+Wolf is configured via a TOML config file and some additional optional ENV variables
+
+== ENV variables
+
+* *LOG_LEVEL*: controls the log level, defaults to `INFO`
+* *CFG_FILE*: path to the TOML config file, defaults to `config.toml`
+
+== TOML file
+
+The TOML configuration file is read only once at startup (or created if not present) and it'll be modified by Wolf when a new user is successfully paired.
+
+.Default TOML configuration file
+[source,toml]
+....
+paired_clients = [] #<1>
+hostname = "wolf"   #<2>
+uuid = "0f75f4d1-e28e-410a-b318-c0579f18f8d1" #<3>
+
+
+[[apps]] #<4>
+title = "Desktop"
+support_hdr = true
+id = "1"
+
+[gstreamer] #<5>
+
+[gstreamer.audio]
+default_sink = """
+rtpmoonlightpay_audio name=moonlight_pay packet_duration={packet_duration} encrypt={encrypt} aes_key="{aes_key}" aes_iv="{aes_iv}"  ! udpsink host={client_ip} port={client_port}\
+"""
+default_opus_encoder = """
+opusenc bitrate={bitrate} bitrate-type=cbr frame-size={p\
+acket_duration} bandwidth=fullband audio-type=generic ma\
+x-payload-size=1400\
+"""
+default_audio_params = """
+audioconvert ! audiorate ! audioresample ! audio/x-raw, \
+channels={channels}\
+"""
+default_source = "audiotestsrc wave=ticks is-live=true"
+
+[gstreamer.video]
+default_sink = """
+rtpmoonlightpay_video name=moonlight_pay payload_size={payload_s\
+ize} fec_percentage={fec_percentage} min_required_fec_packets={m\
+in_required_fec_packets} ! udpsink host={client_ip} port={client\
+_port}\
+"""
+default_hevc_encoder = """
+x265enc tune=zerolatency speed-preset=superfast bitrate={bitrate} option-string="info=0:keyint=-1:qp=28:repeat-headers=1:slices={slices_per_frame}:frame-threads={slices_per_frame}:aud=0:annexb=1:log-level=3:open-gop=0:bframes=0:intra-refresh=0" ! video/x-h265, profile=main, stream-format=byte-stream\
+"""
+default_h264_encoder = """
+x264enc pass=qual tune=zerolatency speed-preset=superfast b-adapt=false bframes=0 ref=1 bitrate={bitrate} aud=false sliced-threads=true threads={slices_per_frame} option-string="slices={slices_per_frame}:keyint=infinite:open-gop=0" ! video/x-h264, profile=high, stream-format=byte-stream\
+"""
+default_video_params = """
+videoscale ! videoconvert ! videorate ! video/x-raw, wid\
+th={width}, height={height}, framerate={fps}/1,format=I4\
+20, chroma-site={color_range}, colorimetry={color_space}\
+"""
+default_source = "videotestsrc pattern=ball is-live=true"
+
+....
