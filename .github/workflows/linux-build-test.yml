@@ -6,26 +6,26 @@ on: [ push, pull_request ]
 jobs:
   build:
     name: ${{matrix.cxx}}, C++${{matrix.std}}, ${{matrix.build_type}}
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-22.04
     strategy:
       fail-fast: false
       matrix:
         cxx:
-          - g++-9
           - g++-10
-          - clang++-9
-          - clang++-10
+          - g++-11
+          - clang++-11
+          - clang++-14
         build_type: [ Debug, Release ]
         std: [ 17 ]
         include:
-          - cxx: g++-9
-            other_pkgs: [ g++-9 ]
           - cxx: g++-10
             other_pkgs: [ g++-10 ]
-          - cxx: clang++-9
-            other_pkgs: [ clang-9 ]
-          - cxx: clang++-10
-            other_pkgs: [ clang-10 ]
+          - cxx: g++-11
+            other_pkgs: [ g++-11 ]
+          - cxx: clang++-11
+            other_pkgs: [ clang-11 ]
+          - cxx: clang++-14
+            other_pkgs: [ clang-14 ]
 
 
     steps:
@@ -34,8 +34,11 @@ jobs:
           submodules: recursive
 
       - name: Prepare environment
+        # ubuntu-latest breaks without libunwind-dev,
+        # see: https://github.com/actions/runner-images/issues/6399#issuecomment-1286050292
         run: |
           sudo apt-get update -y
+          sudo apt-get install -y libunwind-dev
           sudo apt-get install -y \
               ninja-build \
               libboost-thread-dev libboost-filesystem-dev libboost-log-dev libboost-stacktrace-dev \
