@@ -102,6 +102,7 @@ struct Config {
   std::string uuid;
   std::string hostname;
   std::string config_source;
+  bool support_hevc;
 
   /**
    * Mutable, paired_clients will be loaded up on startup

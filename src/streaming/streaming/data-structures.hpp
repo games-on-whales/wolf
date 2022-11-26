@@ -2,6 +2,7 @@
 
 #include <chrono>
 #include <eventbus/event_bus.hpp>
+#include <memory>
 #include <moonlight/data-structures.hpp>
 
 namespace state {

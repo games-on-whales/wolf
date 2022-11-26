@@ -15,7 +15,8 @@ XML serverinfo(bool isServerBusy,
                const std::string &external_ip,
                const std::string &local_ip,
                const immer::array<DisplayMode> &display_modes,
-               int pair_status) {
+               int pair_status,
+               bool support_hevc) {
   XML resp;
 
   resp.put("root.<xmlattr>.status_code", 200);
@@ -25,8 +26,13 @@ XML serverinfo(bool isServerBusy,
   resp.put("root.GfeVersion", M_GFE_VERSION);
   resp.put("root.uniqueid", uuid);
 
-  resp.put("root.MaxLumaPixelsHEVC", "1869449984");
-  resp.put("root.ServerCodecModeSupport", "259");
+  if (support_hevc) {
+    resp.put("root.MaxLumaPixelsHEVC", "1869449984");
+    resp.put("root.ServerCodecModeSupport", "259");
+  } else {
+    resp.put("root.MaxLumaPixelsHEVC", "0");
+    resp.put("root.ServerCodecModeSupport", "3");
+  }
 
   resp.put("root.HttpsPort", https_port);
   resp.put("root.ExternalPort", http_port);

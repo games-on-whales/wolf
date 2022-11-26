@@ -16,6 +16,7 @@ TEST_CASE("LocalState load TOML", "[LocalState]") {
   auto state = state::load_or_default("config.toml");
   REQUIRE(state.hostname == "Wolf");
   REQUIRE(state.uuid == "16510e3e-61fd-4a85-97fa-0db82058b27a");
+  REQUIRE(state.support_hevc);
 
   SECTION("Apps") {
     REQUIRE_THAT(state.apps, Catch::Matchers::SizeIs(3));
@@ -125,7 +126,8 @@ TEST_CASE("Mocked serverinfo", "[MoonlightProtocol]") {
                              "192.168.99.1",
                              "192.168.1.1",
                              displayModes,
-                             false);
+                             false,
+                             true);
 
     REQUIRE(xml_to_str(result) ==
             "<?xml version=\"1.0\" encoding=\"utf-8\"?>\n"

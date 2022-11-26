@@ -256,10 +256,6 @@ int main(int argc, char *argv[]) {
   std::signal(SIGSEGV, signal_handler);
   std::signal(SIGABRT, signal_handler);
 
-  //  streaming::start_streaming(
-  //      {1280, 720, 30, false, (std::size_t)1234, local_state->event_bus, (std::uint16_t)1234, 1000ms, 1024, 3, 0, 0,
-  //      2000, ""}, 1234);
-
   // Let's park the main thread over here, HTTP/S should never stop
   https_thread.join();
   http_thread.join();

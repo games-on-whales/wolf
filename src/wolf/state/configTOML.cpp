@@ -2,6 +2,7 @@
 #include <range/v3/view.hpp>
 #include <state/config.hpp>
 #include <toml.hpp>
+#include <utility>
 
 namespace state {
 
@@ -54,6 +55,7 @@ Config get_default() {
   return Config{
       .uuid = gen_uuid(),
       .hostname = "wolf",
+      .support_hevc = false,
       .paired_clients = *atom,
       .apps = {{.base = {"Desktop", "1", true},
                 .h264_gst_pipeline = video::DEFAULT_SOURCE.data() + " ! "s + video::DEFAULT_PARAMS.data() + " ! "s +
@@ -82,8 +84,11 @@ Config load_or_default(const std::string &source) {
 
     auto cfg_apps = toml::find<std::vector<toml::value>>(cfg, "apps");
     auto apps =
-        cfg_apps //
-        | ranges::views::transform([&default_gst_audio_settings, &default_gst_video_settings](const toml::value &item) {
+        cfg_apps                   //
+        | ranges::views::enumerate //
+        | ranges::views::transform([&default_gst_audio_settings,
+                                    &default_gst_video_settings](std::pair<int, const toml::value &> pair) {
+            auto [idx, item] = pair;
             auto h264_gst_pipeline =
                 toml::find_or<std::string>(item, "video", "source", default_gst_video_settings.default_source) + " ! " +
                 toml::find_or<std::string>(item,
@@ -125,7 +130,7 @@ Config load_or_default(const std::string &source) {
                 toml::find_or<std::string>(item, "audio", "sink", default_gst_audio_settings.default_sink);
 
             return state::App{.base = {.title = toml::find<std::string>(item, "title"),
-                                       .id = toml::find<std::string>(item, "id"),
+                                       .id = std::to_string(idx + 1), // Moonlight expects: 1,2,3 ...
                                        .support_hdr = toml::find_or<bool>(item, "support_hdr", false)},
                               .h264_gst_pipeline = h264_gst_pipeline,
                               .hevc_gst_pipeline = hevc_gst_pipeline,
@@ -137,6 +142,7 @@ Config load_or_default(const std::string &source) {
     return Config{.uuid = uuid,
                   .hostname = hostname,
                   .config_source = source,
+                  .support_hevc = toml::find_or<bool>(cfg, "support_hevc", false),
                   .paired_clients = *clients_atom,
                   .apps = apps};
 
@@ -148,6 +154,7 @@ Config load_or_default(const std::string &source) {
 
     const toml::value data = {{"uuid", cfg.uuid},
                               {"hostname", cfg.hostname},
+                              {"support_hevc", cfg.support_hevc},
                               {"paired_clients", toml::array{}},
                               {"apps", cfg.apps},
                               {"gstreamer", // key
@@ -252,7 +259,6 @@ template <> struct into<state::App> {
   static toml::value into_toml(const state::App &f) {
     return toml::value{
         {"title", f.base.title},
-        {"id", f.base.id},
         {"support_hdr", f.base.support_hdr},
         // TODO: [video] [audio] are they needed?
     };

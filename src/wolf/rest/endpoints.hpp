@@ -48,7 +48,8 @@ void serverinfo(std::shared_ptr<typename SimpleWeb::Server<T>::Response> respons
                                    host.external_ip,
                                    host.internal_ip,
                                    host.display_modes,
-                                   is_https);
+                                   is_https,
+                                   cfg.support_hevc);
 
   send_xml<T>(response, SimpleWeb::StatusCode::success_ok, xml);
 }

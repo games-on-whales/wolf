@@ -1,5 +1,6 @@
 uuid = "16510e3e-61fd-4a85-97fa-0db82058b27a"
 hostname = "Wolf"
+support_hevc = true
 
 #########################
 # Paired clients
@@ -60,19 +61,16 @@ audio_port = 3003
 
 [[apps]]
 title = "Ball"
-id = "1"
 support_hdr = true
 
 [[apps]]
 title = "SMPTE"
-id = "2"
 support_hdr = true
 [apps.video]
 source = "videotestsrc pattern=smpte is-live=true"
 
 [[apps]]
 title = "Desktop"
-id = "3"
 support_hdr = true
 [apps.video]
 source = "avfvideosrc capture-screen-cursor=true capture-screen=true"

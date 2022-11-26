@@ -40,7 +40,8 @@ XML serverinfo(bool isServerBusy,
                const std::string &external_ip,
                const std::string &local_ip,
                const immer::array<DisplayMode> &display_modes,
-               int pair_status);
+               int pair_status,
+               bool support_hevc);
 
 /**
  * @brief Step 2: PAIR a new client
