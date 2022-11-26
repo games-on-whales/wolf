@@ -16,15 +16,15 @@ The TOML configuration file is read only once at startup (or created if not pres
 ....
 paired_clients = [] #<1>
 hostname = "wolf"   #<2>
-uuid = "0f75f4d1-e28e-410a-b318-c0579f18f8d1" #<3>
+support_hevc = false #<3>
+uuid = "0f75f4d1-e28e-410a-b318-c0579f18f8d1" #<4>
 
 
-[[apps]] #<4>
-title = "Desktop"
-support_hdr = true
-id = "1"
+[[apps]] #<5>
+title = "Test ball"
+support_hdr = false
 
-[gstreamer] #<5>
+[gstreamer] #<6>
 
 [gstreamer.audio]
 default_source = "audiotestsrc wave=ticks is-live=true"
@@ -67,11 +67,13 @@ _port}\
 
 <2> *hostname*: this is the name that will be displayed in the list of hosts in the Moonlight UI
 
-<3> *uuid*: a randomly generated UUID, it's used by Moonlight to know if the current host has already been paired
+<3> *support_hevc*: when set to `true` will enable support for HEVC in Moonlight
 
-<4> *apps*: the list of apps that will be seen in Moonlight
+<4> *uuid*: a randomly generated UUID, it's used by Moonlight to know if the current host has already been paired
 
-<5> *gstreamer*: here are all the default parts that compose the two video and audio pipelines.
+<5> *apps*: the list of apps that will be seen in Moonlight
+
+<6> *gstreamer*: here are all the default parts that compose the two video and audio pipelines.
 
 == Defining apps
 
@@ -82,8 +84,7 @@ You can re-define parts of the Gstreamer pipeline easily, ex:
 ....
 [[apps]]
 title = "SMPTE"
-support_hdr = true
-id = "2"
+
 [apps.video]
 source = "videotestsrc pattern=smpte is-live=true"
 ....

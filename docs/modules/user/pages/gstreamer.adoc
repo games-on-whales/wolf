@@ -2,7 +2,143 @@
 
 == Example pipelines
 
-[WARNING,caption=TODO]
-====
-Add more examples here
-====
+See more examples at: https://github.com/matthew1000/gstreamer-cheat-sheet[matthew1000/gstreamer-cheat-sheet]
+
+=== Stream your desktop
+
+[source,toml]
+....
+[[apps]]
+title = "Desktop"
+[apps.video]
+source = "avfvideosrc capture-screen-cursor=true capture-screen=true"
+....
+
+This works in OSX, for X11 you can use https://gstreamer.freedesktop.org/documentation/ximagesrc/index.html?gi-language=c[`ximagesrc`] or on Wayland you can try: https://wiki.archlinux.org/title/GStreamer#PipeWire[`pipewiresrc`]
+
+=== Play some audio
+
+Here the trick is to use `shmsink` and `shmsrc` in order to share the raw audio between the video and audio pipeline:
+
+[source,toml]
+....
+[[apps]]
+title = "Music"
+# Audio sample downloaded from https://www.bensound.com/free-music-for-videos
+# try also: spacescope style=color-lines
+[apps.video]
+source = """
+filesrc location=/Users/ale/Downloads/elevate.mp3 !
+tee name=t
+! queue ! shmsink socket-path=/tmp/pipe.sock shm-size=10000000
+t. ! decodebin ! audioconvert ! wavescope style=color-lines
+"""
+# Get the audio info using:
+# gst-discoverer-1.0 -v elevate.mp3
+[apps.audio]
+source = """
+shmsrc socket-path=/tmp/pipe.sock do-timestamp=true  !
+ audio/mpeg, mpegversion=(int)1, mpegaudioversion=(int)1, layer=(int)3, rate=(int)44100, channels=(int)2 !
+ decodebin
+"""
+....
+
+=== Stream a remote video
+
+Here the trick is to use `shmsink` and `shmsrc` in order to share the raw audio between the video and audio pipeline:
+
+[source,toml]
+....
+[[apps]]
+title = "BigBuckBunny (MP4 - remote)"
+[apps.video]
+# taken from https://gist.github.com/jsturgis/3b19447b304616f18657
+source = """
+curlhttpsrc location="https://storage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4" !
+qtdemux name=demux
+demux.audio_0 ! queue ! shmsink socket-path=/tmp/pipe.sock shm-size=10000000
+demux.video_0 ! decodebin
+\
+"""
+# Get the audio info using:
+# gst-discoverer-1.0 -v https://storage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4
+[apps.audio]
+source = """
+shmsrc socket-path=/tmp/pipe.sock do-timestamp=true !
+ audio/mpeg, mpegversion=(int)4, framed=(boolean)true, stream-format=(string)raw, level=(string)2, base-profile=(string)lc, profile=(string)lc, codec_data=(buffer)1210, rate=(int)44100, channels=(int)2 !
+ decodebin
+"""
+....
+
+=== Stream from Twitch
+
+Here the trick is to use `shmsink` and `shmsrc` in order to share the raw audio between the video and audio pipeline:
+
+[source,toml]
+....
+[[apps]]
+title = "Twitch.tv"
+[apps.video]
+# location is the result of
+# youtube-dl --format mp4 --get-url https://www.twitch.tv/videos/560738950
+source = """
+curlhttpsrc location="https://dqrpb9wgowsf5.cloudfront.net/49e35d90a96078583c9c_andrewfoxtv_34248972186_2596839032/chunked/highlight-560738950.m3u8" !
+hlsdemux !
+tsdemux name=demux
+demux.audio_0_0100 ! queue ! shmsink socket-path=/tmp/pipe.sock shm-size=10000000
+demux.video_0_0101 ! queue ! decodebin
+\
+"""
+# Get the audio info using:
+# gst-discoverer-1.0 -v https://dqrpb9wgowsf5.cloudfront.net/49e35d90a96078583c9c_andrewfoxtv_34248972186_2596839032/chunked/highlight-560738950.m3u8
+[apps.audio]
+source = """
+shmsrc socket-path=/tmp/pipe.sock do-timestamp=true !
+audio/mpeg, framed=(boolean)true, mpegversion=(int)4, level=(string)2, base-profile=(string)lc, profile=(string)lc, rate=(int)44100, channels=(int)2, stream-format=(string)adts !
+decodebin
+"""
+....
+
+=== Picture in picture
+
+The element https://gstreamer.freedesktop.org/documentation/compositor/index.html?gi-language=c#compositor-page[`compositor`] allows video to be mixed (overlayed, put side-by-side, etc).
+
+[source,toml]
+....
+[[apps]]
+title = "PIP: Desktop + Twitch"
+[apps.video]
+# location is the result of
+# youtube-dl --format mp4 --get-url https://www.twitch.tv/videos/560738950
+source = """
+curlhttpsrc location="https://dqrpb9wgowsf5.cloudfront.net/49e35d90a96078583c9c_andrewfoxtv_34248972186_2596839032/chunked/highlight-560738950.m3u8" !
+hlsdemux !
+tsdemux name=demux
+demux.audio_0_0100 ! queue ! shmsink socket-path=/tmp/pipe.sock shm-size=10000000
+demux.video_0_0101 ! queue !
+decodebin !
+videoscale !
+videorate !
+video/x-raw, width=(int)640, height=(int)360, framerate={fps}/1 !
+compositor name=comp sink_0::alpha=1.0 sink_0::zorder=2 sink_0::xpos=1280 sink_1::alpha=1.0 sink_1::zorder=1 !
+avfvideosrc capture-screen-cursor=true capture-screen=true
+\
+"""
+
+video_params = """
+videoscale !
+videoconvert !
+videorate !
+video/x-raw, width={width}, height={height}, framerate={fps}/1, format=I420, chroma-site={color_range}, colorimetry={color_space} !
+comp.
+comp.
+\
+"""
+
+[apps.audio]
+source = """
+shmsrc socket-path=/tmp/pipe.sock do-timestamp=true !
+audio/mpeg, framed=(boolean)true, mpegversion=(int)4, level=(string)2, base-profile=(string)lc, profile=(string)lc, rate=(int)44100, channels=(int)2, stream-format=(string)adts !
+decodebin
+"""
+....

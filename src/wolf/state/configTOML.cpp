@@ -57,7 +57,7 @@ Config get_default() {
       .hostname = "wolf",
       .support_hevc = false,
       .paired_clients = *atom,
-      .apps = {{.base = {"Desktop", "1", true},
+      .apps = {{.base = {"Test ball", "1", true},
                 .h264_gst_pipeline = video::DEFAULT_SOURCE.data() + " ! "s + video::DEFAULT_PARAMS.data() + " ! "s +
                                      video::DEFAULT_H264_ENCODER.data() + " ! " + video::DEFAULT_SINK.data(),
                 .hevc_gst_pipeline = video::DEFAULT_SOURCE.data() + " ! "s + video::DEFAULT_PARAMS.data() + " ! "s +
