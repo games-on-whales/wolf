@@ -6,6 +6,7 @@ Wolf is configured via a TOML config file and some additional optional ENV varia
 
 * *LOG_LEVEL*: controls the log level, defaults to `INFO`
 * *CFG_FILE*: path to the TOML config file, defaults to `config.toml`
+* *GST_DEBUG*: Gstreamer debug print, see https://gstreamer.freedesktop.org/documentation/tutorials/basic/debugging-tools.html?gi-language=c[debugging-tools].
 
 == TOML file
 

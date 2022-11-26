@@ -1,5 +1,28 @@
 = Gstreamer
 
+== CLI interface
+
+To list the installed plugins use:
+
+[source, bash]
+....
+gst-inspect-1.0
+....
+
+To analyse some media use:
+
+[source, bash]
+....
+gst-discoverer-1.0 -v https://storage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4
+....
+
+To test out pipelines in your system use:
+
+[source, bash]
+....
+gst-launch-1.0 videotestsrc ! autovideosink
+....
+
 == Example pipelines
 
 See more examples at: https://github.com/matthew1000/gstreamer-cheat-sheet[matthew1000/gstreamer-cheat-sheet]
