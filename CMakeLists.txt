@@ -1,5 +1,5 @@
-# Works with 3.11 and tested through 3.22
-cmake_minimum_required(VERSION 3.11...3.22)
+# Works with 3.11 and tested through 3.24
+cmake_minimum_required(VERSION 3.13...3.24)
 
 # Project name and a few useful settings. Other commands can pick up the results
 project(wolf
@@ -18,6 +18,9 @@ if (CMAKE_PROJECT_NAME STREQUAL PROJECT_NAME)
     # Let's nicely support folders in IDEs
     set_property(GLOBAL PROPERTY USE_FOLDERS ON)
 
+    set(BUILD_SHARED_LIBS ON)
+    # set(Boost_USE_STATIC_LIBS ON)
+
     # Testing only available if this is the main app
     # Note this needs to be done in the main CMakeLists
     # since it calls enable_testing, which must be in the
@@ -25,17 +28,21 @@ if (CMAKE_PROJECT_NAME STREQUAL PROJECT_NAME)
     include(CTest)
 endif ()
 
+find_program(CCACHE_FOUND ccache)
+if (CCACHE_FOUND)
+    set_property(GLOBAL PROPERTY RULE_LAUNCH_COMPILE ccache)
+endif (CCACHE_FOUND)
+
+
 # FetchContent added in CMake 3.11, downloads during the configure step
 include(FetchContent)
-# FetchContent_MakeAvailable was not added until CMake 3.14; use our shim
-if (${CMAKE_VERSION} VERSION_LESS 3.14)
-    include(cmake/add_FetchContent_MakeAvailable.cmake)
-endif ()
+set(CMAKE_MODULE_PATH ${CMAKE_CURRENT_SOURCE_DIR}/cmake/)
 list(APPEND CMAKE_MODULE_PATH ${CMAKE_CURRENT_SOURCE_DIR}/cmake)
 
 
 add_subdirectory(src/crypto)
 add_subdirectory(src/moonlight)
+add_subdirectory(src/streaming)
 add_subdirectory(src/wolf)
 
 # Testing only available if this is the main app

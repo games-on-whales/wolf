@@ -1,0 +1,89 @@
+= Audio stream via RTP
+
+== Overview
+
+Audio is encoded using https://en.wikipedia.org/wiki/Opus_(audio_format)[Opus], encrypted using AES CBC 128 bit and sent via RTP.
+
+Every 4 RTP packets with audio content will be followed by 2 extra RTP packets with FEC parity information.
+
+== PING
+
+[WARNING]
+====
+The port exchanged during the RTSP phase it's not where the actual audio stream will take place!
+====
+
+Moonlight will send a `PING` package to the exchanged port, this will tell us which random port the connecting client was able to open in order to communicate with Wolf.
+The client port from where Wolf receives the `PING` will also be the one where the actual RTP stream will be sent to.
+
+This is necessary because usually clients will be behind https://en.wikipedia.org/wiki/Network_address_translation[NAT].
+
+== RTP packets
+
+The first 12 bytes of each packet are defined as follows:
+
+.RTP header format in bits
+[packetdiag,format=svg,align="center"]
+....
+{
+  colwidth = 32
+  node_height = 60
+  node_width = 20
+
+  0-7: header
+  8-15: packet type
+  16-31: sequence number
+  32-63: timestamp
+  64-95: synchronization source (SSRC)
+}
+....
+
+FEC packets will also add the followings 12 bytes after the RTP header and before the FEC actual information:
+
+.FEC additional header format in bits
+[packetdiag,format=svg,align="center"]
+....
+{
+  colwidth = 32
+  node_height = 60
+  node_width = 20
+
+  0-7: fecShard index
+  8-15: payload type
+  16-31: base sequence number
+  32-63: base timestamp
+  64-95: synchronization source (SSRC)
+}
+....
+
+== Opus encoder
+
+All parameters for properly encoding using Opus are exchanged via the RTSP phase.
+
+In order to debug what's exchanged it might be useful to checkout the https://datatracker.ietf.org/doc/html/rfc6716#section-3.1[RFC 6716 #section-3.1] which defines the Opus packet formats; from the specs:
+
+> A well-formed Opus packet MUST contain at least one byte [R1].
+This byte forms a table-of-contents (TOC) header that signals which of the various modes and configurations a given packet uses.
+It is composed of a configuration number, "config", a stereo flag, "s", and a frame count code, "c"
+
+.The first byte of any Opus packet
+[wavedrom,format=svg]
+....
+{ reg: [
+  { "attr": "config", "bits": 5, "name": "config"},
+  { "attr": "stereo", "bits": 1, "name": "s"},
+  { "attr": "count", "bits": 2, "name": "c"},
+], config: {fontsize: 16, vflip:true, hflip:true}
+}
+....
+
+== AES encryption
+
+Encoded audio packets will be AES encrypted before being sent over the wire, key and IV are exchanged via HTTPS when calling the `launch` endpoint.
+These are the same key and IV used to also encrypt the Control stream.
+
+== Forward Error Correction (FEC)
+
+Uses https://en.wikipedia.org/wiki/Reed%E2%80%93Solomon_error_correction[Reed Solomon] to encode the payload so that it can be checked on the receiving end for transmission errors (and possibly fix them).
+
+This operation will create extra parity blocks that will be sent in separate RTP packets.

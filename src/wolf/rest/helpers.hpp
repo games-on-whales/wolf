@@ -1,33 +1,30 @@
 #pragma once
 
-#include <string_view>
-using namespace std::literals;
-
-#include <helpers/logger.hpp>
-
-#include <Simple-Web-Server/server_http.hpp>
-#include <Simple-Web-Server/server_https.hpp>
-
 #include <boost/property_tree/ptree.hpp>
 #include <boost/property_tree/xml_parser.hpp>
+#include <helpers/logger.hpp>
+#include <moonlight/protocol.hpp>
+#include <rest/rest.hpp>
+#include <string_view>
 
+using namespace std::literals;
+using XML = moonlight::XML;
 namespace pt = boost::property_tree;
 
-/**
- * @brief C++ way to get which kind of tunnel T is used (http or https)
- */
-template <class T> struct tunnel;
-template <> struct tunnel<SimpleWeb::HTTPS> { static auto constexpr to_string = "https"sv; };
-template <> struct tunnel<SimpleWeb::HTTP> { static auto constexpr to_string = "http"sv; };
+inline std::string xml_to_str(const XML& xml) {
+  std::stringstream ss;
+  pt::write_xml(ss, xml);
+  return ss.str();
+}
 
 /**
  * @brief Log the request
  */
-template <class T> void log_req(std::shared_ptr<typename SimpleWeb::ServerBase<T>::Request> request) {
+template <class T> inline void log_req(std::shared_ptr<typename SimpleWeb::ServerBase<T>::Request> request) {
   logs::log(logs::debug,
             "[{}] {}://{}{}",
             request->method,
-            tunnel<T>::to_string,
+            std::is_same_v<SimpleWeb::HTTP, T> ? "HTTP" : "HTTPS",
             request->local_endpoint(),
             request->path);
   logs::log(logs::trace, "Header: {}", request->parse_query_string());
@@ -37,11 +34,12 @@ template <class T> void log_req(std::shared_ptr<typename SimpleWeb::ServerBase<T
  * @brief send the XML as a response with the specified status_code
  */
 template <class T>
-void send_xml(std::shared_ptr<typename SimpleWeb::ServerBase<T>::Response> response,
-              SimpleWeb::StatusCode status_code,
-              const pt::ptree &xml) {
+inline void send_xml(std::shared_ptr<typename SimpleWeb::ServerBase<T>::Response> response,
+                     SimpleWeb::StatusCode status_code,
+                     const XML &xml) {
   std::ostringstream data;
   pt::write_xml(data, xml);
+  logs::log(logs::trace, "Response: {}", xml_to_str(xml));
   response->write(status_code, data.str());
   response->close_connection_after_response = true;
 }
@@ -53,7 +51,7 @@ void send_xml(std::shared_ptr<typename SimpleWeb::ServerBase<T>::Response> respo
  * @param key: the header key name
  * @return std::string if found, NULL otherwise
  */
-std::optional<std::string> get_header(const SimpleWeb::CaseInsensitiveMultimap &headers, const std::string key) {
+inline std::optional<std::string> get_header(const SimpleWeb::CaseInsensitiveMultimap &headers, const std::string key) {
   auto it = headers.find(key);
   if (it != headers.end()) {
     return it->second;

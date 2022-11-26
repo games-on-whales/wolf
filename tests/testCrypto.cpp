@@ -1,5 +1,7 @@
+#include "catch2/catch_all.hpp"
+using Catch::Matchers::Equals;
+
 #include <algorithm>
-#include <catch2/catch_test_macros.hpp>
 #include <crypto/crypto.hpp>
 #include <moonlight/protocol.hpp>
 #include <string>
@@ -14,7 +16,7 @@ TEST_CASE("sha256", "[Crypto]") {
 
 TEST_CASE("str and hex", "[Crypto]") {
   SECTION("str to hex") {
-    REQUIRE(crypto::str_to_hex("") == "");
+    REQUIRE(crypto::str_to_hex("").empty());
     REQUIRE(crypto::str_to_hex("-----BEGIN CERTIFICATE-----") ==
             "2D2D2D2D2D424547494E2043455254494649434154452D2D2D2D2D");
   }
@@ -67,7 +69,7 @@ TEST_CASE("str and hex", "[Crypto]") {
   }
 }
 
-TEST_CASE("AES", "[Crypto]") {
+TEST_CASE("AES ecb", "[Crypto]") {
   auto key = "0123456789012345"s;
   auto msg = "a message to be sent!"s;
   auto iv = "12345678"s;
@@ -76,10 +78,6 @@ TEST_CASE("AES", "[Crypto]") {
 
   REQUIRE(crypto::str_to_hex(encrypted) == "ABAF3D0AEE0FEDE3955EA4BBE190B5817777A7F53C3A0BF3258967E547285A9A");
   REQUIRE(crypto::aes_decrypt_ecb(encrypted, key, iv, true) == msg);
-
-  SECTION("back and forth") {
-    REQUIRE(crypto::aes_decrypt_ecb(crypto::aes_encrypt_ecb(msg, key, iv, true), key, iv, true) == msg);
-  }
 
   SECTION("Moonlight simulation") {
     auto salt = "ff5dc6eda99339a8a0793e216c4257c4"s;
@@ -93,6 +91,24 @@ TEST_CASE("AES", "[Crypto]") {
     auto decrypted_challenge = crypto::aes_decrypt_ecb(client_challenge_hex, aes_key, "12345678", false);
     REQUIRE(crypto::str_to_hex(decrypted_challenge) == "E3A915CCCB4C60206077D7E9A12316A5");
   }
+}
+
+TEST_CASE("AES gcm", "[Crypto]") {
+  auto key = "0123456789012345"s;
+  auto msg = "a message to be sent!"s;
+  auto iv = "12345678"s;
+
+  auto [encrypted, tag] = crypto::aes_encrypt_gcm(msg, key, iv, true);
+  REQUIRE(crypto::aes_decrypt_gcm(encrypted, key, tag, iv, -1, true) == msg);
+}
+
+TEST_CASE("AES cbc", "[Crypto]") {
+  auto key = "0123456789012345"s;
+  auto msg = "a message to be sent!"s;
+  auto iv = "12345678"s;
+
+  auto encrypted = crypto::aes_encrypt_cbc(msg, key, iv, true);
+  REQUIRE(crypto::aes_decrypt_cbc(encrypted, key, iv, true) == msg);
 }
 
 TEST_CASE("OpenSSL sign", "[Crypto]") {

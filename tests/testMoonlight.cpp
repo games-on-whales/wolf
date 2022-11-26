@@ -1,76 +1,156 @@
-#define CATCH_CONFIG_MAIN  // This tells Catch to provide a main() - only do this in one cpp file
+#include "catch2/catch_all.hpp"
+using Catch::Matchers::Equals;
 
-#include <boost/property_tree/xml_parser.hpp>
-#include <catch2/catch_test_macros.hpp>
-#include <catch2/matchers/catch_matchers_all.hpp>
 #include <crypto/crypto.hpp>
 #include <moonlight/protocol.hpp>
+#include <range/v3/view.hpp>
+#include <rest/helpers.hpp>
+#include <state/config.hpp>
 
 using namespace moonlight;
+using namespace state;
+using namespace ranges;
+using namespace gstreamer;
 
-TEST_CASE("LocalState load JSON", "[LocalState]") {
-  auto state = new Config("config.json");
-  REQUIRE(state->hostname() == "test_wolf");
-  REQUIRE(state->get_uuid() == "uid-12345");
-  REQUIRE(state->external_ip() == "192.168.99.1");
-  REQUIRE(state->local_ip() == "192.168.1.1");
-  REQUIRE(state->mac_address() == "AA:BB:CC:DD");
+TEST_CASE("LocalState load TOML", "[LocalState]") {
+  auto state = state::load_or_default("config.toml");
+  REQUIRE(state.hostname == "Wolf");
+  REQUIRE(state.uuid == "16510e3e-61fd-4a85-97fa-0db82058b27a");
+  REQUIRE(state.support_hevc);
 
-  SECTION("Port mapping") {
-    REQUIRE(state->map_port(Config::HTTP_PORT) == 3000);
-    REQUIRE(state->map_port(Config::HTTPS_PORT) == 2995);
+  SECTION("Apps") {
+    REQUIRE_THAT(state.apps, Catch::Matchers::SizeIs(3));
+
+    auto app = state.apps[0];
+    REQUIRE_THAT(app.base.title, Equals("Ball"));
+    REQUIRE_THAT(app.base.id, Equals("1"));
+    REQUIRE_THAT(app.h264_gst_pipeline,
+                 Equals(video::DEFAULT_SOURCE.data() + " ! "s + video::DEFAULT_PARAMS.data() + " ! "s +
+                        video::DEFAULT_H264_ENCODER.data() + " ! " + video::DEFAULT_SINK.data()));
+    REQUIRE_THAT(app.hevc_gst_pipeline,
+                 Equals(video::DEFAULT_SOURCE.data() + " ! "s + video::DEFAULT_PARAMS.data() + " ! "s +
+                        video::DEFAULT_H265_ENCODER.data() + " ! " + video::DEFAULT_SINK.data()));
+  }
+
+  SECTION("Paired Clients") {
+    REQUIRE_THAT(state.paired_clients.load().get(), Catch::Matchers::SizeIs(2));
+
+    auto paired_client = state.paired_clients.load().get()[0];
+    REQUIRE(paired_client->rtsp_port == RTSP_SETUP_PORT);
+    REQUIRE(paired_client->control_port == CONTROL_PORT);
+    REQUIRE(paired_client->video_port == VIDEO_STREAM_PORT);
+    REQUIRE(paired_client->audio_port == AUDIO_STREAM_PORT);
+
+    paired_client = state.paired_clients.load().get()[1];
+    REQUIRE(paired_client->rtsp_port == 3000);
+    REQUIRE(paired_client->control_port == 3001);
+    REQUIRE(paired_client->video_port == 3002);
+    REQUIRE(paired_client->audio_port == 3003);
   }
 }
 
 TEST_CASE("LocalState pairing information", "[LocalState]") {
-  auto state = new Config("config.json");
-  auto clientID = "0123456789ABCDEF";
-  auto a_client_cert = "A DUMP OF A VALID CERTIFICATE";
+
+  std::remove("defaults.toml");
+
+  auto cfg = state::load_or_default("defaults.toml");
+  auto a_client_cert = "-----BEGIN CERTIFICATE-----\n"
+                       "MIICvzCCAaegAwIBAgIBADANBgkqhkiG9w0BAQsFADAjMSEwHwYDVQQDDBhOVklE\n"
+                       "SUEgR2FtZVN0cmVhbSBDbGllbnQwHhcNMjEwNzEwMDgzNjE3WhcNNDEwNzA1MDgz\n"
+                       "NjE3WjAjMSEwHwYDVQQDDBhOVklESUEgR2FtZVN0cmVhbSBDbGllbnQwggEiMA0G\n"
+                       "CSqGSIb3DQEBAQUAA4IBDwAwggEKAoIBAQC1c49oJxPkIGjUNSwEpNuvNZB/hRoe\n"
+                       "DZPMe3gZ1abOSJFyK3VbQNSOVK6qEfBrHqQgNVMtXZVS5XDfDRW9E37QcAl5Apex\n"
+                       "/NAG2fNHYAvO6P6Gj+/m0XBWcVREzjGCdKJI+9ToNeB6dQtKw26LvlIbHfprBZ+1\n"
+                       "QPr3DuUuTCIdxacJrSoUyqakswGr82j3+Dt3dU0LWCquVeeOMhMVN+EFzjFbDJbz\n"
+                       "+sNLTM2E7HeKNeIr/0oFhyA2b5Kb4vd+z1GfW38o85gDU8ni6FOmEaFTi3TdZ1yR\n"
+                       "RxdKKd9k+myCNHLiyBA9K4Q2JYuUkYxZzsZrKVH7LWfH79qaMvj87iEnAgMBAAEw\n"
+                       "DQYJKoZIhvcNAQELBQADggEBADVm005jqiFEGuH6JfTKRcZU3PMmFrEmJTmvPiyh\n"
+                       "a4b75jai0hLRCzNDu6bSzlXH346YK/x7AVkSZIoD2hTpujVlHIHLoSJzkrmMxIFR\n"
+                       "sZRjh0EGaAmvDuEXADUE0MGpoWLUQumiDWwuSbEzPyr7BID68A3Q6jKwd65D2+ut\n"
+                       "snLzlErTl5fgHkLWV6plelcMgPSo4T+E7APm4LHlP5uxiixAfnhDlzuAeD5r1rsD\n"
+                       "UkrNfMfXnRzPSwXiNYHZ+UoQuchoMCSAa+kcsQ+zsdPwAJ3stwQGcfpvYhdZv1a1\n"
+                       "oPJpyCigkmv0uH4CeJ09A/6Da2uY+HIwVq85qteMVSUTtV0=\n"
+                       "-----END CERTIFICATE-----\n";
 
   SECTION("Checking pairing mechanism") {
-    REQUIRE(state->get_paired_clients().empty());
-    REQUIRE(state->isPaired(clientID) == false);
+    REQUIRE(state::get_client_via_ssl(cfg, a_client_cert).has_value() == false);
+    state::pair(cfg, {"A client", a_client_cert});
+    REQUIRE(state::get_client_via_ssl(cfg, a_client_cert).has_value() == true);
 
-    state->pair("Another client", a_client_cert);
-    REQUIRE(state->isPaired(clientID) == false);
-    state->pair(clientID, a_client_cert);
-    REQUIRE(state->isPaired(clientID) == true);
-    REQUIRE(state->isPaired("Another client") == true);
+    auto another_cert = "-----BEGIN CERTIFICATE-----\n"
+                        "MIIC6zCCAdOgAwIBAgIBATANBgkqhkiG9w0BAQsFADA5MQswCQYDVQQGEwJJVDEW\n"
+                        "MBQGA1UECgwNR2FtZXNPbldoYWxlczESMBAGA1UEAwwJbG9jYWxob3N0MB4XDTIy\n"
+                        "MDgzMTA1NDIzM1oXDTQyMDgyNjA1NDIzM1owOTELMAkGA1UEBhMCSVQxFjAUBgNV\n"
+                        "BAoMDUdhbWVzT25XaGFsZXMxEjAQBgNVBAMMCWxvY2FsaG9zdDCCASIwDQYJKoZI\n"
+                        "hvcNAQEBBQADggEPADCCAQoCggEBAKYAuR+nnhekgyOvEKPhNdGiGECe5iiPo/4g\n"
+                        "yzrXEIKggr1oTauqmBPUhVT6sGuuKE5cR0u4pHm7bcUZAeBdssPzq8IJBKRzEgeM\n"
+                        "AtoWu+MsWijbq2wSKJTLe9e0/WClk0iFopvVrhyai2hbxqlWxyTyxWVxKg4iECAg\n"
+                        "7TT9EAAuZzS5EhfOBA6+xREdDse5TzkTLWHVSNIaDgPuJiM3DXHjt64C0ubTNklO\n"
+                        "VDzU5nBYwOidi64EsznpnHT7Zhj0fhB8g7rV6n4ZEi65o6vhAbC6J4IBCBXLw9R/\n"
+                        "s8cglKED3ebS9gGE9V+0exXkCr+X6JqQ8tnuJaWoeXIWTctatB0CAwEAATANBgkq\n"
+                        "hkiG9w0BAQsFAAOCAQEAnQ5+pnjzAylkoA/vi6DxxwlCxWsDS6HlPptlpY+AlY6q\n"
+                        "PvQMHxrRMGXYWl+70ja8GvvlfZLf0zj/wc8vjxFB/+P3mOLv00YBGdryIF5Fijg9\n"
+                        "h9LZ9+raPvR/xIDevubveQgX/Kcl2cX59/aaIwKPUJH4BHzRTJ2W32B8Fw1KO/sp\n"
+                        "CH7xDcplhPQ6YvTedFBBu1AcSiRpmGcOuo1+HMJZLj3ek7NrFOSjfptIStleYixj\n"
+                        "Gxy5pgOEuXuSoi3dJInrwc3dBILZBDYyBg7jPBDjRC+ld24q6/TYHBPKbmaM2iFa\n"
+                        "AXQMq/fmtPxEDHY0NguWUhGt3uooTiakv1u9zex/Cg==\n"
+                        "-----END CERTIFICATE-----";
 
-    REQUIRE_THAT(state->get_paired_clients(), Catch::Matchers::SizeIs(2)); // TODO: check content
-  }
+    REQUIRE(state::get_client_via_ssl(cfg, another_cert).has_value() == false);
+    state::pair(cfg, {"Another client", another_cert});
+    REQUIRE(state::get_client_via_ssl(cfg, another_cert).has_value() == true);
+    REQUIRE_THAT(cfg.paired_clients.load().get(), Catch::Matchers::SizeIs(2));
 
-  SECTION("Checking client cert info") {
-    REQUIRE(state->get_client_cert(clientID) == std::nullopt);
+    state::unpair(cfg, {"", a_client_cert});
+    REQUIRE(state::get_client_via_ssl(cfg, a_client_cert).has_value() == false);
+    REQUIRE(state::get_client_via_ssl(cfg, another_cert).has_value() == true);
+    REQUIRE_THAT(cfg.paired_clients.load().get(), Catch::Matchers::SizeIs(1));
 
-    state->pair(clientID, a_client_cert);
-    state->pair("Another client", a_client_cert);
-
-    REQUIRE(state->get_client_cert(clientID) == a_client_cert);
-    REQUIRE(state->get_client_cert(clientID) == a_client_cert);
-    REQUIRE(state->get_client_cert("Another client") == a_client_cert);
-    REQUIRE(state->get_client_cert("A non existent client") == std::nullopt);
+    state::unpair(cfg, {"", another_cert});
+    REQUIRE_THAT(cfg.paired_clients.load().get(), Catch::Matchers::SizeIs(0));
   }
 }
 
 TEST_CASE("Mocked serverinfo", "[MoonlightProtocol]") {
-  auto state = new Config("config.json");
-  std::vector<DisplayMode> displayModes = {{1920, 1080, 60}, {1024, 768, 30}};
+  auto cfg = state::load_or_default("config.toml");
+  immer::array<DisplayMode> displayModes = {{1920, 1080, 60}, {1024, 768, 30}};
 
   SECTION("server_info conforms with the expected server_info_response.xml") {
-    auto result = serverinfo(*state, false, 0, displayModes, "001122");
-    pt::ptree expectedResult;
-    pt::read_xml("server_info_response.xml", expectedResult, boost::property_tree::xml_parser::trim_whitespace);
+    auto result = serverinfo(false,
+                             0,
+                             0,
+                             1,
+                             cfg.uuid,
+                             cfg.hostname,
+                             "AA:BB:CC:DD",
+                             "192.168.99.1",
+                             "192.168.1.1",
+                             displayModes,
+                             false,
+                             true);
 
-    REQUIRE(result == expectedResult);
+    REQUIRE(xml_to_str(result) ==
+            "<?xml version=\"1.0\" encoding=\"utf-8\"?>\n"
+            "<root status_code=\"200\">"
+            "<hostname>Wolf</hostname>"
+            "<appversion>7.1.431.0</appversion>"
+            "<GfeVersion>3.23.0.74</GfeVersion>"
+            "<uniqueid>16510e3e-61fd-4a85-97fa-0db82058b27a</uniqueid>"
+            "<MaxLumaPixelsHEVC>1869449984</MaxLumaPixelsHEVC>"
+            "<ServerCodecModeSupport>259</ServerCodecModeSupport>"
+            "<HttpsPort>0</HttpsPort>"
+            "<ExternalPort>1</ExternalPort>"
+            "<mac>AA:BB:CC:DD</mac>"
+            "<ExternalIP>192.168.99.1</ExternalIP>"
+            "<LocalIP>192.168.1.1</LocalIP>"
+            "<SupportedDisplayMode>"
+            "<DisplayMode><Width>1920</Width><Height>1080</Height><RefreshRate>60</RefreshRate></DisplayMode>"
+            "<DisplayMode><Width>1024</Width><Height>768</Height><RefreshRate>30</RefreshRate></DisplayMode>"
+            "</SupportedDisplayMode><PairStatus>0</PairStatus>"
+            "<currentgame>0</currentgame>"
+            "<state>SUNSHINE_SERVER_FREE</state>"
+            "</root>");
     REQUIRE(result.get<bool>("root.PairStatus") == false);
-  }
-
-  SECTION("does pairing change the returned serverinfo?") {
-    state->pair("001122", "");
-    auto result = serverinfo(*state, false, 0, displayModes, "001122");
-
-    REQUIRE(result.get<bool>("root.PairStatus") == true);
   }
 }
 
@@ -195,4 +275,26 @@ TEST_CASE("Pairing moonlight", "[MoonlightProtocol]") {
                                              client_public_cert_signature,
                                              client_cert_public_key);
   REQUIRE(xml_p4.get<int>("root.paired") == 1);
+}
+
+TEST_CASE("applist", "[MoonlightProtocol]") {
+  auto cfg = state::load_or_default("config.toml");
+  auto base_apps = cfg.apps | views::transform([](auto app) { return app.base; }) | to<immer::vector<moonlight::App>>();
+  auto result = applist(base_apps);
+  REQUIRE(xml_to_str(result) == "<?xml version=\"1.0\" encoding=\"utf-8\"?>\n"
+                                "<root status_code=\"200\">"
+                                "<App><IsHdrSupported>1</IsHdrSupported><AppTitle>Ball</AppTitle><ID>1</ID></App>"
+                                "<App><IsHdrSupported>1</IsHdrSupported><AppTitle>SMPTE</AppTitle><ID>2</ID></App>"
+                                "<App><IsHdrSupported>1</IsHdrSupported><AppTitle>Desktop</AppTitle><ID>3</ID></App>"
+                                "</root>");
+}
+
+TEST_CASE("launch", "[MoonlightProtocol]") {
+  auto cfg = state::load_or_default("config.toml");
+  auto result = launch_success("192.168.1.1", "3021");
+  REQUIRE(xml_to_str(result) == "<?xml version=\"1.0\" encoding=\"utf-8\"?>\n"
+                                "<root status_code=\"200\">"
+                                "<sessionUrl0>rtsp://192.168.1.1:3021</sessionUrl0>"
+                                "<gamesession>1</gamesession>"
+                                "</root>");
 }

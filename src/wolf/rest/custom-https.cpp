@@ -1,39 +1,76 @@
-#include <crypto/crypto.hpp>
-#include <helpers/logger.hpp>
-#include <moonlight/config.hpp>
-#include <Simple-Web-Server/server_https.hpp>
+#include <rest/rest.hpp>
 
-/**
- * Override default SimpleWeb::HTTPS by adding custom SSL cert validation that
- * allows only to already paired Moonlight clients to be able to connect to the SSL endpoints.
- */
-class HTTPSCustomCert : public SimpleWeb::Server<SimpleWeb::HTTPS> {
-public:
-  HTTPSCustomCert(const std::string &certification_file,
-                  const std::string &private_key_file,
-                  const std::shared_ptr<moonlight::Config> &config)
-      : SimpleWeb::Server<SimpleWeb::HTTPS>(certification_file, private_key_file, std::string()) {
-    context.set_verify_mode(boost::asio::ssl::verify_peer | boost::asio::ssl::verify_fail_if_no_peer_cert |
-                            boost::asio::ssl::verify_client_once);
+namespace SimpleWeb {
 
-    context.set_verify_callback([config](bool pre_verified, boost::asio::ssl::verify_context &ctx) -> int {
-      auto x509 = X509_STORE_CTX_get_current_cert(ctx.native_handle());
-      if (!x509) {
-        logs::log(logs::error, "Missing certificate on HTTPS server, closing connection");
-        return 0;
-      }
+Server<HTTPS>::Server(const std::string &certification_file, const std::string &private_key_file)
+    : ServerBase<HTTPS>::ServerBase(443), context(asio::ssl::context::tls) {
 
-      auto clients = config->get_paired_clients();
-      for (const auto &client : clients) {
-        auto paired_cert = x509::cert_from_string(client.client_cert);
-        auto valid_error = x509::verification_error(paired_cert, x509);
-        if (valid_error) {
-          logs::log(logs::debug, "SSL certification validation error: {}", valid_error.value());
-        } else { // validation successful!
-          return true;
-        }
-      }
-      return false;
-    });
+  context.use_certificate_chain_file(certification_file);
+  context.use_private_key_file(private_key_file, asio::ssl::context::pem);
+
+  context.set_verify_mode(boost::asio::ssl::verify_peer | boost::asio::ssl::verify_fail_if_no_peer_cert |
+                          boost::asio::ssl::verify_client_once);
+  context.set_verify_callback([](int verified, boost::asio::ssl::verify_context &ctx) {
+    // To respond with an error message, a connection must be established
+    return 1;
+  });
+
+  this->on_error = [](std::shared_ptr<typename ServerBase<HTTPS>::Request> request, const error_code &ec) -> void {
+    logs::log(logs::warning, "HTTPS error during request at {} error code: {}", request->path, ec.message());
+    return;
+  };
+}
+
+void Server<HTTPS>::after_bind() {
+  if (set_session_id_context) {
+    // Creating session_id_context from address:port but reversed due to small SSL_MAX_SSL_SESSION_ID_LENGTH
+    auto session_id_context = std::to_string(acceptor->local_endpoint().port()) + ':';
+    session_id_context.append(config.address.rbegin(), config.address.rend());
+    SSL_CTX_set_session_id_context(
+        context.native_handle(),
+        reinterpret_cast<const unsigned char *>(session_id_context.data()),
+        static_cast<unsigned int>(std::min<std::size_t>(session_id_context.size(), SSL_MAX_SSL_SESSION_ID_LENGTH)));
   }
-};
+}
+
+void Server<HTTPS>::accept() {
+  auto connection = create_connection(*io_service, context);
+
+  acceptor->async_accept(connection->socket->lowest_layer(), [this, connection](const error_code &ec) {
+    auto lock = connection->handler_runner->continue_lock();
+    if (!lock)
+      return;
+
+    if (ec != error::operation_aborted)
+      this->accept();
+
+    auto session = std::make_shared<Session>(config.max_request_streambuf_size, connection);
+
+    if (!ec) {
+      asio::ip::tcp::no_delay option(true);
+      error_code ec;
+      session->connection->socket->lowest_layer().set_option(option, ec);
+
+      session->connection->set_timeout(config.timeout_request);
+      session->connection->socket->async_handshake(asio::ssl::stream_base::server,
+                                                   [this, session](const error_code &ec) {
+                                                     session->connection->cancel_timeout();
+                                                     auto lock = session->connection->handler_runner->continue_lock();
+                                                     if (!lock)
+                                                       return;
+                                                     if (!ec)
+                                                       this->read(session);
+                                                     else if (this->on_error)
+                                                       this->on_error(session->request, ec);
+                                                   });
+    } else if (this->on_error)
+      this->on_error(session->request, ec);
+  });
+}
+
+x509_st *Server<HTTPS>::get_client_cert(const std::shared_ptr<typename ServerBase<HTTPS>::Request> &request) {
+  auto connection = request->connection.lock();
+  return SSL_get_peer_certificate(connection->socket->native_handle());
+}
+
+} // namespace SimpleWeb

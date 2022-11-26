@@ -1,0 +1,47 @@
+= Quickstart
+
+[WARNING]
+====
+Wolf is under *heavy development*; it's *not user-friendly* nor easy to use (we are working on it)
+====
+
+== Installation
+
+The only way to run Wolf right now is to manually compile it.
+
+.Build dependencies
+[source,bash]
+....
+apt install -y ninja-build clang-10 libboost-thread-dev libboost-filesystem-dev libboost-log-dev libboost-stacktrace-dev libssl-dev libgstreamer1.0-dev  libgstreamer-plugins-base1.0-dev
+....
+
+.Compile
+[source,bash]
+....
+cmake -Bbuild -DCMAKE_BUILD_TYPE=Release -DCMAKE_CXX_STANDARD=17 -DCMAKE_CXX_EXTENSIONS=OFF -G Ninja
+
+ninja -C build
+....
+
+If compilations completes correctly you can already start Wolf; in order to successfully streaming you'll probably need to install some Gstreamer plugins first:
+
+.Install gstreamer plugins
+[source,bash]
+....
+apt install -y gstreamer1.0-plugins-base gstreamer1.0-plugins-good gstreamer1.0-plugins-ugly gstreamer1.0-plugins-bad
+....
+
+.Run!
+[source,bash]
+....
+build/src/wolf/wolf
+INFO  | Reading config file from: config.toml
+WARN  | Unable to open config file: config.toml, creating one using defaults
+INFO  | x509 certificates not present, generating...
+INFO  | HTTP server listening on port: 47989
+INFO  | HTTPS server listening on port: 47984
+....
+
+You should now be able to point Moonlight to the IP address of the server and start the pairing process.
+
+TIP: Make sure to follow the next steps on how to configure Wolf!

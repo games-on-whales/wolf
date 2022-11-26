@@ -1,0 +1,165 @@
+= HTTP/S Pairing
+
+== Overview
+
+Here we start with a question:
+[NOTE.think,caption=⁇]
+
+====
+How can we securely authenticate an untrusted client over an insecure network?
+====
+
+This involves quite a bit of cryptography and a few steps between the client (Moonlight) and the server (Wolf).
+
+[plantuml,format=svg]
+....
+title: Moonlight Pairing protocol
+autonumber
+
+participant Moonlight as M
+participant Wolf as W
+
+
+group Phase 1
+    M->W ++:salt + client cert
+    W->W: get PIN from user
+    W->W: AES KEY = SHA256(SALT + PIN)
+    return: server cert
+end
+
+group Phase 2
+    M->W ++: client challenge 🔐
+    W->W: decrypt client challenge
+    W->W: generate server challenge
+    return: server challenge 🔐
+end
+
+group Phase 3
+    M->W ++: server challenge response 🔐
+    return: server secret + signature
+end
+
+group Phase 4
+    M->W ++: client secret + signature
+    W->W: check client signature
+    return:  paired = 1
+end
+
+group Phase 5
+    M->W ++: pairchallenge
+    return:  paired = 1
+end
+....
+
+== Phase 1
+
+[plantuml,format=svg]
+....
+title: Pairing - Phase 1
+
+participant Moonlight as M
+participant Wolf as W
+
+
+M->W ++:salt + client cert
+W->W: get PIN from user
+W->W: AES KEY = SHA256(SALT + PIN)
+return: server cert
+....
+
+Moonlight will send a salt and client certificate, users will see a prompt asking to insert the password on the remote server.
+On the backend, we'll need the PIN to be inserted by the user.
+
+PIN and SALT will be used to derive a shared AES key that needs to be stored in order to be used to decrypt in the next phases.
+
+At this stage we only have to send back our public certificate (`plaincert`).
+
+== Phase 2
+
+[plantuml,format=svg]
+....
+title: Pairing - Phase 2
+
+participant Moonlight as M
+participant Wolf as W
+
+
+M->W ++: client challenge 🔐
+W->W: decrypt client challenge
+W->W: generate server challenge
+return: server challenge 🔐
+....
+
+Using the AES key that we generated in the phase 1 we have to decrypt the client challenge,
+
+We generate a SHA256 hash with the following:
+
+* Decrypted challenge
+* Server certificate signature
+* Server secret: a randomly generated secret
+
+The hash + server_challenge will then be AES encrypted and sent as the `challengeresponse`
+
+== Phase 3
+
+[plantuml,format=svg]
+....
+title: Pairing - Phase 3
+
+participant Moonlight as M
+participant Wolf as W
+
+M->W ++: server challenge response 🔐
+return: server secret + signature
+....
+
+Moonlight will send back a `serverchallengeresp`: an AES encrypted client hash, we have to send back the `pairingsecret`:
+using our private key we have to sign the certificate_signature + server_secret (generated in phase 2)
+
+== Phase 4
+
+[plantuml,format=svg]
+....
+title: Pairing - Phase 4
+
+participant Moonlight as M
+participant Wolf as W
+
+
+M->W ++: client secret + signature
+W->W: check client signature
+return:  paired = 1
+....
+
+We now have to use everything we exchanged before in order to verify and finally pair the clients.
+
+We'll check the client_hash obtained at phase 3, it should contain the following:
+
+* The original server_challenge
+* The signature of the X509 client_cert
+* The unencrypted `client_pairing_secret`
+
+We'll check that `SHA256(server_challenge + client_public_cert_signature + client_secret) == client_hash`
+
+Then using the client certificate public key we should be able to verify that the client secret has been signed by Moonlight
+
+The response will contain:
+
+* paired = 1, if all checks are fine
+* paired = 0, otherwise
+
+== Phase 5 (HTTPS)
+
+[plantuml,format=svg]
+....
+title: Pairing - Phase 5
+
+participant Moonlight as M
+participant Wolf as W
+
+M->W ++: pairchallenge
+return:  paired = 1
+....
+
+This extra step will run over HTTPS in order to make sure that Moonlight can reach Wolf over a secure connection. +
+On the backend every HTTPS request will be checked for a valid client certificate; only clients that have been successfully paired will be allowed to call the APIs

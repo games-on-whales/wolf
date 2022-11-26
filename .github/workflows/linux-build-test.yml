@@ -6,41 +6,45 @@ on: [ push, pull_request ]
 jobs:
   build:
     name: ${{matrix.cxx}}, C++${{matrix.std}}, ${{matrix.build_type}}
-    runs-on: ubuntu-20.04
+    runs-on: ubuntu-22.04
     strategy:
+      fail-fast: false
       matrix:
         cxx:
-          - g++-9
           - g++-10
-          - clang++-9
-          - clang++-10
+          - g++-11
+          - clang++-11
+          - clang++-14
         build_type: [ Debug, Release ]
         std: [ 17 ]
         include:
-          - cxx: g++-9
-            other_pkgs: g++-9 libboost-thread-dev libboost-filesystem-dev libboost-log-dev libssl-dev libboost-stacktrace-dev
           - cxx: g++-10
-            other_pkgs: g++-10 libboost-thread-dev libboost-filesystem-dev libboost-log-dev libssl-dev libboost-stacktrace-dev
-          - cxx: clang++-9
-            other_pkgs: clang-9 libboost-thread-dev libboost-filesystem-dev libboost-log-dev libssl-dev libboost-stacktrace-dev
-          - cxx: clang++-10
-            other_pkgs: clang-10 libboost-thread-dev libboost-filesystem-dev libboost-log-dev libssl-dev libboost-stacktrace-dev
-          - cxx: clang++-10
-            build_type: Debug
-            std: 17
-            other_pkgs: clang-10 libboost-thread-dev libboost-filesystem-dev libboost-log-dev libssl-dev libboost-stacktrace-dev
-          - cxx: clang++-10
-            build_type: Release
-            std: 17
-            other_pkgs: clang-10 libboost-thread-dev libboost-filesystem-dev libboost-log-dev libssl-dev libboost-stacktrace-dev
+            other_pkgs: [ g++-10 ]
+          - cxx: g++-11
+            other_pkgs: [ g++-11 ]
+          - cxx: clang++-11
+            other_pkgs: [ clang-11 ]
+          - cxx: clang++-14
+            other_pkgs: [ clang-14 ]
+
 
     steps:
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@v3
         with:
-          submodules: true
+          submodules: recursive
 
       - name: Prepare environment
-        run: sudo apt-get install -y ninja-build ${{matrix.other_pkgs}}
+        # ubuntu-latest breaks without libunwind-dev,
+        # see: https://github.com/actions/runner-images/issues/6399#issuecomment-1286050292
+        run: |
+          sudo apt-get update -y
+          sudo apt-get install -y libunwind-dev
+          sudo apt-get install -y \
+              ninja-build \
+              libboost-thread-dev libboost-filesystem-dev libboost-log-dev libboost-stacktrace-dev \
+              libssl-dev \
+              libgstreamer1.0-dev \
+              ${{ join(matrix.other_pkgs, ' ') }}
 
       - name: Configure build
         working-directory: ${{runner.workspace}}
@@ -59,11 +63,8 @@ jobs:
 
       - name: Build tests + lib
         working-directory: ${{runner.workspace}}/build
-        run: ninja
+        run: ninja -j 2 wolftests
 
       - name: Run tests
-        env:
-          CTEST_OUTPUT_ON_FAILURE: 1
-        working-directory: ${{runner.workspace}}/build
-        # Hardcode 2 cores we know are there
-        run: ctest -C ${{matrix.build_type}} -j 2
+        working-directory: ${{runner.workspace}}/build/tests
+        run: ./wolftests

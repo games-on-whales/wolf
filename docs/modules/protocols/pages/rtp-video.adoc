@@ -1,0 +1,311 @@
+= Video stream via RTP
+
+== Overview
+
+Here are a few random notes about the low level details of the video streaming protocol in Moonlight.
+
+== PING
+
+[WARNING]
+====
+The port exchanged during the RTSP phase it's not where the actual video stream will take place!
+====
+
+Moonlight will send a `PING` package to the exchanged port, this will tell us which random port the connecting client was able to open in order to communicate with Wolf.
+The client port from where Wolf receives the `PING` will also be the one where the actual RTP stream will be sent to.
+
+This is necessary because usually clients will be behind https://en.wikipedia.org/wiki/Network_address_translation[NAT].
+
+== RTP packets
+
+The video binary NAL unit (see below) will be separated in chunks of `packetSize` (default: `1024`, exchanged during `RTSP`) + `RTP_HEADER_SIZE` (16 byte).
+
+The first 32 bytes of each packet are defined as follows:
+
+.RTP header format in bits
+[packetdiag,format=svg,align="center"]
+....
+{
+  colwidth = 32
+  node_height = 60
+  node_width = 20
+
+  0-7: header
+  8-15: packet type
+  16-31: sequence number
+  32-63: timestamp
+  64-95: synchronization source (SSRC)
+  96-127: reserved
+
+}
+....
+
+.NV Video header format in bits
+[packetdiag,format=svg,align="center"]
+....
+{
+  colwidth = 32
+  node_height = 60
+  node_width = 20
+
+  0-31: stream packet index
+  32-63: frame index
+  64-71: flags
+  72-79: reserved
+  80-87: multi FEC flags
+  88-95: multi FEC blocks
+  96-127: FEC info
+}
+....
+
+The very first packet of the sequence will also contain the hardcoded `017charss` string before the actual video payload
+
+[WARNING,caption=TODO]
+====
+What does this content mean?
+====
+
+.Video payload starts after the 8 hardcoded bytes `017charss` (hex: 0137636861727373)
+[wavedrom,format=svg]
+....
+{ reg: [
+  { "attr": "??", "bits": 8, "name": 0x01},
+  { "attr": "??", "bits": 8, "name": 0x37},
+  { "attr": "??", "bits": 8, "name": 0x63},
+  { "attr": "??", "bits": 8, "name": 0x68},
+  { "attr": "??", "bits": 8, "name": 0x61},
+  { "attr": "??", "bits": 8, "name": 0x72},
+  { "attr": "??", "bits": 8, "name": 0x73},
+  { "attr": "??", "bits": 8, "name": 0x73},
+], config: {fontsize: 16, lanes: 2, vflip:true, hflip:true}
+}
+....
+
+=== NV Video flags
+
+|===
+|Content | value (decimal) | value (binary)
+
+|Contains Picture data
+|1
+|00000001
+
+|EOF (End of File)
+|2
+|00000010
+
+|SOF (Start of File)
+|4
+|00000100
+|===
+
+They'll be summed together, for example: 5 means Picture data AND Start of File.
+
+== Forward Error Correction (FEC)
+
+Uses https://en.wikipedia.org/wiki/Reed%E2%80%93Solomon_error_correction[Reed Solomon] to encode the payload so that it can be checked on the receiving end for transmission errors (and possibly fix them).
+
+This operation will create extra parity blocks that will be sent in separate RTP packets.
+The size of this can be set by changing the `fecpercentage` param.
+
+[NOTE,caption=EXAMPLE]
+====
+With a video payload of `4KB`, a `packetSize` of 1024 and a `fecpercentage` of 50%:
+
+* 4 RTP packets will contain the video data
+* 2 extra RTP packets will be sent with the FEC parity information
+
+The total overhead of sending 4KB of video will be: +
+headers * packets + FEC = 32 * 6 + 2048 = 2248 bytes
+====
+
+This extra packets can be easily identified since the NV Video flag will always be 0.
+
+== H.264 binary format
+
+Read more at https://stackoverflow.com/a/24890903/3901988[stackoverflow.com] and https://yumichan.net/video-processing/video-compression/introduction-to-h264-nal-unit/[yumichan.net].
+
+The video stream is separated in NAL (Network Abstraction Layer) units.
+Each of this unit starts with a three-byte or four-byte start code `0x000001` or `0x00000001`
+
+.A complete H.264 example stream composed of 3 NALU
+....
+0x0000 | 00 00 00 01 67 64 00 0A AC 72 84 44 26 84 00 00
+0x0010 | 03 00 04 00 00 03 00 CA 3C 48 96 11 80 00 00 00
+0x0020 | 01 68 E8 43 8F 13 21 30 00 00 01 65 88 81 00 05
+0x0030 | 4E 7F 87 DF 61 A5 8B 95 EE A4 E9 38 B7 6A 30 6A
+0x0040 | 71 B9 55 60 0B 76 2E B5 0E E4 80 59 27 B8 67 A9
+0x0050 | 63 37 5E 82 20 55 FB E4 6A E9 37 35 72 E2 22 91
+0x0060 | 9E 4D FF 60 86 CE 7E 42 B7 95 CE 2A E1 26 BE 87
+0x0070 | 73 84 26 BA 16 36 F4 E6 9F 17 DA D8 64 75 54 B1
+0x0080 | F3 45 0C 0B 3C 74 B3 9D BC EB 53 73 87 C3 0E 62
+0x0090 | 47 48 62 CA 59 EB 86 3F 3A FA 86 B5 BF A8 6D 06
+0x00A0 | 16 50 82 C4 CE 62 9E 4E E6 4C C7 30 3E DE A1 0B
+0x00B0 | D8 83 0B B6 B8 28 BC A9 EB 77 43 FC 7A 17 94 85
+0x00C0 | 21 CA 37 6B 30 95 B5 46 77 30 60 B7 12 D6 8C C5
+0x00D0 | 54 85 29 D8 69 A9 6F 12 4E 71 DF E3 E2 B1 6B 6B
+0x00E0 | BF 9F FB 2E 57 30 A9 69 76 C4 46 A2 DF FA 91 D9
+0x00F0 | 50 74 55 1D 49 04 5A 1C D6 86 68 7C B6 61 48 6C
+0x0100 | 96 E6 12 4C 27 AD BA C7 51 99 8E D0 F0 ED 8E F6
+0x0110 | 65 79 79 A6 12 A1 95 DB C8 AE E3 B6 35 E6 8D BC
+0x0120 | 48 A3 7F AF 4A 28 8A 53 E2 7E 68 08 9F 67 77 98
+0x0130 | 52 DB 50 84 D6 5E 25 E1 4A 99 58 34 C7 11 D6 43
+0x0140 | FF C4 FD 9A 44 16 D1 B2 FB 02 DB A1 89 69 34 C2
+0x0150 | 32 55 98 F9 9B B2 31 3F 49 59 0C 06 8C DB A5 B2
+0x0160 | 9D 7E 12 2F D0 87 94 44 E4 0A 76 EF 99 2D 91 18
+0x0170 | 39 50 3B 29 3B F5 2C 97 73 48 91 83 B0 A6 F3 4B
+0x0180 | 70 2F 1C 8F 3B 78 23 C6 AA 86 46 43 1D D7 2A 23
+0x0190 | 5E 2C D9 48 0A F5 F5 2C D1 FB 3F F0 4B 78 37 E9
+0x01A0 | 45 DD 72 CF 80 35 C3 95 07 F3 D9 06 E5 4A 58 76
+0x01B0 | 03 6C 81 20 62 45 65 44 73 BC FE C1 9F 31 E5 DB
+0x01C0 | 89 5C 6B 79 D8 68 90 D7 26 A8 A1 88 86 81 DC 9A
+0x01D0 | 4F 40 A5 23 C7 DE BE 6F 76 AB 79 16 51 21 67 83
+0x01E0 | 2E F3 D6 27 1A 42 C2 94 D1 5D 6C DB 4A 7A E2 CB
+0x01F0 | 0B B0 68 0B BE 19 59 00 50 FC C0 BD 9D F5 F5 F8
+0x0200 | A8 17 19 D6 B3 E9 74 BA 50 E5 2C 45 7B F9 93 EA
+0x0210 | 5A F9 A9 30 B1 6F 5B 36 24 1E 8D 55 57 F4 CC 67
+0x0220 | B2 65 6A A9 36 26 D0 06 B8 E2 E3 73 8B D1 C0 1C
+0x0230 | 52 15 CA B5 AC 60 3E 36 42 F1 2C BD 99 77 AB A8
+0x0240 | A9 A4 8E 9C 8B 84 DE 73 F0 91 29 97 AE DB AF D6
+0x0250 | F8 5E 9B 86 B3 B3 03 B3 AC 75 6F A6 11 69 2F 3D
+0x0260 | 3A CE FA 53 86 60 95 6C BB C5 4E F3
+....
+
+This is a complete H.264 stream.
+If you type these values into a hex editor and save the file with a `.264` extension, you will be able to convert it to this image:
+
+image::https://i.stack.imgur.com/Szfku.png[The decoded H.264 stream above]
+
+=== NAL Unit Header
+
+The first byte after the start code it's called NAL Unit Header and indicates the type of data contained in it and other information. +
+In the example above the first header byte is `0x67`, le'ts see what that means:
+
+.`0x67` in hex is `01100111` in binary
+[wavedrom,format=svg]
+....
+{ reg: [
+
+  { "attr": "forbidden_zero", "bits": 1, "name": 0x0, type: 2},
+  { "attr": "nal_ref_idc", "bits": 2, "name": 0x3, type: 3},
+  { "attr": "nal_unit_type", "bits": 5, "name": 0x7, type: 4},
+], config: {fontsize: 16, vflip:true, hflip:true}
+}
+....
+
+[%autowidth.stretch]
+|===
+|Element |Size in bits |Description
+
+|Forbidden zero
+|1
+|Used to check whether there is any error occurred during the transmission. +
+The H.264 specification declares a value of 1 as a syntax violation.
+
+|nal_ref_idc
+|2
+|Current frame priority
+
+|nal_unit_type
+|5
+|This component specifies the NAL unit payload type
+|===
+
+==== nal_ref_idc
+
+Just by looking at this two bits you can already understand what type of information will be encoded:
+
+[%autowidth.stretch]
+|===
+|Start Code Type | nal_ref_idc (in binary)
+
+|I-frame or header data
+|11
+
+|P-frame
+|10
+
+|B-frame
+|01
+
+|other data
+|00
+
+|===
+
+Read the full table https://yumichan.net/video-processing/video-compression/breif-description-of-nal_ref_idc-value-in-h-246-nalu/[here].
+
+==== nal_unit_type
+
+The 5 remaining bits will uniquely identify which exact type of NAL unit we are looking at, here are the most common:
+
+|===
+|Unit type | nal_unit_type (binary) | nal_unit_type (decimal)
+
+|Coded slice of a non-IDR picture
+|00001
+|1
+
+|Coded slice of an IDR picture
+|00101
+|5
+
+|Supplemental enhancement information (SEI)
+|00110
+|6
+
+|Sequence parameter set (SPS)
+|00111
+|7
+
+|Picture parameter set (PPS)
+|01000
+|8
+
+|Access unit delimiter
+|01001
+|9
+|===
+
+Full table https://yumichan.net/video-processing/video-compression/introduction-to-h264-nal-unit/[here].
+
+=== Examples
+
+Looking back at the example above we can now identify the following 3 NALU:
+
+.A SPS NALU
+[wavedrom,format=svg]
+....
+{ reg: [
+  { "attr": "forbidden_zero",   "bits": 1, "name": 0x0, type: 2},
+  { "attr": "nal_ref_idc", "bits": 2, "name": 0x3, type: 3},
+  { "attr": "nal_unit_type", "bits": 5, "name": 0x7, type: 4},
+], config: {fontsize: 16, vflip:true, hflip:true}
+}
+....
+
+.A PPS NALU
+[wavedrom,format=svg]
+....
+{ reg: [
+  { "attr": "forbidden_zero",   "bits": 1, "name": 0x0, type: 2},
+  { "attr": "nal_ref_idc", "bits": 2, "name": 0x3, type: 3},
+  { "attr": "nal_unit_type", "bits": 5, "name": 0x8, type: 4},
+], config: {fontsize: 16, vflip:true, hflip:true}
+}
+....
+
+.A IDR frame NALU
+[wavedrom,format=svg]
+....
+{ reg: [
+  { "attr": "forbidden_zero",   "bits": 1, "name": 0x0, type: 2},
+  { "attr": "nal_ref_idc", "bits": 2, "name": 0x3, type: 3},
+  { "attr": "nal_unit_type", "bits": 5, "name": 0x5, type: 4},
+], config: {fontsize: 16, vflip:true, hflip:true}
+}
+....
+
+== IDR Requests
+
+During the stream the client is actively asking for IDR frames via the Control UDP stream (see: xref:control-specs.adoc[]).
