@@ -1,12 +1,12 @@
 #include "catch2/catch_all.hpp"
 using Catch::Matchers::Equals;
 
-#include <rtsp/net.hpp>
-#include <state/data-structures.hpp>
 #include <boost/beast/_experimental/test/stream.hpp>
-#include <rtsp/parser.hpp>
-#include <string>
 #include <crypto/crypto.hpp>
+#include <rtsp/net.hpp>
+#include <rtsp/parser.hpp>
+#include <state/data-structures.hpp>
+#include <string>
 using namespace std::string_literals;
 using namespace state;
 using namespace rtsp;
@@ -131,6 +131,34 @@ TEST_CASE("Custom Parser", "[RTSP]") {
       REQUIRE_THAT(parsed.payloads[3].second, Equals("x-nv-video[0].clientViewportWd:1920"));
       REQUIRE_THAT(parsed.payloads[4].second, Equals("x-nv-video[0].clientViewportHt:1080"));
 
+      // Round trip
+      REQUIRE(rtsp::to_string(parsed) == rtsp::to_string(rtsp::parse(rtsp::to_string(parsed)).value()));
+    }
+
+    SECTION("Incomplete packet") {
+      // This can happen when we have a single packet that has been split in multiple packets
+      // We need to be at least able to decode the Content-length so that we can ask for another packet
+      auto payload = "ANNOUNCE streamid=control/13/0 RTSP/1.0\n"
+                     "CSeq: 6\n"
+                     "X-GS-ClientVersion: 14\n"
+                     "Host: 192.168.1.227\n"
+                     "Session:  DEADBEEFCAFE\n"
+                     "Content-type: application/sdp\n"
+                     "Content-length: 1347\n"
+                     "\n"
+                     "v=0\n"
+                     "o=android 0 14 IN IPv4 192.168.1.227\n"
+                     "s=NVIDIA Streaming Client\n"
+                     "a=x-nv-video[0].clientViewportWd:1920 \n"
+                     "a=x-nv-video[0].clientViewportHt:1080 \n"
+                     "a=x-nv-video[0].maxFPS:60 \n"
+                     "a=x-nv-video[0].packetSize:1392 \n"
+                     "a=x-nv-video[0].rateControlMode:4 \n"
+                     "a=x-nv-video[0].timeoutLengthMs:7000 \n"
+                     "a=x-nv-video[0].framesWithInvalidRefThreshold:0 \n"
+                     "a"s;
+      auto parsed = rtsp::parse(payload).value();
+      REQUIRE_THAT(parsed.options["Content-length"], Equals("1347"));
       // Round trip
       REQUIRE(rtsp::to_string(parsed) == rtsp::to_string(rtsp::parse(rtsp::to_string(parsed)).value()));
     }

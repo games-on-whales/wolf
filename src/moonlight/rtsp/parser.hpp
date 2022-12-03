@@ -64,7 +64,7 @@ std::optional<RTSP_PACKET> parse(std::string_view msg) {
   // clang-format off
   // Test this out at https://yhirose.github.io/cpp-peglib/
   peg::parser parser = {R"(
-    RTSP <- (RTSPREQUEST / RTSPRESPONSE) ENDLINE CSEQ OPTION* ENDLINE? PAYLOAD*
+    RTSP <- (RTSPREQUEST / RTSPRESPONSE) ENDLINE CSEQ OPTION* ENDLINE? PAYLOAD* UNCOMPLETEROW?
 
     RTSPREQUEST <- CMD TARGET FULLPROTOCOL
     RTSPRESPONSE <- FULLPROTOCOL RESPONSECODE RESPONSEMSG
@@ -110,6 +110,7 @@ std::optional<RTSP_PACKET> parse(std::string_view msg) {
     CR <- '\r'
     LF <- '\n'
     ~ENDLINE <- CR? LF
+    UNCOMPLETEROW <- < [a-zA-Z0-9-_./;=, :]+ >
 
     %whitespace  <-  [ \t]*
     )"};
