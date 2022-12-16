@@ -1,5 +1,10 @@
 #pragma once
 
+#include "fmt/chrono.h"
+#include "fmt/core.h"
+#include "fmt/format.h"
+#include "fmt/ostream.h"
+#include "fmt/ranges.h"
 #include <boost/date_time/posix_time/posix_time_types.hpp>
 #include <boost/log/attributes/named_scope.hpp>
 #include <boost/log/core.hpp>
@@ -13,11 +18,6 @@
 #include <boost/log/utility/setup/common_attributes.hpp>
 #include <boost/log/utility/setup/console.hpp>
 #include <boost/shared_ptr.hpp>
-#include <fmt/chrono.h>
-#include <fmt/core.h>
-#include <fmt/format.h>
-#include <fmt/ostream.h>
-#include <fmt/ranges.h>
 
 namespace logs {
 
