@@ -79,7 +79,7 @@ void start_streaming_video(immer::box<state::VideoSession> video_session, unsign
   bool stop = false;
 
   auto ev_handler = video_session->event_bus->register_handler<immer::box<ControlEvent>>(
-      [sess_id = video_session->session_id, &stop, &moonlight_plugin](immer::box<ControlEvent> ctrl_ev) {
+      [sess_id = video_session->session_id, &moonlight_plugin](immer::box<ControlEvent> ctrl_ev) {
         if (ctrl_ev->session_id == sess_id) {
           if (ctrl_ev->type == IDR_FRAME) {
             // Force IDR event, see: https://github.com/centricular/gstwebrtc-demos/issues/186
@@ -88,10 +88,15 @@ void start_streaming_video(immer::box<state::VideoSession> video_session, unsign
                 gst_structure_new("GstForceKeyUnit", "all-headers", G_TYPE_BOOLEAN, TRUE, NULL));
 
             gst_element_send_event(moonlight_plugin, gst_ev);
-          } else if (ctrl_ev->type == TERMINATION) {
-            g_print("Terminating Gstreamer Video pipeline\n");
-            stop = true;
           }
+        }
+      });
+
+  auto terminate_handler = video_session->event_bus->register_handler<immer::box<TerminateEvent>>(
+      [sess_id = video_session->session_id, &stop](immer::box<TerminateEvent> term_ev) {
+        if (term_ev->session_id == sess_id) {
+          g_print("Terminating Gstreamer Video pipeline\n");
+          stop = true;
         }
       });
 
@@ -118,6 +123,7 @@ void start_streaming_video(immer::box<state::VideoSession> video_session, unsign
   gst_element_set_state(pipeline, GST_STATE_NULL);
 
   ev_handler.unregister();
+  terminate_handler.unregister();
   gst_object_unref(moonlight_plugin);
   gst_object_unref(GST_OBJECT(pipeline));
 }
@@ -149,13 +155,11 @@ void start_streaming_audio(immer::box<state::AudioSession> audio_session, unsign
 
   bool stop = false;
 
-  auto ev_handler = audio_session->event_bus->register_handler<immer::box<ControlEvent>>(
-      [sess_id = audio_session->session_id, &stop](immer::box<ControlEvent> ctrl_ev) {
-        if (ctrl_ev->session_id == sess_id) {
-          if (ctrl_ev->type == TERMINATION) {
-            g_print("Terminating Gstreamer Audio pipeline\n");
-            stop = true;
-          }
+  auto terminate_handler = audio_session->event_bus->register_handler<immer::box<TerminateEvent>>(
+      [sess_id = audio_session->session_id, &stop](immer::box<TerminateEvent> term_ev) {
+        if (term_ev->session_id == sess_id) {
+          g_print("Terminating Gstreamer Video pipeline\n");
+          stop = true;
         }
       });
 
@@ -181,7 +185,7 @@ void start_streaming_audio(immer::box<state::AudioSession> audio_session, unsign
   gst_element_set_state(pipeline, GST_STATE_READY);
   gst_element_set_state(pipeline, GST_STATE_NULL);
 
-  ev_handler.unregister();
+  terminate_handler.unregister();
   gst_object_unref(GST_OBJECT(pipeline));
 }
 

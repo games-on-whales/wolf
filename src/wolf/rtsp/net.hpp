@@ -209,9 +209,9 @@ std::thread start_server(int port, immer::box<state::StreamSession> state) {
 
           logs::log(logs::info, "RTSP server started on port: {}", port);
 
-          auto stop_handler = state->event_bus->register_handler<immer::box<moonlight::control::ControlEvent>>(
-              [sess_id = state->session_id, &io_context](immer::box<moonlight::control::ControlEvent> ctrl_ev) {
-                if (ctrl_ev->session_id == sess_id && ctrl_ev->type == moonlight::control::TERMINATION) {
+          auto stop_handler = state->event_bus->register_handler<immer::box<moonlight::control::TerminateEvent>>(
+              [sess_id = state->session_id, &io_context](immer::box<moonlight::control::TerminateEvent> term_ev) {
+                if (term_ev->session_id == sess_id) {
                   logs::log(logs::info, "RTSP received termination, stopping.");
                   io_context.stop();
                 }
