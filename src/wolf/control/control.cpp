@@ -1,3 +1,4 @@
+#include "input/input.hpp"
 #include <control/control.hpp>
 #include <control/packet_utils.hpp>
 #include <sys/socket.h>
@@ -72,6 +73,8 @@ std::thread start_service(immer::box<state::ControlSession> control_sess, int ti
         enet_host host = create_host(control_sess->host, control_sess->port, control_sess->peers);
         logs::log(logs::info, "Control server started on port: {}", control_sess->port);
 
+        auto input_handlers = input::setup_handlers(control_sess->session_id, control_sess->event_bus);
+
         ENetEvent event;
         bool terminated = false;
         while (!terminated && enet_host_service(host.get(), &event, timeout_millis) > 0) {
@@ -85,7 +88,6 @@ std::thread start_service(immer::box<state::ControlSession> control_sess, int ti
             break;
           case ENET_EVENT_TYPE_DISCONNECT:
             logs::log(logs::debug, "[ENET] disconnected client: {}:{}", client_ip, client_port);
-            control_sess->event_bus->fire_event(immer::box<ControlEvent>{control_sess->session_id, TERMINATION, ""});
             terminated = true;
             break;
           case ENET_EVENT_TYPE_RECEIVE:
@@ -112,16 +114,28 @@ std::thread start_service(immer::box<state::ControlSession> control_sess, int ti
                           packet_type_to_str(sub_type),
                           crypto::str_to_hex(decrypted));
 
+                if (sub_type == TERMINATION) {
+                  terminated = true;
+                }
+
                 auto ev = ControlEvent{control_sess->session_id, sub_type, decrypted};
                 control_sess->event_bus->fire_event(immer::box<ControlEvent>{ev});
               } catch (std::runtime_error &e) {
                 logs::log(logs::error, "[ENET] Unable to decrypt incoming packet: {}", e.what());
               }
             }
-
-            // TODO: read and parse payload
             break;
           }
+        }
+
+        // Failsafe, when we get out of the loop we have to signal to terminate the session
+        logs::log(logs::debug, "[ENET] terminating session: {}", control_sess->session_id);
+
+        auto terminate_ev = TerminateEvent{control_sess->session_id};
+        control_sess->event_bus->fire_event(immer::box<TerminateEvent>{terminate_ev});
+
+        for (auto handler : input_handlers) {
+          handler->unregister();
         }
       },
       std::move(control_sess));

@@ -40,9 +40,11 @@ set(CMAKE_MODULE_PATH ${CMAKE_CURRENT_SOURCE_DIR}/cmake/)
 list(APPEND CMAKE_MODULE_PATH ${CMAKE_CURRENT_SOURCE_DIR}/cmake)
 
 
+add_subdirectory(src/helpers)
 add_subdirectory(src/crypto)
 add_subdirectory(src/moonlight)
 add_subdirectory(src/streaming)
+add_subdirectory(src/input)
 add_subdirectory(src/wolf)
 
 # Testing only available if this is the main app

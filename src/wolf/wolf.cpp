@@ -4,6 +4,7 @@
 #include <csignal>
 #include <fstream>
 #include <immer/array.hpp>
+#include <input/input.hpp>
 #include <memory>
 #include <rest/rest.hpp>
 #include <rtp/udp-ping.hpp>
@@ -188,26 +189,24 @@ auto setup_sessions_handlers(std::shared_ptr<dp::event_bus> &event_bus, TreadsMa
       });
 
   // On control session end, let's wait for all threads to finish then clean them up
-  auto ctrl_handler = event_bus->register_handler<immer::box<moonlight::control::ControlEvent>>(
-      [&threads](immer::box<moonlight::control::ControlEvent> event) {
-        if (event->type == moonlight::control::TERMINATION) {
-          // Events are dispatched from the calling thread; in this case it'll be the control stream thread.
-          // We have to create a new thread to process the cleaning and detach it from the original thread
-          auto cleanup_thread = std::thread([&threads, sess_id = event->session_id]() {
-            auto t_vec = std::move(threads.load()->at(sess_id));
+  auto ctrl_handler = event_bus->register_handler<immer::box<moonlight::control::TerminateEvent>>(
+      [&threads](immer::box<moonlight::control::TerminateEvent> event) {
+        // Events are dispatched from the calling thread; in this case it'll be the control stream thread.
+        // We have to create a new thread to process the cleaning and detach it from the original thread
+        auto cleanup_thread = std::thread([&threads, sess_id = event->session_id]() {
+          auto t_vec = threads.load()->at(sess_id);
 
-            logs::log(logs::debug, "Terminated session: {}, waiting for {} threads to finish", sess_id, t_vec.size());
+          logs::log(logs::debug, "Terminated session: {}, waiting for {} threads to finish", sess_id, t_vec.size());
 
-            for (auto t_ptr : t_vec) {
-              auto thread = std::move(t_ptr->get());
-              thread->join(); // Wait for the thread to be over
-            }
+          for (const auto &t_ptr : t_vec) {
+            auto thread = t_ptr->get();
+            thread->join(); // Wait for the thread to be over
+          }
 
-            logs::log(logs::debug, "Removing session: {}", sess_id);
-            threads.update([sess_id](auto t_map) { return t_map.erase(sess_id); });
-          });
-          cleanup_thread.detach();
-        }
+          logs::log(logs::debug, "Removing session: {}", sess_id);
+          threads.update([sess_id](auto t_map) { return t_map.erase(sess_id); });
+        });
+        cleanup_thread.detach();
       });
 
   return immer::array<immer::box<dp::handler_registration>>{std::move(pair_sig),
@@ -241,13 +240,18 @@ int main(int argc, char *argv[]) {
   auto sess_handlers = setup_sessions_handlers(local_state->event_bus, threads);
 
   // Exception and termination handling
-  shutdown_handler = [&local_state, &config_file](int signum) {
+  shutdown_handler = [&sess_handlers](int signum) {
     logs::log(logs::info, "Received interrupt signal {}, clean exit", signum);
     if (signum == SIGABRT || signum == SIGSEGV) {
       auto trace_file = "./backtrace.dump";
       logs::log(logs::error, "Runtime error, dumping stacktrace to {}", trace_file);
       boost::stacktrace::safe_dump_to(trace_file);
     }
+
+    for (const auto &handler : sess_handlers) {
+      handler->unregister();
+    }
+
     exit(signum);
   };
   std::signal(SIGINT, signal_handler);

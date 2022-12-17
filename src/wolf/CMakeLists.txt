@@ -80,6 +80,8 @@ target_link_libraries(
         wolf_runner PUBLIC
         wolf::moonlight
         wolf::streaming
+        wolf::input
+        wolf::helpers
         ${Boost_LIBRARIES}
         ${CMAKE_DL_LIBS}
         ${CMAKE_THREAD_LIBS_INIT}

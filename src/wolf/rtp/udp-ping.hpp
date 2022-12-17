@@ -21,6 +21,7 @@ unsigned short wait_for_ping(unsigned short port) {
 
   // Stop over here until we receive from Moonlight
   // TODO: timeout?
+  logs::log(logs::trace, "Waiting for PING at: {}", port);
   socket.receive_from(boost::asio::buffer(recv_buf), remote_endpoint);
 
   auto client_port = remote_endpoint.port();

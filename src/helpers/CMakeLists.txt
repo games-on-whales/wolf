@@ -18,13 +18,22 @@ FetchContent_Declare(
         GIT_REPOSITORY https://github.com/ericniebler/range-v3.git
         GIT_TAG 0.12.0)
 FetchContent_MakeAvailable(range)
-target_link_libraries(wolf_helpers PUBLIC range-v3::range-v3)
+
+# Formatting library
+FetchContent_Declare(
+        fmtlib
+        GIT_REPOSITORY https://github.com/fmtlib/fmt.git
+        GIT_TAG 8.1.1)
+FetchContent_MakeAvailable(fmtlib)
 
 # Boost for logging
 find_package(Boost REQUIRED COMPONENTS log_setup log)
 include_directories(${Boost_INCLUDE_DIRS})
 
-target_link_libraries(wolf_helpers PUBLIC ${Boost_LIBRARIES})
+target_link_libraries(wolf_helpers PUBLIC
+        ${Boost_LIBRARIES}
+        fmt::fmt-header-only
+        range-v3::range-v3)
 
 # All users of this library will need at least C++17
 target_compile_features(wolf_helpers PUBLIC cxx_std_17)
