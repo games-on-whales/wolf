@@ -14,9 +14,9 @@ if (UNIX AND NOT APPLE)
         message(FATAL_ERROR "Please install libevdev: CMake will Exit")
     endif ()
 
-    message(STATUS "${LIBEVDEV_INCLUDE_DIR}")
+    message(STATUS "libevdev include path: ${LIBEVDEV_INCLUDE_DIR} library: ${LIBEVDEV_LIBRARY}")
 
-    target_link_libraries(wolf_input PUBLIC ${LIBEVDEV_LIBRARY})
+    target_link_libraries(wolf_input PUBLIC evdev)
     target_include_directories(wolf_input PUBLIC ${LIBEVDEV_INCLUDE_DIR})
 
     message(STATUS "Adding input implementation for LINUX (linux/*.cpp)")

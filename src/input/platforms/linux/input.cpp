@@ -3,6 +3,7 @@
 #include <input/input.hpp>
 #include <libevdev/libevdev-uinput.h>
 #include <libevdev/libevdev.h>
+#include <optional>
 
 namespace input {
 
@@ -103,8 +104,8 @@ void move_touchpad(libevdev_uinput *mouse, const data::MOUSE_MOVE_ABS_PACKET &mo
   float width = boost::endian::big_to_native(move_pkt.width);
   float height = boost::endian::big_to_native(move_pkt.height);
 
-  int scaled_x = (int) std::lround((ABS_MAX_WIDTH / width) * x);
-  int scaled_y = (int) std::lround((ABS_MAX_HEIGHT / height) * y);
+  int scaled_x = (int)std::lround((ABS_MAX_WIDTH / width) * x);
+  int scaled_y = (int)std::lround((ABS_MAX_HEIGHT / height) * y);
 
   libevdev_uinput_write_event(mouse, EV_ABS, ABS_X, scaled_x);
   libevdev_uinput_write_event(mouse, EV_ABS, ABS_Y, scaled_y);
