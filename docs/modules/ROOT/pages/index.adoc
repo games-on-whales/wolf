@@ -7,6 +7,8 @@ image:https://img.shields.io/github/license/games-on-whales/wolf[License MIT]
 [quote,Matshona Dhliwayo.]
 An intelligent wolf is better than a foolish lion.
 
+video::z5jzLIUH6rA[youtube, width=1280, height=720]
+
 == Rationale
 
 The goal is to create an open source backend for https://moonlight-stream.org/[Moonlight] based on https://gstreamer.freedesktop.org/[GStreamer].

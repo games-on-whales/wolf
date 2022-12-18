@@ -7,4 +7,6 @@
 >
 > &mdash; <cite>Matshona Dhliwayo.</cite>
 
+[![Youtube video preview](https://github.com/games-on-whales/wolf/blob/main/docs/modules/ROOT/images/introduction-video.png?raw=true)](https://www.youtube.com/watch?v=z5jzLIUH6rA)
+
 Please [READ THE DOCS](https://games-on-whales.github.io/wolf/)
