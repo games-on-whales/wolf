@@ -1,0 +1,185 @@
+= Input Data
+
+Moonlight will send all user inputs via the xref:protocols:control-specs.adoc[control stream].
+
+The first 4 bytes of a packet of type `INPUT_DATA` will determine the type of input and the format of the packet itself (big endian):
+
+|===
+|Input type |HEX code
+
+|MOUSE_MOVE_REL
+|`0x08`
+
+|MOUSE_MOVE_ABS
+|`0x0E`
+
+|MOUSE_BUTTON
+|`0x05`
+
+|KEYBOARD_OR_SCROLL
+|`0x0A`
+
+|CONTROLLER_MULTI
+|`0x1E`
+
+|CONTROLLER
+|`0x18`
+|===
+
+== Mouse: relative move
+
+.The full format of a `MOUSE_MOVE_REL` packet
+[packetdiag,format=svg,align="center"]
+....
+{
+  colwidth = 8
+  node_height = 50
+  node_width = 70
+
+  0-1: Packet Type
+  2-5: Input Type
+  6-9: unknown
+  10-11: Delta X
+  12-13: Delta Y
+}
+....
+
+`Delta X` and `Delta Y` defines the relative movement that the mouse must perform.
+
+== Mouse: absolute move
+
+.The full format of a `MOUSE_MOVE_ABS` packet
+[packetdiag,format=svg,align="center"]
+....
+{
+  colwidth = 8
+  node_height = 50
+  node_width = 70
+
+  0-1: Packet Type
+  2-5: Input Type
+  6-9: unknown
+  10-11: X
+  12-13: Y
+  14-15: unknown
+  16-17: width
+  18-19: height
+}
+....
+
+In order to define an absolute position Moonlight will send both:
+
+* `width`, `height` which represent the size of the viewport on the client side
+* `X`,`Y` are the absolute coordinates of the mouse on the client side
+
+[NOTE]
+`X`, `Y`, `width` and `height` are all sent in big endian.
+
+== Mouse: button
+
+.The full format of a `MOUSE_BUTTON` packet
+[packetdiag,format=svg,align="center"]
+....
+{
+  colwidth = 8
+  node_height = 50
+  node_width = 70
+
+  0-1: Packet Type
+  2-5: Input Type
+  6-6: Action
+  7-10: Button
+}
+....
+
+`Action` can have the following values:
+
+|===
+|Action data |Meaning
+
+|`0x09`
+|Button released
+
+|`0x08`
+|Button pressed
+|===
+
+`Button` can have the following values:
+
+|===
+|Button data |Meaning
+
+|1
+|Button left
+
+|2
+|Button middle
+
+|3
+|Button right
+
+|4
+|Button side
+
+|5
+|Button extra
+|===
+
+== Keyboard or mouse scroll
+
+Unfortunately an input packet of type: `0x0A` can be either a keyboard packet or a mouse scroll packet. +
+In order to discriminate between the two you can check the next byte after the `Input Type`, if it's `0x0A` the packet will be parsed as a `MOUSE_SCROLL` otherwise it's a `KEYBOARD`.
+
+=== Mouse scroll
+
+.The full format of a `MOUSE_SCROLL` packet
+[packetdiag,format=svg,align="center"]
+....
+{
+  colwidth = 8
+  node_height = 50
+  node_width = 70
+
+  0-1: Packet Type
+  2-5: Input Type
+  6-6: 0x0A
+  7-9: zeros
+  10-11: Scroll amount 1
+  12-13: Scroll amount 2
+  14-15: zeros
+}
+....
+
+We only use `Scroll amount 1` to determine the amount of scroll to be applied.
+
+[WARNING,caption=TODO]
+====
+What's `Scroll amount 2`?
+====
+
+=== Keyboard
+
+.The full format of a `KEYBOARD` packet
+[packetdiag,format=svg,align="center"]
+....
+{
+  colwidth = 8
+  node_height = 50
+  node_width = 70
+
+  0-1: Packet Type
+  2-5: Input Type
+  6-6: Action
+  7-8: zeros
+  9-10: Key Code
+  11-12: unknown
+  13-13: modifiers
+  14-15: zeros
+}
+....
+
+
+
+== Controller multi
+
+== Controller
