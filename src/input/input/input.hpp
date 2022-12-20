@@ -3,8 +3,8 @@
 #include "moonlight/data-structures.hpp"
 #include <cstdint>
 #include <eventbus/event_bus.hpp>
-#include <immer/box.hpp>
 #include <immer/array.hpp>
+#include <immer/box.hpp>
 #include <moonlight/data-structures.hpp>
 #include <thread>
 
@@ -14,8 +14,8 @@ namespace input {
  * PLATFORM DEPENDENT
  * will wait for events on the event bus and setup virtual devices accordingly.
  */
-immer::array<immer::box<dp::handler_registration>> setup_handlers(std::size_t session_id, std::shared_ptr<dp::event_bus> event_bus);
-
+immer::array<immer::box<dp::handler_registration>> setup_handlers(std::size_t session_id,
+                                                                  std::shared_ptr<dp::event_bus> event_bus);
 
 /**
  * A packet of type INPUT_DATA will have different shapes based on the type
@@ -28,11 +28,13 @@ enum INPUT_TYPE : int {
   MOUSE_BUTTON = 0x05,
 
   KEYBOARD_OR_SCROLL = 0x0A,
-  MOUSE_SCROLL = 0xA0,
 
   CONTROLLER_MULTI = 0x1E,
   CONTROLLER = 0x18
 };
+
+constexpr int KEYBOARD_BUTTON_RELEASED = 0x04;
+constexpr int MOUSE_BUTTON_RELEASED = 0x09;
 
 struct INPUT_PKT {
   unsigned short packet_type; // This should always be 0x0206 little endian (INPUT_DATA)
@@ -60,7 +62,7 @@ struct MOUSE_BUTTON_PACKET : INPUT_PKT {
 };
 
 struct MOUSE_SCROLL_PACKET : INPUT_PKT {
-  char magic_a;
+  char magic_a; // static: 0x0A
   char zero1;
   short zero2;
   short scroll_amt1;
@@ -70,8 +72,9 @@ struct MOUSE_SCROLL_PACKET : INPUT_PKT {
 
 struct KEYBOARD_PACKET : INPUT_PKT {
   char key_action;
-  int zero1;
+  short zero1;
   short key_code;
+  short magic;
   char modifiers;
   short zero2;
 };
