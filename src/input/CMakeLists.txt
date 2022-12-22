@@ -14,13 +14,12 @@ if (UNIX AND NOT APPLE)
         message(FATAL_ERROR "Please install libevdev: CMake will Exit")
     endif ()
 
-    message(STATUS "libevdev include path: ${LIBEVDEV_INCLUDE_DIR} library: ${LIBEVDEV_LIBRARY}")
-
     target_link_libraries(wolf_input PUBLIC evdev)
     target_include_directories(wolf_input PUBLIC ${LIBEVDEV_INCLUDE_DIR})
 
-    message(STATUS "Adding input implementation for LINUX (linux/*.cpp)")
+    message(STATUS "Adding input implementation for LINUX")
     list(APPEND SRC_LIST "platforms/linux/input.cpp")
+    list(APPEND HEADER_LIST "platforms/linux/keyboard.hpp")
 else () # TODO: other platforms??
     message(WARNING "Missing virtual input implementation for the current platform")
     list(APPEND SRC_LIST "platforms/unknown/input.cpp")

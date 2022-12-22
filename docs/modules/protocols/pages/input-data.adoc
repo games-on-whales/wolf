@@ -1,3 +1,4 @@
+:experimental:
 = Input Data
 
 Moonlight will send all user inputs via the xref:protocols:control-specs.adoc[control stream].
@@ -171,12 +172,378 @@ What's `Scroll amount 2`?
   2-5: Input Type
   6-6: Action
   7-8: zeros
-  9-10: Key Code
+  9-10: Key code
   11-12: unknown
   13-13: modifiers
   14-15: zeros
 }
 ....
+
+[WARNING,caption=TODO]
+====
+What's `modifiers`?
+====
+
+ * *Action*: will have the value `0x04` when a button is pressed
+ * *Key code* represent the corresponding keyboard code of the pressed input, see the following table:
+
+
+|===
+| Moonlight code | Keyboard button
+
+| 0x08
+| kbd:[BACKSPACE]
+
+| 0x09
+| kbd:[TAB]
+
+| 0x0C
+| kbd:[CLEAR]
+
+| 0x0D
+| kbd:[ENTER]
+
+| 0x10
+| kbd:[LEFTSHIFT]
+
+| 0x11
+| kbd:[LEFTCTRL]
+
+| 0x12
+| kbd:[LEFTALT]
+
+| 0x13
+| kbd:[PAUSE]
+
+| 0x14
+| kbd:[CAPSLOCK]
+
+| 0x15
+| kbd:[KATAKANAHIRAGANA]
+
+| 0x16
+| kbd:[HANGEUL]
+
+| 0x17
+| kbd:[HANJA]
+
+| 0x19
+| kbd:[KATAKANA]
+
+| 0x1B
+| kbd:[ESC]
+
+| 0x20
+| kbd:[SPACE]
+
+| 0x21
+| kbd:[PAGEUP]
+
+| 0x22
+| kbd:[PAGEDOWN]
+
+| 0x23
+| kbd:[END]
+
+| 0x24
+| kbd:[HOME]
+
+| 0x25
+| kbd:[LEFT]
+
+| 0x26
+| kbd:[UP]
+
+| 0x27
+| kbd:[RIGHT]
+
+| 0x28
+| kbd:[DOWN]
+
+| 0x29
+| kbd:[SELECT]
+
+| 0x2A
+| kbd:[PRINT]
+
+| 0x2C
+| kbd:[SYSRQ]
+
+| 0x2D
+| kbd:[INSERT]
+
+| 0x2E
+| kbd:[DELETE]
+
+| 0x2F
+| kbd:[HELP]
+
+| 0x30
+| kbd:[0]
+
+| 0x31
+| kbd:[1]
+
+| 0x32
+| kbd:[2]
+
+| 0x33
+| kbd:[3]
+
+| 0x34
+| kbd:[4]
+
+| 0x35
+| kbd:[5]
+
+| 0x36
+| kbd:[6]
+
+| 0x37
+| kbd:[7]
+
+| 0x38
+| kbd:[8]
+
+| 0x39
+| kbd:[9]
+
+| 0x41
+| kbd:[A]
+
+| 0x42
+| kbd:[B]
+
+| 0x43
+| kbd:[C]
+
+| 0x44
+| kbd:[D]
+
+| 0x45
+| kbd:[E]
+
+| 0x46
+| kbd:[F]
+
+| 0x47
+| kbd:[G]
+
+| 0x48
+| kbd:[H]
+
+| 0x49
+| kbd:[I]
+
+| 0x4A
+| kbd:[J]
+
+| 0x4B
+| kbd:[K]
+
+| 0x4C
+| kbd:[L]
+
+| 0x4D
+| kbd:[M]
+
+| 0x4E
+| kbd:[N]
+
+| 0x4F
+| kbd:[O]
+
+| 0x50
+| kbd:[P]
+
+| 0x51
+| kbd:[Q]
+
+| 0x52
+| kbd:[R]
+
+| 0x53
+| kbd:[S]
+
+| 0x54
+| kbd:[T]
+
+| 0x55
+| kbd:[U]
+
+| 0x56
+| kbd:[V]
+
+| 0x57
+| kbd:[W]
+
+| 0x58
+| kbd:[X]
+
+| 0x59
+| kbd:[Y]
+
+| 0x5A
+| kbd:[Z]
+
+| 0x5B
+| kbd:[LEFTMETA]
+
+| 0x5C
+| kbd:[RIGHTMETA]
+
+| 0x5F
+| kbd:[SLEEP]
+
+| 0x60
+| kbd:[NUMPAD 0]
+
+| 0x61
+| kbd:[NUMPAD 1]
+
+| 0x62
+| kbd:[NUMPAD 2]
+
+| 0x63
+| kbd:[NUMPAD 3]
+
+| 0x64
+| kbd:[NUMPAD 4]
+
+| 0x65
+| kbd:[NUMPAD 5]
+
+| 0x66
+| kbd:[NUMPAD 6]
+
+| 0x67
+| kbd:[NUMPAD 7]
+
+| 0x68
+| kbd:[NUMPAD 8]
+
+| 0x69
+| kbd:[NUMPAD 9]
+
+| 0x6A
+| kbd:[NUMPAD ASTERISK]
+
+| x6B
+| kbd:[NUMPAD PLUS]
+
+| 0x6C
+| kbd:[NUMPAD COMMA]
+
+| 0x6D
+| kbd:[NUMPAD MINUS]
+
+| 0x6E
+| kbd:[NUMPAD DOT]
+
+| 0x6F
+| kbd:[NUMPAD SLASH]
+
+| 0x70
+| kbd:[F1]
+
+| 0x71
+| kbd:[F2]
+
+| 0x72
+| kbd:[F3]
+
+| 0x73
+| kbd:[F4]
+
+| 0x74
+| kbd:[F5]
+
+| 0x75
+| kbd:[F6]
+
+| 0x76
+| kbd:[F7]
+
+| 0x77
+| kbd:[F8]
+
+| 0x78
+| kbd:[F9]
+
+| 0x79
+| kbd:[F10]
+
+
+| 0x7A
+| kbd:[F11]
+
+| 0x7B
+| kbd:[F12]
+
+| 0x90
+| kbd:[NUMLOCK]
+
+| 0x91
+| kbd:[SCROLLLOCK]
+
+| 0xA0
+| kbd:[LEFTSHIFT]
+
+| 0xA1
+| kbd:[RIGHTSHIFT]
+
+| 0xA2
+| kbd:[LEFTCTRL]
+
+| 0xA3
+| kbd:[RIGHTCTRL]
+
+| 0xA4
+| kbd:[LEFTALT]
+
+| 0xA5
+| kbd:[RIGHTALT]
+
+| 0xBA
+| kbd:[SEMICOLON]
+
+| 0xBB
+| kbd:[EQUAL]
+
+| 0xBC
+| kbd:[COMMA]
+
+| 0xBD
+| kbd:[MINUS]
+
+| 0xBE
+| kbd:[DOT]
+
+| 0xBF
+| kbd:[SLASH]
+
+| 0xC0
+| kbd:[GRAVE]
+
+| 0xDB
+| kbd:[LEFTBRACE]
+
+| 0xDC
+| kbd:[BACKSLASH]
+
+| 0xDD
+| kbd:[RIGHTBRACE]
+
+| 0xDE
+| kbd:[APOSTROPHE]
+
+| 0xE2
+| kbd:[102ND]
+
+
+|===
+
+
 
 
 
