@@ -25,7 +25,7 @@ unsigned short wait_for_ping(unsigned short port) {
   socket.receive_from(boost::asio::buffer(recv_buf), remote_endpoint);
 
   auto client_port = remote_endpoint.port();
-  logs::log(logs::debug, "Received PING from {}:{}", remote_endpoint.address(), client_port);
+  logs::log(logs::debug, "Received PING from {}:{}", remote_endpoint.address().to_string(), client_port);
   return client_port;
 }
 

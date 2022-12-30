@@ -25,7 +25,7 @@ template <class T> inline void log_req(std::shared_ptr<typename SimpleWeb::Serve
             "[{}] {}://{}{}",
             request->method,
             std::is_same_v<SimpleWeb::HTTP, T> ? "HTTP" : "HTTPS",
-            request->local_endpoint(),
+            request->local_endpoint().address().to_string(),
             request->path);
   logs::log(logs::trace, "Header: {}", request->parse_query_string());
 }
