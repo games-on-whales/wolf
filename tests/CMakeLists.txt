@@ -12,9 +12,10 @@ add_executable(wolftests main.cpp)
 
 file(GLOB SRC_LIST SRCS *.cpp)
 
-if (UNIX AND NOT APPLE)
+set(TEST_UINPUT ON) # uinput doesn't work in GA
+if (TEST_UINPUT AND UNIX AND NOT APPLE)
     list(APPEND SRC_LIST "platforms/linux/input.cpp")
-endif()
+endif ()
 
 target_sources(wolftests PRIVATE ${SRC_LIST})
 
