@@ -173,6 +173,7 @@ auto setup_sessions_handlers(std::shared_ptr<dp::event_bus> &event_bus, TreadsMa
         });
       });
 
+  // GStreamer audio
   auto audio_launch_sig = event_bus->register_handler<immer::box<state::AudioSession>>(
       [&threads](immer::box<state::AudioSession> audio_sess) {
         auto thread = std::thread(

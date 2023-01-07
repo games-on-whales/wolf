@@ -2,9 +2,7 @@
 #include <libevdev/libevdev.h>
 #include <map>
 
-namespace input {
-
-namespace keyboard {
+namespace input::keyboard {
 
 struct KEY_MAP {
   int linux_code;
@@ -75,7 +73,6 @@ static const std::map<short, KEY_MAP> key_mappings = {
     {0xC0, {KEY_GRAVE, 0x70035}},      {0xDB, {KEY_LEFTBRACE, 0x7002F}},
     {0xDC, {KEY_BACKSLASH, 0x70031}},  {0xDD, {KEY_RIGHTBRACE, 0x70030}},
     {0xDE, {KEY_APOSTROPHE, 0x70034}}, {0xE2, {KEY_102ND, 0x70064}},
-}; // namespace keyboard
+};
 
-} // namespace keyboard
-} // namespace input
+} // namespace input::keyboard

@@ -5,16 +5,19 @@
  *  - Main docs: https://www.freedesktop.org/software/libevdev/doc/latest/index.html
  *  - Python docs are also of good quality: https://python-libevdev.readthedocs.io/en/latest/index.html
  *
- * You can debug your system using `evemu-describe` and `evemu-record`
+ * You can debug your system using `evemu-describe`, `evemu-record` and `udevadm monitor`
  * (they can be installed using: `apt install -y evemu-tools`)
  */
 
 #include "keyboard.hpp"
 #include <boost/endian/conversion.hpp>
+#include <filesystem>
 #include <helpers/logger.hpp>
+#include <immer/atom.hpp>
 #include <input/input.hpp>
 #include <libevdev/libevdev-uinput.h>
 #include <libevdev/libevdev.h>
+#include <memory>
 #include <optional>
 
 namespace input {
@@ -26,6 +29,8 @@ using libevdev_uinput_ptr = std::shared_ptr<libevdev_uinput>;
 
 constexpr int ABS_MAX_WIDTH = 1920;
 constexpr int ABS_MAX_HEIGHT = 1080;
+
+namespace mouse {
 
 std::optional<libevdev_uinput *> create_mouse(libevdev *dev) {
   libevdev_uinput *uidev;
@@ -65,6 +70,8 @@ std::optional<libevdev_uinput *> create_mouse(libevdev *dev) {
     return {};
   }
 
+  logs::log(logs::debug, "[INPUT] Created virtual mouse {}", libevdev_uinput_get_devnode(uidev));
+
   return uidev;
 }
 
@@ -100,31 +107,7 @@ std::optional<libevdev_uinput *> create_touchpad(libevdev *dev) {
     return {};
   }
 
-  return uidev;
-}
-
-std::optional<libevdev_uinput *> create_keyboard(libevdev *dev) {
-  libevdev_uinput *uidev;
-
-  libevdev_set_uniq(dev, "Wolf Keyboard");
-  libevdev_set_name(dev, "Wolf keyboard virtual device");
-  libevdev_set_id_vendor(dev, 0xAB21);
-  libevdev_set_id_product(dev, 0xAB22);
-  libevdev_set_id_version(dev, 0xAB33);
-  libevdev_set_id_bustype(dev, BUS_USB);
-
-  libevdev_enable_event_type(dev, EV_KEY);
-  libevdev_enable_event_code(dev, EV_KEY, KEY_BACKSPACE, nullptr);
-
-  for (auto ev : keyboard::key_mappings) {
-    libevdev_enable_event_code(dev, EV_KEY, ev.second.linux_code, nullptr);
-  }
-
-  auto err = libevdev_uinput_create_from_device(dev, LIBEVDEV_UINPUT_OPEN_MANAGED, &uidev);
-  if (err != 0) {
-    logs::log(logs::error, "Unable to create mouse device, error code: {}", err);
-    return {};
-  }
+  logs::log(logs::debug, "[INPUT] Created virtual touchpad {}", libevdev_uinput_get_devnode(uidev));
 
   return uidev;
 }
@@ -194,6 +177,38 @@ void mouse_scroll(libevdev_uinput *mouse, const data::MOUSE_SCROLL_PACKET &scrol
   libevdev_uinput_write_event(mouse, EV_SYN, SYN_REPORT, 0);
 }
 
+} // namespace mouse
+
+namespace keyboard {
+
+std::optional<libevdev_uinput *> create_keyboard(libevdev *dev) {
+  libevdev_uinput *uidev;
+
+  libevdev_set_uniq(dev, "Wolf Keyboard");
+  libevdev_set_name(dev, "Wolf keyboard virtual device");
+  libevdev_set_id_vendor(dev, 0xAB21);
+  libevdev_set_id_product(dev, 0xAB22);
+  libevdev_set_id_version(dev, 0xAB33);
+  libevdev_set_id_bustype(dev, BUS_USB);
+
+  libevdev_enable_event_type(dev, EV_KEY);
+  libevdev_enable_event_code(dev, EV_KEY, KEY_BACKSPACE, nullptr);
+
+  for (auto ev : keyboard::key_mappings) {
+    libevdev_enable_event_code(dev, EV_KEY, ev.second.linux_code, nullptr);
+  }
+
+  auto err = libevdev_uinput_create_from_device(dev, LIBEVDEV_UINPUT_OPEN_MANAGED, &uidev);
+  if (err != 0) {
+    logs::log(logs::error, "Unable to create mouse device, error code: {}", err);
+    return {};
+  }
+
+  logs::log(logs::debug, "[INPUT] Created virtual keyboard {}", libevdev_uinput_get_devnode(uidev));
+
+  return uidev;
+}
+
 void keyboard_handle(libevdev_uinput *keyboard, const data::KEYBOARD_PACKET &key_pkt) {
   auto release = key_pkt.key_action == data::KEYBOARD_BUTTON_RELEASED;
   auto moonlight_key = (short)boost::endian::big_to_native((short)key_pkt.key_code);
@@ -217,56 +232,251 @@ void keyboard_handle(libevdev_uinput *keyboard, const data::KEYBOARD_PACKET &key
   }
 }
 
+} // namespace keyboard
+
+namespace controller {
+
+std::optional<libevdev_uinput *> create_controller(libevdev *dev) {
+  libevdev_uinput *uidev;
+
+  libevdev_set_uniq(dev, "Wolf gamepad");
+  libevdev_set_name(dev, "Wolf gamepad virtual device");
+  libevdev_set_id_product(dev, 0xAB31);
+  libevdev_set_id_vendor(dev, 0xAB32);
+  libevdev_set_id_bustype(dev, 0xAB33);
+  libevdev_set_id_version(dev, 0xAB34);
+
+  libevdev_enable_event_type(dev, EV_KEY);
+  libevdev_enable_event_code(dev, EV_KEY, BTN_WEST, nullptr);
+  libevdev_enable_event_code(dev, EV_KEY, BTN_EAST, nullptr);
+  libevdev_enable_event_code(dev, EV_KEY, BTN_NORTH, nullptr);
+  libevdev_enable_event_code(dev, EV_KEY, BTN_SOUTH, nullptr);
+  libevdev_enable_event_code(dev, EV_KEY, BTN_THUMBL, nullptr);
+  libevdev_enable_event_code(dev, EV_KEY, BTN_THUMBR, nullptr);
+  libevdev_enable_event_code(dev, EV_KEY, BTN_TR, nullptr);
+  libevdev_enable_event_code(dev, EV_KEY, BTN_TL, nullptr);
+  libevdev_enable_event_code(dev, EV_KEY, BTN_SELECT, nullptr);
+  libevdev_enable_event_code(dev, EV_KEY, BTN_MODE, nullptr);
+  libevdev_enable_event_code(dev, EV_KEY, BTN_START, nullptr);
+
+  input_absinfo stick{0, -32768, 32767, 16, 128, 0};
+  input_absinfo trigger{0, 0, 255, 0, 0, 0};
+  input_absinfo dpad{0, -1, 1, 0, 0, 0};
+  libevdev_enable_event_type(dev, EV_ABS);
+  libevdev_enable_event_code(dev, EV_ABS, ABS_HAT0Y, &dpad);
+  libevdev_enable_event_code(dev, EV_ABS, ABS_HAT0X, &dpad);
+  libevdev_enable_event_code(dev, EV_ABS, ABS_Z, &trigger);
+  libevdev_enable_event_code(dev, EV_ABS, ABS_RZ, &trigger);
+  libevdev_enable_event_code(dev, EV_ABS, ABS_X, &stick);
+  libevdev_enable_event_code(dev, EV_ABS, ABS_RX, &stick);
+  libevdev_enable_event_code(dev, EV_ABS, ABS_Y, &stick);
+  libevdev_enable_event_code(dev, EV_ABS, ABS_RY, &stick);
+
+  libevdev_enable_event_type(dev, EV_FF);
+  libevdev_enable_event_code(dev, EV_FF, FF_RUMBLE, nullptr);
+  libevdev_enable_event_code(dev, EV_FF, FF_CONSTANT, nullptr);
+  libevdev_enable_event_code(dev, EV_FF, FF_PERIODIC, nullptr);
+  libevdev_enable_event_code(dev, EV_FF, FF_SINE, nullptr);
+  libevdev_enable_event_code(dev, EV_FF, FF_RAMP, nullptr);
+  libevdev_enable_event_code(dev, EV_FF, FF_GAIN, nullptr);
+
+  auto err = libevdev_uinput_create_from_device(dev, LIBEVDEV_UINPUT_OPEN_MANAGED, &uidev);
+  if (err != 0) {
+    logs::log(logs::error, "Unable to create controller device, error code: {}", err);
+    return {};
+  }
+
+  logs::log(logs::debug, "[INPUT] Created virtual controller {}", libevdev_uinput_get_devnode(uidev));
+
+  return uidev;
+}
+
+using namespace input::data;
+
+/**
+ * The main trick here is that a single packet can contain multiple pressed buttons at the same time,
+ * the way this is done is by setting multiple bits in the button_flags.
+ * For example you can have both set to 1 `DPAD_UP` and `A`
+ *
+ * We also need to keep the previous packet in order to know if a button has been released.
+ * Example: previous packet had `DPAD_UP` and `A` -> user release `A` -> new packet only has `DPAD_UP`
+ */
+void controller_handle(libevdev_uinput *controller,
+                       const data::CONTROLLER_MULTI_PACKET &ctrl_pkt,
+                       const data::CONTROLLER_MULTI_PACKET &prev_ctrl_pkt) {
+
+  // Button flags that have been changed between current and prev
+  auto bf_changed = ctrl_pkt.button_flags ^ prev_ctrl_pkt.button_flags;
+  // Button flags that are only part of the new packet
+  auto bf_new = ctrl_pkt.button_flags;
+
+  if (bf_changed) {
+    if ((DPAD_UP | DPAD_DOWN) & bf_changed) {
+      int button_state = bf_new & DPAD_UP ? -1 : (bf_new & DPAD_DOWN ? 1 : 0);
+
+      libevdev_uinput_write_event(controller, EV_ABS, ABS_HAT0Y, button_state);
+    }
+
+    if ((DPAD_LEFT | DPAD_RIGHT) & bf_changed) {
+      int button_state = bf_new & DPAD_LEFT ? -1 : (bf_new & DPAD_RIGHT ? 1 : 0);
+
+      libevdev_uinput_write_event(controller, EV_ABS, ABS_HAT0X, button_state);
+    }
+
+    if (START & bf_changed)
+      libevdev_uinput_write_event(controller, EV_KEY, BTN_START, bf_new & START ? 1 : 0);
+    if (BACK & bf_changed)
+      libevdev_uinput_write_event(controller, EV_KEY, BTN_SELECT, bf_new & BACK ? 1 : 0);
+    if (LEFT_STICK & bf_changed)
+      libevdev_uinput_write_event(controller, EV_KEY, BTN_THUMBL, bf_new & LEFT_STICK ? 1 : 0);
+    if (RIGHT_STICK & bf_changed)
+      libevdev_uinput_write_event(controller, EV_KEY, BTN_THUMBR, bf_new & RIGHT_STICK ? 1 : 0);
+    if (LEFT_BUTTON & bf_changed)
+      libevdev_uinput_write_event(controller, EV_KEY, BTN_TL, bf_new & LEFT_BUTTON ? 1 : 0);
+    if (RIGHT_BUTTON & bf_changed)
+      libevdev_uinput_write_event(controller, EV_KEY, BTN_TR, bf_new & RIGHT_BUTTON ? 1 : 0);
+    if (HOME & bf_changed)
+      libevdev_uinput_write_event(controller, EV_KEY, BTN_MODE, bf_new & HOME ? 1 : 0);
+    if (A & bf_changed)
+      libevdev_uinput_write_event(controller, EV_KEY, BTN_SOUTH, bf_new & A ? 1 : 0);
+    if (B & bf_changed)
+      libevdev_uinput_write_event(controller, EV_KEY, BTN_EAST, bf_new & B ? 1 : 0);
+    if (X & bf_changed)
+      libevdev_uinput_write_event(controller, EV_KEY, BTN_NORTH, bf_new & X ? 1 : 0);
+    if (Y & bf_changed)
+      libevdev_uinput_write_event(controller, EV_KEY, BTN_WEST, bf_new & Y ? 1 : 0);
+  }
+
+  if (ctrl_pkt.left_trigger != prev_ctrl_pkt.left_trigger) {
+    libevdev_uinput_write_event(controller, EV_ABS, ABS_Z, ctrl_pkt.left_trigger);
+  }
+
+  if (ctrl_pkt.right_trigger != prev_ctrl_pkt.right_trigger) {
+    libevdev_uinput_write_event(controller, EV_ABS, ABS_RZ, ctrl_pkt.right_trigger);
+  }
+
+  if (ctrl_pkt.left_stick_x != prev_ctrl_pkt.left_stick_x) {
+    libevdev_uinput_write_event(controller, EV_ABS, ABS_X, ctrl_pkt.left_stick_x);
+  }
+
+  if (ctrl_pkt.left_stick_y != prev_ctrl_pkt.left_stick_y) {
+    libevdev_uinput_write_event(controller, EV_ABS, ABS_Y, -ctrl_pkt.left_stick_y);
+  }
+
+  if (ctrl_pkt.right_stick_x != prev_ctrl_pkt.right_stick_x) {
+    libevdev_uinput_write_event(controller, EV_ABS, ABS_RX, ctrl_pkt.right_stick_x);
+  }
+
+  if (ctrl_pkt.right_stick_y != prev_ctrl_pkt.right_stick_y) {
+    libevdev_uinput_write_event(controller, EV_ABS, ABS_RY, -ctrl_pkt.right_stick_y);
+  }
+
+  libevdev_uinput_write_event(controller, EV_SYN, SYN_REPORT, 0);
+}
+
+} // namespace controller
+
+struct VirtualDevices {
+  std::optional<libevdev_uinput_ptr> mouse;
+  std::optional<libevdev_uinput_ptr> touchpad;
+  std::optional<libevdev_uinput_ptr> keyboard;
+
+  immer::array<libevdev_uinput_ptr> controllers{};
+};
+
 immer::array<immer::box<dp::handler_registration>> setup_handlers(std::size_t session_id,
                                                                   std::shared_ptr<dp::event_bus> event_bus) {
   logs::log(logs::debug, "Setting up input handlers for session: {}", session_id);
 
+  auto v_devices = std::make_shared<VirtualDevices>();
+
   libevdev_ptr mouse_dev(libevdev_new(), ::libevdev_free);
-  libevdev_uinput_ptr mouse_ptr(create_mouse(mouse_dev.get()).value(),
-                                ::libevdev_uinput_destroy); // TODO: handle unable to create mouse
+  if (auto mouse_el = mouse::create_mouse(mouse_dev.get())) {
+    v_devices->mouse = {*mouse_el, ::libevdev_uinput_destroy};
+  }
 
   libevdev_ptr touch_dev(libevdev_new(), ::libevdev_free);
-  libevdev_uinput_ptr touch_ptr(create_touchpad(touch_dev.get()).value(),
-                                ::libevdev_uinput_destroy); // TODO: handle unable to create touchpad
+  if (auto touch_el = mouse::create_touchpad(touch_dev.get())) {
+    v_devices->touchpad = {*touch_el, ::libevdev_uinput_destroy};
+  }
 
   libevdev_ptr keyboard_dev(libevdev_new(), ::libevdev_free);
-  libevdev_uinput_ptr keyboard_ptr(create_keyboard(keyboard_dev.get()).value(),
-                                   ::libevdev_uinput_destroy); // TODO: handle unable to create touchpad
+  if (auto keyboard_el = keyboard::create_keyboard(keyboard_dev.get())) {
+    v_devices->keyboard = {*keyboard_el, ::libevdev_uinput_destroy};
+  }
 
+  // TODO: multiple controllers?
+  libevdev_ptr controller_dev(libevdev_new(), ::libevdev_free);
+  if (auto controller_el = controller::create_controller(controller_dev.get())) {
+    v_devices->controllers = {{*controller_el, ::libevdev_uinput_destroy}};
+  }
+
+  auto controller_state = std::make_shared<immer::atom<immer::box<data::CONTROLLER_MULTI_PACKET>>>();
   auto ctrl_handler = event_bus->register_handler<immer::box<ControlEvent>>(
-      [sess_id = session_id, mouse_ptr, touch_ptr, keyboard_ptr](immer::box<ControlEvent> ctrl_ev) {
+      [sess_id = session_id, v_devices, controller_state](immer::box<ControlEvent> ctrl_ev) {
         if (ctrl_ev->session_id == sess_id && ctrl_ev->type == INPUT_DATA) {
           auto input = (const data::INPUT_PKT *)(ctrl_ev->raw_packet.data());
 
           switch ((int)boost::endian::big_to_native((int)input->type)) {
           case data::MOUSE_MOVE_REL:
             logs::log(logs::trace, "[INPUT] Received input of type: MOUSE_MOVE_REL");
-            move_mouse(mouse_ptr.get(), *(data::MOUSE_MOVE_REL_PACKET *)input);
+            if (v_devices->mouse) {
+              mouse::move_mouse(v_devices->mouse->get(), *(data::MOUSE_MOVE_REL_PACKET *)input);
+            }
             break;
           case data::MOUSE_MOVE_ABS:
             logs::log(logs::trace, "[INPUT] Received input of type: MOUSE_MOVE_ABS");
-            move_touchpad(touch_ptr.get(), *(data::MOUSE_MOVE_ABS_PACKET *)input);
+            if (v_devices->touchpad) {
+              mouse::move_touchpad(v_devices->touchpad->get(), *(data::MOUSE_MOVE_ABS_PACKET *)input);
+            }
             break;
           case data::MOUSE_BUTTON:
             logs::log(logs::trace, "[INPUT] Received input of type: MOUSE_BUTTON");
-            mouse_press(mouse_ptr.get(), *(data::MOUSE_BUTTON_PACKET *)input);
+            if (v_devices->mouse) {
+              mouse::mouse_press(v_devices->mouse->get(), *(data::MOUSE_BUTTON_PACKET *)input);
+            }
             break;
           case data::KEYBOARD_OR_SCROLL: {
             char *sub_input_type = (char *)input + 8;
             if (sub_input_type[0] == data::KEYBOARD_OR_SCROLL) {
               logs::log(logs::trace, "[INPUT] Received input of type: MOUSE_SCROLL_PACKET");
-              mouse_scroll(mouse_ptr.get(), *(data::MOUSE_SCROLL_PACKET *)input);
+              if (v_devices->mouse) {
+                mouse::mouse_scroll(v_devices->mouse->get(), *(data::MOUSE_SCROLL_PACKET *)input);
+              }
             } else {
               logs::log(logs::trace, "[INPUT] Received input of type: KEYBOARD_PACKET");
-              keyboard_handle(keyboard_ptr.get(), *(data::KEYBOARD_PACKET *)input);
+              /**
+               * TODO: handle keep pressing a key
+               * We have to keep sending the EV_KEY with a value of 2 until the user release the key.
+               * This needs to be done with some kind of recurring event that will be triggered
+               * every X millis (this should also be user configurable).
+               *
+               * Unfortunately, this event is not being sent by Moonlight.
+               */
+              if (v_devices->keyboard) {
+                keyboard::keyboard_handle(v_devices->keyboard->get(), *(data::KEYBOARD_PACKET *)input);
+              }
             }
             break;
           }
-          case data::CONTROLLER_MULTI:
+          case data::CONTROLLER_MULTI: {
+            /**
+             * TODO: rumble?
+             */
             logs::log(logs::trace, "[INPUT] Received input of type: CONTROLLER_MULTI");
+            auto new_controller_pkt = (data::CONTROLLER_MULTI_PACKET *)input;
+            auto prev_pkt = controller_state->exchange(immer::box<data::CONTROLLER_MULTI_PACKET>{*new_controller_pkt});
+            if (new_controller_pkt->controller_number < v_devices->controllers.size()) {
+              controller::controller_handle(v_devices->controllers[new_controller_pkt->controller_number].get(),
+                                            *new_controller_pkt,
+                                            prev_pkt->get());
+            } else {
+              logs::log(logs::warning, "[INPUT] Unable to find controller {}", new_controller_pkt->controller_number);
+            }
             break;
+          }
           case data::CONTROLLER:
-            logs::log(logs::trace, "[INPUT] Received input of type: CONTROLLER");
+            logs::log(logs::warning, "[INPUT] Received input of type: CONTROLLER ignoring...");
             break;
           }
         }

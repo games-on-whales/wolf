@@ -36,6 +36,27 @@ enum INPUT_TYPE : int {
 constexpr int KEYBOARD_BUTTON_RELEASED = 0x04;
 constexpr int MOUSE_BUTTON_RELEASED = 0x09;
 
+enum CONTROLLER_BTN : unsigned short {
+  DPAD_UP = 0x0001,
+  DPAD_DOWN = 0x0002,
+  DPAD_LEFT = 0x0004,
+  DPAD_RIGHT = 0x0008,
+
+  START = 0x0010,
+  BACK = 0x0020,
+  HOME = 0x0400,
+
+  LEFT_STICK = 0x0040,
+  RIGHT_STICK = 0x0080,
+  LEFT_BUTTON = 0x0100,
+  RIGHT_BUTTON = 0x0200,
+
+  A = 0x1000,
+  B = 0x2000,
+  X = 0x4000,
+  Y = 0x8000
+};
+
 struct INPUT_PKT {
   unsigned short packet_type; // This should always be 0x0206 little endian (INPUT_DATA)
   INPUT_TYPE type;

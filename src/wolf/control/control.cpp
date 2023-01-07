@@ -134,8 +134,8 @@ std::thread start_service(immer::box<state::ControlSession> control_sess, int ti
         auto terminate_ev = TerminateEvent{control_sess->session_id};
         control_sess->event_bus->fire_event(immer::box<TerminateEvent>{terminate_ev});
 
-        for (auto handler : input_handlers) {
-          handler->unregister();
+        for (const auto &handler : input_handlers) {
+          handler->unregister(); // This should also automagically remove the created virtual devices
         }
       },
       std::move(control_sess));

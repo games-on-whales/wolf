@@ -184,9 +184,8 @@ What's `Scroll amount 2`?
 What's `modifiers`?
 ====
 
- * *Action*: will have the value `0x04` when a button is pressed
- * *Key code* represent the corresponding keyboard code of the pressed input, see the following table:
-
+* *Action*: will have the value `0x04` when a button is pressed
+* *Key code* represent the corresponding keyboard code of the pressed input, see the following table:
 
 |===
 | Moonlight code | Keyboard button
@@ -543,10 +542,130 @@ What's `modifiers`?
 
 |===
 
-
-
-
-
 == Controller multi
+
+.The full format of a `CONTROLLER_MULTI` packet
+[packetdiag,format=svg,align="center"]
+....
+{
+  colwidth = 8
+  node_height = 50
+  node_width = 70
+
+  0-1: Packet Type
+  2-5: Input Type
+  6-9: Unknown
+  10-11: Unknown
+  12-13: Controller #
+  14-15: Mask
+  16-17: Unknown
+  18-19: Button Flags
+  20-20: L2
+  21-21: R2
+  22-23: LS-X
+  24-25: LS-Y
+  26-27: RS-X
+  28-29: RS-Y
+  30-33: Unknown
+  34-35: Unknown
+}
+....
+
+=== Button flags
+
+The `button_flag` element encodes the currently pressed buttons in the joypad.
+
+|===
+|Button type | Flag (HEX)
+
+|DPAD_UP
+| 0x0001
+
+|DPAD_DOWN
+| 0x0002
+
+|DPAD_LEFT
+| 0x0004
+
+|DPAD_RIGHT
+| 0x0008
+
+|START
+| 0x0010
+
+|BACK
+| 0x0020
+
+|HOME
+| 0x0400
+
+|LEFT_STICK
+| 0x0040
+
+|RIGHT_STICK
+| 0x0080
+
+|LEFT_BUTTON
+| 0x0100
+
+|RIGHT_BUTTON
+| 0x0200
+
+|A
+| 0x1000
+
+|B
+| 0x2000
+
+|X
+| 0x4000
+
+|Y
+| 0x8000
+|===
+
+If more than one button is being pressed at the same time `button_flag` will contain the sum of both values.
+
+.When pressing  kbd:[A] and  kbd:[X] `button_flag` contains `0x0050` that `5` decodes as follows:
+[wavedrom,format=svg]
+....
+{ reg: [
+
+  { "attr": "Y", "bits": 1, "name": 0x0},
+  { "attr": "X", "bits": 1, "name": 0x1, type: 2},
+  { "attr": "B", "bits": 1, "name": 0x0},
+  { "attr": "A", "bits": 1, "name": 0x1, type: 2},
+], config: {fontsize: 16, vflip:true, hflip:true}
+}
+....
+
+.The full format of the `button_flag` binary encoding
+[wavedrom,format=svg]
+....
+{ reg: [
+
+  {"attr": "START", "bits": 1, "name": 0x0, type: 3},
+  {"attr": "BACK", "bits": 1, "name": 0x0, type: 3},
+  {"attr": "LEFT_STICK", "bits": 1, "name": 0x0, type: 3},
+  {"attr": "RIGHT_STICK", "bits": 1, "name": 0x0, type: 3},
+
+  {"attr": "DPAD_UP", "bits": 1, "name": 0x0, type: 2},
+  {"attr": "DPAD_DOWN", "bits": 1, "name": 0x0, type: 2},
+  {"attr": "DPAD_LEFT", "bits": 1, "name": 0x0, type: 2},
+  {"attr": "DPAD_RIGHT", "bits": 1, "name": 0x0, type: 2},
+
+  { "attr": "Y", "bits": 1, "name": 0x0, type: 5},
+  { "attr": "X", "bits": 1, "name": 0x0, type: 5},
+  { "attr": "B", "bits": 1, "name": 0x0, type: 5},
+  { "attr": "A", "bits": 1, "name": 0x0, type: 5},
+
+  {"attr": "LEFT_BTN", "bits": 1, "name": 0x0, type:4},
+  {"attr": "RIGHT_BTN", "bits": 1, "name": 0x0, type:4},
+  {"attr": "HOME", "bits": 1, "name": 0x0, type:4},
+  {"attr": "None", "bits": 1, "name": 0x0, type:4},
+
+], config: {fontsize: 14, lanes: 2, vflip:true, hflip:true}
+}
+....
 
 == Controller
