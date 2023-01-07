@@ -18,8 +18,8 @@ if (UNIX AND NOT APPLE)
     target_include_directories(wolf_input PUBLIC ${LIBEVDEV_INCLUDE_DIR})
 
     message(STATUS "Adding input implementation for LINUX")
-    list(APPEND SRC_LIST "platforms/linux/input.cpp")
-    list(APPEND HEADER_LIST "platforms/linux/keyboard.hpp")
+    list(APPEND SRC_LIST "platforms/linux/uinput.cpp")
+    list(APPEND HEADER_LIST "platforms/linux/keyboard.hpp" "platforms/linux/uinput.hpp")
 else () # TODO: other platforms??
     message(WARNING "Missing virtual input implementation for the current platform")
     list(APPEND SRC_LIST "platforms/unknown/input.cpp")

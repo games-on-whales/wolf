@@ -11,6 +11,11 @@ FetchContent_MakeAvailable(Catch2)
 add_executable(wolftests main.cpp)
 
 file(GLOB SRC_LIST SRCS *.cpp)
+
+if (UNIX AND NOT APPLE)
+    list(APPEND SRC_LIST "platforms/linux/input.cpp")
+endif()
+
 target_sources(wolftests PRIVATE ${SRC_LIST})
 
 # I'm using C++17 in the test

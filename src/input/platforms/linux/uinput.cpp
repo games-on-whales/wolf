@@ -10,11 +10,10 @@
  */
 
 #include "keyboard.hpp"
+#include "uinput.hpp"
 #include <boost/endian/conversion.hpp>
-#include <filesystem>
 #include <helpers/logger.hpp>
 #include <immer/atom.hpp>
-#include <input/input.hpp>
 #include <libevdev/libevdev-uinput.h>
 #include <libevdev/libevdev.h>
 #include <memory>
@@ -23,9 +22,6 @@
 namespace input {
 
 using namespace moonlight::control;
-
-using libevdev_ptr = std::shared_ptr<libevdev>;
-using libevdev_uinput_ptr = std::shared_ptr<libevdev_uinput>;
 
 constexpr int ABS_MAX_WIDTH = 1920;
 constexpr int ABS_MAX_HEIGHT = 1080;
@@ -375,14 +371,6 @@ void controller_handle(libevdev_uinput *controller,
 }
 
 } // namespace controller
-
-struct VirtualDevices {
-  std::optional<libevdev_uinput_ptr> mouse;
-  std::optional<libevdev_uinput_ptr> touchpad;
-  std::optional<libevdev_uinput_ptr> keyboard;
-
-  immer::array<libevdev_uinput_ptr> controllers{};
-};
 
 immer::array<immer::box<dp::handler_registration>> setup_handlers(std::size_t session_id,
                                                                   std::shared_ptr<dp::event_bus> event_bus) {
