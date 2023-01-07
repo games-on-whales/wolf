@@ -14,10 +14,6 @@
 #include <boost/endian/conversion.hpp>
 #include <helpers/logger.hpp>
 #include <immer/atom.hpp>
-#include <libevdev/libevdev-uinput.h>
-#include <libevdev/libevdev.h>
-#include <memory>
-#include <optional>
 
 namespace input {
 

@@ -1,6 +1,8 @@
 #include "input/input.hpp"
 #include <libevdev/libevdev-uinput.h>
 #include <libevdev/libevdev.h>
+#include <memory>
+#include <optional>
 
 namespace input {
 
