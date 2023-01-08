@@ -50,7 +50,7 @@ create_rtp_header(const gst_rtp_moonlight_pay_video &rtpmoonlightpay, int packet
   return buf;
 }
 
-GstBuffer *prepend_video_header(GstBuffer *inbuf) {
+static GstBuffer *prepend_video_header(GstBuffer *inbuf) {
   constexpr auto video_payload_header_size = 8;
   GstBuffer *video_header = gst_buffer_new_and_fill(video_payload_header_size, "\0017charss");
   auto full_payload_buf = gst_buffer_append(video_header, inbuf);

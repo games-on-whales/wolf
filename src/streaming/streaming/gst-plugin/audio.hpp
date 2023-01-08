@@ -64,7 +64,7 @@ static GstBuffer *create_rtp_fec_header(const gst_rtp_moonlight_pay_audio &rtpmo
   return buf;
 }
 
-GstBuffer *create_rtp_audio_buffer(const gst_rtp_moonlight_pay_audio &rtpmoonlightpay, GstBuffer *inbuf) {
+static GstBuffer *create_rtp_audio_buffer(const gst_rtp_moonlight_pay_audio &rtpmoonlightpay, GstBuffer *inbuf) {
   GstBuffer *payload = inbuf;
 
   if (rtpmoonlightpay.encrypt) {

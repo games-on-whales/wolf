@@ -18,7 +18,7 @@ if (CMAKE_PROJECT_NAME STREQUAL PROJECT_NAME)
     # Let's nicely support folders in IDEs
     set_property(GLOBAL PROPERTY USE_FOLDERS ON)
 
-    set(BUILD_SHARED_LIBS ON)
+    option(BUILD_SHARED_LIBS "Build libs as shared" ON)
     # set(Boost_USE_STATIC_LIBS ON)
 
     # Testing only available if this is the main app
