@@ -9,14 +9,19 @@
  * (they can be installed using: `apt install -y evemu-tools`)
  */
 
-#include "keyboard.hpp"
 #include "uinput.hpp"
+#include "keyboard.hpp"
 #include <boost/endian/conversion.hpp>
+#include <chrono>
 #include <helpers/logger.hpp>
+#include <immer/array.hpp>
 #include <immer/atom.hpp>
+#include <range/v3/view.hpp>
+#include <thread>
 
 namespace input {
 
+using namespace std::chrono_literals;
 using namespace moonlight::control;
 
 constexpr int ABS_MAX_WIDTH = 1920;
@@ -201,7 +206,14 @@ std::optional<libevdev_uinput *> create_keyboard(libevdev *dev) {
   return uidev;
 }
 
-void keyboard_handle(libevdev_uinput *keyboard, const data::KEYBOARD_PACKET &key_pkt) {
+void keyboard_repeat_press(libevdev_uinput *keyboard, const immer::array<int> &linux_codes) {
+  for (auto code : linux_codes) {
+    libevdev_uinput_write_event(keyboard, EV_KEY, code, 2);
+    libevdev_uinput_write_event(keyboard, EV_SYN, SYN_REPORT, 0);
+  }
+}
+
+std::optional<Action> keyboard_handle(libevdev_uinput *keyboard, const data::KEYBOARD_PACKET &key_pkt) {
   auto release = key_pkt.key_action == data::KEYBOARD_BUTTON_RELEASED;
   auto moonlight_key = (short)boost::endian::big_to_native((short)key_pkt.key_code);
 
@@ -212,7 +224,7 @@ void keyboard_handle(libevdev_uinput *keyboard, const data::KEYBOARD_PACKET &key
     logs::log(logs::warning,
               "[INPUT] Moonlight sent keyboard code {} which is not recognised; ignoring.",
               moonlight_key);
-    return;
+    return {};
   } else {
     auto mapped_key = search_key->second;
     if (mapped_key.scan_code != keyboard::UNKNOWN && release) {
@@ -221,6 +233,8 @@ void keyboard_handle(libevdev_uinput *keyboard, const data::KEYBOARD_PACKET &key
 
     libevdev_uinput_write_event(keyboard, EV_KEY, mapped_key.linux_code, release ? 0 : 1);
     libevdev_uinput_write_event(keyboard, EV_SYN, SYN_REPORT, 0);
+
+    return Action{.pressed = !release, .linux_code = mapped_key.linux_code};
   }
 }
 
@@ -369,7 +383,7 @@ void controller_handle(libevdev_uinput *controller,
 } // namespace controller
 
 immer::array<immer::box<dp::handler_registration>> setup_handlers(std::size_t session_id,
-                                                                  std::shared_ptr<dp::event_bus> event_bus) {
+                                                                  const std::shared_ptr<dp::event_bus> &event_bus) {
   logs::log(logs::debug, "Setting up input handlers for session: {}", session_id);
 
   auto v_devices = std::make_shared<VirtualDevices>();
@@ -395,9 +409,11 @@ immer::array<immer::box<dp::handler_registration>> setup_handlers(std::size_t se
     v_devices->controllers = {{*controller_el, ::libevdev_uinput_destroy}};
   }
 
-  auto controller_state = std::make_shared<immer::atom<immer::box<data::CONTROLLER_MULTI_PACKET>>>();
+  auto controller_state = std::make_shared<immer::atom<immer::box<data::CONTROLLER_MULTI_PACKET> /* prev packet */>>();
+  auto keyboard_state = std::make_shared<immer::atom<immer::array<int> /* key codes */>>();
+
   auto ctrl_handler = event_bus->register_handler<immer::box<ControlEvent>>(
-      [sess_id = session_id, v_devices, controller_state](immer::box<ControlEvent> ctrl_ev) {
+      [sess_id = session_id, v_devices, controller_state, keyboard_state](immer::box<ControlEvent> ctrl_ev) {
         if (ctrl_ev->session_id == sess_id && ctrl_ev->type == INPUT_DATA) {
           auto input = (const data::INPUT_PKT *)(ctrl_ev->raw_packet.data());
 
@@ -429,16 +445,25 @@ immer::array<immer::box<dp::handler_registration>> setup_handlers(std::size_t se
               }
             } else {
               logs::log(logs::trace, "[INPUT] Received input of type: KEYBOARD_PACKET");
-              /**
-               * TODO: handle keep pressing a key
-               * We have to keep sending the EV_KEY with a value of 2 until the user release the key.
-               * This needs to be done with some kind of recurring event that will be triggered
-               * every X millis (this should also be user configurable).
-               *
-               * Unfortunately, this event is not being sent by Moonlight.
-               */
               if (v_devices->keyboard) {
-                keyboard::keyboard_handle(v_devices->keyboard->get(), *(data::KEYBOARD_PACKET *)input);
+                auto kb_action = keyboard::keyboard_handle(v_devices->keyboard->get(), *(data::KEYBOARD_PACKET *)input);
+
+                // Setting up the shared keyboard_state with the currently pressed keys
+                if (kb_action) {
+                  if (kb_action->pressed) { // Pressed key, add it to the key_codes
+                    keyboard_state->update([&kb_action](const immer::array<int> &key_codes) {
+                      return key_codes.push_back(kb_action->linux_code);
+                    });
+                  } else { // Released key, remove it from the key_codes
+                    keyboard_state->update([&kb_action](const immer::array<int> &key_codes) {
+                      return key_codes                                        //
+                             | ranges::views::filter([&kb_action](int code) { //
+                                 return code != kb_action->linux_code;        //
+                               })                                             //
+                             | ranges::to<immer::array<int>>();               //
+                    });
+                  }
+                }
               }
             }
             break;
@@ -466,6 +491,29 @@ immer::array<immer::box<dp::handler_registration>> setup_handlers(std::size_t se
         }
       });
 
-  return immer::array<immer::box<dp::handler_registration>>{std::move(ctrl_handler)};
+  /**
+   * We have to keep sending the EV_KEY with a value of 2 until the user release the key.
+   * This needs to be done with some kind of recurring event that will be triggered
+   * every 50 millis.
+   *
+   * Unfortunately, this event is not being sent by Moonlight.
+   */
+  auto kb_thread_over = std::make_shared<immer::atom<bool>>(false);
+  auto keyboard_thread = std::make_shared<std::thread>([v_devices, keyboard_state, kb_thread_over]() {
+    while (!kb_thread_over->load()) {
+      std::this_thread::sleep_for(50ms); // TODO: should this be configurable?
+      keyboard::keyboard_repeat_press(v_devices->keyboard->get(), keyboard_state->load());
+    }
+  });
+
+  auto end_handler = event_bus->register_handler<immer::box<moonlight::control::TerminateEvent>>(
+      [sess_id = session_id, kb_thread_over, keyboard_thread](immer::box<moonlight::control::TerminateEvent> event) {
+        if (event->session_id == sess_id) {
+          kb_thread_over->update([](bool terminate) { return true; });
+          keyboard_thread->join();
+        }
+      });
+
+  return immer::array<immer::box<dp::handler_registration>>{std::move(ctrl_handler), std::move(end_handler)};
 }
 } // namespace input

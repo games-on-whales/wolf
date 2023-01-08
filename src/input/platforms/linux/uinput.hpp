@@ -3,6 +3,7 @@
 #include <libevdev/libevdev.h>
 #include <memory>
 #include <optional>
+#include <immer/array.hpp>
 
 namespace input {
 
@@ -36,7 +37,12 @@ namespace keyboard {
 
 std::optional<libevdev_uinput *> create_keyboard(libevdev *dev);
 
-void keyboard_handle(libevdev_uinput *keyboard, const data::KEYBOARD_PACKET &key_pkt);
+struct Action {
+  bool pressed;
+  int linux_code;
+};
+
+std::optional<Action> keyboard_handle(libevdev_uinput *keyboard, const data::KEYBOARD_PACKET &key_pkt);
 
 } // namespace keyboard
 

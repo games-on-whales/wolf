@@ -30,7 +30,9 @@ TEST_CASE("uinput - keyboard", "UINPUT") {
   REQUIRE(rc == -EAGAIN);
 
   auto press_shift_key = data::KEYBOARD_PACKET{.key_action = 0, .key_code = boost::endian::native_to_big((short)0xA0)};
-  keyboard::keyboard_handle(keyboard_el.get(), press_shift_key);
+  auto press_action = keyboard::keyboard_handle(keyboard_el.get(), press_shift_key);
+  REQUIRE(press_action->pressed);
+  REQUIRE(press_action->linux_code == KEY_LEFTSHIFT);
 
   rc = libevdev_next_event(keyboard_dev.get(), LIBEVDEV_READ_FLAG_NORMAL, &ev);
   REQUIRE(rc == LIBEVDEV_READ_STATUS_SUCCESS);
@@ -42,7 +44,9 @@ TEST_CASE("uinput - keyboard", "UINPUT") {
 
   auto release_shift_key = data::KEYBOARD_PACKET{.key_action = data::KEYBOARD_BUTTON_RELEASED,
                                                  .key_code = boost::endian::native_to_big((short)0xA0)};
-  keyboard::keyboard_handle(keyboard_el.get(), release_shift_key);
+  auto release_action = keyboard::keyboard_handle(keyboard_el.get(), release_shift_key);
+  REQUIRE(!release_action->pressed);
+  REQUIRE(release_action->linux_code == KEY_LEFTSHIFT);
 
   rc = libevdev_next_event(keyboard_dev.get(), LIBEVDEV_READ_FLAG_NORMAL, &ev);
   REQUIRE(rc == LIBEVDEV_READ_STATUS_SUCCESS);
