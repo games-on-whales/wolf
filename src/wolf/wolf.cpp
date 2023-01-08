@@ -42,11 +42,11 @@ state::Host get_host_config(std::string_view pkey_filename, std::string_view cer
   X509 *server_cert;
   EVP_PKEY *server_pkey;
   if (x509::cert_exists(pkey_filename, cert_filename)) {
-    logs::log(logs::debug, "Loading server certificates from disk...");
+    logs::log(logs::debug, "Loading server certificates from disk: {} {}", cert_filename, pkey_filename);
     server_cert = x509::cert_from_file(cert_filename);
     server_pkey = x509::pkey_from_file(pkey_filename);
   } else {
-    logs::log(logs::info, "x509 certificates not present, generating...");
+    logs::log(logs::info, "x509 certificates not present, generating: {} {}", cert_filename, pkey_filename);
     server_pkey = x509::generate_key();
     server_cert = x509::generate_x509(server_pkey);
     x509::write_to_disk(server_pkey, pkey_filename, server_cert, cert_filename);
@@ -226,13 +226,15 @@ int main(int argc, char *argv[]) {
   check_exceptions();
 
   auto config_file = get_env("CFG_FILE", "config.toml");
-  auto local_state = initialize(config_file, "key.pem", "cert.pem");
+  auto p_key_file = get_env("PRIVATE_KEY_FILE", "key.pem");
+  auto p_cert_file = get_env("PRIVATE_CERT_FILE", "cert.pem");
+  auto local_state = initialize(config_file, p_key_file, p_cert_file);
 
   // REST HTTP/S APIs
   auto http_server = std::make_unique<HttpServer>();
   auto http_thread = HTTPServers::startServer(http_server.get(), local_state, state::HTTP_PORT);
 
-  auto https_server = std::make_unique<HttpsServer>("cert.pem", "key.pem");
+  auto https_server = std::make_unique<HttpsServer>(p_cert_file, p_key_file);
   auto https_thread = HTTPServers::startServer(https_server.get(), local_state, state::HTTPS_PORT);
 
   // Holds reference to all running threads, grouped by session_id

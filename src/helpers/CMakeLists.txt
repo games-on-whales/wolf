@@ -5,7 +5,6 @@ add_library(wolf::helpers ALIAS wolf_helpers)
 # We need this directory, and users of our library will need it too
 target_include_directories(wolf_helpers INTERFACE .)
 set_target_properties(wolf_helpers PROPERTIES PUBLIC_HEADER .)
-set_target_properties(wolf_helpers PROPERTIES OUTPUT_NAME "helpers")
 
 # Additional algorithms for dealing with containers
 FetchContent_Declare(
@@ -32,4 +31,3 @@ target_link_libraries(wolf_helpers INTERFACE
 
 # All users of this library will need at least C++17
 target_compile_features(wolf_helpers INTERFACE cxx_std_17)
-set_target_properties(wolf_helpers PROPERTIES LINKER_LANGUAGE CXX)

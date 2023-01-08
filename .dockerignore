@@ -1,0 +1,5 @@
+cmake-build*
+docs/
+.github/
+.dockerignore
+Dockerfile
