@@ -17,6 +17,12 @@ We are also trying to isolate the Moonlight protocol from the actual implementat
 
 The crypto module depends on OpenSSL and provides an interface (https://github.com/games-on-whales/wolf/blob/HEAD/src/crypto/crypto/crypto.hpp[crypto.hpp]) to all the crypto related methods that are used by the other modules.
 
+=== src/input
+
+Here are the methods that will deal with a Moonlight input event (ex: Keyboard, Mouse, Joypad). +
+The code here will be platform specific with a default failover of `noop`.
+In Linux we used `uinput` and https://www.freedesktop.org/wiki/Software/libevdev/[libevdev].
+
 === src/moonlight
 
 Here we define core Moonlight functions in order to create the foundation for a platform-agnostic portable library.

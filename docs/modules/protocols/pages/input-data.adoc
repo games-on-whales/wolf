@@ -1,0 +1,671 @@
+:experimental:
+= Input Data
+
+Moonlight will send all user inputs via the xref:protocols:control-specs.adoc[control stream].
+
+The first 4 bytes of a packet of type `INPUT_DATA` will determine the type of input and the format of the packet itself (big endian):
+
+|===
+|Input type |HEX code
+
+|MOUSE_MOVE_REL
+|`0x08`
+
+|MOUSE_MOVE_ABS
+|`0x0E`
+
+|MOUSE_BUTTON
+|`0x05`
+
+|KEYBOARD_OR_SCROLL
+|`0x0A`
+
+|CONTROLLER_MULTI
+|`0x1E`
+
+|CONTROLLER
+|`0x18`
+|===
+
+== Mouse: relative move
+
+.The full format of a `MOUSE_MOVE_REL` packet
+[packetdiag,format=svg,align="center"]
+....
+{
+  colwidth = 8
+  node_height = 50
+  node_width = 70
+
+  0-1: Packet Type
+  2-5: Input Type
+  6-9: unknown
+  10-11: Delta X
+  12-13: Delta Y
+}
+....
+
+`Delta X` and `Delta Y` defines the relative movement that the mouse must perform.
+
+== Mouse: absolute move
+
+.The full format of a `MOUSE_MOVE_ABS` packet
+[packetdiag,format=svg,align="center"]
+....
+{
+  colwidth = 8
+  node_height = 50
+  node_width = 70
+
+  0-1: Packet Type
+  2-5: Input Type
+  6-9: unknown
+  10-11: X
+  12-13: Y
+  14-15: unknown
+  16-17: width
+  18-19: height
+}
+....
+
+In order to define an absolute position Moonlight will send both:
+
+* `width`, `height` which represent the size of the viewport on the client side
+* `X`,`Y` are the absolute coordinates of the mouse on the client side
+
+[NOTE]
+`X`, `Y`, `width` and `height` are all sent in big endian.
+
+== Mouse: button
+
+.The full format of a `MOUSE_BUTTON` packet
+[packetdiag,format=svg,align="center"]
+....
+{
+  colwidth = 8
+  node_height = 50
+  node_width = 70
+
+  0-1: Packet Type
+  2-5: Input Type
+  6-6: Action
+  7-10: Button
+}
+....
+
+`Action` can have the following values:
+
+|===
+|Action data |Meaning
+
+|`0x09`
+|Button released
+
+|`0x08`
+|Button pressed
+|===
+
+`Button` can have the following values:
+
+|===
+|Button data |Meaning
+
+|1
+|Button left
+
+|2
+|Button middle
+
+|3
+|Button right
+
+|4
+|Button side
+
+|5
+|Button extra
+|===
+
+== Keyboard or mouse scroll
+
+Unfortunately an input packet of type: `0x0A` can be either a keyboard packet or a mouse scroll packet. +
+In order to discriminate between the two you can check the next byte after the `Input Type`, if it's `0x0A` the packet will be parsed as a `MOUSE_SCROLL` otherwise it's a `KEYBOARD`.
+
+=== Mouse scroll
+
+.The full format of a `MOUSE_SCROLL` packet
+[packetdiag,format=svg,align="center"]
+....
+{
+  colwidth = 8
+  node_height = 50
+  node_width = 70
+
+  0-1: Packet Type
+  2-5: Input Type
+  6-6: 0x0A
+  7-9: zeros
+  10-11: Scroll amount 1
+  12-13: Scroll amount 2
+  14-15: zeros
+}
+....
+
+We only use `Scroll amount 1` to determine the amount of scroll to be applied.
+
+[WARNING,caption=TODO]
+====
+What's `Scroll amount 2`?
+====
+
+=== Keyboard
+
+.The full format of a `KEYBOARD` packet
+[packetdiag,format=svg,align="center"]
+....
+{
+  colwidth = 8
+  node_height = 50
+  node_width = 70
+
+  0-1: Packet Type
+  2-5: Input Type
+  6-6: Action
+  7-8: zeros
+  9-10: Key code
+  11-12: unknown
+  13-13: modifiers
+  14-15: zeros
+}
+....
+
+[WARNING,caption=TODO]
+====
+What's `modifiers`?
+====
+
+* *Action*: will have the value `0x04` when a button is pressed
+* *Key code* represent the corresponding keyboard code of the pressed input, see the following table:
+
+|===
+| Moonlight code | Keyboard button
+
+| 0x08
+| kbd:[BACKSPACE]
+
+| 0x09
+| kbd:[TAB]
+
+| 0x0C
+| kbd:[CLEAR]
+
+| 0x0D
+| kbd:[ENTER]
+
+| 0x10
+| kbd:[LEFTSHIFT]
+
+| 0x11
+| kbd:[LEFTCTRL]
+
+| 0x12
+| kbd:[LEFTALT]
+
+| 0x13
+| kbd:[PAUSE]
+
+| 0x14
+| kbd:[CAPSLOCK]
+
+| 0x15
+| kbd:[KATAKANAHIRAGANA]
+
+| 0x16
+| kbd:[HANGEUL]
+
+| 0x17
+| kbd:[HANJA]
+
+| 0x19
+| kbd:[KATAKANA]
+
+| 0x1B
+| kbd:[ESC]
+
+| 0x20
+| kbd:[SPACE]
+
+| 0x21
+| kbd:[PAGEUP]
+
+| 0x22
+| kbd:[PAGEDOWN]
+
+| 0x23
+| kbd:[END]
+
+| 0x24
+| kbd:[HOME]
+
+| 0x25
+| kbd:[LEFT]
+
+| 0x26
+| kbd:[UP]
+
+| 0x27
+| kbd:[RIGHT]
+
+| 0x28
+| kbd:[DOWN]
+
+| 0x29
+| kbd:[SELECT]
+
+| 0x2A
+| kbd:[PRINT]
+
+| 0x2C
+| kbd:[SYSRQ]
+
+| 0x2D
+| kbd:[INSERT]
+
+| 0x2E
+| kbd:[DELETE]
+
+| 0x2F
+| kbd:[HELP]
+
+| 0x30
+| kbd:[0]
+
+| 0x31
+| kbd:[1]
+
+| 0x32
+| kbd:[2]
+
+| 0x33
+| kbd:[3]
+
+| 0x34
+| kbd:[4]
+
+| 0x35
+| kbd:[5]
+
+| 0x36
+| kbd:[6]
+
+| 0x37
+| kbd:[7]
+
+| 0x38
+| kbd:[8]
+
+| 0x39
+| kbd:[9]
+
+| 0x41
+| kbd:[A]
+
+| 0x42
+| kbd:[B]
+
+| 0x43
+| kbd:[C]
+
+| 0x44
+| kbd:[D]
+
+| 0x45
+| kbd:[E]
+
+| 0x46
+| kbd:[F]
+
+| 0x47
+| kbd:[G]
+
+| 0x48
+| kbd:[H]
+
+| 0x49
+| kbd:[I]
+
+| 0x4A
+| kbd:[J]
+
+| 0x4B
+| kbd:[K]
+
+| 0x4C
+| kbd:[L]
+
+| 0x4D
+| kbd:[M]
+
+| 0x4E
+| kbd:[N]
+
+| 0x4F
+| kbd:[O]
+
+| 0x50
+| kbd:[P]
+
+| 0x51
+| kbd:[Q]
+
+| 0x52
+| kbd:[R]
+
+| 0x53
+| kbd:[S]
+
+| 0x54
+| kbd:[T]
+
+| 0x55
+| kbd:[U]
+
+| 0x56
+| kbd:[V]
+
+| 0x57
+| kbd:[W]
+
+| 0x58
+| kbd:[X]
+
+| 0x59
+| kbd:[Y]
+
+| 0x5A
+| kbd:[Z]
+
+| 0x5B
+| kbd:[LEFTMETA]
+
+| 0x5C
+| kbd:[RIGHTMETA]
+
+| 0x5F
+| kbd:[SLEEP]
+
+| 0x60
+| kbd:[NUMPAD 0]
+
+| 0x61
+| kbd:[NUMPAD 1]
+
+| 0x62
+| kbd:[NUMPAD 2]
+
+| 0x63
+| kbd:[NUMPAD 3]
+
+| 0x64
+| kbd:[NUMPAD 4]
+
+| 0x65
+| kbd:[NUMPAD 5]
+
+| 0x66
+| kbd:[NUMPAD 6]
+
+| 0x67
+| kbd:[NUMPAD 7]
+
+| 0x68
+| kbd:[NUMPAD 8]
+
+| 0x69
+| kbd:[NUMPAD 9]
+
+| 0x6A
+| kbd:[NUMPAD ASTERISK]
+
+| x6B
+| kbd:[NUMPAD PLUS]
+
+| 0x6C
+| kbd:[NUMPAD COMMA]
+
+| 0x6D
+| kbd:[NUMPAD MINUS]
+
+| 0x6E
+| kbd:[NUMPAD DOT]
+
+| 0x6F
+| kbd:[NUMPAD SLASH]
+
+| 0x70
+| kbd:[F1]
+
+| 0x71
+| kbd:[F2]
+
+| 0x72
+| kbd:[F3]
+
+| 0x73
+| kbd:[F4]
+
+| 0x74
+| kbd:[F5]
+
+| 0x75
+| kbd:[F6]
+
+| 0x76
+| kbd:[F7]
+
+| 0x77
+| kbd:[F8]
+
+| 0x78
+| kbd:[F9]
+
+| 0x79
+| kbd:[F10]
+
+
+| 0x7A
+| kbd:[F11]
+
+| 0x7B
+| kbd:[F12]
+
+| 0x90
+| kbd:[NUMLOCK]
+
+| 0x91
+| kbd:[SCROLLLOCK]
+
+| 0xA0
+| kbd:[LEFTSHIFT]
+
+| 0xA1
+| kbd:[RIGHTSHIFT]
+
+| 0xA2
+| kbd:[LEFTCTRL]
+
+| 0xA3
+| kbd:[RIGHTCTRL]
+
+| 0xA4
+| kbd:[LEFTALT]
+
+| 0xA5
+| kbd:[RIGHTALT]
+
+| 0xBA
+| kbd:[SEMICOLON]
+
+| 0xBB
+| kbd:[EQUAL]
+
+| 0xBC
+| kbd:[COMMA]
+
+| 0xBD
+| kbd:[MINUS]
+
+| 0xBE
+| kbd:[DOT]
+
+| 0xBF
+| kbd:[SLASH]
+
+| 0xC0
+| kbd:[GRAVE]
+
+| 0xDB
+| kbd:[LEFTBRACE]
+
+| 0xDC
+| kbd:[BACKSLASH]
+
+| 0xDD
+| kbd:[RIGHTBRACE]
+
+| 0xDE
+| kbd:[APOSTROPHE]
+
+| 0xE2
+| kbd:[102ND]
+
+
+|===
+
+== Controller multi
+
+.The full format of a `CONTROLLER_MULTI` packet
+[packetdiag,format=svg,align="center"]
+....
+{
+  colwidth = 8
+  node_height = 50
+  node_width = 70
+
+  0-1: Packet Type
+  2-5: Input Type
+  6-9: Unknown
+  10-11: Unknown
+  12-13: Controller #
+  14-15: Mask
+  16-17: Unknown
+  18-19: Button Flags
+  20-20: L2
+  21-21: R2
+  22-23: LS-X
+  24-25: LS-Y
+  26-27: RS-X
+  28-29: RS-Y
+  30-33: Unknown
+  34-35: Unknown
+}
+....
+
+=== Button flags
+
+The `button_flag` element encodes the currently pressed buttons in the joypad.
+
+|===
+|Button type | Flag (HEX)
+
+|DPAD_UP
+| 0x0001
+
+|DPAD_DOWN
+| 0x0002
+
+|DPAD_LEFT
+| 0x0004
+
+|DPAD_RIGHT
+| 0x0008
+
+|START
+| 0x0010
+
+|BACK
+| 0x0020
+
+|HOME
+| 0x0400
+
+|LEFT_STICK
+| 0x0040
+
+|RIGHT_STICK
+| 0x0080
+
+|LEFT_BUTTON
+| 0x0100
+
+|RIGHT_BUTTON
+| 0x0200
+
+|A
+| 0x1000
+
+|B
+| 0x2000
+
+|X
+| 0x4000
+
+|Y
+| 0x8000
+|===
+
+If more than one button is being pressed at the same time `button_flag` will contain the sum of both values.
+
+.When pressing  kbd:[A] and  kbd:[X] `button_flag` contains `0x0050` that `5` decodes as follows:
+[wavedrom,format=svg]
+....
+{ reg: [
+
+  { "attr": "Y", "bits": 1, "name": 0x0},
+  { "attr": "X", "bits": 1, "name": 0x1, type: 2},
+  { "attr": "B", "bits": 1, "name": 0x0},
+  { "attr": "A", "bits": 1, "name": 0x1, type: 2},
+], config: {fontsize: 16, vflip:true, hflip:true}
+}
+....
+
+.The full format of the `button_flag` binary encoding
+[wavedrom,format=svg]
+....
+{ reg: [
+
+  {"attr": "START", "bits": 1, "name": 0x0, type: 3},
+  {"attr": "BACK", "bits": 1, "name": 0x0, type: 3},
+  {"attr": "LEFT_STICK", "bits": 1, "name": 0x0, type: 3},
+  {"attr": "RIGHT_STICK", "bits": 1, "name": 0x0, type: 3},
+
+  {"attr": "DPAD_UP", "bits": 1, "name": 0x0, type: 2},
+  {"attr": "DPAD_DOWN", "bits": 1, "name": 0x0, type: 2},
+  {"attr": "DPAD_LEFT", "bits": 1, "name": 0x0, type: 2},
+  {"attr": "DPAD_RIGHT", "bits": 1, "name": 0x0, type: 2},
+
+  { "attr": "Y", "bits": 1, "name": 0x0, type: 5},
+  { "attr": "X", "bits": 1, "name": 0x0, type: 5},
+  { "attr": "B", "bits": 1, "name": 0x0, type: 5},
+  { "attr": "A", "bits": 1, "name": 0x0, type: 5},
+
+  {"attr": "LEFT_BTN", "bits": 1, "name": 0x0, type:4},
+  {"attr": "RIGHT_BTN", "bits": 1, "name": 0x0, type:4},
+  {"attr": "HOME", "bits": 1, "name": 0x0, type:4},
+  {"attr": "None", "bits": 1, "name": 0x0, type:4},
+
+], config: {fontsize: 14, lanes: 2, vflip:true, hflip:true}
+}
+....
+
+== Controller

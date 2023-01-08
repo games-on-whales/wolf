@@ -68,7 +68,7 @@ The first two bytes of the decrypted payload represent the *type* of the message
 * INVALIDATE_REF_FRAMES (`0x0301`)
 * LOSS_STATS (`0x0201`)
 * FRAME_STATS (`0x0204`)
-* INPUT_DATA (`0x0206`)
+* xref:protocols:input-data.adoc[INPUT_DATA] (`0x0206`)
 * RUMBLE_DATA (`0x010b`)
 * TERMINATION (`0x0100`)
 * PERIODIC_PING (`0x0200`)

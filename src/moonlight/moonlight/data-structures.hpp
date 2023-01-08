@@ -24,7 +24,6 @@ struct App {
 
 #define MAX_RTP_HEADER_SIZE 16
 
-
 typedef struct _NV_VIDEO_PACKET {
   uint32_t streamPacketIndex;
   uint32_t frameIndex;
@@ -68,6 +67,13 @@ struct ControlEvent {
 
   PACKET_TYPE type;
   std::string_view raw_packet;
+};
+
+/**
+ * We use terminate as a special type of ControlEvent since it'll be handled differently
+ */
+struct TerminateEvent {
+  std::size_t session_id;
 };
 
 } // namespace control

@@ -9,7 +9,7 @@ add_library(wolf::runner ALIAS wolf_runner)
 FetchContent_Declare(
         fmtlib
         GIT_REPOSITORY https://github.com/fmtlib/fmt.git
-        GIT_TAG 8.1.1)
+        GIT_TAG 9.1.0)
 FetchContent_MakeAvailable(fmtlib) # Download and build
 
 FetchContent_Declare(
@@ -80,6 +80,8 @@ target_link_libraries(
         wolf_runner PUBLIC
         wolf::moonlight
         wolf::streaming
+        wolf::input
+        wolf::helpers
         ${Boost_LIBRARIES}
         ${CMAKE_DL_LIBS}
         ${CMAKE_THREAD_LIBS_INIT}
