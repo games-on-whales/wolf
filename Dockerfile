@@ -8,6 +8,7 @@ RUN apt-get update -y && \
     ca-certificates \
     ninja-build \
     cmake \
+    ccache \
     git \
     clang \
     libboost-thread-dev libboost-filesystem-dev libboost-log-dev libboost-stacktrace-dev \
@@ -20,14 +21,21 @@ RUN apt-get update -y && \
 COPY . /wolf
 WORKDIR /wolf
 
-RUN cmake -Bbuild \
+ENV CCACHE_DIR=/cache/ccache
+ENV CMAKE_BUILD_DIR=/cache/cmake-build
+RUN --mount=type=cache,target=/cache/ccache \
+    --mount=type=cache,target=/cache/cmake-build \
+    cmake -B$CMAKE_BUILD_DIR \
     -DCMAKE_BUILD_TYPE=Release \
     -DCMAKE_CXX_STANDARD=17 \
     -DCMAKE_CXX_EXTENSIONS=OFF \
     -DBUILD_SHARED_LIBS=OFF \
     -DBoost_USE_STATIC_LIBS=ON \
+    -DBUILD_TESTING=OFF \
     -G Ninja && \
-    ninja -C build
+    ninja -C $CMAKE_BUILD_DIR && \
+    # We have to copy out the built executable because this will only be available inside the buildkit cache
+    cp $CMAKE_BUILD_DIR/src/wolf/wolf /wolf/wolf
 
 ########################################################
 # TODO: build gstreamer plugin manually
@@ -42,7 +50,7 @@ RUN apt-get update -y && \
     libevdev2 \
     && rm -rf /var/lib/apt/lists/*
 
-COPY --from=wolf-builder /wolf/build/src/wolf/wolf /wolf/wolf
+COPY --from=wolf-builder /wolf/wolf /wolf/wolf
 
 WORKDIR /wolf
 
