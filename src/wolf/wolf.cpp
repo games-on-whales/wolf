@@ -6,6 +6,7 @@
 #include <immer/array.hpp>
 #include <input/input.hpp>
 #include <memory>
+#include <process/process.hpp>
 #include <rest/rest.hpp>
 #include <rtp/udp-ping.hpp>
 #include <rtsp/net.hpp>
@@ -136,11 +137,21 @@ auto setup_sessions_handlers(std::shared_ptr<dp::event_bus> &event_bus, TreadsMa
   // RTSP
   auto rtsp_launch_sig = event_bus->register_handler<immer::box<state::StreamSession>>(
       [&threads](immer::box<state::StreamSession> stream_session) {
-        auto thread = rtsp::start_server(stream_session->rtsp_port, stream_session);
-        auto thread_ptr = std::make_unique<std::thread>(std::move(thread));
+        // Start RTSP
+        auto rtsp_thread = rtsp::start_server(stream_session->rtsp_port, stream_session);
+        auto rtsp_thread_ptr = std::make_unique<std::thread>(std::move(rtsp_thread));
 
-        threads.update([&thread_ptr, sess_id = stream_session->session_id](auto t_map) {
-          return t_map.update(sess_id, [&thread_ptr](auto t_vec) { return t_vec.push_back(std::move(thread_ptr)); });
+        // Start app process
+        auto process_thread = process::spawn_process(process::START_PROCESS_EV{.session_id = stream_session->session_id,
+                                                                               .event_bus = stream_session->event_bus,
+                                                                               .run_cmd = stream_session->app.run_cmd});
+        auto process_thread_ptr = std::make_unique<std::thread>(std::move(process_thread));
+
+        threads.update([&rtsp_thread_ptr, &process_thread_ptr, sess_id = stream_session->session_id](auto t_map) {
+          return t_map.update(sess_id, [&rtsp_thread_ptr, &process_thread_ptr](auto t_vec) {
+            // TODO: use transient instead
+            return t_vec.push_back(std::move(rtsp_thread_ptr)).push_back(std::move(process_thread_ptr));
+          });
         });
       });
 

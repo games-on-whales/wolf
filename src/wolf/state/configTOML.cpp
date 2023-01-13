@@ -63,7 +63,8 @@ Config get_default() {
                 .hevc_gst_pipeline = video::DEFAULT_SOURCE.data() + " ! "s + video::DEFAULT_PARAMS.data() + " ! "s +
                                      video::DEFAULT_H265_ENCODER.data() + " ! " + video::DEFAULT_SINK.data(),
                 .opus_gst_pipeline = audio::DEFAULT_SOURCE.data() + " ! "s + audio::DEFAULT_PARAMS.data() + " ! "s +
-                                     audio::DEFAULT_OPUS_ENCODER.data() + " ! " + audio::DEFAULT_SINK.data()}}};
+                                     audio::DEFAULT_OPUS_ENCODER.data() + " ! " + audio::DEFAULT_SINK.data(),
+                .run_cmd = "sh -c \"while :; do echo 'running...'; sleep 1; done\""}}};
 }
 
 Config load_or_default(const std::string &source) {
@@ -129,12 +130,16 @@ Config load_or_default(const std::string &source) {
                 + " ! " +                                                                   //
                 toml::find_or<std::string>(item, "audio", "sink", default_gst_audio_settings.default_sink);
 
+            auto run_cmd =
+                toml::find_or<std::string>(item, "run_cmd", "sh -c \"while :; do echo 'running...'; sleep 1; done\"");
+
             return state::App{.base = {.title = toml::find<std::string>(item, "title"),
                                        .id = std::to_string(idx + 1), // Moonlight expects: 1,2,3 ...
                                        .support_hdr = toml::find_or<bool>(item, "support_hdr", false)},
                               .h264_gst_pipeline = h264_gst_pipeline,
                               .hevc_gst_pipeline = hevc_gst_pipeline,
-                              .opus_gst_pipeline = opus_gst_pipeline};
+                              .opus_gst_pipeline = opus_gst_pipeline,
+                              .run_cmd = run_cmd};
           })                                       //
         | ranges::to<immer::vector<state::App>>(); //
 

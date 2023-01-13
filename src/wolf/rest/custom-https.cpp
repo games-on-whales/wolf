@@ -16,7 +16,12 @@ Server<HTTPS>::Server(const std::string &certification_file, const std::string &
   });
 
   this->on_error = [](std::shared_ptr<typename ServerBase<HTTPS>::Request> request, const error_code &ec) -> void {
-    logs::log(logs::warning, "HTTPS error during request at {} error code: {}", request->path, ec.message());
+    // TODO: why is stream truncated happening so frequently?
+    logs::log(ec.value() == 1 ? logs::trace : logs::warning,
+              "HTTPS error during request at {} error code: {} - {}",
+              request->path,
+              ec.value(),
+              ec.message());
     return;
   };
 }
