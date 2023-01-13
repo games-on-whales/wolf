@@ -18,7 +18,9 @@ RUN apt-get update -y && \
     libunwind-dev \
     && rm -rf /var/lib/apt/lists/*
 
-COPY . /wolf
+COPY src /wolf/src
+COPY cmake /wolf/cmake
+COPY CMakeLists.txt /wolf/CMakeLists.txt
 WORKDIR /wolf
 
 ENV CCACHE_DIR=/cache/ccache
@@ -43,9 +45,12 @@ RUN --mount=type=cache,target=/cache/ccache \
 FROM ubuntu:22.04 AS runner
 ENV DEBIAN_FRONTEND=noninteractive
 
+# curl only used by plugin curlhttpsrc (remote video play)
 RUN apt-get update -y && \
     apt-get install -y --no-install-recommends \
     gstreamer1.0-plugins-base gstreamer1.0-plugins-good gstreamer1.0-plugins-ugly gstreamer1.0-plugins-bad \
+    ca-certificates libcurl4 \
+    tini \
     libssl3 \
     libevdev2 \
     && rm -rf /var/lib/apt/lists/*
@@ -77,4 +82,5 @@ EXPOSE 48000/udp
 # RTSP
 EXPOSE 48010/tcp
 
+ENTRYPOINT ["/usr/bin/tini", "--"]
 CMD ["/wolf/wolf"]
