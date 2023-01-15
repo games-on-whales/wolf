@@ -21,6 +21,10 @@ struct LaunchAPPEvent {
   std::string app_launch_cmd;
 };
 
+struct AppStoppedEvent{
+  std::size_t session_id;
+};
+
 namespace bp = boost::process;
 
 void run_process(immer::box<process::LaunchAPPEvent> process_ev);

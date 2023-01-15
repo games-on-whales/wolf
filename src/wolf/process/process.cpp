@@ -43,9 +43,8 @@ void run_process(immer::box<LaunchAPPEvent> process_ev) {
   ios.run(); // This will stop here until the process is over
 
   if (*client_connected.load()) {
-    // TODO: the process terminated in error before the user closed the connection
-    // We should signal this to the control event so that it can close the connection downstream
-    // fire_event( ... )
+    logs::log(logs::warning, "[PROCESS] Process terminated before the user closed the connection.");
+    process_ev->event_bus->fire_event(AppStoppedEvent{.session_id = process_ev->session_id});
   }
   child_proc.wait(); // to avoid a zombie process & get the exit code
 

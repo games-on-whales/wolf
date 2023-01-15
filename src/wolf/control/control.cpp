@@ -2,6 +2,7 @@
 #include <control/control.hpp>
 #include <control/packet_utils.hpp>
 #include <immer/box.hpp>
+#include <process/process.hpp>
 #include <sys/socket.h>
 
 namespace control {
@@ -74,8 +75,16 @@ void run_control(immer::box<state::ControlSession> control_sess, int timeout_mil
   logs::log(logs::info, "Control server started on port: {}", control_sess->port);
 
   ENetEvent event;
-  bool terminated = false;
-  while (!terminated && enet_host_service(host.get(), &event, timeout_millis) > 0) {
+  immer::atom<bool> terminated(false);
+
+  auto app_stop_handler = control_sess->event_bus->register_handler<process::AppStoppedEvent>(
+      [&terminated, sess_id = control_sess->session_id](process::AppStoppedEvent ev) {
+        if (ev.session_id == sess_id) {
+          terminated.store(true); // TODO: is there a way to better signal this to Moonlight?
+        }
+      });
+
+  while (!terminated.load() && enet_host_service(host.get(), &event, timeout_millis) > 0) {
     auto [client_ip, client_port] = get_ip((sockaddr *)&event.peer->address.address);
 
     switch (event.type) {
@@ -86,7 +95,7 @@ void run_control(immer::box<state::ControlSession> control_sess, int timeout_mil
       break;
     case ENET_EVENT_TYPE_DISCONNECT:
       logs::log(logs::debug, "[ENET] disconnected client: {}:{}", client_ip, client_port);
-      terminated = true;
+      terminated.store(true);
       break;
     case ENET_EVENT_TYPE_RECEIVE:
       enet_packet packet = {event.packet, enet_packet_destroy};
@@ -125,9 +134,9 @@ void run_control(immer::box<state::ControlSession> control_sess, int timeout_mil
       break;
     }
   }
-
   // Failsafe, when we get out of the loop we have to signal to terminate the session
   logs::log(logs::debug, "[ENET] terminating session: {}", control_sess->session_id);
+  app_stop_handler.unregister();
 
   auto terminate_ev = TerminateEvent{control_sess->session_id};
   control_sess->event_bus->fire_event(immer::box<TerminateEvent>{terminate_ev});
