@@ -169,9 +169,9 @@ auto setup_sessions_handlers(std::shared_ptr<dp::event_bus> &event_bus, TreadsMa
         auto t_pool = threads.load()->at(launch_ev->session_id);
 
         // Setup inputs and start selected app
-        ba::post(*t_pool, [launch_ev]() {
+        ba::post(*t_pool, [launch_ev, t_pool]() {
           // create virtual inputs
-          auto input_setup = input::setup_handlers(launch_ev->session_id, launch_ev->event_bus);
+          auto input_setup = input::setup_handlers(launch_ev->session_id, launch_ev->event_bus, t_pool);
 
           // Start app
           process::run_process(launch_ev);

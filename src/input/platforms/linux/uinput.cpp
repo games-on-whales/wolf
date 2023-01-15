@@ -18,7 +18,6 @@
 #include <immer/array_transient.hpp>
 #include <immer/atom.hpp>
 #include <range/v3/view.hpp>
-#include <thread>
 
 namespace input {
 
@@ -383,7 +382,9 @@ void controller_handle(libevdev_uinput *controller,
 
 } // namespace controller
 
-InputReady setup_handlers(std::size_t session_id, const std::shared_ptr<dp::event_bus> &event_bus) {
+InputReady setup_handlers(std::size_t session_id,
+                          const std::shared_ptr<dp::event_bus> &event_bus,
+                          std::shared_ptr<boost::asio::thread_pool> t_pool) {
   logs::log(logs::debug, "Setting up input handlers for session: {}", session_id);
 
   auto v_devices = std::make_shared<VirtualDevices>();
@@ -504,18 +505,17 @@ InputReady setup_handlers(std::size_t session_id, const std::shared_ptr<dp::even
    * Unfortunately, this event is not being sent by Moonlight.
    */
   auto kb_thread_over = std::make_shared<immer::atom<bool>>(false);
-  auto keyboard_thread = std::make_shared<std::thread>([v_devices, keyboard_state, kb_thread_over]() {
+  boost::asio::post(*t_pool, ([v_devices, keyboard_state, kb_thread_over]() {
     while (!kb_thread_over->load()) {
       std::this_thread::sleep_for(50ms); // TODO: should this be configurable?
       keyboard::keyboard_repeat_press(v_devices->keyboard->get(), keyboard_state->load());
     }
-  });
+  }));
 
   auto end_handler = event_bus->register_handler<immer::box<moonlight::control::TerminateEvent>>(
-      [sess_id = session_id, kb_thread_over, keyboard_thread](immer::box<moonlight::control::TerminateEvent> event) {
+      [sess_id = session_id, kb_thread_over](immer::box<moonlight::control::TerminateEvent> event) {
         if (event->session_id == sess_id) {
           kb_thread_over->update([](bool terminate) { return true; });
-          keyboard_thread->join();
         }
       });
 
