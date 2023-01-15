@@ -1,6 +1,7 @@
 #pragma once
 
 #include "moonlight/data-structures.hpp"
+#include <boost/asio.hpp>
 #include <cstdint>
 #include <eventbus/event_bus.hpp>
 #include <immer/array.hpp>
@@ -10,12 +11,18 @@
 
 namespace input {
 
+struct InputReady {
+  immer::array<immer::box<std::string>> devices_paths;
+  immer::array<immer::box<dp::handler_registration>> registered_handlers;
+};
+
 /**
  * PLATFORM DEPENDENT
  * will wait for events on the event bus and setup virtual devices accordingly.
  */
-immer::array<immer::box<dp::handler_registration>> setup_handlers(std::size_t session_id,
-                                                                  const std::shared_ptr<dp::event_bus>& event_bus);
+InputReady setup_handlers(std::size_t session_id,
+                          const std::shared_ptr<dp::event_bus> &event_bus,
+                          std::shared_ptr<boost::asio::thread_pool> t_pool);
 
 /**
  * A packet of type INPUT_DATA will have different shapes based on the type

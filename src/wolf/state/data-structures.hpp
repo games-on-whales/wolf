@@ -93,6 +93,8 @@ struct App {
   std::string h264_gst_pipeline;
   std::string hevc_gst_pipeline;
   std::string opus_gst_pipeline;
+
+  std::string run_cmd;
 };
 
 /**
