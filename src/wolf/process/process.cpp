@@ -10,8 +10,8 @@ namespace process {
 
 using namespace moonlight;
 
-void run_process(immer::box<START_PROCESS_EV> process_ev) {
-  logs::log(logs::debug, "[PROCESS] Starting process: {}", process_ev->run_cmd);
+void run_process(immer::box<LaunchAPPEvent> process_ev) {
+  logs::log(logs::debug, "[PROCESS] Starting process: {}", process_ev->app_launch_cmd);
 
   std::future<std::string> std_out, err_out;
   boost::asio::io_service ios;
@@ -19,7 +19,7 @@ void run_process(immer::box<START_PROCESS_EV> process_ev) {
   bp::group group_proc;
 
   try {
-    child_proc = bp::child(process_ev->run_cmd,
+    child_proc = bp::child(process_ev->app_launch_cmd,
                            bp::std_in.close(),
                            bp::std_out > std_out,
                            bp::std_err > err_out,
@@ -58,7 +58,4 @@ void run_process(immer::box<START_PROCESS_EV> process_ev) {
   terminate_handler.unregister();
 }
 
-std::thread spawn_process(immer::box<START_PROCESS_EV> process_ev) {
-  return std::thread(run_process, process_ev);
-}
 } // namespace process

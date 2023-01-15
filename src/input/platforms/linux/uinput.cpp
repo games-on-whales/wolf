@@ -15,6 +15,7 @@
 #include <chrono>
 #include <helpers/logger.hpp>
 #include <immer/array.hpp>
+#include <immer/array_transient.hpp>
 #include <immer/atom.hpp>
 #include <range/v3/view.hpp>
 #include <thread>
@@ -382,31 +383,35 @@ void controller_handle(libevdev_uinput *controller,
 
 } // namespace controller
 
-immer::array<immer::box<dp::handler_registration>> setup_handlers(std::size_t session_id,
-                                                                  const std::shared_ptr<dp::event_bus> &event_bus) {
+InputReady setup_handlers(std::size_t session_id, const std::shared_ptr<dp::event_bus> &event_bus) {
   logs::log(logs::debug, "Setting up input handlers for session: {}", session_id);
 
   auto v_devices = std::make_shared<VirtualDevices>();
+  auto devices_paths = immer::array<immer::box<std::string>>().transient();
 
   libevdev_ptr mouse_dev(libevdev_new(), ::libevdev_free);
   if (auto mouse_el = mouse::create_mouse(mouse_dev.get())) {
     v_devices->mouse = {*mouse_el, ::libevdev_uinput_destroy};
+    devices_paths.push_back(libevdev_uinput_get_devnode(*mouse_el));
   }
 
   libevdev_ptr touch_dev(libevdev_new(), ::libevdev_free);
   if (auto touch_el = mouse::create_touchpad(touch_dev.get())) {
     v_devices->touchpad = {*touch_el, ::libevdev_uinput_destroy};
+    devices_paths.push_back(libevdev_uinput_get_devnode(*touch_el));
   }
 
   libevdev_ptr keyboard_dev(libevdev_new(), ::libevdev_free);
   if (auto keyboard_el = keyboard::create_keyboard(keyboard_dev.get())) {
     v_devices->keyboard = {*keyboard_el, ::libevdev_uinput_destroy};
+    devices_paths.push_back(libevdev_uinput_get_devnode(*keyboard_el));
   }
 
   // TODO: multiple controllers?
   libevdev_ptr controller_dev(libevdev_new(), ::libevdev_free);
   if (auto controller_el = controller::create_controller(controller_dev.get())) {
     v_devices->controllers = {{*controller_el, ::libevdev_uinput_destroy}};
+    devices_paths.push_back(libevdev_uinput_get_devnode(*controller_el));
   }
 
   auto controller_state = std::make_shared<immer::atom<immer::box<data::CONTROLLER_MULTI_PACKET> /* prev packet */>>();
@@ -514,6 +519,8 @@ immer::array<immer::box<dp::handler_registration>> setup_handlers(std::size_t se
         }
       });
 
-  return immer::array<immer::box<dp::handler_registration>>{std::move(ctrl_handler), std::move(end_handler)};
+  return InputReady{.devices_paths = devices_paths.persistent(),
+                    .registered_handlers = immer::array<immer::box<dp::handler_registration>>{std::move(ctrl_handler),
+                                                                                              std::move(end_handler)}};
 }
 } // namespace input

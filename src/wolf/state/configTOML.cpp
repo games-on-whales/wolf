@@ -265,6 +265,7 @@ template <> struct into<state::App> {
     return toml::value{
         {"title", f.base.title},
         {"support_hdr", f.base.support_hdr},
+        {"run_cmd", f.run_cmd}
         // TODO: [video] [audio] are they needed?
     };
   }

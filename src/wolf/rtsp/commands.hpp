@@ -2,6 +2,7 @@
 
 #include <helpers/logger.hpp>
 #include <helpers/utils.hpp>
+#include <process/process.hpp>
 #include <rtsp/parser.hpp>
 #include <state/data-structures.hpp>
 #include <string>
@@ -78,7 +79,14 @@ RTSP_PACKET setup(const RTSP_PACKET &req, const state::StreamSession &session) {
                 {{"Session", session_opt}, {"Transport", "server_port=" + std::to_string(service_port)}});
 }
 
-RTSP_PACKET play(const RTSP_PACKET &req) {
+RTSP_PACKET play(const RTSP_PACKET &req, const state::StreamSession &session) {
+  process::LaunchAPPEvent event{
+      .session_id = session.session_id,
+      .event_bus = session.event_bus,
+      .app_launch_cmd = session.app.run_cmd,
+  };
+  session.event_bus->fire_event(immer::box<process::LaunchAPPEvent>(event));
+
   return ok_msg(req.seq_number);
 }
 
@@ -187,7 +195,7 @@ RTSP_PACKET message_handler(const RTSP_PACKET &req, const state::StreamSession &
   case utils::hash("ANNOUNCE"):
     return announce(req, session);
   case utils::hash("PLAY"):
-    return play(req);
+    return play(req, session);
   default:
     logs::log(logs::warning, "[RTSP] command {} not found", cmd);
     return error_msg(404, "NOT FOUND", req.seq_number);
