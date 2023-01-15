@@ -26,7 +26,7 @@ jobs:
           if [ -n "${{ secrets.DOCKERHUB_TOKEN }}" ]; then
             IMAGES="gameonwhales/wolf"
             PUSH=true
-            echo ::set-output name=has_docker_token::true
+            echo "has_docker_token=true" >> $GITHUB_OUTPUT
           fi
           if [ -n "${{ secrets.GHCR_TOKEN }}" ]; then
             REGISTRY_IMAGE="ghcr.io/${{ github.repository_owner }}/wolf"
@@ -36,16 +36,16 @@ jobs:
               IMAGES="$IMAGES,ghcr.io/${REGISTRY_IMAGE}"
             fi
             PUSH=true
-            echo ::set-output name=has_github_token::true
-            echo ::set-output name=cache_from::"type=registry,ref=${REGISTRY_IMAGE}:buildcache"
-            echo ::set-output name=cache_to::"type=registry,ref=${REGISTRY_IMAGE}:buildcache,mode=max"
+            echo "has_github_token=true" >> $GITHUB_OUTPUT
+            echo "cache_from=type=registry,ref=${REGISTRY_IMAGE}:buildcache" >> $GITHUB_OUTPUT
+            echo "cache_to=type=registry,ref=${REGISTRY_IMAGE}:buildcache,mode=max" >> $GITHUB_OUTPUT
           else
-            echo ::set-output name=cache_from::"type=registry,ref=${REGISTRY_IMAGE}:buildcache"
-            echo ::set-output name=cache_to::""
+            echo "cache_from=type=registry,ref=${REGISTRY_IMAGE}:buildcache" >> $GITHUB_OUTPUT
+            echo "cache_to=" >> $GITHUB_OUTPUT
           fi
-          echo ::set-output name=images::"${IMAGES}"
-          echo ::set-output name=push::${PUSH}
-          echo ::set-output name=github_server_url::"${GITHUB_SERVER_URL}"
+          echo "images=${IMAGES}" >> $GITHUB_OUTPUT
+          echo "push=${PUSH}" >> $GITHUB_OUTPUT
+          echo "github_server_url=${GITHUB_SERVER_URL}" >> $GITHUB_OUTPUT
 
       - name: Docker meta
         id: meta
@@ -60,7 +60,7 @@ jobs:
             type=edge,branch=master
             type=ref,event=branch
             type=sha
-          flavor: latest=auto #latest will point to last semver version (stable)
+          flavor: latest=false # let's not produce a :latest tag
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v2

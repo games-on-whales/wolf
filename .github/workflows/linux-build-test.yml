@@ -30,8 +30,6 @@ jobs:
 
     steps:
       - uses: actions/checkout@v3
-        with:
-          submodules: recursive
 
       - name: Prepare environment
         # ubuntu-latest breaks without libunwind-dev,
