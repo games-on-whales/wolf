@@ -86,7 +86,8 @@ struct MOUSE_MOVE_ABS_PACKET : INPUT_PKT {
 
 struct MOUSE_BUTTON_PACKET : INPUT_PKT {
   char action;
-  int button;
+  short zero;
+  short button;
 };
 
 struct MOUSE_SCROLL_PACKET : INPUT_PKT {

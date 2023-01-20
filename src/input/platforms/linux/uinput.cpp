@@ -72,7 +72,7 @@ std::optional<libevdev_uinput *> create_mouse(libevdev *dev) {
   return uidev;
 }
 
-std::optional<libevdev_uinput *> create_touchpad(libevdev *dev) {
+std::optional<libevdev_uinput *> create_mouse_abs(libevdev *dev) {
   libevdev_uinput *uidev;
 
   libevdev_set_uniq(dev, "Wolf Touchpad");
@@ -84,12 +84,10 @@ std::optional<libevdev_uinput *> create_touchpad(libevdev *dev) {
 
   libevdev_enable_property(dev, INPUT_PROP_DIRECT);
   libevdev_enable_event_type(dev, EV_KEY);
-  libevdev_enable_event_code(dev, EV_KEY, BTN_TOUCH, nullptr);
-  libevdev_enable_event_code(dev, EV_KEY, BTN_TOOL_PEN, nullptr);
-  libevdev_enable_event_code(dev, EV_KEY, BTN_TOOL_FINGER, nullptr);
+  libevdev_enable_event_code(dev, EV_KEY, BTN_LEFT, nullptr);
 
   struct input_absinfo absinfo {
-    .value = 0, .minimum = 0, .maximum = 0, .fuzz = 1, .flat = 0, .resolution = 40
+    .value = 0, .minimum = 0, .maximum = 65535, .fuzz = 1, .flat = 0, .resolution = 28
   };
   libevdev_enable_event_type(dev, EV_ABS);
 
@@ -110,18 +108,20 @@ std::optional<libevdev_uinput *> create_touchpad(libevdev *dev) {
 }
 
 void move_mouse(libevdev_uinput *mouse, const data::MOUSE_MOVE_REL_PACKET &move_pkt) {
-  if (move_pkt.delta_x) {
-    libevdev_uinput_write_event(mouse, EV_REL, REL_X, move_pkt.delta_x);
+  short delta_x = boost::endian::big_to_native(move_pkt.delta_x);
+  short delta_y = boost::endian::big_to_native(move_pkt.delta_y);
+  if (delta_x) {
+    libevdev_uinput_write_event(mouse, EV_REL, REL_X, delta_x);
   }
 
-  if (move_pkt.delta_y) {
-    libevdev_uinput_write_event(mouse, EV_REL, REL_Y, move_pkt.delta_y);
+  if (delta_y) {
+    libevdev_uinput_write_event(mouse, EV_REL, REL_Y, delta_y);
   }
 
   libevdev_uinput_write_event(mouse, EV_SYN, SYN_REPORT, 0);
 }
 
-void move_touchpad(libevdev_uinput *mouse, const data::MOUSE_MOVE_ABS_PACKET &move_pkt) {
+void move_mouse_abs(libevdev_uinput *mouse, const data::MOUSE_MOVE_ABS_PACKET &move_pkt) {
   float x = boost::endian::big_to_native(move_pkt.x);
   float y = boost::endian::big_to_native(move_pkt.y);
   float width = boost::endian::big_to_native(move_pkt.width);
@@ -132,8 +132,6 @@ void move_touchpad(libevdev_uinput *mouse, const data::MOUSE_MOVE_ABS_PACKET &mo
 
   libevdev_uinput_write_event(mouse, EV_ABS, ABS_X, scaled_x);
   libevdev_uinput_write_event(mouse, EV_ABS, ABS_Y, scaled_y);
-  libevdev_uinput_write_event(mouse, EV_KEY, BTN_TOOL_FINGER, 1);
-  libevdev_uinput_write_event(mouse, EV_KEY, BTN_TOOL_FINGER, 0);
 
   libevdev_uinput_write_event(mouse, EV_SYN, SYN_REPORT, 0);
 }
@@ -396,9 +394,9 @@ InputReady setup_handlers(std::size_t session_id,
     devices_paths.push_back(libevdev_uinput_get_devnode(*mouse_el));
   }
 
-  libevdev_ptr touch_dev(libevdev_new(), ::libevdev_free);
-  if (auto touch_el = mouse::create_touchpad(touch_dev.get())) {
-    v_devices->touchpad = {*touch_el, ::libevdev_uinput_destroy};
+  libevdev_ptr mouse_abs_dev(libevdev_new(), ::libevdev_free);
+  if (auto touch_el = mouse::create_mouse_abs(mouse_abs_dev.get())) {
+    v_devices->mouse_abs = {*touch_el, ::libevdev_uinput_destroy};
     devices_paths.push_back(libevdev_uinput_get_devnode(*touch_el));
   }
 
@@ -432,8 +430,8 @@ InputReady setup_handlers(std::size_t session_id,
             break;
           case data::MOUSE_MOVE_ABS:
             logs::log(logs::trace, "[INPUT] Received input of type: MOUSE_MOVE_ABS");
-            if (v_devices->touchpad) {
-              mouse::move_touchpad(v_devices->touchpad->get(), *(data::MOUSE_MOVE_ABS_PACKET *)input);
+            if (v_devices->mouse_abs) {
+              mouse::move_mouse_abs(v_devices->mouse_abs->get(), *(data::MOUSE_MOVE_ABS_PACKET *)input);
             }
             break;
           case data::MOUSE_BUTTON:

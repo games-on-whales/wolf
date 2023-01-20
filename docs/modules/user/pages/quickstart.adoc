@@ -12,7 +12,7 @@ The only way to run Wolf right now is to manually compile it.
 .Build dependencies
 [source,bash]
 ....
-apt install -y ninja-build clang libboost-thread-dev libboost-filesystem-dev libboost-log-dev libboost-stacktrace-dev libssl-dev libgstreamer1.0-dev  libgstreamer-plugins-base1.0-dev libevdev-dev
+apt install -y ninja-build cmake clang libboost-thread-dev libboost-filesystem-dev libboost-log-dev libboost-stacktrace-dev libssl-dev libgstreamer1.0-dev  libgstreamer-plugins-base1.0-dev libevdev-dev
 ....
 
 .Compile
@@ -45,3 +45,28 @@ INFO  | HTTPS server listening on port: 47984
 You should now be able to point Moonlight to the IP address of the server and start the pairing process.
 
 TIP: Make sure to follow the next steps on how to configure Wolf!
+
+== devices support
+
+We use uinput to create virtual devices (Mouse, Keyboard and Joypad), make sure that `/dev/uinput` is present in the host:
+
+[source, bash]
+....
+ls -la /dev/uinput
+crw------- 1 root root 10, 223 Jan 17 09:08 /dev/uinput
+....
+
+.Add your user to group `input`
+[source, bash]
+....
+sudo usermod -a -G input $USER
+....
+
+.Create `udev` rules
+[source, bash]
+....
+echo 'KERNEL=="uinput", GROUP="input", MODE="0660", OPTIONS+="static_node=uinput"' | \
+sudo tee /etc/udev/rules.d/85-wolf-virtual-inputs.rules
+....
+
+Reboot.
