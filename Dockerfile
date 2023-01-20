@@ -23,6 +23,8 @@ COPY cmake /wolf/cmake
 COPY CMakeLists.txt /wolf/CMakeLists.txt
 WORKDIR /wolf
 
+# TODO: link with gstreamer from gameonwhales/gstreamer:1.20.3
+
 ENV CCACHE_DIR=/cache/ccache
 ENV CMAKE_BUILD_DIR=/cache/cmake-build
 RUN --mount=type=cache,target=/cache/ccache \
@@ -62,20 +64,18 @@ RUN --mount=type=cache,target=/usr/local/cargo/registry cargo build --release
 
 
 ########################################################
-# TODO: build gstreamer plugin manually
-########################################################
-FROM ubuntu:22.04 AS runner
+FROM gameonwhales/gstreamer:1.20.3 AS runner
 ENV DEBIAN_FRONTEND=noninteractive
 
 # Wolf runtime dependencies
 # curl only used by plugin curlhttpsrc (remote video play)
 RUN apt-get update -y && \
     apt-get install -y --no-install-recommends \
-    gstreamer1.0-plugins-base gstreamer1.0-plugins-good gstreamer1.0-plugins-ugly gstreamer1.0-plugins-bad \
     ca-certificates libcurl4 \
     tini \
     libssl3 \
     libevdev2 \
+    va-driver-all \
     && rm -rf /var/lib/apt/lists/*
 
 # gst-plugin-wayland runtime dependencies
@@ -87,8 +87,6 @@ RUN apt-get update -y && \
 
 # TODO: avoid running as root
 
-# DEBUG: install gstreamer1.0-tools in order to add gst-inspect-1.0, gst-launch-1.0 and more
-ENV GST_PLUGIN_PATH=/usr/lib/x86_64-linux-gnu/gstreamer-1.0/
 COPY --from=wolf-builder /wolf/wolf /wolf/wolf
 COPY --from=gst-plugin-wayland /sunrise/gst-plugin-wayland-display/target/release/libgstwaylanddisplay.so $GST_PLUGIN_PATH/libgstwaylanddisplay.so
 
