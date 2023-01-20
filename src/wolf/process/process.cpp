@@ -50,8 +50,9 @@ void run_process(immer::box<LaunchAPPEvent> process_ev) {
 
   auto ex_code = child_proc.exit_code();
   logs::log(logs::debug, "[PROCESS] Terminated with status code: {}\nstd_out: {}", ex_code, std_out.get());
-  if (!err_out.get().empty()) {
-    logs::log(logs::warning, "[PROCESS] Terminated with status code: {}, std_err: {}", ex_code, err_out.get());
+  auto errors = err_out.get();
+  if (!errors.empty()) {
+    logs::log(logs::warning, "[PROCESS] Terminated with status code: {}, std_err: {}", ex_code, errors);
   }
 
   terminate_handler.unregister();
