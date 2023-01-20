@@ -94,19 +94,17 @@ jobs:
           password: ${{ secrets.GHCR_TOKEN }}
 
       - name: Build Gstreamer
-        id: docker_build
         uses: docker/build-push-action@v3
         with:
           builder: ${{ steps.buildx.outputs.name }}
           context: docker
-          file: gstreamer.Dockerfile
+          file: docker/gstreamer.Dockerfile
           push: true
-          tags: ghcr.io/${{ github.repository_owner }}/gstreamer:1.20.3,gameonwhales:1.20.3 # TODO: set gstreamer version as param
-          cache-from: registry,ref=ghcr.io/${{ github.repository_owner }}/gstreamer:buildcache-1.20.3
-          cache-to: registry,ref=ghcr.io/${{ github.repository_owner }}/gstreamer:buildcache-1.20.3,mode=max
+          tags: ghcr.io/${{ github.repository_owner }}/gstreamer:1.20.3,gameonwhales/gstreamer:1.20.3 # TODO: set gstreamer version as param
+          cache-from: type=registry,ref=ghcr.io/${{ github.repository_owner }}/gstreamer:buildcache-1.20.3
+          cache-to: type=registry,ref=ghcr.io/${{ github.repository_owner }}/gstreamer:buildcache-1.20.3,mode=max
 
       - name: Build Wolf
-        id: docker_build
         uses: docker/build-push-action@v3
         with:
           builder: ${{ steps.buildx.outputs.name }}
