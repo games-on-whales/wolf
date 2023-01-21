@@ -10,7 +10,7 @@ RUN apt-get update -y && \
     build-essential \
     meson bison ninja-build \
     flex libx265-dev nasm libva-dev libzxingcore-dev libzbar-dev \
-    libx11-dev libwayland-dev libpulse-dev \
+    libx11-dev libxfixes-dev libxdamage-dev libwayland-dev libpulse-dev \
     && rm -rf /var/lib/apt/lists/*
 
 ######################################################
