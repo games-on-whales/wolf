@@ -76,30 +76,33 @@ void pair(std::shared_ptr<typename SimpleWeb::Server<T>::Response> response,
 
   // PHASE 1
   if (client_id && salt && client_cert_str) {
-    auto future_pin = std::promise<std::string>();
-    state::PairSignal signal = {client_ip, future_pin};
-    state->event_bus->fire_event(signal); // Emit a signal and wait for a response
-    auto user_pin = future_pin.get_future().get();
+    auto future_pin = std::make_shared<boost::promise<std::string>>();
+    state->event_bus->fire_event( // Emit a signal and wait for the promise to be fulfilled
+        immer::box<state::PairSignal>(state::PairSignal{.client_ip = client_ip, .user_pin = future_pin}));
 
-    auto server_pem = x509::get_cert_pem(*state->host.server_cert);
-    auto result = moonlight::pair::get_server_cert(user_pin, salt.value(), server_pem);
+    future_pin->get_future().then(
+        [state, salt, client_cert_str, cache_key, client_id, response](boost::future<std::string> fut_pin) {
+          auto server_pem = x509::get_cert_pem(*state->host.server_cert);
+          auto result = moonlight::pair::get_server_cert(fut_pin.get(), salt.value(), server_pem);
 
-    auto client_cert_parsed = crypto::hex_to_str(client_cert_str.value(), true);
+          auto client_cert_parsed = crypto::hex_to_str(client_cert_str.value(), true);
 
-    state->pairing_cache.update([&](const immer::map<std::string, state::PairCache> &pairing_cache) {
-      return pairing_cache.set(cache_key,
-                               {client_id.value(),
-                                client_cert_parsed,
-                                state::RTSP_SETUP_PORT,
-                                state::CONTROL_PORT,
-                                state::VIDEO_STREAM_PORT,
-                                state::AUDIO_STREAM_PORT,
-                                result.second,
-                                std::nullopt,
-                                std::nullopt});
-    });
+          state->pairing_cache.update([&](const immer::map<std::string, state::PairCache> &pairing_cache) {
+            return pairing_cache.set(cache_key,
+                                     {client_id.value(),
+                                      client_cert_parsed,
+                                      state::RTSP_SETUP_PORT,
+                                      state::CONTROL_PORT,
+                                      state::VIDEO_STREAM_PORT,
+                                      state::AUDIO_STREAM_PORT,
+                                      result.second,
+                                      std::nullopt,
+                                      std::nullopt});
+          });
 
-    send_xml<T>(response, SimpleWeb::StatusCode::success_ok, result.first);
+          send_xml<T>(response, SimpleWeb::StatusCode::success_ok, result.first);
+        });
+
     return;
   }
 

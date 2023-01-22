@@ -2,7 +2,6 @@
 
 #include <chrono>
 #include <eventbus/event_bus.hpp>
-#include <future>
 #include <immer/array.hpp>
 #include <immer/atom.hpp>
 #include <immer/box.hpp>
@@ -12,6 +11,10 @@
 #include <openssl/x509.h>
 #include <optional>
 #include <streaming/data-structures.hpp>
+
+#define BOOST_THREAD_PROVIDES_FUTURE_CONTINUATION
+#define BOOST_THREAD_PROVIDES_FUTURE
+#include <boost/thread/future.hpp>
 
 namespace state {
 using namespace std::chrono_literals;
@@ -40,7 +43,7 @@ struct PairedClient {
 
 struct PairSignal {
   std::string client_ip;
-  std::promise<std::string> &user_pin;
+  std::shared_ptr<boost::promise<std::string>> user_pin;
 };
 
 using PairedClientList = immer::vector<immer::box<PairedClient>>;

@@ -100,6 +100,16 @@ target_sources(wolf_runner
         PUBLIC
         ${HEADER_LIST})
 
+## Add pin.html
+function(make_includable input_file output_file)
+    file(READ ${input_file} content)
+    set(delim "for_c++_include")
+    set(content "R\"${delim}(\n${content})${delim}\"")
+    file(WRITE ${output_file} "${content}")
+endfunction(make_includable)
+
+make_includable(rest/html/pin.html rest/html/pin.include.html)
+
 # All users of this library will need at least C++17
 target_compile_features(wolf_runner PUBLIC cxx_std_17)
 

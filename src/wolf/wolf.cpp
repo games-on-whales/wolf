@@ -110,13 +110,6 @@ const char *get_env(const char *tag, const char *def = nullptr) noexcept {
   return ret ? ret : def;
 }
 
-void user_pin_handler(state::PairSignal pair_request) {
-  std::string user_pin;
-  std::cout << "Insert pin:" << std::endl;
-  std::getline(std::cin, user_pin);
-  pair_request.user_pin.set_value(user_pin);
-}
-
 /**
  * A bit tricky here: on a basic level we want a map of [session_id] -> thread_pool
  */
@@ -132,9 +125,6 @@ typedef immer::atom<immer::map<std::size_t, std::shared_ptr<boost::asio::thread_
  */
 auto setup_sessions_handlers(std::shared_ptr<dp::event_bus> &event_bus, TreadsMapAtom &threads) {
   immer::vector_transient<immer::box<dp::handler_registration>> handlers;
-
-  // HTTP PIN
-  handlers.push_back(event_bus->register_handler<state::PairSignal>(&user_pin_handler));
 
   // RTSP
   handlers.push_back(event_bus->register_handler<immer::box<state::StreamSession>>(
