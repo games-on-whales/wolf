@@ -20,7 +20,7 @@ services:
     volumes:
       - xorg:/tmp/.X11-unix
       - pulse:/tmp/pulse/
-      - /home/ale/wolf:/wolf/cfg # TODO: set this
+      - wolf_state:/wolf/cfg # Mount this externally to see and edit config file
     devices:
       - /dev/dri:/dev/dri
     environment:
@@ -98,3 +98,4 @@ volumes:
   xorg:
   pulse:
   ffox_state:
+  wolf_state:
