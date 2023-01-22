@@ -82,7 +82,7 @@ ENV DEBIAN_FRONTEND=noninteractive
 RUN apt-get update -y && \
     apt-get install -y --no-install-recommends \
     libgstreamer1.0-0 \
-    libcairo-gobject2 libgdk-pixbuf-2.0-0 libva2 libva-x11-2 libva-drm2 liblcms2-2  \
+    libcairo-gobject2 libgdk-pixbuf-2.0-0 libva2 libva-x11-2 libva-drm2 libxdamage1 liblcms2-2  \
     libopenexr25 libzbar0 libopenjp2-7 librsvg2-2 libx265-199 libzxingcore1 libopenh264-6 libpulse0 \
     && rm -rf /var/lib/apt/lists/*
 
