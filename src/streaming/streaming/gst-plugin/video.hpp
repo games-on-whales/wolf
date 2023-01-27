@@ -1,5 +1,6 @@
 #pragma once
 #include <cmath>
+#include <helpers/logger.hpp>
 #include <streaming/gst-plugin/gstrtpmoonlightpay_video.hpp>
 #include <streaming/gst-plugin/utils.hpp>
 
@@ -53,8 +54,7 @@ create_rtp_header(const gst_rtp_moonlight_pay_video &rtpmoonlightpay, int packet
 static GstBuffer *prepend_video_header(GstBuffer *inbuf) {
   constexpr auto video_payload_header_size = 8;
   GstBuffer *video_header = gst_buffer_new_and_fill(video_payload_header_size, "\0017charss");
-  auto full_payload_buf = gst_buffer_append(video_header, inbuf);
-  gst_copy_timestamps(inbuf, full_payload_buf);
+  auto full_payload_buf = gst_buffer_append(video_header, gst_buffer_ref(inbuf));
   return full_payload_buf;
 }
 
@@ -65,25 +65,25 @@ static GstBufferList *generate_rtp_packets(const gst_rtp_moonlight_pay_video &rt
   auto in_buf_size = gst_buffer_get_size(inbuf);
   auto payload_size = rtpmoonlightpay.payload_size - MAX_RTP_HEADER_SIZE;
   auto tot_packets = std::ceil((float)in_buf_size / payload_size);
-  GstBufferList *buffers = gst_buffer_list_new_sized(tot_packets);
+  GstBufferList *buffers = gst_buffer_list_new();
 
   for (int packet_nr = 0; packet_nr < tot_packets; packet_nr++) {
     auto begin = packet_nr * payload_size;
     auto remaining = in_buf_size - begin;
     auto packet_payload_size = MIN(remaining, payload_size);
 
-    GstBuffer *header = create_rtp_header(rtpmoonlightpay, packet_nr, tot_packets);
+    GstBuffer *rtp_packet = create_rtp_header(rtpmoonlightpay, packet_nr, tot_packets);
 
     GstBuffer *payload = gst_buffer_copy_region(inbuf, GST_BUFFER_COPY_ALL, begin, packet_payload_size);
-    GstBuffer *rtp_packet = gst_buffer_append(header, payload);
+    rtp_packet = gst_buffer_append(rtp_packet, payload);
 
     if ((remaining < payload_size) && rtpmoonlightpay.add_padding) {
       GstBuffer *padding = gst_buffer_new_and_fill(payload_size - remaining, 0x00);
-      gst_buffer_append(rtp_packet, padding);
+      rtp_packet = gst_buffer_append(rtp_packet, padding);
     }
 
     gst_copy_timestamps(inbuf, rtp_packet);
-    gst_buffer_list_insert(buffers, -1, rtp_packet);
+    gst_buffer_list_add(buffers, rtp_packet);
   }
 
   return buffers;
@@ -149,6 +149,15 @@ static void generate_fec_packets(const gst_rtp_moonlight_pay_video &rtpmoonlight
   auto blocks = determine_split(rtpmoonlightpay, gst_buffer_list_length(rtp_packets));
   auto nr_shards = blocks.data_shards + blocks.parity_shards;
 
+  if (nr_shards > DATA_SHARDS_MAX) {
+    logs::log(logs::warning,
+              "[GSTREAMER] Size of frame too large, {} packets is bigger than the max ({}); skipping FEC",
+              nr_shards,
+              DATA_SHARDS_MAX);
+    gst_buffer_unref(rtp_payload);
+    return;
+  }
+
   // pads rtp_payload to blocksize
   if (payload_size % blocks.block_size != 0) {
     GstBuffer *pad = gst_buffer_new_and_fill((blocks.data_shards * blocks.block_size) - payload_size, 0x00);
@@ -156,8 +165,8 @@ static void generate_fec_packets(const gst_rtp_moonlight_pay_video &rtpmoonlight
   }
 
   // Allocate space for FEC packets
-  rtp_payload =
-      gst_buffer_append(rtp_payload, gst_buffer_new_and_fill((blocks.parity_shards * blocks.block_size), 0x00));
+  auto fec_buff = gst_buffer_new_and_fill((blocks.parity_shards * blocks.block_size), 0x00);
+  rtp_payload = gst_buffer_append(rtp_payload, fec_buff);
   gst_buffer_map(rtp_payload, &info, GST_MAP_WRITE);
 
   // Reed Solomon encode the full stream of bytes
@@ -201,10 +210,11 @@ static void generate_fec_packets(const gst_rtp_moonlight_pay_video &rtpmoonlight
 
     GstBuffer *packet_buf = gst_buffer_new_allocate(nullptr, blocks.block_size, nullptr);
     gst_buffer_fill(packet_buf, 0, rtp_packet, blocks.block_size);
-    gst_buffer_list_insert(rtp_packets, -1, packet_buf);
+    gst_buffer_list_add(rtp_packets, packet_buf);
   }
 
   gst_buffer_unmap(rtp_payload, &info);
+  gst_buffer_unref(rtp_payload);
 }
 
 /**
@@ -221,7 +231,7 @@ generate_fec_multi_blocks(gst_rtp_moonlight_pay_video *rtpmoonlightpay, GstBuffe
   constexpr auto nr_blocks = 3;
   constexpr auto last_block_index = 2 << 6;
 
-  GstBufferList *final_packets = gst_buffer_list_new_sized(0); // we'll increase the size on each block iteration
+  GstBufferList *final_packets = gst_buffer_list_new(); // we'll increase the size on each block iteration
 
   auto packets_per_block = (int)std::ceil((float)data_shards / nr_blocks);
   for (int block_idx = 0; block_idx < nr_blocks; block_idx++) {
@@ -237,12 +247,15 @@ generate_fec_multi_blocks(gst_rtp_moonlight_pay_video *rtpmoonlightpay, GstBuffe
     auto total_block_packets = gst_buffer_list_length(block_packets);
     for (int packet_idx = 0; packet_idx < total_block_packets; packet_idx++) {
       // copy here is about the buffer object, not the data
-      gst_buffer_list_insert(final_packets, -1, gst_buffer_copy(gst_buffer_list_get(block_packets, packet_idx)));
+      gst_buffer_list_add(final_packets, gst_buffer_copy(gst_buffer_list_get(block_packets, packet_idx)));
     }
 
     // This will adjust the sequenceNumber of the RTP packet
     rtpmoonlightpay->cur_seq_number += total_block_packets;
+    gst_buffer_list_unref(block_packets);
   }
+
+  gst_buffer_list_unref(rtp_packets);
 
   return final_packets;
 }
@@ -258,8 +271,9 @@ static GstBufferList *split_into_rtp(gst_rtp_moonlight_pay_video *rtpmoonlightpa
   auto full_payload_buf = prepend_video_header(inbuf);
 
   GstBufferList *rtp_packets = generate_rtp_packets(*rtpmoonlightpay, full_payload_buf);
-  auto rtp_packets_size = gst_buffer_list_length(rtp_packets);
+
   if (rtpmoonlightpay->fec_percentage > 0) {
+    auto rtp_packets_size = gst_buffer_list_length(rtp_packets);
     auto blocks = determine_split(*rtpmoonlightpay, rtp_packets_size);
 
     // With a fec_percentage of 255, if payload is broken up into more than a 100 data_shards
@@ -273,6 +287,7 @@ static GstBufferList *split_into_rtp(gst_rtp_moonlight_pay_video *rtpmoonlightpa
   }
 
   rtpmoonlightpay->frame_num++;
+  gst_buffer_unref(full_payload_buf);
   return rtp_packets;
 }
 

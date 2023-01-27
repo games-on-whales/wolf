@@ -17,9 +17,7 @@ static void gst_buffer_copy_into(GstBuffer *buf, unsigned char *destination) {
   /* get READ access to the memory and fill with vals */
   GstMapInfo info;
   gst_buffer_map(buf, &info, GST_MAP_READ);
-  for (int i = 0; i < size; i++) {
-    destination[i] = info.data[i];
-  }
+  std::copy(info.data, info.data + size, destination);
   gst_buffer_unmap(buf, &info);
 }
 
@@ -48,7 +46,7 @@ static std::vector<unsigned char> gst_buffer_copy_content(GstBuffer *buf) {
  * Creates a GstBuffer and fill the memory with the given value
  */
 static GstBuffer *gst_buffer_new_and_fill(gsize size, int fill_val) {
-  GstBuffer *buf = gst_buffer_new_allocate(NULL, size, NULL);
+  GstBuffer *buf = gst_buffer_new_allocate(nullptr, size, nullptr);
 
   /* get WRITE access to the memory and fill with fill_val */
   GstMapInfo info;
@@ -62,15 +60,8 @@ static GstBuffer *gst_buffer_new_and_fill(gsize size, int fill_val) {
  * Creates a GstBuffer from the given array of chars
  */
 static GstBuffer *gst_buffer_new_and_fill(gsize size, const char vals[]) {
-  GstBuffer *buf = gst_buffer_new_allocate(NULL, size, NULL);
-
-  /* get WRITE access to the memory and fill with vals */
-  GstMapInfo info;
-  gst_buffer_map(buf, &info, GST_MAP_WRITE);
-  for (int i = 0; i < size; i++) {
-    info.data[i] = vals[i];
-  }
-  gst_buffer_unmap(buf, &info);
+  GstBuffer *buf = gst_buffer_new_allocate(nullptr, size, nullptr);
+  gst_buffer_fill(buf, 0, vals, size);
   return buf;
 }
 
@@ -95,7 +86,7 @@ static GstBuffer *gst_buffer_list_unfold(GstBufferList *buffer_list) {
  * No copy of the stored data is performed
  */
 static GstBufferList *gst_buffer_list_sub(GstBufferList *buffer_list, int start, int end) {
-  GstBufferList *res = gst_buffer_list_new_sized(end - start);
+  GstBufferList *res = gst_buffer_list_new();
 
   for (int idx = start; idx < end; idx++) {
     auto buf_idx =

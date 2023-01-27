@@ -12,6 +12,10 @@ if (CMAKE_PROJECT_NAME STREQUAL PROJECT_NAME)
 
     # Optionally set things like CMAKE_CXX_STANDARD, CMAKE_POSITION_INDEPENDENT_CODE here
 
+    set(CMAKE_CXX_STANDARD 17)
+
+    set(CMAKE_CXX_STANDARD_REQUIRED ON)
+
     # Let's ensure -std=c++xx instead of -std=g++xx
     set(CMAKE_CXX_EXTENSIONS OFF)
 

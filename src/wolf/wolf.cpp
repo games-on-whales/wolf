@@ -242,7 +242,7 @@ int main(int argc, char *argv[]) {
   auto sess_handlers = setup_sessions_handlers(local_state->event_bus, threads);
 
   // Exception and termination handling
-  shutdown_handler = [&sess_handlers](int signum) {
+  shutdown_handler = [&sess_handlers, &threads](int signum) {
     logs::log(logs::info, "Received interrupt signal {}, clean exit", signum);
     if (signum == SIGABRT || signum == SIGSEGV) {
       auto trace_file = "./backtrace.dump";
@@ -250,10 +250,15 @@ int main(int argc, char *argv[]) {
       boost::stacktrace::safe_dump_to(trace_file);
     }
 
+    for(const auto &thread_pool : *threads.load()){
+      thread_pool.second->stop();
+    }
+
     for (const auto &handler : sess_handlers) {
       handler->unregister();
     }
 
+    logs::log(logs::info, "See ya!");
     exit(signum);
   };
   std::signal(SIGINT, signal_handler);
