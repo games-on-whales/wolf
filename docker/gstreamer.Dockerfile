@@ -82,9 +82,23 @@ ENV DEBIAN_FRONTEND=noninteractive
 RUN apt-get update -y && \
     apt-get install -y --no-install-recommends \
     libgstreamer1.0-0 \
-    libcairo-gobject2 libgdk-pixbuf-2.0-0 libva2 libva-x11-2 libva-drm2 libxdamage1 liblcms2-2  \
+    libcairo-gobject2 libgdk-pixbuf-2.0-0 libva2 libva-x11-2 libva-drm2 libxdamage1 liblcms2-2 libsoup2.4-1 \
     libopenexr25 libzbar0 libopenjp2-7 librsvg2-2 libx265-199 libzxingcore1 libopenh264-6 libpulse0 \
     && rm -rf /var/lib/apt/lists/*
+
+# Adding missing libnvrtc.so for Nvidia
+RUN apt-get update -y && \
+    apt-get install -y wget gnupg2 && \
+    apt-key del 7fa2af80 && \
+    wget https://developer.download.nvidia.com/compute/cuda/repos/ubuntu2204/x86_64/cuda-keyring_1.0-1_all.deb && \
+    dpkg -i cuda-keyring_1.0-1_all.deb && \
+    rm cuda-keyring_1.0-1_all.deb && \
+    apt-get update -y && \
+    apt install -y  \
+    cuda-nvrtc-dev-12-0 && \
+    echo "/usr/local/cuda-12.0/targets/x86_64-linux/lib/" > /etc/ld.so.conf.d/cuda.conf && \
+    apt-get purge -y wget gnupg2 && \
+    rm -rf /var/lib/apt/lists/*
 
 COPY --from=builder /gstreamer/gstreamer/build/subprojects/ /gstreamer/
 
