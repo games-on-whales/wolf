@@ -1,0 +1,100 @@
+R"for_c++_include(
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Wolf - PIN</title>
+    <style>
+        body {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            font-family: Roboto, "Helvetica Neue", Arial, sans-serif;
+            background: rgb(114, 0, 130);
+            background: linear-gradient(132deg, rgba(114, 0, 130, 1) 0%, rgba(63, 0, 195, 1) 50%, rgba(0, 71, 255, 1) 100%);
+        }
+
+        form {
+            display: flex;
+            justify-content: center;
+            color: white;
+        }
+
+        input {
+            margin: 0 0.5rem;
+            padding: 0.5rem;
+            border: 1px solid white;
+            width: 50px;
+            height: 50px;
+            text-align: center;
+            font-size: 3rem;
+        }
+
+        /* Chrome, Safari, Edge, Opera */
+        input::-webkit-outer-spin-button,
+        input::-webkit-inner-spin-button {
+            -webkit-appearance: none;
+            margin: 0;
+        }
+
+        /* Firefox */
+        input[type=number] {
+            -moz-appearance: textfield;
+        }
+    </style>
+</head>
+<body>
+
+
+<div>
+    <form class="form">
+        <input type="number" min="0" max="9" step="1"/>
+        <input type="number" min="0" max="9" step="1"/>
+        <input type="number" min="0" max="9" step="1"/>
+        <input type="number" min="0" max="9" step="1"/>
+    </form>
+</div>
+
+
+</body>
+<script type="application/javascript">
+    const inputs = document.querySelectorAll("input");
+    const form = document.querySelector(".form");
+
+    function send(pin) {
+        let xhr = new XMLHttpRequest();
+        xhr.open("POST", "/pin/", true);
+        xhr.setRequestHeader("Content-Type", "application/json");
+        xhr.onreadystatechange = function () {
+            if (xhr.readyState === 4) {
+                form.textContent = xhr.responseText;
+            }
+        };
+        const data = JSON.stringify({
+            "pin": pin,
+            "secret": window.location.hash.substring(1)
+        });
+        form.textContent = "Sending " + pin + " ...";
+        xhr.send(data);
+    }
+
+    inputs.forEach((input, key) => {
+        input.addEventListener("keyup", function (ev) {
+            if (ev.key === "Backspace" && key > 0) {
+                inputs[key - 1].focus();
+            }
+            if (input.value) {
+                if (key === 3) {
+                    const userCode = [...inputs].map((input) => input.value).join("");
+                    send(userCode);
+                    [...inputs].forEach((input) => input.remove());
+                } else {
+                    inputs[key + 1].focus();
+                }
+            }
+        });
+    });
+    inputs[0].focus();
+</script>
+</html>)for_c++_include"

@@ -1,0 +1,101 @@
+version: "3"
+
+services:
+  ##############################
+  # Wolf
+  ##########
+  wolf:
+    image: ghcr.io/games-on-whales/wolf:alpha
+    depends_on:
+      - xorg
+      - pulse
+      - udevd
+    ports:
+      - "47984:47984/tcp"
+      - "47989:47989/tcp"
+      - "48010:48010/tcp"
+      - "47998-48000:47998-48000/udp"
+    privileged: true
+    ipc: service:xorg
+    volumes:
+      - xorg:/tmp/.X11-unix
+      - pulse:/tmp/pulse/
+      - wolf_state:/wolf/cfg # Mount this externally to see and edit config file
+    devices:
+      - /dev/dri:/dev/dri
+    environment:
+      LOG_LEVEL: "INFO" # Wolf: Set to DEBUG to print more
+      GST_DEBUG: "2" # Gstreamer: 2 logs all warnings and errors, set to 4 to see debug information
+
+      XDG_RUNTIME_DIR: "/tmp/.X11-unix"
+      XORG_SOCKET: "/tmp/.X11-unix/X0"
+      DISPLAY: ":0"
+      PULSE_SERVER: "unix:/tmp/pulse/pulse-socket"
+      LIBVA_DRIVER_NAME: "iHD" # Might be needed by VAAPI
+
+  ##############################
+  # An app running
+  ##########
+  firefox:
+    image: andrewmackrodt/firefox-x11
+    depends_on:
+      - xorg
+    volumes:
+      - xorg:/tmp/.X11-unix
+      - pulse:/tmp/pulse/
+      - ffox_state:/run/user/1000
+    environment:
+      LOG_LEVEL: info
+      XDG_RUNTIME_DIR: "/tmp/.X11-unix"
+      DISPLAY: ":0"
+      PULSE_SERVER: "unix:/tmp/pulse/pulse-socket"
+
+  ##############################
+  # Desktop stack
+  ##########
+  xorg:
+    image: ghcr.io/games-on-whales/xorg:edge
+    network_mode: service:udevd
+    privileged: true
+    volumes:
+      - /dev/input:/dev/input:ro
+      - udev:/run/udev/:ro
+      - xorg:/tmp/.X11-unix
+      - /run/dbus/system_bus_socket:/run/dbus/system_bus_socket:ro
+    ipc: shareable # Needed for MIT-SHM, removing this should cause a performance hit see https://github.com/jessfraz/dockerfiles/issues/359
+    devices:
+      - /dev/dri:/dev/dri
+    environment:
+      RESOLUTION: "1920x1080"
+      DISPLAY: ":0"
+      CURRENT_OUTPUT: "HDMI-1" # TODO: adjust this accordingly
+      REFRESH_RATE: "60"
+      FORCE_RESOLUTION: "false"
+      LIBVA_DRIVERS_PATH: /usr/lib/x86_64-linux-gnu/dri/
+      LIBVA_DRIVER_NAME: "iHD"
+
+  pulse:
+    command: /bin/bash -c "chmod +x /home/retro/entrypoint.sh && /home/retro/entrypoint.sh"
+    image: ghcr.io/games-on-whales/pulseaudio:edge
+    depends_on:
+      - xorg
+    ipc: service:xorg
+    volumes:
+      - pulse:/tmp/pulse/
+      - /run/dbus/system_bus_socket:/run/dbus/system_bus_socket:ro
+      - ./pulse-setup.sh:/home/retro/entrypoint.sh
+
+  udevd:
+    image: ghcr.io/games-on-whales/udevd:edge
+    network_mode: host
+    privileged: true
+    volumes:
+      - udev:/run/udev/
+
+
+volumes:
+  udev:
+  xorg:
+  pulse:
+  ffox_state:
+  wolf_state:

@@ -10,14 +10,18 @@
 namespace crypto {
 
 std::string sha256(std::string_view str) {
-  unsigned char hash[SHA256_DIGEST_LENGTH];
-  SHA256_CTX sha256;
-  SHA256_Init(&sha256);
-  SHA256_Update(&sha256, str.data(), str.size());
-  SHA256_Final(hash, &sha256);
+  unsigned char md_value[EVP_MAX_MD_SIZE];
+  unsigned int md_len;
+  auto mdctx = EVP_MD_CTX_new();
+
+  EVP_DigestInit_ex(mdctx, EVP_sha256(), nullptr);
+  EVP_DigestUpdate(mdctx, str.data(), str.size());
+  EVP_DigestFinal_ex(mdctx, md_value, &md_len);
+  EVP_MD_CTX_free(mdctx);
+
   std::stringstream ss;
-  for (unsigned char i : hash) {
-    ss << std::hex << std::setw(2) << std::setfill('0') << (int)i;
+  for (int i = 0; i < md_len; ++i) {
+    ss << std::hex << std::setw(2) << std::setfill('0') << (int)md_value[i];
   }
   return ss.str();
 }

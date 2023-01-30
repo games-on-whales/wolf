@@ -2,7 +2,6 @@
 
 #include <chrono>
 #include <eventbus/event_bus.hpp>
-#include <future>
 #include <immer/array.hpp>
 #include <immer/atom.hpp>
 #include <immer/box.hpp>
@@ -12,6 +11,10 @@
 #include <openssl/x509.h>
 #include <optional>
 #include <streaming/data-structures.hpp>
+
+#define BOOST_THREAD_PROVIDES_FUTURE_CONTINUATION
+#define BOOST_THREAD_PROVIDES_FUTURE
+#include <boost/thread/future.hpp>
 
 namespace state {
 using namespace std::chrono_literals;
@@ -40,29 +43,30 @@ struct PairedClient {
 
 struct PairSignal {
   std::string client_ip;
-  std::promise<std::string> &user_pin;
+  std::shared_ptr<boost::promise<std::string>> user_pin;
 };
 
 using PairedClientList = immer::vector<immer::box<PairedClient>>;
 
 namespace gstreamer {
 namespace video {
-constexpr std::string_view DEFAULT_SOURCE = "videotestsrc pattern=ball is-live=true";
-constexpr std::string_view DEFAULT_PARAMS = "videoscale ! videoconvert ! videorate ! "
-                                            "video/x-raw, width={width}, height={height}, framerate={fps}/1,"
-                                            "format=I420, chroma-site={color_range}, colorimetry={color_space}";
+constexpr std::string_view DEFAULT_SOURCE =
+    "videotestsrc pattern=ball flip=true is-live=true ! video/x-raw, framerate={fps}/1";
+constexpr std::string_view DEFAULT_PARAMS = "videoscale ! videoconvert ! "
+                                            "video/x-raw, width={width}, height={height}, "
+                                            "chroma-site={color_range}, colorimetry={color_space}, format=NV12";
 
 constexpr std::string_view DEFAULT_H264_ENCODER =
-    "x264enc pass=qual tune=zerolatency speed-preset=superfast b-adapt=false bframes=0 ref=1 bitrate={bitrate} "
-    "aud=false sliced-threads=true threads={slices_per_frame} "
-    "option-string=\"slices={slices_per_frame}:keyint=infinite:open-gop=0\" ! "
-    "video/x-h264, profile=high, stream-format=byte-stream";
+    "encodebin "
+    " profile=\"video/x-h264, "
+    " profile=main, tune=zerolatency, bframes=0, aud=false, stream-format=byte-stream, bitrate={bitrate}, "
+    " insert-vui=false \"";
 
 constexpr std::string_view DEFAULT_H265_ENCODER =
-    "x265enc tune=zerolatency speed-preset=superfast bitrate={bitrate} "
-    "option-string=\"info=0:keyint=-1:qp=28:repeat-headers=1:slices={slices_per_frame}:frame-threads={slices_per_"
-    "frame}:aud=0:annexb=1:log-level=3:open-gop=0:bframes=0:intra-refresh=0\" ! "
-    "video/x-h265, profile=main, stream-format=byte-stream";
+    "encodebin "
+    " profile=\"video/x-h265, "
+    " profile=main, tune=zerolatency, bframes=0, aud=false, stream-format=byte-stream, bitrate={bitrate}, "
+    " insert-vui=false\"";
 
 constexpr std::string_view DEFAULT_SINK =
     "rtpmoonlightpay_video name=moonlight_pay payload_size={payload_size} fec_percentage={fec_percentage} "
@@ -73,8 +77,7 @@ constexpr std::string_view DEFAULT_SINK =
 
 namespace audio {
 constexpr std::string_view DEFAULT_SOURCE = "audiotestsrc wave=ticks is-live=true";
-constexpr std::string_view DEFAULT_PARAMS = "audioconvert ! audiorate ! audioresample ! "
-                                            "audio/x-raw, channels={channels}";
+constexpr std::string_view DEFAULT_PARAMS = "audio/x-raw, channels={channels}";
 constexpr std::string_view DEFAULT_OPUS_ENCODER =
     "opusenc bitrate={bitrate} bitrate-type=cbr frame-size={packet_duration} "
     "bandwidth=fullband audio-type=generic max-payload-size=1400";
@@ -93,6 +96,8 @@ struct App {
   std::string h264_gst_pipeline;
   std::string hevc_gst_pipeline;
   std::string opus_gst_pipeline;
+
+  std::string run_cmd;
 };
 
 /**

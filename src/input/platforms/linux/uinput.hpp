@@ -12,7 +12,7 @@ using libevdev_uinput_ptr = std::shared_ptr<libevdev_uinput>;
 
 struct VirtualDevices {
   std::optional<libevdev_uinput_ptr> mouse;
-  std::optional<libevdev_uinput_ptr> touchpad;
+  std::optional<libevdev_uinput_ptr> mouse_abs;
   std::optional<libevdev_uinput_ptr> keyboard;
 
   immer::array<libevdev_uinput_ptr> controllers{};
@@ -22,11 +22,11 @@ namespace mouse {
 
 std::optional<libevdev_uinput *> create_mouse(libevdev *dev);
 
-std::optional<libevdev_uinput *> create_touchpad(libevdev *dev);
+std::optional<libevdev_uinput *> create_mouse_abs(libevdev *dev);
 
 void move_mouse(libevdev_uinput *mouse, const data::MOUSE_MOVE_REL_PACKET &move_pkt);
 
-void move_touchpad(libevdev_uinput *mouse, const data::MOUSE_MOVE_ABS_PACKET &move_pkt);
+void move_mouse_abs(libevdev_uinput *mouse, const data::MOUSE_MOVE_ABS_PACKET &move_pkt);
 
 void mouse_press(libevdev_uinput *mouse, const data::MOUSE_BUTTON_PACKET &btn_pkt);
 

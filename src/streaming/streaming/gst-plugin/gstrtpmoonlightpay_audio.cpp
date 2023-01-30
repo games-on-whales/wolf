@@ -248,6 +248,8 @@ static GstFlowReturn gst_rtp_moonlight_pay_audio_generate_output(GstBaseTransfor
   /* Send the generated packets to any downstream listener */
   gst_pad_push_list(trans->srcpad, rtp_packets);
 
+  gst_buffer_unref(inbuf);
+
   /* Setting outbuf to NULL and returning GST_BASE_TRANSFORM_FLOW_DROPPED will signal that we finished doing business */
   outbuf = nullptr;
   return GST_BASE_TRANSFORM_FLOW_DROPPED;

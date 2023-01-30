@@ -51,6 +51,7 @@ endif ()
 # https://www.collabora.com/news-and-blog/news-and-events/generate-mininal-gstreamer-build-tailored-to-your-needs.html
 target_link_libraries(streaming PUBLIC
         wolf::moonlight
+        wolf::helpers
         fmt::fmt-header-only
         dp::eventbus
         ${GOBJECT_LIBRARIES}

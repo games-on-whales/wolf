@@ -112,38 +112,51 @@ TEST_CASE("AES cbc", "[Crypto]") {
 }
 
 TEST_CASE("OpenSSL sign", "[Crypto]") {
-  /* Generated using: `openssl genrsa -out mykey.pem 1024` */
-  auto private_key = "-----BEGIN RSA PRIVATE KEY-----\n"
-                     "MIICXAIBAAKBgQDwRIo9jwMkSxUPLbuLSnUpy4yoRkA8L1NGitnQjrol9ouz436k\n"
-                     "7Ip0jyEqAqLdmSAJYtoyqx78BbPP1ubscrKwjWVxf67FeZBWavhkhNhZoaXWYmhN\n"
-                     "Pif5OlvI6WFasg4L6IDGOh/Gl6SrqUntYsYLqJmvfuJf175zdS3YCribdwIDAQAB\n"
-                     "AoGBANVI8rK8vlw8boBf54k52pH0iHNkkWcb17/aSIrz+Fj06IUS4PyEok/gMt95\n"
-                     "IZy3bpIGd43dDA9K/Jj2u12QX//Tx96DbJznmjMeOTEJY/+Hl7rfNGEchUyBsZeP\n"
-                     "vW5KdIHKGaoLkXnuDtsQjq63nzkPEa9Ijl7dFYtUZ9FdQvsBAkEA/YDRefFlbkXJ\n"
-                     "CMWzD/x+s/YEbvBwW5qA9V5qaCpdRjHhdOuZ6VDUl627IktF3L4QfUPlCWJKUSeW\n"
-                     "670X9hxggQJBAPKiWZNgzIH7VpD+mbxneGW1wjGRx5MO6AntdxINhnC8jFJcw6Jl\n"
-                     "y+GthxoA07OuSjdU5oKfrUZTGBLzf9W3//cCQBS0ted48Sj9qDsAMu0GWa8HVDtf\n"
-                     "hj3lM81W5egWNcIrBthO+iZVhNfSx+s4LL+oAp7Ised/UMSqMCiXLGLc1IECQEH0\n"
-                     "nfLxEkaXIv4BJ5tOaS0EzogY/65bE/p24bI3mP8WUfKlosyHbXeoaxxHc0TZsPT/\n"
-                     "kDWb4EdImTe1l19qSBsCQBBq6j2aIC2MMKatQ4916tGxDdfJrUKpujtqypOeVCu4\n"
-                     "TrWeVb6zYtY5BC6Y+AzitAkHLg+gZ8df6B5z4cgATOs=\n"
-                     "-----END RSA PRIVATE KEY-----"s;
-  /* Generated from the private key using: `openssl rsa -in mykey.pem -pubout > mykey.pub` */
-  auto public_key = "-----BEGIN PUBLIC KEY-----\n"
-                    "MIGfMA0GCSqGSIb3DQEBAQUAA4GNADCBiQKBgQDwRIo9jwMkSxUPLbuLSnUpy4yo\n"
-                    "RkA8L1NGitnQjrol9ouz436k7Ip0jyEqAqLdmSAJYtoyqx78BbPP1ubscrKwjWVx\n"
-                    "f67FeZBWavhkhNhZoaXWYmhNPif5OlvI6WFasg4L6IDGOh/Gl6SrqUntYsYLqJmv\n"
-                    "fuJf175zdS3YCribdwIDAQAB\n"
-                    "-----END PUBLIC KEY-----"s;
+  SECTION("Manually created") { /* Generated using: `openssl genrsa -out mykey.pem 1024` */
+    auto private_key = "-----BEGIN RSA PRIVATE KEY-----\n"
+                       "MIICXAIBAAKBgQDwRIo9jwMkSxUPLbuLSnUpy4yoRkA8L1NGitnQjrol9ouz436k\n"
+                       "7Ip0jyEqAqLdmSAJYtoyqx78BbPP1ubscrKwjWVxf67FeZBWavhkhNhZoaXWYmhN\n"
+                       "Pif5OlvI6WFasg4L6IDGOh/Gl6SrqUntYsYLqJmvfuJf175zdS3YCribdwIDAQAB\n"
+                       "AoGBANVI8rK8vlw8boBf54k52pH0iHNkkWcb17/aSIrz+Fj06IUS4PyEok/gMt95\n"
+                       "IZy3bpIGd43dDA9K/Jj2u12QX//Tx96DbJznmjMeOTEJY/+Hl7rfNGEchUyBsZeP\n"
+                       "vW5KdIHKGaoLkXnuDtsQjq63nzkPEa9Ijl7dFYtUZ9FdQvsBAkEA/YDRefFlbkXJ\n"
+                       "CMWzD/x+s/YEbvBwW5qA9V5qaCpdRjHhdOuZ6VDUl627IktF3L4QfUPlCWJKUSeW\n"
+                       "670X9hxggQJBAPKiWZNgzIH7VpD+mbxneGW1wjGRx5MO6AntdxINhnC8jFJcw6Jl\n"
+                       "y+GthxoA07OuSjdU5oKfrUZTGBLzf9W3//cCQBS0ted48Sj9qDsAMu0GWa8HVDtf\n"
+                       "hj3lM81W5egWNcIrBthO+iZVhNfSx+s4LL+oAp7Ised/UMSqMCiXLGLc1IECQEH0\n"
+                       "nfLxEkaXIv4BJ5tOaS0EzogY/65bE/p24bI3mP8WUfKlosyHbXeoaxxHc0TZsPT/\n"
+                       "kDWb4EdImTe1l19qSBsCQBBq6j2aIC2MMKatQ4916tGxDdfJrUKpujtqypOeVCu4\n"
+                       "TrWeVb6zYtY5BC6Y+AzitAkHLg+gZ8df6B5z4cgATOs=\n"
+                       "-----END RSA PRIVATE KEY-----"s;
+    /* Generated from the private key using: `openssl rsa -in mykey.pem -pubout > mykey.pub` */
+    auto public_key = "-----BEGIN PUBLIC KEY-----\n"
+                      "MIGfMA0GCSqGSIb3DQEBAQUAA4GNADCBiQKBgQDwRIo9jwMkSxUPLbuLSnUpy4yo\n"
+                      "RkA8L1NGitnQjrol9ouz436k7Ip0jyEqAqLdmSAJYtoyqx78BbPP1ubscrKwjWVx\n"
+                      "f67FeZBWavhkhNhZoaXWYmhNPif5OlvI6WFasg4L6IDGOh/Gl6SrqUntYsYLqJmv\n"
+                      "fuJf175zdS3YCribdwIDAQAB\n"
+                      "-----END PUBLIC KEY-----"s;
 
-  auto msg = "A very important message to be signed"s;
-  auto signature = crypto::sign(msg, private_key);
+    auto msg = "A very important message to be signed"s;
+    auto signature = crypto::sign(msg, private_key);
 
-  REQUIRE(crypto::str_to_hex(signature) ==
-          "BE6EDF421CEFC1D0AFFB88487A2A23FA0B12DAABAE87D263F0F9A8F36758D30FE52EE475FFE"
-          "A11D00DED565406807968E8F14A8D3C1DC0E01E3D71B0AE7495232F425E1CA62F403069164A1"
-          "1225F18CA5472932BE34A82A78BC0A06CE7503AAD2EC7BA5A77A0A8A1D3F83623EE1D3F89EB4"
-          "F10B0B72642FB88CD08C055D64CFE");
+    REQUIRE(crypto::str_to_hex(signature) ==
+            "BE6EDF421CEFC1D0AFFB88487A2A23FA0B12DAABAE87D263F0F9A8F36758D30FE52EE475FFE"
+            "A11D00DED565406807968E8F14A8D3C1DC0E01E3D71B0AE7495232F425E1CA62F403069164A1"
+            "1225F18CA5472932BE34A82A78BC0A06CE7503AAD2EC7BA5A77A0A8A1D3F83623EE1D3F89EB4"
+            "F10B0B72642FB88CD08C055D64CFE");
 
-  REQUIRE(crypto::verify(msg, signature, public_key));
+    REQUIRE(crypto::verify(msg, signature, public_key));
+  }
+  SECTION("Auto generated") {
+    auto pkey = x509::generate_key();
+    auto pcert = x509::generate_x509(pkey);
+
+    auto private_key = x509::get_pkey_content(pkey);
+    auto public_cert = x509::get_cert_public_key(pcert);
+
+    auto msg = "A very important message to be signed"s;
+    auto signature = crypto::sign(msg, private_key);
+
+    REQUIRE(crypto::verify(msg, signature, public_cert));
+  }
 }

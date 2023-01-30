@@ -7,7 +7,7 @@
 
 namespace control {
 
-std::thread start_service(immer::box<state::ControlSession> control_sess, int timeout_millis = 1000);
+void run_control(immer::box<state::ControlSession> control_sess, int timeout_millis = 1000);
 
 bool init();
 

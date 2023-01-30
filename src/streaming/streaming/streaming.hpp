@@ -14,7 +14,7 @@ void init();
 /**
  * @return the Gstreamer version we are linked to
  */
-std::string version() {
+inline std::string version() {
   guint major, minor, micro, nano;
   gst_version(&major, &minor, &micro, &nano);
   return fmt::format("{}.{}.{}-{}", major, minor, micro, nano);

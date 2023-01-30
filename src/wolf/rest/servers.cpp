@@ -1,10 +1,20 @@
-#include <future>
+#include <boost/property_tree/json_parser.hpp>
+#include <immer/atom.hpp>
 #include <rest/endpoints.hpp>
 #include <rest/helpers.hpp>
 #include <rest/rest.hpp>
 #include <state/config.hpp>
 
 namespace HTTPServers {
+
+/**
+ * A bit of magic here, it'll load up the pin.html via Cmake (look for `make_includable`)
+ */
+constexpr char const *pin_html =
+#include "html/pin.include.html"
+    ;
+
+namespace bt = boost::property_tree;
 
 /**
  * @brief Start the generic server on the specified port
@@ -24,15 +34,36 @@ std::thread startServer(HttpServer *server, const std::shared_ptr<state::AppStat
     endpoints::pair<SimpleWeb::HTTP>(resp, req, state);
   };
 
+  auto pairing_atom = std::make_shared<immer::atom<immer::map<std::string, immer::box<state::PairSignal>>>>();
+
+  server->resource["^/pin/$"]["GET"] = [](auto resp, auto req) { resp->write(pin_html); };
+  server->resource["^/pin/$"]["POST"] = [pairing_atom](auto resp, auto req) {
+    try {
+      bt::ptree pt;
+
+      read_json(req->content, pt);
+
+      auto pin = pt.get<std::string>("pin");
+      auto secret = pt.get<std::string>("secret");
+      logs::log(logs::debug, "Received POST /pin/ pin:{} secret:{}", pin, secret);
+
+      auto pair_request = pairing_atom->load()->at(secret);
+      pair_request->user_pin->set_value(pin);
+      resp->write("OK");
+      pairing_atom->update([&secret](auto m) { return m.erase(secret); });
+    } catch (const std::exception &e) {
+      *resp << "HTTP/1.1 400 Bad Request\r\nContent-Length: " << strlen(e.what()) << "\r\n\r\n" << e.what();
+    }
+  };
+
   server->resource["^/unpair$"]["GET"] = [&state](auto resp, auto req) {
     SimpleWeb::CaseInsensitiveMultimap headers = req->parse_query_string();
     auto client_id = get_header(headers, "uniqueid");
     auto client_ip = req->remote_endpoint().address().to_string();
     auto cache_key = client_id.value() + "@" + client_ip;
 
-    state->pairing_cache.update([&cache_key](const immer::map<std::string, state::PairCache> &pairing_cache) {
-      return pairing_cache.erase(cache_key);
-    });
+    logs::log(logs::info, "Unpairing: {}", cache_key);
+    state::unpair(state->config, state->pairing_cache.load()->at(cache_key));
 
     XML xml;
     xml.put("root.<xmlattr>.status_code", 200);
@@ -40,9 +71,20 @@ std::thread startServer(HttpServer *server, const std::shared_ptr<state::AppStat
   };
 
   std::thread server_thread(
-      [](auto server) {
+      [pairing_atom, event_bus = state->event_bus](auto server) {
+        auto pair_handler = event_bus->register_handler<immer::box<state::PairSignal>>(
+            [pairing_atom](const immer::box<state::PairSignal> &pair_sig) {
+              pairing_atom->update([&pair_sig](auto m) {
+                auto secret = crypto::str_to_hex(crypto::random(8));
+                logs::log(logs::info, "Insert pin at http://localhost:47989/pin/#{}", secret);
+                return m.set(secret, pair_sig);
+              });
+            });
+
         // Start server
         server->start([](unsigned short port) { logs::log(logs::info, "HTTP server listening on port: {} ", port); });
+
+        pair_handler.unregister();
       },
       server);
 

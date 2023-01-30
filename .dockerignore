@@ -1,0 +1,7 @@
+# Start by removing everything and add just the things we need
+*
+
+!src
+!cmake
+!CMakeLists.txt
+!.clang-format

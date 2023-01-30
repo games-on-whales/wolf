@@ -64,7 +64,7 @@ static GstBuffer *create_rtp_fec_header(const gst_rtp_moonlight_pay_audio &rtpmo
   return buf;
 }
 
-GstBuffer *create_rtp_audio_buffer(const gst_rtp_moonlight_pay_audio &rtpmoonlightpay, GstBuffer *inbuf) {
+static GstBuffer *create_rtp_audio_buffer(const gst_rtp_moonlight_pay_audio &rtpmoonlightpay, GstBuffer *inbuf) {
   GstBuffer *payload = inbuf;
 
   if (rtpmoonlightpay.encrypt) {
@@ -89,10 +89,10 @@ GstBuffer *create_rtp_audio_buffer(const gst_rtp_moonlight_pay_audio &rtpmoonlig
 static GstBufferList *split_into_rtp(gst_rtp_moonlight_pay_audio *rtpmoonlightpay, GstBuffer *inbuf) {
   bool time_to_fec = (rtpmoonlightpay->cur_seq_number + 1) % AUDIO_DATA_SHARDS == 0;
 
-  GstBufferList *rtp_packets = gst_buffer_list_new_sized(time_to_fec ? 1 + AUDIO_FEC_SHARDS : 1);
+  GstBufferList *rtp_packets = gst_buffer_list_new();
 
   auto rtp_audio_buf = create_rtp_audio_buffer(*rtpmoonlightpay, inbuf);
-  gst_buffer_list_insert(rtp_packets, -1, rtp_audio_buf);
+  gst_buffer_list_add(rtp_packets, rtp_audio_buf);
 
   // save the payload locally
   gst_buffer_copy_into(rtp_audio_buf,
@@ -118,7 +118,7 @@ static GstBufferList *split_into_rtp(gst_rtp_moonlight_pay_audio *rtpmoonlightpa
       auto fec_buf = gst_buffer_append(fec_packet_header, fec_payload_buf);
       gst_copy_timestamps(inbuf, fec_buf);
 
-      gst_buffer_list_insert(rtp_packets, -1, fec_buf);
+      gst_buffer_list_add(rtp_packets, fec_buf);
     }
   }
   rtpmoonlightpay->cur_seq_number++;

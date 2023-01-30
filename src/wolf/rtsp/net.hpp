@@ -200,33 +200,27 @@ private:
  *
  * @return the thread instance
  */
-std::thread start_server(int port, immer::box<state::StreamSession> state) {
-  auto thread = std::thread(
-      [port](immer::box<state::StreamSession> state) {
-        try {
-          boost::asio::io_context io_context;
-          tcp_server server(io_context, port, state);
+void run_server(int port, immer::box<state::StreamSession> state) {
+  try {
+    boost::asio::io_context io_context;
+    tcp_server server(io_context, port, state);
 
-          logs::log(logs::info, "RTSP server started on port: {}", port);
+    logs::log(logs::info, "RTSP server started on port: {}", port);
 
-          auto stop_handler = state->event_bus->register_handler<immer::box<moonlight::control::TerminateEvent>>(
-              [sess_id = state->session_id, &io_context](immer::box<moonlight::control::TerminateEvent> term_ev) {
-                if (term_ev->session_id == sess_id) {
-                  logs::log(logs::info, "RTSP received termination, stopping.");
-                  io_context.stop();
-                }
-              });
+    auto stop_handler = state->event_bus->register_handler<immer::box<moonlight::control::TerminateEvent>>(
+        [sess_id = state->session_id, &io_context](immer::box<moonlight::control::TerminateEvent> term_ev) {
+          if (term_ev->session_id == sess_id) {
+            logs::log(logs::info, "RTSP received termination, stopping.");
+            io_context.stop();
+          }
+        });
 
-          // This will block here until the context is stopped
-          io_context.run();
-          stop_handler.unregister();
-        } catch (std::exception &e) {
-          logs::log(logs::error, "Unable to create RTSP server on port: {} ex: {}", port, e.what());
-        }
-      },
-      std::move(state));
-
-  return thread;
+    // This will block here until the context is stopped
+    io_context.run();
+    stop_handler.unregister();
+  } catch (std::exception &e) {
+    logs::log(logs::error, "Unable to create RTSP server on port: {} ex: {}", port, e.what());
+  }
 }
 
 } // namespace rtsp

@@ -2,6 +2,7 @@
 #include <cstring>
 #include <fstream>
 #include <openssl/pem.h>
+#include <openssl/rsa.h>
 #include <openssl/x509.h>
 #include <optional>
 #include <stdexcept>
@@ -15,13 +16,20 @@ EVP_PKEY *generate_key() {
     throw std::runtime_error("Unable to create EVP_PKEY structure.");
   }
 
-  auto big_num = BN_new();
-  auto rsa = RSA_new();
-  BN_set_word(big_num, RSA_F4);
-  RSA_generate_key_ex(rsa, 2048, big_num, nullptr);
-  if (!EVP_PKEY_assign_RSA(pkey, rsa)) {
+  EVP_PKEY_CTX *ctx = EVP_PKEY_CTX_new_id(EVP_PKEY_RSA, nullptr);
+  if (!ctx) {
     throw std::runtime_error("Unable to generate 2048-bit RSA key.");
   }
+  if (EVP_PKEY_keygen_init(ctx) <= 0) {
+    throw std::runtime_error("Unable to generate 2048-bit RSA key.");
+  }
+  if (EVP_PKEY_CTX_set_rsa_keygen_bits(ctx, 2048) <= 0) {
+    throw std::runtime_error("Unable to generate 2048-bit RSA key.");
+  }
+  if (EVP_PKEY_keygen(ctx, &pkey) <= 0) {
+    throw std::runtime_error("Unable to generate 2048-bit RSA key.");
+  }
+  EVP_PKEY_CTX_free(ctx);
 
   return pkey;
 }
@@ -159,8 +167,6 @@ std::string get_cert_pem(const X509 &x509) {
 
 std::string get_key_content(EVP_PKEY *pkey, bool private_key) {
   BIO *bio;
-  BUF_MEM *bufmem;
-  char *pem;
 
   bio = BIO_new(BIO_s_mem());
 
@@ -175,7 +181,9 @@ std::string get_key_content(EVP_PKEY *pkey, bool private_key) {
   BIO_read(bio, key, keylen);
   BIO_free_all(bio);
 
-  return {key, static_cast<size_t>(keylen)};
+  std::string result(key, static_cast<size_t>(keylen));
+  free(key);
+  return result;
 }
 
 std::string get_pkey_content(EVP_PKEY *pkey) {
@@ -234,12 +242,15 @@ std::optional<std::string> verification_error(X509 *paired_cert, X509 *untrusted
   X509_STORE_CTX_set_flags(_cert_ctx, X509_V_FLAG_PARTIAL_CHAIN);
 
   auto err = X509_verify_cert(_cert_ctx);
+  X509_STORE_free(x509_store);
 
   if (err == 1) {
+    X509_STORE_CTX_free(_cert_ctx);
     return std::nullopt;
   }
 
   int err_code = X509_STORE_CTX_get_error(_cert_ctx);
+  X509_STORE_CTX_free(_cert_ctx);
   return X509_verify_cert_error_string(err_code);
 }
 

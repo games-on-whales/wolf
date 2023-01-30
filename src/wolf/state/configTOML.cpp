@@ -49,136 +49,170 @@ void write(const toml::value &data, const std::string &dest) {
   out_file.close();
 }
 
-Config get_default() {
-  state::PairedClientList clients = {};
-  auto atom = new immer::atom<state::PairedClientList>(clients);
-  return Config{
-      .uuid = gen_uuid(),
-      .hostname = "wolf",
-      .support_hevc = false,
-      .paired_clients = *atom,
-      .apps = {{.base = {"Test ball", "1", true},
-                .h264_gst_pipeline = video::DEFAULT_SOURCE.data() + " ! "s + video::DEFAULT_PARAMS.data() + " ! "s +
-                                     video::DEFAULT_H264_ENCODER.data() + " ! " + video::DEFAULT_SINK.data(),
-                .hevc_gst_pipeline = video::DEFAULT_SOURCE.data() + " ! "s + video::DEFAULT_PARAMS.data() + " ! "s +
-                                     video::DEFAULT_H265_ENCODER.data() + " ! " + video::DEFAULT_SINK.data(),
-                .opus_gst_pipeline = audio::DEFAULT_SOURCE.data() + " ! "s + audio::DEFAULT_PARAMS.data() + " ! "s +
-                                     audio::DEFAULT_OPUS_ENCODER.data() + " ! " + audio::DEFAULT_SINK.data()}}};
-}
-
 Config load_or_default(const std::string &source) {
-  if (file_exist(source)) {
-    const auto cfg = toml::parse<toml::preserve_comments>(source);
+  if (!file_exist(source)) {
+    {
+      logs::log(logs::warning, "Unable to open config file: {}, creating one using defaults", source);
 
-    auto uuid = toml::find_or<std::string>(cfg, "uuid", gen_uuid());
-    auto hostname = toml::find_or<std::string>(cfg, "hostname", "Wolf");
+      auto video_test = video::DEFAULT_SOURCE;
+      auto x11_src = "ximagesrc show-pointer=true use-damage=false ! video/x-raw, framerate={fps}/1";
+      auto pulse_src = "pulsesrc";
 
-    GstVideoCfg default_gst_video_settings = toml::find<GstVideoCfg>(cfg, "gstreamer", "video");
-    GstAudioCfg default_gst_audio_settings = toml::find<GstAudioCfg>(cfg, "gstreamer", "audio");
+      auto default_app = toml::value{{"title", "Test ball (auto)"}, {"video", {{"source", video_test}}}};
+      auto x11_auto =
+          toml::value{{"title", "X11 (auto)"}, {"video", {{"source", x11_src}}}, {"audio", {{"source", pulse_src}}}};
 
-    auto cfg_clients = toml::find<std::vector<PairedClient>>(cfg, "paired_clients");
-    auto paired_clients =
-        cfg_clients                                                                                             //
-        | ranges::views::transform([](const PairedClient &client) { return immer::box<PairedClient>{client}; }) //
-        | ranges::to<immer::vector<immer::box<PairedClient>>>();
+      /* VAAPI specific encoder */
 
-    auto cfg_apps = toml::find<std::vector<toml::value>>(cfg, "apps");
-    auto apps =
-        cfg_apps                   //
-        | ranges::views::enumerate //
-        | ranges::views::transform([&default_gst_audio_settings,
-                                    &default_gst_video_settings](std::pair<int, const toml::value &> pair) {
-            auto [idx, item] = pair;
-            auto h264_gst_pipeline =
-                toml::find_or<std::string>(item, "video", "source", default_gst_video_settings.default_source) + " ! " +
-                toml::find_or<std::string>(item,
-                                           "video",
-                                           "video_params",
-                                           default_gst_video_settings.default_video_params) +
-                " ! " +
-                toml::find_or<std::string>(item,
-                                           "video",
-                                           "h264_encoder",
-                                           default_gst_video_settings.default_h264_encoder) +
-                " ! " + toml::find_or<std::string>(item, "video", "sink", default_gst_video_settings.default_sink);
+      auto h264_vaapi = "vaapih264enc max-bframes=0 refs=1 num-slices={slices_per_frame} bitrate={bitrate} ! "
+                        "h264parse ! "
+                        "video/x-h264, profile=main, stream-format=byte-stream";
+      auto hevc_vaapi = "vaapih265enc max-bframes=0 refs=1 num-slices={slices_per_frame} bitrate={bitrate} ! "
+                        "h265parse ! "
+                        "video/x-h265, profile=main, stream-format=byte-stream";
+      auto video_vaapi = "vaapipostproc ! "
+                         "video/x-raw(memory:VASurface), chroma-site={color_range}, width={width}, "
+                         "height={height}, format=NV12, colorimetry={color_space}";
 
-            auto hevc_gst_pipeline =
-                toml::find_or<std::string>(item, "video", "source", default_gst_video_settings.default_source) + " ! " +
-                toml::find_or<std::string>(item,
-                                           "video",
-                                           "video_params",
-                                           default_gst_video_settings.default_video_params) +
-                " ! " +
-                toml::find_or<std::string>(item,
-                                           "video",
-                                           "hevc_encoder",
-                                           default_gst_video_settings.default_hevc_encoder) +
-                " ! " + toml::find_or<std::string>(item, "video", "sink", default_gst_video_settings.default_sink);
+      auto test_vaapi = toml::value{{"title", "Test ball (VAAPI)"},
+                                    {"video",
+                                     {{"source", video_test},
+                                      {"h264_encoder", h264_vaapi},
+                                      {"hevc_encoder", hevc_vaapi},
+                                      {"video_params", video_vaapi}}}};
+      auto x11_vaapi = toml::value{{"title", "X11 (VAAPI)"},
+                                   {"video",
+                                    {{"source", x11_src},
+                                     {"h264_encoder", h264_vaapi},
+                                     {"hevc_encoder", hevc_vaapi},
+                                     {"video_params", video_vaapi}}},
+                                   {"audio", {{"source", pulse_src}}}};
 
-            auto opus_gst_pipeline =
-                toml::find_or<std::string>(item, "audio", "source", default_gst_audio_settings.default_source) + " ! " +
-                toml::find_or<std::string>(item,
-                                           "audio",
-                                           "video_params",
-                                           default_gst_audio_settings.default_audio_params) //
-                + " ! " +                                                                   //
-                toml::find_or<std::string>(item,
-                                           "audio",
-                                           "opus_encoder",
-                                           default_gst_audio_settings.default_opus_encoder) //
-                + " ! " +                                                                   //
-                toml::find_or<std::string>(item, "audio", "sink", default_gst_audio_settings.default_sink);
+      /* CUDA specific encoder */
+      // TODO: gop-size here should be -1 but it's not playing with Moonlight
+      auto h264_cuda = "nvh264enc preset=low-latency-hq zerolatency=true gop-size=0 bitrate={bitrate} aud=false ! "
+                       "h264parse ! "
+                       "video/x-h264, profile=main, stream-format=byte-stream";
+      auto hevc_cuda = "nvh265enc preset=low-latency-hq zerolatency=true bitrate={bitrate} aud=false ! "
+                       "h265parse ! "
+                       "video/x-h265, profile=main, stream-format=byte-stream";
+      auto video_cuda = " queue !"
+                        " cudaupload !"
+                        " cudascale ! "
+                        " cudaconvert ! "
+                        " video/x-raw(memory:CUDAMemory), width={width}, height={height}, "
+                        " chroma-site={color_range}, format=NV12, colorimetry={color_space}";
 
-            return state::App{.base = {.title = toml::find<std::string>(item, "title"),
-                                       .id = std::to_string(idx + 1), // Moonlight expects: 1,2,3 ...
-                                       .support_hdr = toml::find_or<bool>(item, "support_hdr", false)},
-                              .h264_gst_pipeline = h264_gst_pipeline,
-                              .hevc_gst_pipeline = hevc_gst_pipeline,
-                              .opus_gst_pipeline = opus_gst_pipeline};
-          })                                       //
-        | ranges::to<immer::vector<state::App>>(); //
+      auto test_cuda = toml::value{{"title", "Test ball (CUDA)"},
+                                   {"video",
+                                    {{"source", video_test},
+                                     {"h264_encoder", h264_cuda},
+                                     {"hevc_encoder", hevc_cuda},
+                                     {"video_params", video_cuda}}}};
+      auto x11_cuda = toml::value{{"title", "X11 (CUDA)"},
+                                  {"video",
+                                   {{"source", x11_src},
+                                    {"h264_encoder", h264_cuda},
+                                    {"hevc_encoder", hevc_cuda},
+                                    {"video_params", video_cuda}}},
+                                  {"audio", {{"source", pulse_src}}}};
 
-    auto clients_atom = new immer::atom<state::PairedClientList>(paired_clients);
-    return Config{.uuid = uuid,
-                  .hostname = hostname,
-                  .config_source = source,
-                  .support_hevc = toml::find_or<bool>(cfg, "support_hevc", false),
-                  .paired_clients = *clients_atom,
-                  .apps = apps};
+      const toml::value data = {{"uuid", gen_uuid()},
+                                {"hostname", "Wolf"},
+                                {"support_hevc", true},
+                                {"paired_clients", toml::array{}},
+                                {"apps", {default_app, x11_auto, test_vaapi, x11_vaapi, test_cuda, x11_cuda}},
+                                {"gstreamer", // key
+                                 {            // array
+                                  {
+                                      "video",
+                                      {{"default_source", video::DEFAULT_SOURCE},
+                                       {"default_video_params", video::DEFAULT_PARAMS},
+                                       {"default_h264_encoder", video::DEFAULT_H264_ENCODER},
+                                       {"default_hevc_encoder", video::DEFAULT_H265_ENCODER},
+                                       {"default_sink", video::DEFAULT_SINK}},
+                                  },
+                                  {
+                                      "audio",
+                                      {{"default_source", audio::DEFAULT_SOURCE},
+                                       {"default_audio_params", audio::DEFAULT_PARAMS},
+                                       {"default_opus_encoder", audio::DEFAULT_OPUS_ENCODER},
+                                       {"default_sink", audio::DEFAULT_SINK}},
+                                  }}}};
 
-  } else {
-    logs::log(logs::warning, "Unable to open config file: {}, creating one using defaults", source);
-
-    auto cfg = get_default();
-    cfg.config_source = source;
-
-    const toml::value data = {{"uuid", cfg.uuid},
-                              {"hostname", cfg.hostname},
-                              {"support_hevc", cfg.support_hevc},
-                              {"paired_clients", toml::array{}},
-                              {"apps", cfg.apps},
-                              {"gstreamer", // key
-                               {            // array
-                                {
-                                    "video",
-                                    {{"default_source", video::DEFAULT_SOURCE},
-                                     {"default_video_params", video::DEFAULT_PARAMS},
-                                     {"default_h264_encoder", video::DEFAULT_H264_ENCODER},
-                                     {"default_hevc_encoder", video::DEFAULT_H265_ENCODER},
-                                     {"default_sink", video::DEFAULT_SINK}},
-                                },
-                                {
-                                    "audio",
-                                    {{"default_source", audio::DEFAULT_SOURCE},
-                                     {"default_audio_params", audio::DEFAULT_PARAMS},
-                                     {"default_opus_encoder", audio::DEFAULT_OPUS_ENCODER},
-                                     {"default_sink", audio::DEFAULT_SINK}},
-                                }}}};
-
-    write(data, source); // write it back for future users
-
-    return cfg;
+      write(data, source); // write it back
+    }
   }
+  const auto cfg = toml::parse<toml::preserve_comments>(source);
+
+  auto uuid = toml::find_or<std::string>(cfg, "uuid", gen_uuid());
+  auto hostname = toml::find_or<std::string>(cfg, "hostname", "Wolf");
+
+  GstVideoCfg default_gst_video_settings = toml::find<GstVideoCfg>(cfg, "gstreamer", "video");
+  GstAudioCfg default_gst_audio_settings = toml::find<GstAudioCfg>(cfg, "gstreamer", "audio");
+
+  auto cfg_clients = toml::find<std::vector<PairedClient>>(cfg, "paired_clients");
+  auto paired_clients =
+      cfg_clients                                                                                             //
+      | ranges::views::transform([](const PairedClient &client) { return immer::box<PairedClient>{client}; }) //
+      | ranges::to<immer::vector<immer::box<PairedClient>>>();
+
+  auto cfg_apps = toml::find<std::vector<toml::value>>(cfg, "apps");
+  auto apps =
+      cfg_apps                   //
+      | ranges::views::enumerate //
+      |
+      ranges::views::transform([&default_gst_audio_settings,
+                                &default_gst_video_settings](std::pair<int, const toml::value &> pair) {
+        auto [idx, item] = pair;
+        auto h264_gst_pipeline =
+            toml::find_or<std::string>(item, "video", "source", default_gst_video_settings.default_source) + " ! " +
+            toml::find_or<std::string>(item, "video", "video_params", default_gst_video_settings.default_video_params) +
+            " ! " +
+            toml::find_or<std::string>(item, "video", "h264_encoder", default_gst_video_settings.default_h264_encoder) +
+            " ! " + toml::find_or<std::string>(item, "video", "sink", default_gst_video_settings.default_sink);
+
+        auto hevc_gst_pipeline =
+            toml::find_or<std::string>(item, "video", "source", default_gst_video_settings.default_source) + " ! " +
+            toml::find_or<std::string>(item, "video", "video_params", default_gst_video_settings.default_video_params) +
+            " ! " +
+            toml::find_or<std::string>(item, "video", "hevc_encoder", default_gst_video_settings.default_hevc_encoder) +
+            " ! " + toml::find_or<std::string>(item, "video", "sink", default_gst_video_settings.default_sink);
+
+        auto opus_gst_pipeline =
+            toml::find_or<std::string>(item, "audio", "source", default_gst_audio_settings.default_source) + " ! " +
+            toml::find_or<std::string>(item,
+                                       "audio",
+                                       "video_params",
+                                       default_gst_audio_settings.default_audio_params) //
+            + " ! " +                                                                   //
+            toml::find_or<std::string>(item,
+                                       "audio",
+                                       "opus_encoder",
+                                       default_gst_audio_settings.default_opus_encoder) //
+            + " ! " +                                                                   //
+            toml::find_or<std::string>(item, "audio", "sink", default_gst_audio_settings.default_sink);
+
+        auto run_cmd =
+            toml::find_or<std::string>(item, "run_cmd", "sh -c \"while :; do echo 'running...'; sleep 1; done\"");
+
+        return state::App{.base = {.title = toml::find<std::string>(item, "title"),
+                                   .id = std::to_string(idx + 1), // Moonlight expects: 1,2,3 ...
+                                   .support_hdr = toml::find_or<bool>(item, "support_hdr", false)},
+                          .h264_gst_pipeline = h264_gst_pipeline,
+                          .hevc_gst_pipeline = hevc_gst_pipeline,
+                          .opus_gst_pipeline = opus_gst_pipeline,
+                          .run_cmd = run_cmd};
+      })                                         //
+      | ranges::to<immer::vector<state::App>>(); //
+
+  auto clients_atom = new immer::atom<state::PairedClientList>(paired_clients);
+  return Config{.uuid = uuid,
+                .hostname = hostname,
+                .config_source = source,
+                .support_hevc = toml::find_or<bool>(cfg, "support_hevc", false),
+                .paired_clients = *clients_atom,
+                .apps = apps};
 }
 
 void pair(const Config &cfg, const PairedClient &client) {
@@ -260,6 +294,7 @@ template <> struct into<state::App> {
     return toml::value{
         {"title", f.base.title},
         {"support_hdr", f.base.support_hdr},
+        {"run_cmd", f.run_cmd}
         // TODO: [video] [audio] are they needed?
     };
   }
