@@ -207,8 +207,7 @@ void start_streaming_audio(immer::box<state::AudioSession> audio_session, unsign
                               fmt::arg("aes_iv", audio_session->aes_iv),
                               fmt::arg("encrypt", audio_session->encrypt_audio),
                               fmt::arg("client_port", client_port),
-                              fmt::arg("client_ip", audio_session->client_ip),
-                              fmt::arg("stream_type", "audio"));
+                              fmt::arg("client_ip", audio_session->client_ip));
 
   run_pipeline(pipeline, [audio_session](auto pipeline, auto loop) {
     auto terminate_handler = audio_session->event_bus->register_handler<immer::box<TerminateEvent>>(

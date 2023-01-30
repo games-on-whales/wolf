@@ -54,22 +54,25 @@ Config load_or_default(const std::string &source) {
     {
       logs::log(logs::warning, "Unable to open config file: {}, creating one using defaults", source);
 
-      auto video_test = "videotestsrc pattern=ball is-live=true";
-      auto x11_src = "ximagesrc show-pointer=true use-damage=false";
+      auto video_test = video::DEFAULT_SOURCE;
+      auto x11_src = "ximagesrc show-pointer=true use-damage=false ! video/x-raw, framerate={fps}/1";
       auto pulse_src = "pulsesrc";
 
-      auto default_app = toml::value{{"title", "Test ball"}, {"video", {{"source", video_test}}}};
-      auto x11_sw =
-          toml::value{{"title", "X11 (SW)"}, {"video", {{"source", x11_src}}}, {"audio", {{"source", pulse_src}}}};
+      auto default_app = toml::value{{"title", "Test ball (auto)"}, {"video", {{"source", video_test}}}};
+      auto x11_auto =
+          toml::value{{"title", "X11 (auto)"}, {"video", {{"source", x11_src}}}, {"audio", {{"source", pulse_src}}}};
+
+      /* VAAPI specific encoder */
 
       auto h264_vaapi = "vaapih264enc max-bframes=0 refs=1 num-slices={slices_per_frame} bitrate={bitrate} ! "
-                        "video/x-h264, profile=high, stream-format=byte-stream";
+                        "h264parse ! "
+                        "video/x-h264, profile=main, stream-format=byte-stream";
       auto hevc_vaapi = "vaapih265enc max-bframes=0 refs=1 num-slices={slices_per_frame} bitrate={bitrate} ! "
+                        "h265parse ! "
                         "video/x-h265, profile=main, stream-format=byte-stream";
-      auto video_vaapi = "videoscale ! videoconvert ! videorate ! "
-                         "video/x-raw, framerate={fps}/1, chroma-site={color_range}, width={width}, height={height}, "
-                         "format=NV12, colorimetry={color_space} ! "
-                         "vaapipostproc";
+      auto video_vaapi = "vaapipostproc ! "
+                         "video/x-raw(memory:VASurface), chroma-site={color_range}, width={width}, "
+                         "height={height}, format=NV12, colorimetry={color_space}";
 
       auto test_vaapi = toml::value{{"title", "Test ball (VAAPI)"},
                                     {"video",
@@ -85,11 +88,40 @@ Config load_or_default(const std::string &source) {
                                      {"video_params", video_vaapi}}},
                                    {"audio", {{"source", pulse_src}}}};
 
+      /* CUDA specific encoder */
+      // TODO: gop-size here should be -1 but it's not playing with Moonlight
+      auto h264_cuda = "nvh264enc preset=low-latency-hq zerolatency=true gop-size=0 bitrate={bitrate} aud=false ! "
+                       "h264parse ! "
+                       "video/x-h264, profile=main, stream-format=byte-stream";
+      auto hevc_cuda = "nvh265enc preset=low-latency-hq zerolatency=true bitrate={bitrate} aud=false ! "
+                       "h265parse ! "
+                       "video/x-h265, profile=main, stream-format=byte-stream";
+      auto video_cuda = " queue !"
+                        " cudaupload !"
+                        " cudascale ! "
+                        " cudaconvert ! "
+                        " video/x-raw(memory:CUDAMemory), width={width}, height={height}, "
+                        " chroma-site={color_range}, format=NV12, colorimetry={color_space}";
+
+      auto test_cuda = toml::value{{"title", "Test ball (CUDA)"},
+                                   {"video",
+                                    {{"source", video_test},
+                                     {"h264_encoder", h264_cuda},
+                                     {"hevc_encoder", hevc_cuda},
+                                     {"video_params", video_cuda}}}};
+      auto x11_cuda = toml::value{{"title", "X11 (CUDA)"},
+                                  {"video",
+                                   {{"source", x11_src},
+                                    {"h264_encoder", h264_cuda},
+                                    {"hevc_encoder", hevc_cuda},
+                                    {"video_params", video_cuda}}},
+                                  {"audio", {{"source", pulse_src}}}};
+
       const toml::value data = {{"uuid", gen_uuid()},
                                 {"hostname", "Wolf"},
                                 {"support_hevc", true},
                                 {"paired_clients", toml::array{}},
-                                {"apps", {default_app, x11_sw, test_vaapi, x11_vaapi}},
+                                {"apps", {default_app, x11_auto, test_vaapi, x11_vaapi, test_cuda, x11_cuda}},
                                 {"gstreamer", // key
                                  {            // array
                                   {

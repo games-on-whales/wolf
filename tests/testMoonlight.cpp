@@ -24,12 +24,36 @@ TEST_CASE("LocalState load TOML", "[LocalState]") {
     auto app = state.apps[0];
     REQUIRE_THAT(app.base.title, Equals("Ball"));
     REQUIRE_THAT(app.base.id, Equals("1"));
-    REQUIRE_THAT(app.h264_gst_pipeline,
-                 Equals(video::DEFAULT_SOURCE.data() + " ! "s + video::DEFAULT_PARAMS.data() + " ! "s +
-                        video::DEFAULT_H264_ENCODER.data() + " ! " + video::DEFAULT_SINK.data()));
-    REQUIRE_THAT(app.hevc_gst_pipeline,
-                 Equals(video::DEFAULT_SOURCE.data() + " ! "s + video::DEFAULT_PARAMS.data() + " ! "s +
-                        video::DEFAULT_H265_ENCODER.data() + " ! " + video::DEFAULT_SINK.data()));
+    REQUIRE_THAT(
+        app.h264_gst_pipeline,
+        Equals("videotestsrc pattern=ball is-live=true ! "
+               "videoscale ! "
+               "videoconvert ! "
+               "videorate ! "
+               "video/x-raw, width={width}, height={height}, framerate={fps}/1,format=I420, chroma-site={color_range}, "
+               "colorimetry={color_space} ! "
+               "x264enc pass=qual tune=zerolatency speed-preset=superfast b-adapt=false "
+               "bframes=0 ref=1 bitrate={bitrate} aud=false sliced-threads=true threads={slices_per_frame} "
+               "option-string=\"slices={slices_per_frame}:keyint=infinite:open-gop=0\" ! "
+               "video/x-h264, profile=high, stream-format=byte-stream ! "
+               "rtpmoonlightpay_video name=moonlight_pay payload_size={payload_size} fec_percentage={fec_percentage} "
+               "min_required_fec_packets={min_required_fec_packets} ! "
+               "udpsink host={client_ip} port={client_port}"));
+    REQUIRE_THAT(
+        app.hevc_gst_pipeline,
+        Equals("videotestsrc pattern=ball is-live=true ! "
+               "videoscale ! "
+               "videoconvert ! "
+               "videorate ! "
+               "video/x-raw, width={width}, height={height}, framerate={fps}/1,format=I420, chroma-site={color_range}, "
+               "colorimetry={color_space} ! "
+               "x265enc tune=zerolatency speed-preset=superfast bitrate={bitrate} "
+               "option-string=\"info=0:keyint=-1:qp=28:repeat-headers=1:slices={slices_per_frame}:frame-threads={"
+               "slices_per_frame}:aud=0:annexb=1:log-level=3:open-gop=0:bframes=0:intra-refresh=0\" ! "
+               "video/x-h265, profile=main, stream-format=byte-stream ! "
+               "rtpmoonlightpay_video name=moonlight_pay payload_size={payload_size} fec_percentage={fec_percentage} "
+               "min_required_fec_packets={min_required_fec_packets} ! "
+               "udpsink host={client_ip} port={client_port}"));
   }
 
   SECTION("Paired Clients") {
