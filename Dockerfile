@@ -1,5 +1,6 @@
+ARG GSTREAMER_VERSION=1.22.0
 ########################################################
-FROM ubuntu:22.04 AS wolf-builder
+FROM gameonwhales/gstreamer:$GSTREAMER_VERSION AS wolf-builder
 
 ENV DEBIAN_FRONTEND=noninteractive
 
@@ -8,12 +9,12 @@ RUN apt-get update -y && \
     ca-certificates \
     ninja-build \
     cmake \
+    pkg-config \
     ccache \
     git \
     clang \
     libboost-thread-dev libboost-filesystem-dev libboost-log-dev libboost-stacktrace-dev \
     libssl-dev \
-    libgstreamer1.0-dev \
     libevdev-dev \
     libunwind-dev \
     && rm -rf /var/lib/apt/lists/*
@@ -23,12 +24,9 @@ COPY cmake /wolf/cmake
 COPY CMakeLists.txt /wolf/CMakeLists.txt
 WORKDIR /wolf
 
-# TODO: link with gstreamer from gameonwhales/gstreamer:1.20.3
-
 ENV CCACHE_DIR=/cache/ccache
 ENV CMAKE_BUILD_DIR=/cache/cmake-build
 RUN --mount=type=cache,target=/cache/ccache \
-    --mount=type=cache,target=/cache/cmake-build \
     cmake -B$CMAKE_BUILD_DIR \
     -DCMAKE_BUILD_TYPE=Release \
     -DCMAKE_CXX_STANDARD=17 \
@@ -64,7 +62,7 @@ RUN --mount=type=cache,target=/usr/local/cargo/registry cargo build --release
 
 
 ########################################################
-FROM gameonwhales/gstreamer:1.20.3 AS runner
+FROM gameonwhales/gstreamer:$GSTREAMER_VERSION AS runner
 ENV DEBIAN_FRONTEND=noninteractive
 
 # Wolf runtime dependencies
