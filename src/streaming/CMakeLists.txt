@@ -38,17 +38,14 @@ set(EVENTBUS_BUILD_TESTS OFF)
 FetchContent_MakeAvailable(eventbus)
 
 find_package(PkgConfig)
-pkg_check_modules(GST REQUIRED gstreamer-1.0)
+pkg_check_modules(GSTREAMER REQUIRED gstreamer-1.0 gstreamer-base-1.0)
+pkg_check_modules(GLIB2 REQUIRED glib-2.0)
+pkg_check_modules(GOBJECT REQUIRED gobject-2.0)
 
-find_package(GLIB2)
-find_package(GObject)
-find_package(GStreamer)
 if (NOT (GSTREAMER_FOUND))
     message(FATAL_ERROR "Please Install Gstreamer Dev: CMake will Exit")
 endif ()
 
-# See here for a guide on how to statically link gstreamer:
-# https://www.collabora.com/news-and-blog/news-and-events/generate-mininal-gstreamer-build-tailored-to-your-needs.html
 target_link_libraries(streaming PUBLIC
         wolf::moonlight
         wolf::helpers
