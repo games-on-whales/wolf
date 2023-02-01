@@ -73,7 +73,7 @@ RUN apt-get update -y && \
     tini \
     libssl3 \
     libevdev2 \
-    va-driver-all \
+    va-driver-all intel-media-va-driver-non-free  \
     && rm -rf /var/lib/apt/lists/*
 
 # gst-plugin-wayland runtime dependencies
