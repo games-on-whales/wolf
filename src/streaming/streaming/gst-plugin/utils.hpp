@@ -1,9 +1,5 @@
 #pragma once
 
-extern "C" {
-#include <reedsolomon/rs.h>
-}
-
 #include <array>
 #include <boost/endian/conversion.hpp>
 #include <crypto/crypto.hpp>
@@ -11,6 +7,7 @@ extern "C" {
 #include <gst/gst.h>
 #include <streaming/data-structures.hpp>
 #include <vector>
+#include <moonlight/fec.hpp>
 
 static void gst_buffer_copy_into(GstBuffer *buf, unsigned char *destination) {
   auto size = gst_buffer_get_size(buf);

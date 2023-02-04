@@ -1,13 +1,11 @@
 #include "catch2/catch_all.hpp"
 using Catch::Matchers::Equals;
 
-extern "C" {
-#include <reedsolomon/rs.h>
-}
-
+#include <moonlight/fec.hpp>
 #include <streaming/gst-plugin/audio.hpp>
 #include <streaming/gst-plugin/video.hpp>
 #include <string>
+
 using namespace std::string_literals;
 
 /* UTILS */
@@ -41,7 +39,7 @@ class GStreamerTestsFixture {
 public:
   GStreamerTestsFixture() {
     gst_init(nullptr, nullptr);
-    reed_solomon_init();
+    moonlight::fec::init();
   }
 };
 
@@ -262,7 +260,6 @@ TEST_CASE_METHOD(GStreamerTestsFixture, "Create RTP VIDEO packets", "[GSTPlugin]
     SECTION("REED SOLOMON") {
       auto data_shards = 2;
       auto parity_shards = 2;
-      auto packet_size = rtpmoonlightpay->payload_size + (int)sizeof(state::VideoRTPHeaders);
       auto total_shards = data_shards + parity_shards;
 
       auto flatten_packets = gst_buffer_list_unfold(rtp_packets);
@@ -270,40 +267,40 @@ TEST_CASE_METHOD(GStreamerTestsFixture, "Create RTP VIDEO packets", "[GSTPlugin]
 
       unsigned char *packets_ptr[total_shards];
       for (int shard_idx = 0; shard_idx < total_shards; shard_idx++) {
-        packets_ptr[shard_idx] = &packets_content.front() + (shard_idx * packet_size);
+        packets_ptr[shard_idx] = &packets_content.front() + (shard_idx * rtp_packet_size);
       }
 
       SECTION("If no package is marked nothing should change") {
         std::vector<unsigned char> marks = {0, 0, 0, 0};
 
-        auto rs = reed_solomon_new(data_shards, parity_shards);
-        auto result = reed_solomon_reconstruct(rs, packets_ptr, &marks.front(), total_shards, packets_content.size());
+        auto rs = moonlight::fec::create(data_shards, parity_shards);
+        auto result = moonlight::fec::decode(rs.get(), packets_ptr, &marks.front(), total_shards, rtp_packet_size);
 
         REQUIRE(result == 0);
         REQUIRE_THAT(packets_content, Equals(gst_buffer_copy_content(flatten_packets)));
       }
 
       SECTION("Missing one packet should still lead to successfully reconstruct") {
-        auto missing_pkt = std::vector<unsigned char>(packet_size);
+        auto missing_pkt = std::vector<unsigned char>(rtp_packet_size);
         packets_ptr[0] = &missing_pkt[0];
         std::vector<unsigned char> marks = {1, 0, 0, 0};
 
-        auto rs = reed_solomon_new(data_shards, parity_shards);
-        auto result = reed_solomon_reconstruct(rs, packets_ptr, &marks.front(), total_shards, packet_size);
+        auto rs = moonlight::fec::create(data_shards, parity_shards);
+        auto result = moonlight::fec::decode(rs.get(), packets_ptr, &marks.front(), total_shards, rtp_packet_size);
 
         REQUIRE(result == 0);
 
         // Here the packet headers will be wrongly reconstructed because we are manually
         // modifying the parity packets after creation
         // We can only check the packet payload here which should be correctly reconstructed
+        auto pay_size = rtpmoonlightpay->payload_size - MAX_RTP_HEADER_SIZE;
         auto missing_pkt_payload = std::vector<unsigned char>(
             missing_pkt.begin() + sizeof(state::VideoRTPHeaders),
-            missing_pkt.begin() + sizeof(state::VideoRTPHeaders) + rtpmoonlightpay->payload_size);
-        auto first_packet_pay_before_fec = gst_buffer_copy_content(gst_buffer_list_get(rtp_packets, 0),
-                                                                   sizeof(state::VideoRTPHeaders),
-                                                                   rtpmoonlightpay->payload_size);
-        // TODO: fix this
-        // REQUIRE_THAT(missing_pkt_payload, Equals(first_packet_pay_before_fec));
+            missing_pkt.begin() + sizeof(state::VideoRTPHeaders) + pay_size);
+        auto first_packet_pay_before_fec =
+            gst_buffer_copy_content(gst_buffer_list_get(rtp_packets, 0), sizeof(state::VideoRTPHeaders), pay_size);
+
+        REQUIRE_THAT(missing_pkt_payload, Equals(first_packet_pay_before_fec));
       }
     }
   }
@@ -333,10 +330,10 @@ TEST_CASE_METHOD(GStreamerTestsFixture, "Audio RTP packet creation", "[GSTPlugin
 
   REQUIRE(gst_buffer_list_length(rtp_packets) == 1);
   REQUIRE(rtpmoonlightpay->cur_seq_number == 1);
+  auto first_pkt = gst_buffer_list_get(rtp_packets, 0);
 
   SECTION("First packet") {
-    auto buf = gst_buffer_list_get(rtp_packets, 0);
-    auto rtp_packet = get_rtp_audio_from_buf(buf);
+    auto rtp_packet = get_rtp_audio_from_buf(first_pkt);
 
     REQUIRE(rtp_packet->rtp.ssrc == 0);
     REQUIRE(rtp_packet->rtp.packetType == 97);
@@ -344,7 +341,7 @@ TEST_CASE_METHOD(GStreamerTestsFixture, "Audio RTP packet creation", "[GSTPlugin
     REQUIRE(rtp_packet->rtp.sequenceNumber == 0);
     REQUIRE(rtp_packet->rtp.timestamp == 0);
 
-    auto rtp_payload = gst_buffer_copy_content(buf, sizeof(state::AudioRTPHeaders));
+    auto rtp_payload = gst_buffer_copy_content(first_pkt, sizeof(state::AudioRTPHeaders));
 
     auto decrypted = crypto::aes_decrypt_cbc(std::string(rtp_payload.begin(), rtp_payload.end()),
                                              rtpmoonlightpay->aes_key,
@@ -356,10 +353,10 @@ TEST_CASE_METHOD(GStreamerTestsFixture, "Audio RTP packet creation", "[GSTPlugin
   rtp_packets = audio::split_into_rtp(rtpmoonlightpay, payload);
   REQUIRE(gst_buffer_list_length(rtp_packets) == 1);
   REQUIRE(rtpmoonlightpay->cur_seq_number == 2);
+  auto second_pkt = gst_buffer_list_get(rtp_packets, 0);
 
   SECTION("Second packet") {
-    auto buf = gst_buffer_list_get(rtp_packets, 0);
-    auto rtp_packet = get_rtp_audio_from_buf(buf);
+    auto rtp_packet = get_rtp_audio_from_buf(second_pkt);
 
     REQUIRE(rtp_packet->rtp.ssrc == 0);
     REQUIRE(rtp_packet->rtp.packetType == 97);
@@ -367,7 +364,7 @@ TEST_CASE_METHOD(GStreamerTestsFixture, "Audio RTP packet creation", "[GSTPlugin
     REQUIRE(boost::endian::big_to_native(rtp_packet->rtp.sequenceNumber) == 1);
     REQUIRE(boost::endian::big_to_native(rtp_packet->rtp.timestamp) == 5);
 
-    auto rtp_payload = gst_buffer_copy_content(buf, sizeof(state::AudioRTPHeaders));
+    auto rtp_payload = gst_buffer_copy_content(second_pkt, sizeof(state::AudioRTPHeaders));
 
     auto decrypted = crypto::aes_decrypt_cbc(std::string(rtp_payload.begin(), rtp_payload.end()),
                                              rtpmoonlightpay->aes_key,
@@ -379,44 +376,93 @@ TEST_CASE_METHOD(GStreamerTestsFixture, "Audio RTP packet creation", "[GSTPlugin
   rtp_packets = audio::split_into_rtp(rtpmoonlightpay, payload);
   REQUIRE(gst_buffer_list_length(rtp_packets) == 1);
   REQUIRE(rtpmoonlightpay->cur_seq_number == 3);
+  auto third_pkt = gst_buffer_list_get(rtp_packets, 0);
 
+  SECTION("Third packet") {
+    auto rtp_packet = get_rtp_audio_from_buf(third_pkt);
+
+    REQUIRE(rtp_packet->rtp.ssrc == 0);
+    REQUIRE(rtp_packet->rtp.packetType == 97);
+    REQUIRE(rtp_packet->rtp.header == 0x80);
+    REQUIRE(boost::endian::big_to_native(rtp_packet->rtp.sequenceNumber) == 2);
+    REQUIRE(boost::endian::big_to_native(rtp_packet->rtp.timestamp) == 10);
+
+    auto rtp_payload = gst_buffer_copy_content(third_pkt, sizeof(state::AudioRTPHeaders));
+
+    auto decrypted = crypto::aes_decrypt_cbc(std::string(rtp_payload.begin(), rtp_payload.end()),
+                                             rtpmoonlightpay->aes_key,
+                                             derive_iv(rtpmoonlightpay->aes_iv, rtpmoonlightpay->cur_seq_number - 1),
+                                             true);
+    REQUIRE_THAT(decrypted, Equals(payload_str));
+  }
+
+  /* When the 4th packet arrives, we'll also FEC encode all the previous and return
+   * the data packet + 2 more FEC packets
+   */
   rtp_packets = audio::split_into_rtp(rtpmoonlightpay, payload);
-  REQUIRE(gst_buffer_list_length(rtp_packets) == 3);
+  REQUIRE(gst_buffer_list_length(rtp_packets) == 3); // One data packet + 2 FEC packets
   REQUIRE(rtpmoonlightpay->cur_seq_number == 4);
+
+  SECTION("FEC") {
+    SECTION("First FEC packet") {
+      auto fec_packet = (state::AudioFECPacket *)copy_buffer_data((gst_buffer_list_get(rtp_packets, 1))).first;
+
+      REQUIRE(fec_packet->rtp.ssrc == 0);
+      REQUIRE(fec_packet->rtp.packetType == 127);
+      REQUIRE(fec_packet->rtp.header == 0x80);
+      REQUIRE(fec_packet->rtp.timestamp == 0);
+
+      REQUIRE(boost::endian::big_to_native(fec_packet->rtp.sequenceNumber) == 3);
+      REQUIRE(fec_packet->fec_header.payloadType == 97);
+      REQUIRE(fec_packet->fec_header.ssrc == 0);
+      REQUIRE(fec_packet->fec_header.fecShardIndex == 0);
+    }
+
+    SECTION("Second FEC packet") {
+      auto fec_packet = (state::AudioFECPacket *)copy_buffer_data((gst_buffer_list_get(rtp_packets, 2))).first;
+
+      REQUIRE(fec_packet->rtp.ssrc == 0);
+      REQUIRE(fec_packet->rtp.packetType == 127);
+      REQUIRE(fec_packet->rtp.header == 0x80);
+      REQUIRE(fec_packet->rtp.timestamp == 0);
+
+      REQUIRE(boost::endian::big_to_native(fec_packet->rtp.sequenceNumber) == 4);
+      REQUIRE(fec_packet->fec_header.payloadType == 97);
+      REQUIRE(fec_packet->fec_header.ssrc == 0);
+      REQUIRE(fec_packet->fec_header.fecShardIndex == 1);
+    }
+  }
 
   SECTION("REED SOLOMON") {
     auto packet_size = gst_buffer_get_size(gst_buffer_list_get(rtp_packets, 0));
-    auto total_shards = AUDIO_TOTAL_SHARDS;
 
     SECTION("If no package is marked nothing should change") {
       std::vector<unsigned char> marks = {0, 0, 0, 0, 0, 0};
 
-      auto result = reed_solomon_reconstruct(rtpmoonlightpay->rs,
-                                             rtpmoonlightpay->packets_buffer.data(),
-                                             &marks.front(),
-                                             total_shards,
-                                             packet_size);
+      auto result = moonlight::fec::decode(rtpmoonlightpay->rs.get(),
+                                           rtpmoonlightpay->packets_buffer,
+                                           &marks.front(),
+                                           AUDIO_TOTAL_SHARDS,
+                                           packet_size);
 
       REQUIRE(result == 0);
     }
 
-    SECTION("Missing one packet should still lead to successfully reconstruct") {
-      auto original_pkt = std::vector<unsigned char>(rtpmoonlightpay->packets_buffer[0],
-                                                     rtpmoonlightpay->packets_buffer[0] + packet_size);
+    SECTION("Missing one packet should still lead to successful reconstruct") {
+      auto original_pkt = gst_buffer_copy_content(first_pkt, sizeof(state::AudioRTPHeaders));
       auto missing_pkt = std::vector<unsigned char>(packet_size);
       rtpmoonlightpay->packets_buffer[0] = &missing_pkt[0];
       std::vector<unsigned char> marks = {1, 0, 0, 0, 0, 0};
 
-      auto result = reed_solomon_reconstruct(rtpmoonlightpay->rs,
-                                             rtpmoonlightpay->packets_buffer.data(),
-                                             &marks.front(),
-                                             total_shards,
-                                             packet_size);
+      auto result = moonlight::fec::decode(rtpmoonlightpay->rs.get(),
+                                           rtpmoonlightpay->packets_buffer,
+                                           &marks.front(),
+                                           AUDIO_TOTAL_SHARDS,
+                                           packet_size);
 
       REQUIRE(result == 0);
-      // TODO: this fails on clang when building as release
-      // see: https://github.com/games-on-whales/wolf/actions/runs/3553743568/jobs/5969436029
-      // REQUIRE_THAT(missing_pkt, Equals(original_pkt));
+      REQUIRE_THAT(std::string(missing_pkt.begin() + sizeof(state::AudioRTPHeaders), missing_pkt.end()),
+                   Equals(std::string(original_pkt.begin(), original_pkt.end())));
     }
 
     g_object_unref(rtpmoonlightpay);

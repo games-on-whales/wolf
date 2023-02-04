@@ -16,10 +16,6 @@
 #include "config.h"
 #endif
 
-extern "C" {
-#include <reedsolomon/rs.h>
-}
-
 #include <crypto/crypto.hpp>
 #include <gst/base/gstbasetransform.h>
 #include <gst/gst.h>
@@ -146,16 +142,14 @@ static void gst_rtp_moonlight_pay_audio_init(gst_rtp_moonlight_pay_audio *rtpmoo
   rtpmoonlightpay_audio->encrypt = true;
 
   rtpmoonlightpay_audio->packet_duration = 5;
-  rtpmoonlightpay_audio->packets_buffer = {};
+  rtpmoonlightpay_audio->packets_buffer = new unsigned char *[AUDIO_TOTAL_SHARDS];
   for (int i = 0; i < AUDIO_TOTAL_SHARDS; i++) {
-    auto new_array = std::array<unsigned char, AUDIO_MAX_BLOCK_SIZE>{0};
-    rtpmoonlightpay_audio->packets_buffer[i] = new_array.data();
+    rtpmoonlightpay_audio->packets_buffer[i] = new unsigned char[AUDIO_MAX_BLOCK_SIZE];
   }
 
-  auto rs = reed_solomon_new(AUDIO_DATA_SHARDS, AUDIO_FEC_SHARDS);
-  memcpy(&rs->m[16], AUDIO_FEC_PARITY, sizeof(AUDIO_FEC_PARITY));
-  memcpy(rs->parity, AUDIO_FEC_PARITY, sizeof(AUDIO_FEC_PARITY));
-  rtpmoonlightpay_audio->rs = rs;
+  auto rs = moonlight::fec::create(AUDIO_DATA_SHARDS, AUDIO_FEC_SHARDS);
+  memcpy(rs->p, AUDIO_FEC_PARITY, sizeof(AUDIO_FEC_PARITY));
+  rtpmoonlightpay_audio->rs = std::move(rs);
 }
 
 void gst_rtp_moonlight_pay_audio_set_property(GObject *object,
@@ -213,8 +207,6 @@ void gst_rtp_moonlight_pay_audio_dispose(GObject *object) {
   gst_rtp_moonlight_pay_audio *rtpmoonlightpay_audio = gst_rtp_moonlight_pay_audio(object);
 
   GST_DEBUG_OBJECT(rtpmoonlightpay_audio, "dispose");
-
-  reed_solomon_release(rtpmoonlightpay_audio->rs);
 
   G_OBJECT_CLASS(gst_rtp_moonlight_pay_audio_parent_class)->dispose(object);
 }

@@ -5,7 +5,6 @@ project(moonlight)
 # Optionally glob, but only for CMake 3.12 or later:
 file(GLOB HEADER_LIST CONFIGURE_DEPENDS
         moonlight/*.hpp
-        reedsolomon/rs.h
         rtsp/parser.hpp)
 
 
@@ -16,7 +15,6 @@ add_library(wolf::moonlight ALIAS moonlight)
 target_sources(moonlight
         PRIVATE
         moonlight.cpp
-        reedsolomon/rs.c
 
         PUBLIC
         ${HEADER_LIST})
@@ -35,6 +33,29 @@ set(FPHSA_NAME_MISMATCHED on) # see: https://github.com/arximboldi/immer/issues/
 FetchContent_MakeAvailable(immer)
 target_link_libraries(moonlight PUBLIC immer)
 unset(FPHSA_NAME_MISMATCHED)
+
+# FEC implementation
+FetchContent_Declare(
+        nanors
+        GIT_REPOSITORY https://github.com/sleepybishop/nanors.git
+        GIT_TAG 395e5ada44dd8d5974eaf6bb6b17f23406e3ca72)
+FetchContent_GetProperties(nanors)
+if (NOT nanors_POPULATED)
+    FetchContent_Populate(nanors)
+
+    add_library(nanors STATIC ${nanors_SOURCE_DIR}/rs.c)
+    add_library(nanors::nanors ALIAS nanors)
+    target_include_directories(nanors PUBLIC ${nanors_SOURCE_DIR} ${nanors_SOURCE_DIR}/deps/obl/)
+
+    target_sources(nanors
+            PRIVATE ${nanors_SOURCE_DIR}/rs.c
+            PUBLIC ${nanors_SOURCE_DIR}/rs.h)
+
+    set_source_files_properties(${nanors_SOURCE_DIR}/rs.c
+            PROPERTIES COMPILE_FLAGS "-include deps/obl/autoshim.h -ftree-vectorize")
+
+    target_link_libraries(moonlight PUBLIC nanors::nanors)
+endif ()
 
 # Additional algorithms for dealing with containers
 FetchContent_Declare(
@@ -65,9 +86,7 @@ set_target_properties(moonlight PROPERTIES PUBLIC_HEADER .)
 set_target_properties(moonlight PROPERTIES OUTPUT_NAME "moonlight")
 
 # moonlight-common-c dependencies
-target_include_directories(moonlight PUBLIC
-        ./reedsolomon
-        ./rtsp)
+target_include_directories(moonlight PUBLIC ./rtsp)
 
 find_package(Boost REQUIRED)
 

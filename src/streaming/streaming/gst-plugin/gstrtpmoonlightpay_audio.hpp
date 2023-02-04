@@ -2,6 +2,7 @@
 
 #include <array>
 #include <gst/base/gstbasetransform.h>
+#include <moonlight/fec.hpp>
 #include <vector>
 
 constexpr int AUDIO_DATA_SHARDS = 4;
@@ -40,8 +41,8 @@ struct _gst_rtp_moonlight_pay_audio {
 
   int packet_duration;
 
-  std::array<unsigned char *, AUDIO_TOTAL_SHARDS> packets_buffer;
-  _reed_solomon *rs;
+  unsigned char **packets_buffer;
+  moonlight::fec::rs_ptr rs;
 };
 
 struct _gst_rtp_moonlight_pay_audioClass {

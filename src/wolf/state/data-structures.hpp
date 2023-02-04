@@ -72,7 +72,7 @@ constexpr std::string_view DEFAULT_SINK =
     "rtpmoonlightpay_video name=moonlight_pay payload_size={payload_size} fec_percentage={fec_percentage} "
     "min_required_fec_packets={min_required_fec_packets}"
     " ! "
-    "udpsink host={client_ip} port={client_port}";
+    "udpsink host={client_ip} port={client_port} sync=false";
 } // namespace video
 
 namespace audio {
@@ -85,7 +85,7 @@ constexpr std::string_view DEFAULT_SINK = "rtpmoonlightpay_audio name=moonlight_
                                           "packet_duration={packet_duration} "
                                           "encrypt={encrypt} aes_key=\"{aes_key}\" aes_iv=\"{aes_iv}\" "
                                           " ! "
-                                          "udpsink host={client_ip} port={client_port}";
+                                          "udpsink host={client_ip} port={client_port} sync=false";
 } // namespace audio
 
 } // namespace gstreamer

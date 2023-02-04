@@ -170,13 +170,14 @@ static void generate_fec_packets(const gst_rtp_moonlight_pay_video &rtpmoonlight
   gst_buffer_map(rtp_payload, &info, GST_MAP_WRITE);
 
   // Reed Solomon encode the full stream of bytes
-  auto rs = reed_solomon_new(blocks.data_shards, blocks.parity_shards);
+  auto rs = moonlight::fec::create(blocks.data_shards, blocks.parity_shards);
   unsigned char *ptr[nr_shards];
   for (int shard_idx = 0; shard_idx < nr_shards; shard_idx++) {
     ptr[shard_idx] = info.data + (shard_idx * blocks.block_size);
   }
-  reed_solomon_encode(rs, ptr, nr_shards, blocks.block_size);
-  reed_solomon_release(rs);
+  if(moonlight::fec::encode(rs.get(), ptr, nr_shards, blocks.block_size) != 0){
+    logs::log(logs::warning, "Error during video FEC encoding");
+  }
 
   // update FEC info of the already created RTP packets
   for (int shard_idx = 0; shard_idx < blocks.data_shards; shard_idx++) {

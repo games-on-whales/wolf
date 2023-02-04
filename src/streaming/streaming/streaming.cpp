@@ -1,7 +1,3 @@
-extern "C" {
-#include <reedsolomon/rs.h>
-}
-
 #include <functional>
 #include <helpers/logger.hpp>
 #include <immer/array.hpp>
@@ -34,7 +30,7 @@ void init() {
   GstPlugin *audio_plugin = gst_plugin_load_by_name("rtpmoonlightpay_audio");
   gst_element_register(audio_plugin, "rtpmoonlightpay_audio", GST_RANK_PRIMARY, gst_TYPE_rtp_moonlight_pay_audio);
 
-  reed_solomon_init();
+  moonlight::fec::init();
 }
 
 static gboolean msg_handler(GstBus *bus, GstMessage *message, gpointer data) {

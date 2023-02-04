@@ -16,10 +16,6 @@
 #include "config.h"
 #endif
 
-extern "C" {
-#include <reedsolomon/rs.h>
-}
-
 #include <gst/base/gstbasetransform.h>
 #include <gst/gst.h>
 #include <streaming/gst-plugin/gstrtpmoonlightpay_video.hpp>

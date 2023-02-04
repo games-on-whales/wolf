@@ -29,7 +29,8 @@ Here we define core Moonlight functions in order to create the foundation for a 
 It currently hosts the followings:
 
 * HTTP/S protocol interface: https://github.com/games-on-whales/wolf/blob/HEAD/src/moonlight/moonlight/protocol.hpp[protocol.hpp]
-* Reed Solomon FEC implementation https://github.com/games-on-whales/wolf/blob/HEAD/src/moonlight/reedsolomon/rs.h[rs.h]
+* Reed Solomon FEC header https://github.com/games-on-whales/wolf/blob/HEAD/src/moonlight/moonlight/fec.hpp[fec.hpp]
+** Based on top of https://github.com/sleepybishop/nanors[sleepybishop/nanors]
 * RTSP message parser https://github.com/games-on-whales/wolf/blob/HEAD/src/moonlight/rtsp/parser.hpp[parser.hpp]
 ** Built using https://github.com/yhirose/cpp-peglib[yhirose/cpp-peglib] by writing a formal PEG (Parsing Expression Grammars) definition for all messages
 

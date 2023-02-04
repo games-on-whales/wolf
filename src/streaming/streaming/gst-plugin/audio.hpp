@@ -1,16 +1,19 @@
 #pragma once
 
+#include <helpers/logger.hpp>
 #include <streaming/gst-plugin/gstrtpmoonlightpay_audio.hpp>
 #include <streaming/gst-plugin/utils.hpp>
 
 namespace audio {
 
+constexpr auto RTP_HEADER_SIZE = sizeof(state::AudioRTPHeaders);
+constexpr auto FEC_HEADER_SIZE = sizeof(state::AudioFECPacket);
+
 /**
  * Creates an RTP header and returns a GstBuffer to it
  */
 static GstBuffer *create_rtp_header(const gst_rtp_moonlight_pay_audio &rtpmoonlightpay) {
-  constexpr auto rtp_header_size = sizeof(state::AudioRTPHeaders);
-  GstBuffer *buf = gst_buffer_new_and_fill(rtp_header_size, 0x00);
+  GstBuffer *buf = gst_buffer_new_and_fill(RTP_HEADER_SIZE, 0x00);
 
   /* get WRITE access to the memory */
   GstMapInfo info;
@@ -33,8 +36,7 @@ static GstBuffer *create_rtp_header(const gst_rtp_moonlight_pay_audio &rtpmoonli
 }
 
 static GstBuffer *create_rtp_fec_header(const gst_rtp_moonlight_pay_audio &rtpmoonlightpay, int fec_packet_idx) {
-  constexpr auto rtp_header_size = sizeof(state::AudioFECPacket);
-  GstBuffer *buf = gst_buffer_new_and_fill(rtp_header_size, 0x00);
+  GstBuffer *buf = gst_buffer_new_and_fill(FEC_HEADER_SIZE, 0x00);
 
   /* get WRITE access to the memory */
   GstMapInfo info;
@@ -100,25 +102,27 @@ static GstBufferList *split_into_rtp(gst_rtp_moonlight_pay_audio *rtpmoonlightpa
 
   // Time to generate FEC based on the previous payloads
   if (time_to_fec) {
-    auto encoded_block_size = (int)gst_buffer_get_size(rtp_audio_buf);
-    reed_solomon_encode(rtpmoonlightpay->rs,
-                        rtpmoonlightpay->packets_buffer.data(),
-                        AUDIO_TOTAL_SHARDS,
-                        encoded_block_size);
+    /* Here the assumption is that all audio blocks will have the exact same size */
+    auto rtp_block_size = (int)gst_buffer_get_size(rtp_audio_buf);
+    auto payload_size = rtp_block_size - RTP_HEADER_SIZE;
+    if (moonlight::fec::encode(rtpmoonlightpay->rs.get(),
+                               rtpmoonlightpay->packets_buffer,
+                               AUDIO_TOTAL_SHARDS,
+                               rtp_block_size) != 0) {
+      logs::log(logs::warning, "Error during audio FEC encoding");
+    }
 
     for (auto fec_packet_idx = 0; fec_packet_idx < AUDIO_FEC_SHARDS; fec_packet_idx++) {
-      auto fec_packet_header = create_rtp_fec_header(*rtpmoonlightpay, fec_packet_idx);
+      auto fec_packet = create_rtp_fec_header(*rtpmoonlightpay, fec_packet_idx);
 
-      GstBuffer *fec_payload_buf = gst_buffer_new_allocate(nullptr, encoded_block_size, nullptr);
+      GstBuffer *fec_payload_buf = gst_buffer_new_allocate(nullptr, payload_size, nullptr);
       gst_buffer_fill(fec_payload_buf,
-                      sizeof(state::AudioRTPHeaders),
-                      rtpmoonlightpay->packets_buffer[AUDIO_DATA_SHARDS + fec_packet_idx],
-                      encoded_block_size - sizeof(state::AudioRTPHeaders));
+                      0,
+                      rtpmoonlightpay->packets_buffer[AUDIO_DATA_SHARDS + fec_packet_idx] + RTP_HEADER_SIZE,
+                      payload_size);
 
-      auto fec_buf = gst_buffer_append(fec_packet_header, fec_payload_buf);
-      gst_copy_timestamps(inbuf, fec_buf);
-
-      gst_buffer_list_add(rtp_packets, fec_buf);
+      fec_packet = gst_buffer_append(fec_packet, fec_payload_buf);
+      gst_buffer_list_add(rtp_packets, fec_packet);
     }
   }
   rtpmoonlightpay->cur_seq_number++;

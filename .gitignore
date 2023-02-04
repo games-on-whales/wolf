@@ -15,3 +15,4 @@ build
 cmake-build-*
 DartConfiguration.tcl
 .DS_Store
+.run/
