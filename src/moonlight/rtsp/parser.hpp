@@ -19,7 +19,7 @@ enum TARGET_TYPE {
 
 struct URI {
   std::string protocol;
-  std::string ip;
+  std::string ip; // Do not rely on this, can be missing (AndroidTV)
   unsigned short port{};
 };
 
@@ -83,7 +83,7 @@ std::optional<RTSP_PACKET> parse(std::string_view msg) {
     STREAMTYPE <- < [a-z]i+  >
     STREAMPARAMS <- < [0-9/]+ >
 
-    URI <- PROTOCOL '://' IP ':' PORT
+    URI <- PROTOCOL '://' IP? ':' PORT
     PROTOCOL <- < [a-z]i+ >
     IP <-  < [0-9.]+ >
     PORT <- < [0-9]+ >

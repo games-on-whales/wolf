@@ -80,6 +80,24 @@ TEST_CASE("Custom Parser", "[RTSP]") {
       REQUIRE(rtsp::to_string(parsed) == rtsp::to_string(rtsp::parse(rtsp::to_string(parsed)).value()));
     }
 
+    SECTION("Missing IP (AndroidTV)") {
+      auto payload = "OPTIONS rtsp://:48010 RTSP/1.0\n"
+                     "CSeq: 1\n"
+                     "X-GS-ClientVersion: 14\n"
+                     "Host: "s;
+      auto parsed = rtsp::parse(payload).value();
+      REQUIRE(parsed.type == REQUEST);
+      REQUIRE(parsed.request.type == TARGET_URI);
+      REQUIRE_THAT(parsed.request.cmd, Equals("OPTIONS"));
+      REQUIRE_THAT(parsed.request.uri.ip, Equals(""));
+      REQUIRE(parsed.request.uri.port == 48010);
+      REQUIRE(parsed.seq_number == 1);
+
+      REQUIRE(parsed.options.size() == 1); // We don't want partial unfilled options like Host
+      REQUIRE_THAT(parsed.options["X-GS-ClientVersion"], Equals("14"));
+      REQUIRE(parsed.payloads.empty());
+    }
+
     SECTION("Stream target") {
       auto payload = "MissingNo streamid=audio/1/2/3 RTSP/1.0\r\n"
                      "CSeq: 1993\r\n\r\n"s;
