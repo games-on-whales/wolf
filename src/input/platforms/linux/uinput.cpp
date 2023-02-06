@@ -244,10 +244,12 @@ std::optional<libevdev_uinput *> create_controller(libevdev *dev) {
   libevdev_uinput *uidev;
 
   libevdev_set_uniq(dev, "Wolf gamepad");
-  libevdev_set_name(dev, "Wolf gamepad virtual device");
-  libevdev_set_id_product(dev, 0xAB31);
-  libevdev_set_id_vendor(dev, 0xAB32);
-  libevdev_set_id_bustype(dev, 0xAB33);
+  libevdev_set_name(dev, "Wolf X-Box One (virtual) pad");
+  // Vendor and product are very important
+  // see the full list at: https://github.com/torvalds/linux/blob/master/drivers/input/joystick/xpad.c#L147
+  libevdev_set_id_product(dev, 0x02d1);
+  libevdev_set_id_vendor(dev, 0x045e);
+  libevdev_set_id_bustype(dev, BUS_USB);
   libevdev_set_id_version(dev, 0xAB34);
 
   libevdev_enable_event_type(dev, EV_KEY);
