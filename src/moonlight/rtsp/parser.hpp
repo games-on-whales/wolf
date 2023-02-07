@@ -99,12 +99,12 @@ std::optional<RTSP_PACKET> parse(std::string_view msg) {
     #####
     OPTION <- OPTKEY ':' OPTVAL ENDLINE?
     OPTKEY <- < [a-zA-Z0-9-_]+ >
-    OPTVAL <- < [a-zA-Z0-9-_./;=, :]+ >
+    OPTVAL <- < [a-zA-Z0-9-_./;=, :]+ > / ''
 
     #####
     PAYLOAD <- PAYLOADKEY '=' PAYLOADVAL ENDLINE?
     PAYLOADKEY <- < [a-zA-Z0-9-_]+ >
-    PAYLOADVAL <- < [a-zA-Z0-9-_./[\]:  =]+ >
+    PAYLOADVAL <- < [a-zA-Z0-9-_./[\]:  =]+ > / ''
 
     #####
     CR <- '\r'

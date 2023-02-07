@@ -84,7 +84,7 @@ TEST_CASE("Custom Parser", "[RTSP]") {
       auto payload = "OPTIONS rtsp://:48010 RTSP/1.0\n"
                      "CSeq: 1\n"
                      "X-GS-ClientVersion: 14\n"
-                     "Host: "s;
+                     "Host: \n\n"s;
       auto parsed = rtsp::parse(payload).value();
       REQUIRE(parsed.type == REQUEST);
       REQUIRE(parsed.request.type == TARGET_URI);
@@ -93,8 +93,9 @@ TEST_CASE("Custom Parser", "[RTSP]") {
       REQUIRE(parsed.request.uri.port == 48010);
       REQUIRE(parsed.seq_number == 1);
 
-      REQUIRE(parsed.options.size() == 1); // We don't want partial unfilled options like Host
+      REQUIRE(parsed.options.size() == 2);
       REQUIRE_THAT(parsed.options["X-GS-ClientVersion"], Equals("14"));
+      REQUIRE_THAT(parsed.options["Host"], Equals(""));
       REQUIRE(parsed.payloads.empty());
     }
 
