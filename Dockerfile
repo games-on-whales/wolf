@@ -50,7 +50,7 @@ RUN apt-get update -y && \
     libgstreamer1.0-dev libgstreamer-plugins-base1.0-dev \
     && rm -rf /var/lib/apt/lists/*
 
-ARG SUNRISE_SHA=eb5b07d79c42a69e700ca5666ce1710f9c8f4ef0
+ARG SUNRISE_SHA=6506ad500c16e79a2f350fc6b39f0ee587eabe26
 ENV SUNRISE_SHA=$SUNRISE_SHA
 RUN git clone https://github.com/Drakulix/sunrise.git && \
     cd sunrise && \
@@ -85,6 +85,7 @@ RUN apt-get update -y && \
 
 # TODO: avoid running as root
 
+ENV GST_PLUGIN_PATH=/usr/local/lib/x86_64-linux-gnu/gstreamer-1.0/
 COPY --from=wolf-builder /wolf/wolf /wolf/wolf
 COPY --from=gst-plugin-wayland /sunrise/gst-plugin-wayland-display/target/release/libgstwaylanddisplay.so $GST_PLUGIN_PATH/libgstwaylanddisplay.so
 

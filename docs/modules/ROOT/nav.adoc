@@ -6,6 +6,7 @@
 * Developer guide
 ** xref:dev:code-structure.adoc[]
 ** xref:dev:gstreamer.adoc[]
+** xref:dev:wayland.adoc[]
 
 ** xref:protocols:index.adoc[]
 *** xref:protocols:http-pairing.adoc[]
