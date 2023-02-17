@@ -164,7 +164,7 @@ void mouse_press(libevdev_uinput *mouse, const data::MOUSE_BUTTON_PACKET &btn_pk
 }
 
 void mouse_scroll(libevdev_uinput *mouse, const data::MOUSE_SCROLL_PACKET &scroll_pkt) {
-  int high_res_distance = scroll_pkt.scroll_amt1;
+  int high_res_distance = boost::endian::big_to_native(scroll_pkt.scroll_amt1);
   int distance = high_res_distance / 120;
 
   libevdev_uinput_write_event(mouse, EV_REL, REL_WHEEL, distance);
