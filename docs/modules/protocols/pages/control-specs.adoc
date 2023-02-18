@@ -74,6 +74,8 @@ The first two bytes of the decrypted payload represent the *type* of the message
 * PERIODIC_PING (`0x0200`)
 * IDR_FRAME (`0x0302`)
 
+The next two bytes indicate the size of the decrypted payload.  The format of the remaining data depends on the message type.
+
 [WARNING,caption=TODO]
 ====
 Add details of all the message types

@@ -11,7 +11,7 @@ namespace moonlight {
 namespace pt = boost::property_tree;
 using XML = pt::ptree;
 
-constexpr auto M_VERSION = "7.1.431.0";
+constexpr auto M_VERSION = "7.1.431.-1";
 constexpr auto M_GFE_VERSION = "3.23.0.74";
 
 /**

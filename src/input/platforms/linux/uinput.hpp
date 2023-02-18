@@ -31,6 +31,8 @@ void move_mouse_abs(libevdev_uinput *mouse, const data::MOUSE_MOVE_ABS_PACKET &m
 void mouse_press(libevdev_uinput *mouse, const data::MOUSE_BUTTON_PACKET &btn_pkt);
 
 void mouse_scroll(libevdev_uinput *mouse, const data::MOUSE_SCROLL_PACKET &scroll_pkt);
+
+void mouse_scroll_horizontal(libevdev_uinput *mouse, const data::MOUSE_HSCROLL_PACKET &scroll_pkt);
 } // namespace mouse
 
 namespace keyboard {

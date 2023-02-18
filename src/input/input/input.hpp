@@ -2,6 +2,7 @@
 
 #include "moonlight/data-structures.hpp"
 #include <boost/asio.hpp>
+#include <boost/endian.hpp>
 #include <cstdint>
 #include <eventbus/event_bus.hpp>
 #include <immer/array.hpp>
@@ -30,18 +31,17 @@ InputReady setup_handlers(std::size_t session_id,
 namespace data {
 
 enum INPUT_TYPE : int {
-  MOUSE_MOVE_REL = 0x08,
-  MOUSE_MOVE_ABS = 0x0e,
-  MOUSE_BUTTON = 0x05,
-
-  KEYBOARD_OR_SCROLL = 0x0A,
-
-  CONTROLLER_MULTI = 0x1E,
-  CONTROLLER = 0x18
+    MOUSE_MOVE_REL       = boost::endian::native_to_little(0x00000007),
+    MOUSE_MOVE_ABS       = boost::endian::native_to_little(0x00000005),
+    MOUSE_BUTTON_PRESS   = boost::endian::native_to_little(0x00000008),
+    MOUSE_BUTTON_RELEASE = boost::endian::native_to_little(0x00000009),
+    KEY_PRESS            = boost::endian::native_to_little(0x00000003),
+    KEY_RELEASE          = boost::endian::native_to_little(0x00000004),
+    MOUSE_SCROLL         = boost::endian::native_to_little(0x0000000A),
+    MOUSE_HSCROLL        = boost::endian::native_to_little(0x55000001),
+    CONTROLLER_MULTI     = boost::endian::native_to_little(0x0000000C),
+    UTF8_TEXT            = boost::endian::native_to_little(0x00000017),
 };
-
-constexpr int KEYBOARD_BUTTON_RELEASED = 0x04;
-constexpr int MOUSE_BUTTON_RELEASED = 0x09;
 
 enum CONTROLLER_BTN : unsigned short {
   DPAD_UP = 0x0001,
@@ -64,19 +64,25 @@ enum CONTROLLER_BTN : unsigned short {
   Y = 0x8000
 };
 
+// make sure these structs are allocated in 1-byte blocks so the data aligns
+// right
+#pragma pack(push, 1)
+
 struct INPUT_PKT {
   unsigned short packet_type; // This should always be 0x0206 little endian (INPUT_DATA)
+  unsigned short packet_len; // the total size of the packet
+
+  unsigned int data_size; // the size of the input data
+
   INPUT_TYPE type;
 };
 
 struct MOUSE_MOVE_REL_PACKET : INPUT_PKT {
-  int magic;
   short delta_x;
   short delta_y;
 };
 
 struct MOUSE_MOVE_ABS_PACKET : INPUT_PKT {
-  int magic;
   short x;
   short y;
   short unused;
@@ -85,31 +91,33 @@ struct MOUSE_MOVE_ABS_PACKET : INPUT_PKT {
 };
 
 struct MOUSE_BUTTON_PACKET : INPUT_PKT {
-  char action;
-  short zero;
-  short button;
+  unsigned char button;
 };
 
 struct MOUSE_SCROLL_PACKET : INPUT_PKT {
-  char magic_a; // static: 0x0A
-  char zero1;
-  short zero2;
   short scroll_amt1;
   short scroll_amt2;
-  short zero3;
+  short zero1;
+};
+
+struct MOUSE_HSCROLL_PACKET : INPUT_PKT {
+    short scroll_amount;
 };
 
 struct KEYBOARD_PACKET : INPUT_PKT {
-  char key_action;
-  short zero1;
-  short key_code;
-  short magic;
-  char modifiers;
-  short zero2;
+    unsigned char flags;
+    short key_code;
+    unsigned char modifiers;
+    short zero1;
+};
+
+// this is the same size moonlight uses
+constexpr int UTF8_TEXT_MAX_LEN = 32;
+struct UTF8_TEXT_PACKET : INPUT_PKT {
+    char text[UTF8_TEXT_MAX_LEN];
 };
 
 struct CONTROLLER_MULTI_PACKET : INPUT_PKT {
-  int header_a;
   short header_b;
   short controller_number;
   short active_gamepad_mask;
@@ -125,19 +133,7 @@ struct CONTROLLER_MULTI_PACKET : INPUT_PKT {
   short tail_b;
 };
 
-struct CONTROLLER_PACKET : INPUT_PKT {
-  int header_a;
-  short header_b;
-  short button_flags;
-  unsigned char left_trigger;
-  unsigned char right_trigger;
-  short left_stick_x;
-  short left_stick_y;
-  short right_stick_x;
-  short right_stick_y;
-  int tail_a;
-  short tail_b;
-};
+#pragma pack(pop)
 
 } // namespace data
 

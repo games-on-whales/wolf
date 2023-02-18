@@ -29,7 +29,9 @@ TEST_CASE("uinput - keyboard", "UINPUT") {
   auto rc = libevdev_next_event(keyboard_dev.get(), LIBEVDEV_READ_FLAG_NORMAL, &ev);
   REQUIRE(rc == -EAGAIN);
 
-  auto press_shift_key = data::KEYBOARD_PACKET{.key_action = 0, .key_code = boost::endian::native_to_big((short)0xA0)};
+  auto press_shift_key = data::KEYBOARD_PACKET{.key_code = boost::endian::native_to_big((short)0xA0)};
+  press_shift_key.type = data::KEY_PRESS;
+
   auto press_action = keyboard::keyboard_handle(keyboard_el.get(), press_shift_key);
   REQUIRE(press_action->pressed);
   REQUIRE(press_action->linux_code == KEY_LEFTSHIFT);
@@ -42,8 +44,9 @@ TEST_CASE("uinput - keyboard", "UINPUT") {
   rc = libevdev_next_event(keyboard_dev.get(), LIBEVDEV_READ_FLAG_NORMAL, &ev);
   REQUIRE(rc == LIBEVDEV_READ_STATUS_SUCCESS);
 
-  auto release_shift_key = data::KEYBOARD_PACKET{.key_action = data::KEYBOARD_BUTTON_RELEASED,
-                                                 .key_code = boost::endian::native_to_big((short)0xA0)};
+  auto release_shift_key = data::KEYBOARD_PACKET{.key_code = boost::endian::native_to_big((short)0xA0)};
+  release_shift_key.type = data::KEY_RELEASE;
+
   auto release_action = keyboard::keyboard_handle(keyboard_el.get(), release_shift_key);
   REQUIRE(!release_action->pressed);
   REQUIRE(release_action->linux_code == KEY_LEFTSHIFT);
@@ -86,7 +89,8 @@ TEST_CASE("uinput - mouse", "UINPUT") {
   }
 
   SECTION("Mouse press button") {
-    auto pressed_packet = data::MOUSE_BUTTON_PACKET{.action = 0, .button = BTN_EXTRA};
+    auto pressed_packet = data::MOUSE_BUTTON_PACKET{.button = 5};
+    pressed_packet.type = data::MOUSE_BUTTON_PRESS;
     mouse::mouse_press(mouse_el.get(), pressed_packet);
 
     rc = libevdev_next_event(mouse_dev.get(), LIBEVDEV_READ_FLAG_NORMAL, &ev);
@@ -115,6 +119,20 @@ TEST_CASE("uinput - mouse", "UINPUT") {
     REQUIRE_THAT(libevdev_event_type_get_name(ev.type), Equals("EV_REL"));
     REQUIRE_THAT(libevdev_event_code_get_name(ev.type, ev.code), Equals("REL_WHEEL_HI_RES"));
     REQUIRE(ev.value == scroll_packet.scroll_amt1);
+
+    rc = libevdev_next_event(mouse_dev.get(), LIBEVDEV_READ_FLAG_NORMAL, &ev);
+    REQUIRE(rc == LIBEVDEV_READ_STATUS_SUCCESS);
+  }
+
+  SECTION("Mouse horizontal scroll") {
+    auto scroll_packet = data::MOUSE_HSCROLL_PACKET{.scroll_amount = 10};
+    mouse::mouse_scroll_horizontal(mouse_el.get(), scroll_packet);
+
+    rc = libevdev_next_event(mouse_dev.get(), LIBEVDEV_READ_FLAG_NORMAL, &ev);
+    REQUIRE(rc == LIBEVDEV_READ_STATUS_SUCCESS);
+    REQUIRE_THAT(libevdev_event_type_get_name(ev.type), Equals("EV_REL"));
+    REQUIRE_THAT(libevdev_event_code_get_name(ev.type, ev.code), Equals("REL_HWHEEL_HI_RES"));
+    REQUIRE(ev.value == scroll_packet.scroll_amount);
 
     rc = libevdev_next_event(mouse_dev.get(), LIBEVDEV_READ_FLAG_NORMAL, &ev);
     REQUIRE(rc == LIBEVDEV_READ_STATUS_SUCCESS);
