@@ -1,0 +1,48 @@
+[package]
+name = "gst-plugin-wayland-display"
+authors = ["Victoria Brekenfeld <git@drakulix.de>"]
+version = "0.1.0"
+edition = "2021"
+license = "MIT"
+description = "GStreamer Wayland Compositor Plugin"
+repository = "https://github.com/games-on-whales/wolf"
+rust-version = "1.67"
+
+[lib]
+name = "gstwaylanddisplay"
+crate-type = ["cdylib", "rlib"]
+path = "src/lib.rs"
+
+[features]
+static = []
+capi = []
+doc = []
+
+[dependencies]
+gst = { version = "0.20", package = "gstreamer", features = ["v1_18"] }
+gst-base = { version = "0.20", package = "gstreamer-base", features = ["v1_18"] }
+gst-video = { version = "0.20", package = "gstreamer-video", features = ["v1_18"] }
+slog = "2.7.0"
+once_cell = "1.17.0"
+
+[dependencies.smithay]
+git = "https://github.com/smithay/Smithay"
+rev = "e9bdcb982f"
+default-features = false
+features = [ "backend_drm", "backend_egl", "backend_libinput", "backend_udev", "renderer_gl", "use_system_lib", "desktop", "wayland_frontend", "xwayland" ]
+
+[build-dependencies]
+gst-plugin-version-helper = "0.7.5"
+
+[package.metadata.capi]
+min_version = "0.8.0"
+
+[package.metadata.capi.header]
+enabled = false
+
+[package.metadata.capi.library]
+install_subdir = "gstreamer-1.0"
+versioning = false
+
+[package.metadata.capi.pkg_config]
+requires_private = "gstreamer-1.0, gstreamer-base-1.0, gstreamer-video-1.0, gobject-2.0, glib-2.0, gmodule-2.0"
