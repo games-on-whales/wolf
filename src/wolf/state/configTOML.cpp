@@ -56,11 +56,14 @@ Config load_or_default(const std::string &source) {
 
       auto video_test = video::DEFAULT_SOURCE;
       auto x11_src = "ximagesrc show-pointer=true use-damage=false ! video/x-raw, framerate={fps}/1";
+      auto wayland_src = "waylanddisplaysrc ! video/x-raw, framerate={fps}/1";
       auto pulse_src = "pulsesrc";
 
       auto default_app = toml::value{{"title", "Test ball (auto)"}, {"video", {{"source", video_test}}}};
       auto x11_auto =
           toml::value{{"title", "X11 (auto)"}, {"video", {{"source", x11_src}}}, {"audio", {{"source", pulse_src}}}};
+      auto wayland_auto =
+          toml::value{{"title", "Wayland Display (auto)"}, {"video", {{"source", wayland_src}}}, {"audio", {{"source", pulse_src}}}};
 
       /* VAAPI specific encoder */
 
@@ -83,6 +86,13 @@ Config load_or_default(const std::string &source) {
       auto x11_vaapi = toml::value{{"title", "X11 (VAAPI)"},
                                    {"video",
                                     {{"source", x11_src},
+                                     {"h264_encoder", h264_vaapi},
+                                     {"hevc_encoder", hevc_vaapi},
+                                     {"video_params", video_vaapi}}},
+                                   {"audio", {{"source", pulse_src}}}};
+      auto wayland_vaapi = toml::value{{"title", "Wayland Display (VAAPI)"},
+                                   {"video",
+                                    {{"source", wayland_src},
                                      {"h264_encoder", h264_vaapi},
                                      {"hevc_encoder", hevc_vaapi},
                                      {"video_params", video_vaapi}}},
@@ -116,12 +126,19 @@ Config load_or_default(const std::string &source) {
                                     {"hevc_encoder", hevc_cuda},
                                     {"video_params", video_cuda}}},
                                   {"audio", {{"source", pulse_src}}}};
+      auto wayland_cuda = toml::value{{"title", "Wayland Display (CUDA)"},
+                                  {"video",
+                                   {{"source", wayland_src},
+                                    {"h264_encoder", h264_cuda},
+                                    {"hevc_encoder", hevc_cuda},
+                                    {"video_params", video_cuda}}},
+                                  {"audio", {{"source", pulse_src}}}};
 
       const toml::value data = {{"uuid", gen_uuid()},
                                 {"hostname", "Wolf"},
                                 {"support_hevc", true},
                                 {"paired_clients", toml::array{}},
-                                {"apps", {default_app, x11_auto, test_vaapi, x11_vaapi, test_cuda, x11_cuda}},
+                                {"apps", {default_app, x11_auto, wayland_auto, test_vaapi, x11_vaapi, wayland_vaapi, test_cuda, x11_cuda, wayland_cuda}},
                                 {"gstreamer", // key
                                  {            // array
                                   {
