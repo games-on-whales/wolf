@@ -1,6 +1,7 @@
 # Start by removing everything and add just the things we need
 *
 
+!gst-plugin-wayland-display
 !src
 !cmake
 !CMakeLists.txt

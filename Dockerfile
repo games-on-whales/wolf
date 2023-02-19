@@ -40,26 +40,22 @@ RUN --mount=type=cache,target=/cache/ccache \
     cp $CMAKE_BUILD_DIR/src/wolf/wolf /wolf/wolf
 
 ########################################################
-FROM rust:1.66-slim AS gst-plugin-wayland
+FROM rust:1.67-slim AS gst-plugin-wayland
 
 ENV DEBIAN_FRONTEND=noninteractive
 RUN apt-get update -y && \
     apt-get install -y --no-install-recommends \
-    git ca-certificates pkg-config \
+    git ca-certificates libssl-dev pkg-config \
     libwayland-dev libwayland-server0 libudev-dev libinput-dev libxkbcommon-dev libgbm-dev \
     libgstreamer1.0-dev libgstreamer-plugins-base1.0-dev \
     && rm -rf /var/lib/apt/lists/*
 
-ARG SUNRISE_SHA=6506ad500c16e79a2f350fc6b39f0ee587eabe26
-ENV SUNRISE_SHA=$SUNRISE_SHA
-RUN git clone https://github.com/Drakulix/sunrise.git && \
-    cd sunrise && \
-    git checkout $SUNRISE_SHA
+COPY gst-plugin-wayland-display /gst-plugin-wayland-display
 
-WORKDIR /sunrise/gst-plugin-wayland-display
+WORKDIR /gst-plugin-wayland-display
 
-RUN --mount=type=cache,target=/usr/local/cargo/registry cargo build --release
-
+RUN --mount=type=cache,target=/usr/local/cargo/registry cargo install cargo-c
+RUN --mount=type=cache,target=/usr/local/cargo/registry cargo cbuild --release
 
 ########################################################
 FROM gameonwhales/gstreamer:$GSTREAMER_VERSION AS runner
@@ -80,16 +76,16 @@ RUN apt-get update -y && \
 RUN apt-get update -y && \
     apt-get install -y --no-install-recommends \
     libwayland-server0 libinput10 libxkbcommon0 libgbm1 \
-    libglvnd0 libgl1  libglx0 libegl1 libgles2 \
+    libglvnd0 libgl1 libglx0 libegl1 libgles2 xwayland \
     && rm -rf /var/lib/apt/lists/*
 
 # TODO: avoid running as root
 
 ENV GST_PLUGIN_PATH=/usr/local/lib/x86_64-linux-gnu/gstreamer-1.0/
 COPY --from=wolf-builder /wolf/wolf /wolf/wolf
-COPY --from=gst-plugin-wayland /sunrise/gst-plugin-wayland-display/target/release/libgstwaylanddisplay.so $GST_PLUGIN_PATH/libgstwaylanddisplay.so
+COPY --from=gst-plugin-wayland /gst-plugin-wayland-display/target/x86_64-unknown-linux-gnu/release/libgstwaylanddisplay.so /usr/local/lib/x86_64-linux-gnu/gstreamer-1.0/libgstwaylanddisplay.so
 
-# Here is where the dinamically created wayland sockets will be stored
+# Here is where the dynamically created wayland sockets will be stored
 ENV XDG_RUNTIME_DIR=/wolf/run/
 RUN mkdir $XDG_RUNTIME_DIR
 
