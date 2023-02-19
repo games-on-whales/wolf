@@ -40,9 +40,12 @@ target_include_directories(wolf_input PUBLIC .)
 set_target_properties(wolf_input PROPERTIES PUBLIC_HEADER .)
 set_target_properties(wolf_input PROPERTIES OUTPUT_NAME "input")
 
+find_package(Boost REQUIRED COMPONENTS locale)
+include_directories(${Boost_INCLUDE_DIRS})
 
 # This library depends on:
 target_link_libraries(wolf_input PUBLIC
+        ${Boost_LIBRARIES}
         wolf::helpers
         wolf::moonlight
         dp::eventbus)

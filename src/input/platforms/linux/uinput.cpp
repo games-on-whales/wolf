@@ -12,16 +12,21 @@
 #include "uinput.hpp"
 #include "keyboard.hpp"
 #include <boost/endian/conversion.hpp>
+#include <boost/locale.hpp>
 #include <chrono>
 #include <helpers/logger.hpp>
 #include <immer/array.hpp>
 #include <immer/array_transient.hpp>
 #include <immer/atom.hpp>
+#include <iomanip>
 #include <range/v3/view.hpp>
+#include <sstream>
 
 namespace input {
 
 using namespace std::chrono_literals;
+using namespace std::string_literals;
+
 using namespace moonlight::control;
 
 constexpr int ABS_MAX_WIDTH = 1920;
@@ -390,6 +395,25 @@ void controller_handle(libevdev_uinput *controller,
 
 } // namespace controller
 
+/**
+ * Takes UTF-16 encoded string and returns a hex string representation of the bytes (uppercase)
+ *
+ * ex: ['ა'] = "10D0" // see UTF-16 encoding at https://www.compart.com/en/unicode/U+10D0
+ *
+ * adapted from: https://stackoverflow.com/a/7639754
+ */
+std::string to_hex(const std::basic_string<wchar_t> &str) {
+  std::stringstream ss;
+  ss << std::hex << std::setfill('0');
+  for (const auto &ch : str) {
+    ss << std::setw(2) << ch;
+  }
+
+  std::string hex_unicode(ss.str());
+  std::transform(hex_unicode.begin(), hex_unicode.end(), hex_unicode.begin(), ::toupper);
+  return hex_unicode;
+}
+
 InputReady setup_handlers(std::size_t session_id,
                           const std::shared_ptr<dp::event_bus> &event_bus,
                           std::shared_ptr<boost::asio::thread_pool> t_pool) {
@@ -453,17 +477,17 @@ InputReady setup_handlers(std::size_t session_id,
             break;
 
           case data::MOUSE_SCROLL:
-              logs::log(logs::trace, "[INPUT] Received input of type: MOUSE_SCROLL_PACKET");
-              if (v_devices->mouse) {
-                mouse::mouse_scroll(v_devices->mouse->get(), *(data::MOUSE_SCROLL_PACKET *)input);
-              }
+            logs::log(logs::trace, "[INPUT] Received input of type: MOUSE_SCROLL_PACKET");
+            if (v_devices->mouse) {
+              mouse::mouse_scroll(v_devices->mouse->get(), *(data::MOUSE_SCROLL_PACKET *)input);
+            }
             break;
 
           case data::MOUSE_HSCROLL:
-              logs::log(logs::trace, "[INPUT] Received input of type: MOUSE_HSCROLL_PACKET");
-              if (v_devices->mouse) {
-                mouse::mouse_scroll_horizontal(v_devices->mouse->get(), *(data::MOUSE_HSCROLL_PACKET *)input);
-              }
+            logs::log(logs::trace, "[INPUT] Received input of type: MOUSE_HSCROLL_PACKET");
+            if (v_devices->mouse) {
+              mouse::mouse_scroll_horizontal(v_devices->mouse->get(), *(data::MOUSE_HSCROLL_PACKET *)input);
+            }
             break;
 
           case data::KEY_PRESS:
@@ -507,9 +531,56 @@ InputReady setup_handlers(std::size_t session_id,
             }
             break;
           }
-          case data::UTF8_TEXT:
-            logs::log(logs::warning, "[INPUT] UTF-8 text input is not yet supported on Linux");
+          case data::UTF8_TEXT: {
+            /**
+             * Here we receive a single UTF8 encoded char at a time,
+             * the trick here is to convert it to UTF-16 then send CTRL+SHIFT+U+<HEXCODE> in order to produce any unicode character
+             * see: https://en.wikipedia.org/wiki/Unicode_input
+             */
+
+            auto txt_pkt = (data::UTF8_TEXT_PACKET *)input;
+            auto size = boost::endian::big_to_native(input->data_size) - sizeof(input->packet_type) - 2;
+
+            /* Converting UTF-8 to UTF-16 */
+            auto utf_16 = boost::locale::conv::utf_to_utf<wchar_t>(std::string(txt_pkt->text, size));
+            auto hex_unicode = to_hex(utf_16);
+            logs::log(logs::debug, "[INPUT] Typing U+{}", hex_unicode);
+
+            auto kb = v_devices->keyboard->get();
+            libevdev_uinput_write_event(kb, EV_KEY, KEY_LEFTCTRL, 1);
+            libevdev_uinput_write_event(kb, EV_SYN, SYN_REPORT, 0);
+
+            libevdev_uinput_write_event(kb, EV_KEY, KEY_LEFTSHIFT, 1);
+            libevdev_uinput_write_event(kb, EV_SYN, SYN_REPORT, 0);
+
+            libevdev_uinput_write_event(kb, EV_KEY, KEY_U, 1);
+            libevdev_uinput_write_event(kb, EV_SYN, SYN_REPORT, 0);
+
+            libevdev_uinput_write_event(kb, EV_KEY, KEY_U, 0);
+            libevdev_uinput_write_event(kb, EV_SYN, SYN_REPORT, 0);
+
+            for (auto &ch : hex_unicode) {
+              auto key_str = "KEY_"s + ch;
+              auto keycode = libevdev_event_code_from_name(EV_KEY, key_str.c_str());
+              if (keycode == -1) {
+                logs::log(logs::warning, "[INPUT] Unable to find keycode for: {}", ch);
+              } else {
+                libevdev_uinput_write_event(kb, EV_KEY, keycode, 1);
+                libevdev_uinput_write_event(kb, EV_SYN, SYN_REPORT, 0);
+
+                libevdev_uinput_write_event(kb, EV_KEY, keycode, 0);
+                libevdev_uinput_write_event(kb, EV_SYN, SYN_REPORT, 0);
+              }
+            }
+
+            libevdev_uinput_write_event(kb, EV_KEY, KEY_LEFTSHIFT, 0);
+            libevdev_uinput_write_event(kb, EV_SYN, SYN_REPORT, 0);
+
+            libevdev_uinput_write_event(kb, EV_KEY, KEY_LEFTCTRL, 0);
+            libevdev_uinput_write_event(kb, EV_SYN, SYN_REPORT, 0);
+
             break;
+          }
           }
         }
       });
