@@ -508,7 +508,7 @@ InputReady setup_handlers(std::size_t session_id,
             break;
           }
           case data::UTF8_TEXT:
-			logs::log(logs::warning, "[INPUT] UTF-8 text input is not yet supported on Linux");
+            logs::log(logs::warning, "[INPUT] UTF-8 text input is not yet supported on Linux");
             break;
           }
         }
