@@ -157,7 +157,7 @@ TEST_CASE("Mocked serverinfo", "[MoonlightProtocol]") {
             "<?xml version=\"1.0\" encoding=\"utf-8\"?>\n"
             "<root status_code=\"200\">"
             "<hostname>Wolf</hostname>"
-            "<appversion>7.1.431.0</appversion>"
+            "<appversion>7.1.431.-1</appversion>"
             "<GfeVersion>3.23.0.74</GfeVersion>"
             "<uniqueid>16510e3e-61fd-4a85-97fa-0db82058b27a</uniqueid>"
             "<MaxLumaPixelsHEVC>1869449984</MaxLumaPixelsHEVC>"
