@@ -211,10 +211,24 @@ frame "Wolf" #lightblue {
 === Gstreamer
 
 Our compositor finally composed an image, and we are ready to send this to our Moonlight client, how do we push this to the selected encoder in the Gstreamer pipeline without copying?
+Sad news is, we don't (at least currently).
 
-Luckily Gstreamer supports https://gstreamer.freedesktop.org/documentation/additional/design/dmabuf.html?gi-language=c[DMA Buffers] (Direct Memory Access) which are an efficient way to share memory without going through the CPU.
+Although Gstreamer supports https://gstreamer.freedesktop.org/documentation/additional/design/dmabuf.html?gi-language=c[DMA Buffers] (Direct Memory Access) which are an efficient way to share memory without going through the CPU,
+the support for modifiers of DMA Buffers is lacking behind significantly and varyies from one plugin to the next.
 
-.We are able to share, compose and finally encode different buffer types with zero memory copied between the GPU and the CPU
+What are modifiers? Modifiers add additional vendor specific properties to the internal pixel layout of a buffer. These modifiers are usually internally used by the GPU to speed up certain operations depending on characteristics of the hardware.
+None of this really has to worry us, because all of that is handled by the gpu driver. But because DMA buffers exist outside of the scope of a singular device, we need to carry the modifier of the buffer along.
+If it gets lost on the way, the program receiving the buffer has no idea how the data is layed out in memory and will likely output a broken image.
+
+Modifiers as such a crucial for communicating formats across devices, but they haven't existed all the time. So called "explicit" modifiers are a relatively new addition to the apis in question. Previously the drivers managed modifiers internally without exposing them to the user.
+Buffers without an accompanying modifier are as such described as having an "implicit" modifier. Because the modifier is handled internally by the driver communication across devices is impossible with such a buffer.
+
+Because these changes are relatively new, a lot of software still has to adapt to the new explicit apis and many try to be able to handle both, implicit and explicit buffers. Gstreamer being composed of many plugins currently results in very different stages of transitioning between these apis.
+Some apis even got support for explicit modifiers, only to drop it a release later, because users of older plugins were complaining about incompatibilities... This means the chance of getting a good image out of the pipeline starting with a DMA Buffer is very small.
+
+Given the state of things, we are currently copying the buffer through host-memory once to side-step this issue for now. The plan for the future is to provide first an experimental option for using DMA buffers,
+and later with more testing and development we will hopefully be able to share, compose and finally encode different buffer types with zero memory copied between the GPU and the CPU for truely the best possible latency.
+
 [plantuml,format=svg]
 ....
 @startuml
