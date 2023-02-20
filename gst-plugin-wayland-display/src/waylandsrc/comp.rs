@@ -16,19 +16,27 @@ use smithay::{
         libinput::LibinputInputBackend,
         renderer::{
             damage::{DamageTrackedRenderer, DamageTrackedRendererError as DTRError},
-            element::memory::{MemoryRenderBuffer, MemoryRenderBufferRenderElement},
+            element::{
+                memory::{MemoryRenderBuffer, MemoryRenderBufferRenderElement},
+                surface::WaylandSurfaceRenderElement,
+            },
             gles2::{Gles2Renderbuffer, Gles2Renderer},
             utils::{import_surface_tree, on_commit_buffer_handler},
-            Bind, ExportMem, ImportDma, ImportMemWl, Offscreen, Unbind,
+            Bind, ExportMem, ImportAll, ImportDma, ImportMem, ImportMemWl, Offscreen, Renderer,
+            Unbind,
         },
     },
     delegate_compositor, delegate_data_device, delegate_dmabuf, delegate_output, delegate_seat,
     delegate_shm, delegate_viewporter, delegate_xdg_shell,
     desktop::{
-        find_popup_root_surface, space::render_output, PopupKeyboardGrab, PopupKind, PopupManager,
-        PopupPointerGrab, PopupUngrabStrategy, Space,
+        find_popup_root_surface, space::render_output, utils::send_frames_surface_tree,
+        PopupKeyboardGrab, PopupKind, PopupManager, PopupPointerGrab, PopupUngrabStrategy, Space,
     },
-    input::{keyboard::XkbConfig, pointer::Focus, Seat, SeatHandler, SeatState},
+    input::{
+        keyboard::XkbConfig,
+        pointer::{CursorImageStatus, Focus},
+        Seat, SeatHandler, SeatState,
+    },
     output::{Mode as OutputMode, Output, PhysicalProperties, Subpixel},
     reexports::{
         calloop::{
@@ -45,6 +53,7 @@ use smithay::{
             Display, DisplayHandle, Resource,
         },
     },
+    render_elements,
     utils::{Logical, Physical, Point, Rectangle, Serial, Size, Transform},
     wayland::{
         buffer::BufferHandler,
@@ -113,6 +122,7 @@ struct State {
     popups: PopupManager,
     pointer_location: Point<f64, Logical>,
     cursor_element: MemoryRenderBuffer,
+    cursor_state: CursorImageStatus,
     pending_windows: Vec<Window>,
 
     // wayland state
@@ -313,6 +323,10 @@ impl SeatHandler for State {
             set_data_device_focus(&self.dh, seat, None);
         }
     }
+
+    fn cursor_image(&mut self, _seat: &Seat<Self>, image: CursorImageStatus) {
+        self.cursor_state = image;
+    }
 }
 
 impl ShmHandler for State {
@@ -393,6 +407,12 @@ delegate_shm!(State);
 delegate_xdg_shell!(State);
 delegate_viewporter!(State);
 
+render_elements! {
+    CursorElement<R> where R: Renderer + ImportAll + ImportMem;
+    Surface=WaylandSurfaceRenderElement<R>,
+    Memory=MemoryRenderBufferRenderElement<R>
+}
+
 impl State {
     fn create_frame(&mut self) -> Result<gst::Buffer, DTRError<Gles2Renderer>> {
         assert!(self.output.is_some());
@@ -400,16 +420,30 @@ impl State {
         assert!(self.video_info.is_some());
         assert!(self.renderbuffer.is_some());
 
-        let elements = vec![MemoryRenderBufferRenderElement::from_buffer(
-            &mut self.renderer,
-            self.pointer_location.to_physical_precise_round(1),
-            &self.cursor_element,
-            None,
-            None,
-            None,
-            None,
-        )
-        .map_err(DTRError::Rendering)?];
+        let elements = match &self.cursor_state {
+            CursorImageStatus::Default => vec![CursorElement::Memory(
+                MemoryRenderBufferRenderElement::from_buffer(
+                    &mut self.renderer,
+                    self.pointer_location.to_physical_precise_round(1),
+                    &self.cursor_element,
+                    None,
+                    None,
+                    None,
+                    None,
+                )
+                .map_err(DTRError::Rendering)?,
+            )],
+            CursorImageStatus::Surface(wl_surface) => {
+                smithay::backend::renderer::element::surface::render_elements_from_surface_tree(
+                    &mut self.renderer,
+                    wl_surface,
+                    self.pointer_location.to_physical_precise_round(1),
+                    1.,
+                    None,
+                )
+            }
+            CursorImageStatus::Hidden => vec![],
+        };
 
         self.renderer
             .bind(self.renderbuffer.clone().unwrap())
@@ -749,6 +783,7 @@ pub fn init(
         output: None,
         pointer_location: (0., 0.).into(),
         cursor_element,
+        cursor_state: CursorImageStatus::Default,
         pending_windows: Vec::new(),
 
         dh: display.handle(),
@@ -971,6 +1006,15 @@ pub fn init(
                 window.send_frame(output, data.state.start_time.elapsed(), None, |_, _| {
                     Some(output.clone())
                 })
+            }
+            if let CursorImageStatus::Surface(wl_surface) = &data.state.cursor_state {
+                send_frames_surface_tree(
+                    wl_surface,
+                    output,
+                    data.state.start_time.elapsed(),
+                    None,
+                    |_, _| Some(output.clone()),
+                )
             }
         }
 
