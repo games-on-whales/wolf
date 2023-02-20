@@ -1,5 +1,6 @@
 #include "catch2/catch_all.hpp"
 #include <boost/endian/conversion.hpp>
+#include <boost/locale.hpp>
 #include <chrono>
 #include <fcntl.h>
 #include <platforms/linux/keyboard.hpp>
@@ -9,6 +10,7 @@
 using Catch::Matchers::Equals;
 
 using namespace input;
+using namespace std::string_literals;
 
 void link_devnode(libevdev *dev, libevdev_uinput *dev_input) {
   // We have to sleep in order to be able to read from the newly created device
@@ -29,7 +31,7 @@ TEST_CASE("uinput - keyboard", "UINPUT") {
   auto rc = libevdev_next_event(keyboard_dev.get(), LIBEVDEV_READ_FLAG_NORMAL, &ev);
   REQUIRE(rc == -EAGAIN);
 
-  auto press_shift_key = data::KEYBOARD_PACKET{.key_code = boost::endian::native_to_big((short)0xA0)};
+  auto press_shift_key = data::KEYBOARD_PACKET{.key_code = boost::endian::native_to_little((short)0xA0)};
   press_shift_key.type = data::KEY_PRESS;
 
   auto press_action = keyboard::keyboard_handle(keyboard_el.get(), press_shift_key);
@@ -44,7 +46,7 @@ TEST_CASE("uinput - keyboard", "UINPUT") {
   rc = libevdev_next_event(keyboard_dev.get(), LIBEVDEV_READ_FLAG_NORMAL, &ev);
   REQUIRE(rc == LIBEVDEV_READ_STATUS_SUCCESS);
 
-  auto release_shift_key = data::KEYBOARD_PACKET{.key_code = boost::endian::native_to_big((short)0xA0)};
+  auto release_shift_key = data::KEYBOARD_PACKET{.key_code = boost::endian::native_to_little((short)0xA0)};
   release_shift_key.type = data::KEY_RELEASE;
 
   auto release_action = keyboard::keyboard_handle(keyboard_el.get(), release_shift_key);
@@ -110,29 +112,30 @@ TEST_CASE("uinput - mouse", "UINPUT") {
   }
 
   SECTION("Mouse scroll") {
-    auto scroll_packet = data::MOUSE_SCROLL_PACKET{.scroll_amt1 = 10};
+    short scroll_amt = 10;
+    auto scroll_packet = data::MOUSE_SCROLL_PACKET{.scroll_amt1 = boost::endian::native_to_big(scroll_amt)};
     mouse::mouse_scroll(mouse_el.get(), scroll_packet);
 
-    // TODO: why is REL_WHEEL not registered ???
     rc = libevdev_next_event(mouse_dev.get(), LIBEVDEV_READ_FLAG_NORMAL, &ev);
     REQUIRE(rc == LIBEVDEV_READ_STATUS_SUCCESS);
     REQUIRE_THAT(libevdev_event_type_get_name(ev.type), Equals("EV_REL"));
     REQUIRE_THAT(libevdev_event_code_get_name(ev.type, ev.code), Equals("REL_WHEEL_HI_RES"));
-    REQUIRE(ev.value == scroll_packet.scroll_amt1);
+    REQUIRE(ev.value == scroll_amt);
 
     rc = libevdev_next_event(mouse_dev.get(), LIBEVDEV_READ_FLAG_NORMAL, &ev);
     REQUIRE(rc == LIBEVDEV_READ_STATUS_SUCCESS);
   }
 
   SECTION("Mouse horizontal scroll") {
-    auto scroll_packet = data::MOUSE_HSCROLL_PACKET{.scroll_amount = 10};
+    short scroll_amt = 10;
+    auto scroll_packet = data::MOUSE_HSCROLL_PACKET{.scroll_amount = boost::endian::native_to_big(scroll_amt)};
     mouse::mouse_scroll_horizontal(mouse_el.get(), scroll_packet);
 
     rc = libevdev_next_event(mouse_dev.get(), LIBEVDEV_READ_FLAG_NORMAL, &ev);
     REQUIRE(rc == LIBEVDEV_READ_STATUS_SUCCESS);
     REQUIRE_THAT(libevdev_event_type_get_name(ev.type), Equals("EV_REL"));
     REQUIRE_THAT(libevdev_event_code_get_name(ev.type, ev.code), Equals("REL_HWHEEL_HI_RES"));
-    REQUIRE(ev.value == scroll_packet.scroll_amount);
+    REQUIRE(ev.value == scroll_amt);
 
     rc = libevdev_next_event(mouse_dev.get(), LIBEVDEV_READ_FLAG_NORMAL, &ev);
     REQUIRE(rc == LIBEVDEV_READ_STATUS_SUCCESS);
@@ -199,4 +202,79 @@ TEST_CASE("uinput - joypad", "UINPUT") {
   REQUIRE_THAT(libevdev_event_type_get_name(ev.type), Equals("EV_KEY"));
   REQUIRE_THAT(libevdev_event_code_get_name(ev.type, ev.code), Equals("BTN_THUMBR"));
   REQUIRE(ev.value == 1);
+}
+
+TEST_CASE("uinput - paste UTF8", "UINPUT") {
+
+  SECTION("UTF8 to HEX") {
+    auto utf8 = boost::locale::conv::to_utf<wchar_t>("\xF0\x9F\x92\xA9", "UTF-8"); // UTF-8 '💩'
+    auto utf32 = boost::locale::conv::utf_to_utf<char32_t>(utf8);
+    REQUIRE_THAT(keyboard::to_hex(utf32), Equals("1F4A9"));
+  }
+
+  SECTION("UTF16 to HEX") {
+    char16_t payload[] = {0xD83D, 0xDCA9}; // UTF-16 '💩'
+    auto utf16 = std::u16string(payload, 2);
+    auto utf32 = boost::locale::conv::utf_to_utf<char32_t>(utf16);
+    REQUIRE_THAT(keyboard::to_hex(utf32), Equals("1F4A9"));
+  }
+
+  SECTION("Paste UTF8") {
+    libevdev_ptr keyboard_dev(libevdev_new(), ::libevdev_free);
+    libevdev_uinput_ptr keyboard_el = {keyboard::create_keyboard(keyboard_dev.get()).value(),
+                                       ::libevdev_uinput_destroy};
+    struct input_event ev {};
+
+    link_devnode(keyboard_dev.get(), keyboard_el.get());
+
+    auto rc = libevdev_next_event(keyboard_dev.get(), LIBEVDEV_READ_FLAG_NORMAL, &ev);
+    REQUIRE(rc == -EAGAIN);
+
+    auto utf8_pkt = data::UTF8_TEXT_PACKET{.text = "\xF0\x9F\x92\xA9"};
+    utf8_pkt.data_size = boost::endian::native_to_big(8);
+
+    keyboard::paste_utf(keyboard_el.get(), utf8_pkt);
+
+    /**
+     * Lambda, checks that the given key_name has been correctly sent via evdev
+     */
+    auto require_ev = [&](const std::string &key_name, bool pressed = true) {
+      rc = libevdev_next_event(keyboard_dev.get(), LIBEVDEV_READ_FLAG_NORMAL, &ev);
+      REQUIRE(rc == LIBEVDEV_READ_STATUS_SUCCESS);
+      REQUIRE_THAT(libevdev_event_code_get_name(ev.type, ev.code), Equals(key_name));
+      REQUIRE(ev.value == (pressed ? 1 : 0));
+      rc = libevdev_next_event(keyboard_dev.get(), LIBEVDEV_READ_FLAG_NORMAL, &ev);
+      REQUIRE(rc == LIBEVDEV_READ_STATUS_SUCCESS);
+      REQUIRE_THAT(libevdev_event_code_get_name(ev.type, ev.code), Equals("SYN_REPORT"));
+    };
+
+    /*
+     * Pressing <CTRL> + <SHIFT> + U
+     */
+    require_ev("KEY_LEFTCTRL");
+    require_ev("KEY_LEFTSHIFT");
+    require_ev("KEY_U");
+    require_ev("KEY_U", false); // release U
+
+    /*
+     * At this point we should have typed: U+1F4A9
+     * (twice each because it's <press>, <release>
+     */
+    require_ev("KEY_1");
+    require_ev("KEY_1", false);
+    require_ev("KEY_F");
+    require_ev("KEY_F", false);
+    require_ev("KEY_4");
+    require_ev("KEY_4", false);
+    require_ev("KEY_A");
+    require_ev("KEY_A", false);
+    require_ev("KEY_9");
+    require_ev("KEY_9", false);
+
+    /*
+     * Finally, releasing <CTRL> and <SHIFT>
+     */
+    require_ev("KEY_LEFTSHIFT", false);
+    require_ev("KEY_LEFTCTRL", false);
+  }
 }

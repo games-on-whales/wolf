@@ -218,11 +218,76 @@ std::optional<libevdev_uinput *> create_keyboard(libevdev *dev) {
   return uidev;
 }
 
+void keyboard_ev(libevdev_uinput *keyboard, int linux_code, int event_code = 1) {
+  libevdev_uinput_write_event(keyboard, EV_KEY, linux_code, event_code);
+  libevdev_uinput_write_event(keyboard, EV_SYN, SYN_REPORT, 0);
+}
+
 void keyboard_repeat_press(libevdev_uinput *keyboard, const immer::array<int> &linux_codes) {
   for (auto code : linux_codes) {
-    libevdev_uinput_write_event(keyboard, EV_KEY, code, 2);
-    libevdev_uinput_write_event(keyboard, EV_SYN, SYN_REPORT, 0);
+    keyboard_ev(keyboard, code, 2);
   }
+}
+
+/**
+ * Takes an UTF-32 encoded string and returns a hex string representation of the bytes (uppercase)
+ *
+ * ex: ['💩'] = "1F4A9" // see UTF encoding at https://www.compart.com/en/unicode/U+1F4A9
+ *
+ * adapted from: https://stackoverflow.com/a/7639754
+ */
+std::string to_hex(const std::basic_string<char32_t> &str) {
+  std::stringstream ss;
+  ss << std::hex << std::setfill('0');
+  for (const auto &ch : str) {
+    ss << ch;
+  }
+
+  std::string hex_unicode(ss.str());
+  std::transform(hex_unicode.begin(), hex_unicode.end(), hex_unicode.begin(), ::toupper);
+  return hex_unicode;
+}
+
+/**
+ * Here we receive a single UTF-8 encoded char at a time,
+ * the trick is to convert it to UTF-32 then send CTRL+SHIFT+U+<HEXCODE> in order to produce any
+ * unicode character, see: https://en.wikipedia.org/wiki/Unicode_input
+ *
+ * ex:
+ * - when receiving UTF-8 [0xF0 0x9F 0x92 0xA9] (which is '💩')
+ * - we'll convert it to UTF-32 [0x1F4A9]
+ * - then type: CTRL+SHIFT+U+1F4A9
+ * see the conversion at: https://www.compart.com/en/unicode/U+1F4A9
+ */
+void paste_utf(libevdev_uinput *kb, const data::UTF8_TEXT_PACKET &pkt) {
+  auto size = boost::endian::big_to_native(pkt.data_size) - sizeof(pkt.packet_type) - 2;
+
+  /* Reading input text as UTF-8 */
+  auto utf8 = boost::locale::conv::to_utf<wchar_t>(pkt.text, pkt.text + size, "UTF-8");
+  /* Converting to UTF-32 */
+  auto utf32 = boost::locale::conv::utf_to_utf<char32_t>(utf8);
+  /* To HEX string */
+  auto hex_unicode = to_hex(utf32);
+  logs::log(logs::debug, "[INPUT] Typing U+{}", hex_unicode);
+
+  keyboard::keyboard_ev(kb, KEY_LEFTCTRL, 1);
+  keyboard::keyboard_ev(kb, KEY_LEFTSHIFT, 1);
+  keyboard::keyboard_ev(kb, KEY_U, 1);
+  keyboard::keyboard_ev(kb, KEY_U, 0);
+
+  for (auto &ch : hex_unicode) {
+    auto key_str = "KEY_"s + ch;
+    auto keycode = libevdev_event_code_from_name(EV_KEY, key_str.c_str());
+    if (keycode == -1) {
+      logs::log(logs::warning, "[INPUT] Unable to find keycode for: {}", ch);
+    } else {
+      keyboard::keyboard_ev(kb, keycode, 1);
+      keyboard::keyboard_ev(kb, keycode, 0);
+    }
+  }
+
+  keyboard::keyboard_ev(kb, KEY_LEFTSHIFT, 0);
+  keyboard::keyboard_ev(kb, KEY_LEFTCTRL, 0);
 }
 
 std::optional<Action> keyboard_handle(libevdev_uinput *keyboard, const data::KEYBOARD_PACKET &key_pkt) {
@@ -230,7 +295,7 @@ std::optional<Action> keyboard_handle(libevdev_uinput *keyboard, const data::KEY
   // moonlight always sets the high bit; not sure why but mask it off here
   auto moonlight_key = (short)boost::endian::little_to_native((short)key_pkt.key_code) & 0x7fff;
 
-  auto search_key = keyboard::key_mappings.find(moonlight_key);
+  auto search_key = keyboard::key_mappings.find(static_cast<short>(moonlight_key));
   if (search_key == keyboard::key_mappings.end()) {
     logs::log(logs::warning,
               "[INPUT] Moonlight sent keyboard code {} which is not recognised; ignoring.",
@@ -242,8 +307,7 @@ std::optional<Action> keyboard_handle(libevdev_uinput *keyboard, const data::KEY
       libevdev_uinput_write_event(keyboard, EV_MSC, MSC_SCAN, mapped_key.scan_code);
     }
 
-    libevdev_uinput_write_event(keyboard, EV_KEY, mapped_key.linux_code, release ? 0 : 1);
-    libevdev_uinput_write_event(keyboard, EV_SYN, SYN_REPORT, 0);
+    keyboard_ev(keyboard, mapped_key.linux_code, release ? 0 : 1);
 
     return Action{.pressed = !release, .linux_code = mapped_key.linux_code};
   }
@@ -395,25 +459,6 @@ void controller_handle(libevdev_uinput *controller,
 
 } // namespace controller
 
-/**
- * Takes UTF-16 encoded string and returns a hex string representation of the bytes (uppercase)
- *
- * ex: ['ა'] = "10D0" // see UTF-16 encoding at https://www.compart.com/en/unicode/U+10D0
- *
- * adapted from: https://stackoverflow.com/a/7639754
- */
-std::string to_hex(const std::basic_string<wchar_t> &str) {
-  std::stringstream ss;
-  ss << std::hex << std::setfill('0');
-  for (const auto &ch : str) {
-    ss << std::setw(2) << ch;
-  }
-
-  std::string hex_unicode(ss.str());
-  std::transform(hex_unicode.begin(), hex_unicode.end(), hex_unicode.begin(), ::toupper);
-  return hex_unicode;
-}
-
 InputReady setup_handlers(std::size_t session_id,
                           const std::shared_ptr<dp::event_bus> &event_bus,
                           std::shared_ptr<boost::asio::thread_pool> t_pool) {
@@ -532,54 +577,10 @@ InputReady setup_handlers(std::size_t session_id,
             break;
           }
           case data::UTF8_TEXT: {
-            /**
-             * Here we receive a single UTF8 encoded char at a time,
-             * the trick here is to convert it to UTF-16 then send CTRL+SHIFT+U+<HEXCODE> in order to produce any unicode character
-             * see: https://en.wikipedia.org/wiki/Unicode_input
-             */
-
             auto txt_pkt = (data::UTF8_TEXT_PACKET *)input;
-            auto size = boost::endian::big_to_native(input->data_size) - sizeof(input->packet_type) - 2;
-
-            /* Converting UTF-8 to UTF-16 */
-            auto utf_16 = boost::locale::conv::utf_to_utf<wchar_t>(std::string(txt_pkt->text, size));
-            auto hex_unicode = to_hex(utf_16);
-            logs::log(logs::debug, "[INPUT] Typing U+{}", hex_unicode);
-
-            auto kb = v_devices->keyboard->get();
-            libevdev_uinput_write_event(kb, EV_KEY, KEY_LEFTCTRL, 1);
-            libevdev_uinput_write_event(kb, EV_SYN, SYN_REPORT, 0);
-
-            libevdev_uinput_write_event(kb, EV_KEY, KEY_LEFTSHIFT, 1);
-            libevdev_uinput_write_event(kb, EV_SYN, SYN_REPORT, 0);
-
-            libevdev_uinput_write_event(kb, EV_KEY, KEY_U, 1);
-            libevdev_uinput_write_event(kb, EV_SYN, SYN_REPORT, 0);
-
-            libevdev_uinput_write_event(kb, EV_KEY, KEY_U, 0);
-            libevdev_uinput_write_event(kb, EV_SYN, SYN_REPORT, 0);
-
-            for (auto &ch : hex_unicode) {
-              auto key_str = "KEY_"s + ch;
-              auto keycode = libevdev_event_code_from_name(EV_KEY, key_str.c_str());
-              if (keycode == -1) {
-                logs::log(logs::warning, "[INPUT] Unable to find keycode for: {}", ch);
-              } else {
-                libevdev_uinput_write_event(kb, EV_KEY, keycode, 1);
-                libevdev_uinput_write_event(kb, EV_SYN, SYN_REPORT, 0);
-
-                libevdev_uinput_write_event(kb, EV_KEY, keycode, 0);
-                libevdev_uinput_write_event(kb, EV_SYN, SYN_REPORT, 0);
-              }
+            if (v_devices->keyboard) {
+              keyboard::paste_utf(v_devices->keyboard->get(), *txt_pkt);
             }
-
-            libevdev_uinput_write_event(kb, EV_KEY, KEY_LEFTSHIFT, 0);
-            libevdev_uinput_write_event(kb, EV_SYN, SYN_REPORT, 0);
-
-            libevdev_uinput_write_event(kb, EV_KEY, KEY_LEFTCTRL, 0);
-            libevdev_uinput_write_event(kb, EV_SYN, SYN_REPORT, 0);
-
-            break;
           }
           }
         }
