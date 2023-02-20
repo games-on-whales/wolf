@@ -91,6 +91,38 @@ impl State {
                     },
                 )
             }
+            InputEvent::PointerMotionAbsolute { event } => {
+                let serial = SERIAL_COUNTER.next_serial();
+                if let Some(output) = self.output.as_ref() {
+                    let output_size = output
+                        .current_mode()
+                        .unwrap()
+                        .size
+                        .to_f64()
+                        .to_logical(output.current_scale().fractional_scale())
+                        .to_i32_round();
+                    self.pointer_location = (
+                        event.absolute_x_transformed(output_size.w),
+                        event.absolute_y_transformed(output_size.h),
+                    )
+                        .into();
+
+                    let pointer = self.seat.get_pointer().unwrap();
+                    let under = self
+                        .space
+                        .element_under(self.pointer_location)
+                        .map(|(w, pos)| (w.clone().into(), pos));
+                    pointer.motion(
+                        self,
+                        under.clone(),
+                        &MotionEvent {
+                            location: self.pointer_location,
+                            serial,
+                            time: event.time_msec(),
+                        },
+                    );
+                }
+            }
             InputEvent::PointerButton { event, .. } => {
                 let serial = SERIAL_COUNTER.next_serial();
                 let button = event.button_code();
