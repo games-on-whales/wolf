@@ -411,7 +411,7 @@ impl State {
         render_output(
             self.output.as_ref().unwrap(),
             &mut self.renderer,
-            0,
+            1,
             [&self.space],
             &*elements,
             self.dtr.as_mut().unwrap(),
