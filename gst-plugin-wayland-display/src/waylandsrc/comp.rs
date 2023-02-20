@@ -1,4 +1,8 @@
-use std::{ffi::OsString, os::unix::prelude::AsRawFd, time::Duration};
+use std::{
+    ffi::OsString,
+    os::unix::prelude::AsRawFd,
+    time::{Duration, Instant},
+};
 
 use super::imp::Command;
 use gst::{message::Application, traits::ElementExt, Structure};
@@ -30,6 +34,7 @@ use smithay::{
         calloop::{
             channel::{Channel, Event},
             generic::Generic,
+            timer::{TimeoutAction, Timer},
             EventLoop, Interest, LoopHandle, Mode, PostAction,
         },
         input::Libinput,
@@ -98,6 +103,7 @@ struct State {
     renderer: Gles2Renderer,
     renderbuffer: Option<Gles2Renderbuffer>,
     dmabuf_global: DmabufGlobal,
+    last_render: Option<Instant>,
 
     // management
     output: Option<Output>,
@@ -722,7 +728,8 @@ pub fn init(
         .expect("Failed to add keyboard to seat");
     seat.add_pointer();
 
-    let mut event_loop = EventLoop::<Data>::try_new().expect("Unable to create event_loop");
+    let mut event_loop =
+        EventLoop::<Data>::try_new_high_precision().expect("Unable to create event_loop");
     let state = State {
         handle: event_loop.handle(),
         should_quit: false,
@@ -734,6 +741,7 @@ pub fn init(
         renderbuffer: None,
         dmabuf_global,
         video_info: None,
+        last_render: None,
 
         space,
         popups: PopupManager::new(log.clone()),
@@ -809,17 +817,53 @@ pub fn init(
                     data.state.video_info = Some(info);
                 }
                 Event::Msg(Command::Buffer(buffer_sender)) => {
-                    if let Err(_) = match data.state.create_frame() {
-                        Ok(buf) => buffer_sender.send(Ok(buf)),
-                        Err(err) => {
-                            slog::error!(data.state.log, "Rendering failed: {}", err);
-                            buffer_sender.send(Err(match err {
-                                DTRError::OutputNoMode(_) => unreachable!(),
-                                DTRError::Rendering(err) => err.into(),
-                            }))
+                    let wait = if let Some(last_render) = data.state.last_render {
+                        let framerate = data.state.video_info.as_ref().unwrap().fps();
+                        let duration = Duration::from_secs_f64(
+                            framerate.denom() as f64 / framerate.numer() as f64,
+                        );
+                        let time_passed = Instant::now().duration_since(last_render);
+                        if time_passed < duration {
+                            Some(duration - time_passed)
+                        } else {
+                            None
                         }
-                    } {
-                        data.state.should_quit = true;
+                    } else {
+                        None
+                    };
+
+                    let render = move |data: &mut Data, now: Instant| {
+                        if let Err(_) = match data.state.create_frame() {
+                            Ok(buf) => {
+                                data.state.last_render = Some(now);
+                                buffer_sender.send(Ok(buf))
+                            }
+                            Err(err) => {
+                                slog::error!(data.state.log, "Rendering failed: {}", err);
+                                buffer_sender.send(Err(match err {
+                                    DTRError::OutputNoMode(_) => unreachable!(),
+                                    DTRError::Rendering(err) => err.into(),
+                                }))
+                            }
+                        } {
+                            data.state.should_quit = true;
+                        }
+                    };
+
+                    match wait {
+                        Some(duration) => {
+                            if let Err(err) = data.state.handle.insert_source(
+                                Timer::from_duration(duration),
+                                move |now, _, data| {
+                                    render(data, now);
+                                    TimeoutAction::Drop
+                                },
+                            ) {
+                                slog::error!(data.state.log, "Event loop error: {}", err);
+                                data.state.should_quit = true;
+                            };
+                        }
+                        None => render(data, Instant::now()),
                     };
                 }
                 Event::Msg(Command::Quit) | Event::Closed => {
