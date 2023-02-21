@@ -33,38 +33,6 @@ void init() {
   moonlight::fec::init();
 }
 
-static gboolean msg_handler(GstBus *bus, GstMessage *message, gpointer data) {
-  auto loop = (GMainLoop *)data;
-  switch (GST_MESSAGE_TYPE(message)) {
-  case GST_MESSAGE_ERROR: {
-    GError *err;
-    gchar *debug;
-    gst_message_parse_error(message, &err, &debug);
-    logs::log(logs::error, "[GSTREAMER] Pipeline error: {}", err->message);
-    g_error_free(err);
-    g_free(debug);
-
-    /* Terminate pipeline on error */
-    g_main_loop_quit(loop);
-    break;
-  }
-  case GST_MESSAGE_EOS:
-    /* end-of-stream */
-    g_main_loop_quit(loop);
-    break;
-  default:
-    /* unhandled message */
-    break;
-  }
-
-  /*
-   * we want to be notified again the next time there is a message
-   * on the bus, so returning TRUE (FALSE means we want to stop watching
-   * for messages on the bus and our callback should not be called again)
-   */
-  return TRUE;
-}
-
 static void pipeline_error_handler(GstBus *bus, GstMessage *message, gpointer data) {
   auto loop = (GMainLoop *)data;
   GError *err;
@@ -166,6 +134,16 @@ void application_msg_handler(GstBus *bus, GstMessage *message, gpointer /* state
 }
 
 /**
+ * Sends a custom message in the pipeline starting from our custom moonlight plugin
+ */
+void send_message(GstElement *recipient, GstStructure *message) {
+  //  gst_element_ptr moonlight_plugin(gst_bin_get_by_name(reinterpret_cast<GstBin *>(pipeline), "moonlight_pay"),
+  //                                   ::gst_object_unref);
+  auto gst_ev = gst_event_new_custom(GST_EVENT_CUSTOM_UPSTREAM, message);
+  gst_element_send_event(recipient, gst_ev);
+}
+
+/**
  * Start VIDEO pipeline
  */
 void start_streaming_video(immer::box<state::VideoSession> video_session, unsigned short client_port) {
@@ -209,6 +187,27 @@ void start_streaming_video(immer::box<state::VideoSession> video_session, unsign
                      &const_cast<state::VideoSession &>(video_session.get()));
     gst_object_unref(bus);
 
+    /**
+     * When we've finished setting up virtual devices we'll fire that event in the gstreamer pipeline
+     * it'll be picked up by our custom wayland plugin
+     */
+    auto inputs_handlers = video_session->event_bus->register_handler<immer::box<state::InputsReadyEvent>>(
+        [sess_id = video_session->session_id, pipeline](immer::box<state::InputsReadyEvent> inputs_ev) {
+          if (inputs_ev->session_id == sess_id) {
+            logs::log(logs::debug, "[GSTREAMER] Sending VirtualDevicesReady");
+
+            /* Copying to GArray */
+            auto size = inputs_ev->devices_paths.size();
+            GArray *devices = g_array_new(false, false, size);
+            for (const auto &path : inputs_ev->devices_paths) {
+              g_array_append_val(devices, path.get());
+            }
+
+            send_message(pipeline.get(),
+                         gst_structure_new("VirtualDevicesReady", "paths", G_TYPE_ARRAY, devices, NULL));
+            g_array_free(devices, true);
+          }
+        });
 
     /*
      * The force IDR event will be triggered by the control stream.
@@ -220,16 +219,9 @@ void start_streaming_video(immer::box<state::VideoSession> video_session, unsign
           if (ctrl_ev->session_id == sess_id) {
             if (ctrl_ev->type == IDR_FRAME) {
               logs::log(logs::debug, "[GSTREAMER] Forcing IDR");
-
-              gst_element_ptr moonlight_plugin(
-                  gst_bin_get_by_name(reinterpret_cast<GstBin *>(pipeline.get()), "moonlight_pay"),
-                  ::gst_object_unref);
               // Force IDR event, see: https://github.com/centricular/gstwebrtc-demos/issues/186
-              auto gst_ev = gst_event_new_custom(
-                  GST_EVENT_CUSTOM_UPSTREAM,
-                  gst_structure_new("GstForceKeyUnit", "all-headers", G_TYPE_BOOLEAN, TRUE, NULL));
-
-              gst_element_send_event(moonlight_plugin.get(), gst_ev);
+              send_message(pipeline.get(),
+                           gst_structure_new("GstForceKeyUnit", "all-headers", G_TYPE_BOOLEAN, TRUE, NULL));
             }
           }
         });
@@ -242,7 +234,9 @@ void start_streaming_video(immer::box<state::VideoSession> video_session, unsign
           }
         });
 
-    return immer::array<immer::box<dp::handler_registration>>{std::move(idr_handler), std::move(terminate_handler)};
+    return immer::array<immer::box<dp::handler_registration>>{std::move(idr_handler),
+                                                              std::move(terminate_handler),
+                                                              std::move(inputs_handlers)};
   });
 }
 

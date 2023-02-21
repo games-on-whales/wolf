@@ -1,3 +1,4 @@
+use std::fmt::Debug;
 use std::sync::{
     mpsc::{self, SyncSender},
     Mutex,
@@ -11,7 +12,7 @@ use smithay::reexports::calloop::channel::Sender;
 use gst::glib::once_cell::sync::Lazy;
 use gst::prelude::*;
 use gst::subclass::prelude::*;
-use gst::{glib, Fraction};
+use gst::{glib, Fraction, Event};
 
 use gst_base::subclass::base_src::CreateSuccess;
 use gst_base::subclass::prelude::*;
@@ -161,7 +162,7 @@ impl ElementImpl for WaylandDisplaySrc {
                 gst::PadPresence::Always,
                 &caps,
             )
-            .unwrap();
+                .unwrap();
 
             vec![src_pad_template]
         });
@@ -214,6 +215,18 @@ impl BaseSrcImpl for WaylandDisplaySrc {
 
     fn negotiate(&self) -> Result<(), gst::LoggableError> {
         self.parent_negotiate()
+    }
+
+    fn event(&self, event: &Event) -> bool {
+        if event.type_() == gst::EventType::CustomUpstream {
+            let structure = event.structure().expect("Unable to get message structure");
+            gst::debug!(CAT, "Received message: {}", structure);
+            if structure.has_name("VirtualDevicesReady") {
+                // TODO: let paths = structure.get("paths");
+            }
+        }
+
+        true // TODO: return?
     }
 
     fn set_caps(&self, caps: &gst::Caps) -> Result<(), gst::LoggableError> {

@@ -4,6 +4,8 @@
 #include <eventbus/event_bus.hpp>
 #include <memory>
 #include <moonlight/data-structures.hpp>
+#include <immer/array.hpp>
+#include <immer/box.hpp>
 #include <optional>
 
 namespace state {
@@ -86,6 +88,11 @@ struct LaunchAPPEvent {
 
   std::optional<std::string> wayland_socket;
   std::optional<std::string> xorg_socket;
+};
+
+struct InputsReadyEvent {
+  std::size_t session_id;
+  immer::array<immer::box<std::string>> devices_paths;
 };
 
 struct VideoRTPHeaders {

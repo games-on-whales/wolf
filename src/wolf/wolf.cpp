@@ -130,7 +130,7 @@ auto setup_sessions_handlers(std::shared_ptr<dp::event_bus> &event_bus, TreadsMa
   handlers.push_back(event_bus->register_handler<immer::box<state::StreamSession>>(
       [&threads](immer::box<state::StreamSession> stream_session) {
         // Create pool
-        auto t_pool = std::make_shared<ba::thread_pool>(10);
+        auto t_pool = std::make_shared<ba::thread_pool>(6);
 
         // Start RTSP
         ba::post(*t_pool, [stream_session]() { rtsp::run_server(stream_session->rtsp_port, stream_session); });
@@ -162,6 +162,10 @@ auto setup_sessions_handlers(std::shared_ptr<dp::event_bus> &event_bus, TreadsMa
         ba::post(*t_pool, [launch_ev, t_pool]() {
           // create virtual inputs
           auto input_setup = input::setup_handlers(launch_ev->session_id, launch_ev->event_bus, t_pool);
+
+          launch_ev->event_bus->fire_event(
+              immer::box<state::InputsReadyEvent>(state::InputsReadyEvent{.session_id = launch_ev->session_id,
+                                                                          .devices_paths = input_setup.devices_paths}));
 
           // Start app
           process::run_process(launch_ev);
@@ -250,7 +254,7 @@ int main(int argc, char *argv[]) {
       boost::stacktrace::safe_dump_to(trace_file);
     }
 
-    for(const auto &thread_pool : *threads.load()){
+    for (const auto &thread_pool : *threads.load()) {
       thread_pool.second->stop();
     }
 
