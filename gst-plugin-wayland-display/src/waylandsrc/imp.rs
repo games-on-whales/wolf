@@ -1,4 +1,3 @@
-use std::fmt::Debug;
 use std::sync::{
     mpsc::{self, SyncSender},
     Mutex,
@@ -9,10 +8,10 @@ use gst_video::{VideoCapsBuilder, VideoFormat, VideoInfo};
 use smithay::backend::{drm::DrmNode, SwapBuffersError};
 use smithay::reexports::calloop::channel::Sender;
 
-use gst::glib::once_cell::sync::Lazy;
+use gst::glib::{once_cell::sync::Lazy, ValueArray};
 use gst::prelude::*;
 use gst::subclass::prelude::*;
-use gst::{glib, Fraction, Event};
+use gst::{glib, Event, Fraction};
 
 use gst_base::subclass::base_src::CreateSuccess;
 use gst_base::subclass::prelude::*;
@@ -37,7 +36,6 @@ impl Default for WaylandDisplaySrc {
 #[derive(Debug, Default)]
 pub struct Settings {
     render_node: Option<DrmNode>,
-    input_seat: Option<String>,
 }
 
 pub struct State {
@@ -47,6 +45,7 @@ pub struct State {
 
 pub enum Command {
     VideoInfo(VideoInfo),
+    InputDevice(String),
     Buffer(SyncSender<Result<gst::Buffer, SwapBuffersError>>),
     Quit,
 }
@@ -62,18 +61,11 @@ impl ObjectSubclass for WaylandDisplaySrc {
 impl ObjectImpl for WaylandDisplaySrc {
     fn properties() -> &'static [glib::ParamSpec] {
         static PROPERTIES: Lazy<Vec<glib::ParamSpec>> = Lazy::new(|| {
-            vec![
-                glib::ParamSpecString::builder("render-node")
-                    .nick("DRM Render Node")
-                    .blurb("DRM Render Node to use (e.g. /dev/dri/renderD128")
-                    .construct()
-                    .build(),
-                glib::ParamSpecString::builder("seat")
-                    .nick("libinput seat")
-                    .blurb("libinput seat to use (e.g. seat-0")
-                    .construct()
-                    .build(),
-            ]
+            vec![glib::ParamSpecString::builder("render-node")
+                .nick("DRM Render Node")
+                .blurb("DRM Render Node to use (e.g. /dev/dri/renderD128")
+                .construct()
+                .build()]
         });
 
         PROPERTIES.as_ref()
@@ -88,13 +80,6 @@ impl ObjectImpl for WaylandDisplaySrc {
                     .expect("type checked upstream")
                     .map(|path| DrmNode::from_path(path).expect("No valid render_node"));
                 settings.render_node = node;
-            }
-            "seat" => {
-                let mut settings = self.settings.lock().unwrap();
-                let seat = value
-                    .get::<Option<String>>()
-                    .expect("type checked upstream");
-                settings.input_seat = seat;
             }
             _ => unreachable!(),
         }
@@ -111,10 +96,6 @@ impl ObjectImpl for WaylandDisplaySrc {
                     .map(|path| path.to_string_lossy().into_owned())
                     .unwrap_or_else(|| String::from("/dev/dri/renderD128"))
                     .to_value()
-            }
-            "seat" => {
-                let settings = self.settings.lock().unwrap();
-                settings.input_seat.to_value()
             }
             _ => unreachable!(),
         }
@@ -162,7 +143,7 @@ impl ElementImpl for WaylandDisplaySrc {
                 gst::PadPresence::Always,
                 &caps,
             )
-                .unwrap();
+            .unwrap();
 
             vec![src_pad_template]
         });
@@ -220,13 +201,24 @@ impl BaseSrcImpl for WaylandDisplaySrc {
     fn event(&self, event: &Event) -> bool {
         if event.type_() == gst::EventType::CustomUpstream {
             let structure = event.structure().expect("Unable to get message structure");
-            gst::debug!(CAT, "Received message: {}", structure);
             if structure.has_name("VirtualDevicesReady") {
-                // TODO: let paths = structure.get("paths");
+                let mut state = self.state.lock().unwrap();
+                let tx = &mut state.as_mut().unwrap().command_tx;
+
+                let paths = structure
+                    .get::<ValueArray>("paths")
+                    .expect("Should contain paths");
+                for value in paths.into_iter() {
+                    let path = value.get::<String>().expect("Paths are strings");
+                    if let Err(err) = tx.send(Command::InputDevice(path)) {
+                        gst::warning!(CAT, "Command channel dead: {}", err);
+                    }
+                }
+
+                return true;
             }
         }
-
-        true // TODO: return?
+        self.parent_event(event)
     }
 
     fn set_caps(&self, caps: &gst::Caps) -> Result<(), gst::LoggableError> {
@@ -250,19 +242,14 @@ impl BaseSrcImpl for WaylandDisplaySrc {
         }
 
         let settings = self.settings.lock().unwrap();
-        let input_seat = settings
-            .input_seat
-            .clone()
-            .unwrap_or_else(|| String::from("seat-0"));
         let render_node = settings.render_node.clone().unwrap_or_else(|| {
             DrmNode::from_path("/dev/dri/renderD128").expect("Unable to open renderD128")
         });
 
         let elem = self.obj().upcast_ref::<gst::Element>().to_owned();
         let (command_tx, command_src) = smithay::reexports::calloop::channel::channel();
-        let thread_handle = std::thread::spawn(move || {
-            super::comp::init(command_src, render_node, &input_seat, elem)
-        });
+        let thread_handle =
+            std::thread::spawn(move || super::comp::init(command_src, render_node, elem));
 
         *state = Some(State {
             thread_handle,

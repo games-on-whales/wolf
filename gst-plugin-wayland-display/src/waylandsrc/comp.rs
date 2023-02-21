@@ -124,6 +124,7 @@ struct State {
     cursor_element: MemoryRenderBuffer,
     cursor_state: CursorImageStatus,
     pending_windows: Vec<Window>,
+    input_context: Libinput,
 
     // wayland state
     dh: DisplayHandle,
@@ -707,12 +708,7 @@ impl XwmHandler for Data {
     }
 }
 
-pub fn init(
-    command_src: Channel<Command>,
-    render_node: DrmNode,
-    seat: impl AsRef<str>,
-    elem: gst::Element,
-) {
+pub fn init(command_src: Channel<Command>, render_node: DrmNode, elem: gst::Element) {
     let log = ::slog::Logger::root(crate::utils::SlogGstDrain.fuse(), slog::o!());
 
     let mut display = Display::<State>::new().unwrap();
@@ -749,10 +745,8 @@ pub fn init(
         MemoryRenderBuffer::from_memory(CURSOR_DATA_BYTES, (64, 64), 1, Transform::Normal, None);
 
     // init input backend
-    let mut libinput_context = Libinput::new_with_udev(NixInterface::new(log.clone()));
-    libinput_context
-        .udev_assign_seat(seat.as_ref())
-        .expect("Failed to assign libinput seat");
+    let libinput_context = Libinput::new_from_path(NixInterface::new(log.clone()));
+    let input_context = libinput_context.clone();
     let libinput_backend = LibinputInputBackend::new(libinput_context, log.clone());
 
     let space = Space::new(log.clone());
@@ -785,6 +779,7 @@ pub fn init(
         cursor_element,
         cursor_state: CursorImageStatus::Default,
         pending_windows: Vec::new(),
+        input_context,
 
         dh: display.handle(),
         compositor_state,
@@ -850,6 +845,10 @@ pub fn init(
                             .expect("Failed to create renderbuffer"),
                     );
                     data.state.video_info = Some(info);
+                }
+                Event::Msg(Command::InputDevice(path)) => {
+                    slog::info!(data.state.log, "Adding input device: {}", path);
+                    data.state.input_context.path_add_device(&path);
                 }
                 Event::Msg(Command::Buffer(buffer_sender)) => {
                     let wait = if let Some(last_render) = data.state.last_render {

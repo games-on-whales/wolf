@@ -198,14 +198,17 @@ void start_streaming_video(immer::box<state::VideoSession> video_session, unsign
 
             /* Copying to GArray */
             auto size = inputs_ev->devices_paths.size();
-            GArray *devices = g_array_new(false, false, size);
+            GValueArray *devices = g_value_array_new(size);
             for (const auto &path : inputs_ev->devices_paths) {
-              g_array_append_val(devices, path.get());
+              GValue value = G_VALUE_INIT;
+              g_value_init(&value, G_TYPE_STRING);
+              g_value_set_string(&value, path.get().c_str());
+              g_value_array_append(devices, &value);
             }
 
             send_message(pipeline.get(),
-                         gst_structure_new("VirtualDevicesReady", "paths", G_TYPE_ARRAY, devices, NULL));
-            g_array_free(devices, true);
+                         gst_structure_new("VirtualDevicesReady", "paths", G_TYPE_VALUE_ARRAY, devices, NULL));
+            g_value_array_free(devices);
           }
         });
 
