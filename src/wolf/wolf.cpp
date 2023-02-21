@@ -154,8 +154,8 @@ auto setup_sessions_handlers(std::shared_ptr<dp::event_bus> &event_bus, TreadsMa
         });
       }));
 
-  handlers.push_back(event_bus->register_handler<immer::box<process::LaunchAPPEvent>>(
-      [&threads](immer::box<process::LaunchAPPEvent> launch_ev) {
+  handlers.push_back(event_bus->register_handler<immer::box<state::LaunchAPPEvent>>(
+      [&threads](immer::box<state::LaunchAPPEvent> launch_ev) {
         auto t_pool = threads.load()->at(launch_ev->session_id);
 
         // Setup inputs and start selected app

@@ -4,6 +4,7 @@
 #include <eventbus/event_bus.hpp>
 #include <memory>
 #include <moonlight/data-structures.hpp>
+#include <optional>
 
 namespace state {
 
@@ -44,6 +45,11 @@ struct VideoSession {
   ColorSpace color_space;
 
   std::string client_ip;
+
+  /**
+   * The full command to be launched
+   */
+  std::optional<std::string> app_launch_cmd;
 };
 
 struct AudioSession {
@@ -64,6 +70,22 @@ struct AudioSession {
   int channels;
   int mask;
   int bitrate = 48000;
+};
+
+/**
+ * This event will trigger the start of the application command
+ */
+struct LaunchAPPEvent {
+  std::size_t session_id;
+  std::shared_ptr<dp::event_bus> event_bus;
+
+  /**
+   * The full command to be launched
+   */
+  std::string app_launch_cmd;
+
+  std::optional<std::string> wayland_socket;
+  std::optional<std::string> xorg_socket;
 };
 
 struct VideoRTPHeaders {

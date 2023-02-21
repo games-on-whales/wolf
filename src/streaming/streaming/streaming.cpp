@@ -65,6 +65,25 @@ static gboolean msg_handler(GstBus *bus, GstMessage *message, gpointer data) {
   return TRUE;
 }
 
+static void pipeline_error_handler(GstBus *bus, GstMessage *message, gpointer data) {
+  auto loop = (GMainLoop *)data;
+  GError *err;
+  gchar *debug;
+  gst_message_parse_error(message, &err, &debug);
+  logs::log(logs::error, "[GSTREAMER] Pipeline error: {}", err->message);
+  g_error_free(err);
+  g_free(debug);
+
+  /* Terminate pipeline on error */
+  g_main_loop_quit(loop);
+}
+
+static void pipeline_eos_handler(GstBus *bus, GstMessage *message, gpointer data) {
+  auto loop = (GMainLoop *)data;
+  logs::log(logs::info, "[GSTREAMER] Pipeline reached End Of Stream");
+  g_main_loop_quit(loop);
+}
+
 bool run_pipeline(
     const std::string &pipeline_desc,
     const std::function<immer::array<immer::box<dp::handler_registration>>(gst_element_ptr, gst_main_loop_ptr)>
@@ -93,7 +112,9 @@ bool run_pipeline(
    * GLib main loop is attached to below
    */
   auto bus = gst_pipeline_get_bus(GST_PIPELINE(pipeline.get()));
-  auto bus_watch_id = gst_bus_add_watch(bus, msg_handler, loop.get());
+  gst_bus_add_signal_watch(bus);
+  g_signal_connect(bus, "message::error", G_CALLBACK(pipeline_error_handler), loop.get());
+  g_signal_connect(bus, "message::eos", G_CALLBACK(pipeline_eos_handler), loop.get());
   gst_object_unref(bus);
 
   /* Let the calling thread set extra things */
@@ -112,13 +133,36 @@ bool run_pipeline(
   gst_element_set_state(pipeline.get(), GST_STATE_PAUSED);
   gst_element_set_state(pipeline.get(), GST_STATE_READY);
   gst_element_set_state(pipeline.get(), GST_STATE_NULL);
-  g_source_remove(bus_watch_id);
 
   for (const auto &handler : handlers) {
     handler->unregister();
   }
 
   return true;
+}
+
+void application_msg_handler(GstBus *bus, GstMessage *message, gpointer /* state::VideoSession */ data) {
+  auto structure = gst_message_get_structure(message);
+  auto name = std::string(gst_structure_get_name(structure));
+  if (name == "wayland.src") { // No gstreamer plugin should send application messages, but better be safe here
+
+    auto wayland_display = gst_structure_get_string(structure, "WAYLAND_DISPLAY");
+    auto x_display = gst_structure_get_string(structure, "DISPLAY");
+    logs::log(logs::debug, "[GSTREAMER] Received WAYLAND_DISPLAY={} DISPLAY={}", wayland_display, x_display);
+
+    auto video_session = (state::VideoSession *)data;
+    if (auto launch_cmd = video_session->app_launch_cmd) {
+      state::LaunchAPPEvent event{.session_id = video_session->session_id,
+                                  .event_bus = video_session->event_bus,
+
+                                  .app_launch_cmd = launch_cmd.value(),
+                                  .wayland_socket = wayland_display,
+                                  .xorg_socket = x_display};
+      video_session->event_bus->fire_event(immer::box<state::LaunchAPPEvent>(event));
+    }
+  } else {
+    logs::log(logs::debug, "[GSTREAMER] Received message::application named: {} ignoring..", name);
+  }
 }
 
 /**
@@ -155,6 +199,17 @@ void start_streaming_video(immer::box<state::VideoSession> video_session, unsign
                               fmt::arg("color_range", color_range));
 
   run_pipeline(pipeline, [video_session](auto pipeline, auto loop) {
+    auto bus = gst_pipeline_get_bus(GST_PIPELINE(pipeline.get()));
+    /**
+     * Trigger an event when our custom wayland plugin sends a signal that the sockets are ready
+     */
+    g_signal_connect(bus,
+                     "message::application",
+                     G_CALLBACK(application_msg_handler),
+                     &const_cast<state::VideoSession &>(video_session.get()));
+    gst_object_unref(bus);
+
+
     /*
      * The force IDR event will be triggered by the control stream.
      * We have to pass this back into the gstreamer pipeline

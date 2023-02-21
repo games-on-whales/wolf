@@ -80,13 +80,6 @@ RTSP_PACKET setup(const RTSP_PACKET &req, const state::StreamSession &session) {
 }
 
 RTSP_PACKET play(const RTSP_PACKET &req, const state::StreamSession &session) {
-  process::LaunchAPPEvent event{
-      .session_id = session.session_id,
-      .event_bus = session.event_bus,
-      .app_launch_cmd = session.app.run_cmd,
-  };
-  session.event_bus->fire_event(immer::box<process::LaunchAPPEvent>(event));
-
   return ok_msg(req.seq_number);
 }
 
@@ -157,7 +150,8 @@ RTSP_PACKET announce(const RTSP_PACKET &req, const state::StreamSession &session
       .color_range = (csc & 0x1) ? state::JPEG : state::MPEG,
       .color_space = state::ColorSpace(csc >> 1),
 
-      .client_ip = session.ip};
+      .client_ip = session.ip,
+      .app_launch_cmd = session.app.run_cmd};
   session.event_bus->fire_event(immer::box<state::VideoSession>(video));
 
   // Audio session
