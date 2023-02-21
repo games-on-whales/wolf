@@ -60,7 +60,6 @@ RUN --mount=type=cache,target=/usr/local/cargo/registry cargo cbuild --release
 ########################################################
 FROM gameonwhales/gstreamer:$GSTREAMER_VERSION AS runner
 ENV DEBIAN_FRONTEND=noninteractive
-ARG NV_VERSION
 
 # Wolf runtime dependencies
 # curl only used by plugin curlhttpsrc (remote video play)
@@ -80,11 +79,12 @@ RUN apt-get update -y && \
     libglvnd0 libgl1 libglx0 libegl1 libgles2 xwayland \
     && rm -rf /var/lib/apt/lists/*
 
+ARG NV_VERSION
 # nvidia files
 RUN if [ -n "$NV_VERSION" ]; then \
     apt-get update -y && \
-    apt-get install -y --no-install-recommends curl kmod pkg-config libglvnd-dev &&\
-    curl -LO https://international.download.nvidia.com/XFree86/Linux-x86_64/$NV_VERSION/NVIDIA-Linux-x86_64-$NV_VERSION.run && \
+    apt-get install -y --no-install-recommends curl kmod pkg-config libglvnd-dev && \
+    curl -LO https://download.nvidia.com/XFree86/Linux-x86_64/$NV_VERSION/NVIDIA-Linux-x86_64-$NV_VERSION.run && \
     chmod +x NVIDIA-Linux-x86_64-$NV_VERSION.run && \
     ./NVIDIA-Linux-x86_64-$NV_VERSION.run --silent -z --skip-depmod --skip-module-unload --no-nvidia-modprobe --no-kernel-modules --no-kernel-module-source && \
     rm ./NVIDIA-Linux-x86_64-$NV_VERSION.run && \
