@@ -63,7 +63,7 @@ std::thread startServer(HttpServer *server, const std::shared_ptr<state::AppStat
     auto cache_key = client_id.value() + "@" + client_ip;
 
     logs::log(logs::info, "Unpairing: {}", cache_key);
-    state::unpair(state->config, state->pairing_cache.load()->at(cache_key));
+    state::unpair(state->config, state->pairing_cache->load()->at(cache_key));
 
     XML xml;
     xml.put("root.<xmlattr>.status_code", 200);

@@ -24,6 +24,7 @@ void init() {
    * in which case no command line options will be parsed by GStreamer.
    */
   gst_init(nullptr, nullptr);
+  logs::log(logs::debug, "Gstreamer version: {}", get_gst_version());
 
   GstPlugin *video_plugin = gst_plugin_load_by_name("rtpmoonlightpay_video");
   gst_element_register(video_plugin, "rtpmoonlightpay_video", GST_RANK_PRIMARY, gst_TYPE_rtp_moonlight_pay_video);
@@ -151,9 +152,9 @@ void send_message(GstElement *recipient, GstStructure *message) {
 /**
  * Start VIDEO pipeline
  */
-void start_streaming_video(immer::box<state::VideoSession> video_session,
+void start_streaming_video(const immer::box<state::VideoSession> &video_session,
                            unsigned short client_port,
-                           std::shared_ptr<boost::asio::thread_pool> t_pool) {
+                           const std::shared_ptr<boost::asio::thread_pool> &t_pool) {
   std::string color_range = (static_cast<int>(video_session->color_range) == static_cast<int>(state::JPEG)) ? "jpeg"
                                                                                                             : "mpeg2";
   std::string color_space;
@@ -220,7 +221,7 @@ void start_streaming_video(immer::box<state::VideoSession> video_session,
      * in order to force the encoder to produce a new IDR packet
      */
     auto idr_handler = video_session->event_bus->register_handler<immer::box<ControlEvent>>(
-        [sess_id = video_session->session_id, pipeline](immer::box<ControlEvent> ctrl_ev) {
+        [sess_id = video_session->session_id, pipeline](const immer::box<ControlEvent> &ctrl_ev) {
           if (ctrl_ev->session_id == sess_id) {
             if (ctrl_ev->type == IDR_FRAME) {
               logs::log(logs::debug, "[GSTREAMER] Forcing IDR");
@@ -232,7 +233,7 @@ void start_streaming_video(immer::box<state::VideoSession> video_session,
         });
 
     auto terminate_handler = video_session->event_bus->register_handler<immer::box<TerminateEvent>>(
-        [sess_id = video_session->session_id, loop](immer::box<TerminateEvent> term_ev) {
+        [sess_id = video_session->session_id, loop](const immer::box<TerminateEvent> &term_ev) {
           if (term_ev->session_id == sess_id) {
             logs::log(logs::debug, "[GSTREAMER] Terminating video pipeline");
             g_main_loop_quit(loop.get());
@@ -249,7 +250,7 @@ void start_streaming_video(immer::box<state::VideoSession> video_session,
 /**
  * Start AUDIO pipeline
  */
-void start_streaming_audio(immer::box<state::AudioSession> audio_session, unsigned short client_port) {
+void start_streaming_audio(const immer::box<state::AudioSession> &audio_session, unsigned short client_port) {
   auto pipeline = fmt::format(audio_session->gst_pipeline,
                               fmt::arg("channels", audio_session->channels),
                               fmt::arg("bitrate", audio_session->bitrate),
@@ -262,7 +263,7 @@ void start_streaming_audio(immer::box<state::AudioSession> audio_session, unsign
 
   run_pipeline(pipeline, [audio_session](auto pipeline, auto loop) {
     auto terminate_handler = audio_session->event_bus->register_handler<immer::box<TerminateEvent>>(
-        [sess_id = audio_session->session_id, loop](immer::box<TerminateEvent> term_ev) {
+        [sess_id = audio_session->session_id, loop](const immer::box<TerminateEvent> &term_ev) {
           if (term_ev->session_id == sess_id) {
             logs::log(logs::debug, "[GSTREAMER] Terminating audio pipeline");
             g_main_loop_quit(loop.get());

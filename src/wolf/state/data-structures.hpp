@@ -175,18 +175,18 @@ struct AppState {
   /**
    * The stored (and user modifiable) configuration
    */
-  Config config;
+  immer::box<Config> config;
 
   /**
    * Host information like network, certificates and displays
    */
-  Host host;
+  immer::box<Host> host;
 
   /**
    * Mutable temporary results in order to achieve the multistep pairing process
    * It's shared between the two HTTP/HTTPS threads
    */
-  immer::atom<immer::map<std::string, PairCache>> &pairing_cache;
+  std::shared_ptr<immer::atom<immer::map<std::string, PairCache>>> pairing_cache;
 
   /**
    * A shared bus of events so that we can decouple modules

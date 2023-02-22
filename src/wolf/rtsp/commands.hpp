@@ -33,10 +33,6 @@ RTSP_PACKET ok_msg(int sequence_number,
   };
 }
 
-RTSP_PACKET options(const RTSP_PACKET &req) {
-  return ok_msg(req.seq_number);
-}
-
 RTSP_PACKET describe(const RTSP_PACKET &req, const state::StreamSession &session) {
   auto video_params = "";
   if (session.display_mode.hevc_supported) {
@@ -81,16 +77,11 @@ RTSP_PACKET setup(const RTSP_PACKET &req, const state::StreamSession &session) {
                 {{"Session", session_opt}, {"Transport", "server_port=" + std::to_string(service_port)}});
 }
 
-RTSP_PACKET play(const RTSP_PACKET &req, const state::StreamSession &session) {
-  std::this_thread::sleep_for(500ms); // Let's give some time for the gstreamer pipeline to startup
-  return ok_msg(req.seq_number);
-}
-
 /**
  * Ex given: x-nv-video[0].clientViewportWd:1920
  * returns: <x-nv-video[0].clientViewportWd, 1920>
  */
-std::pair<std::string, std::optional<int>> parse_arg_line(std::pair<std::string, std::string> line) {
+std::pair<std::string, std::optional<int>> parse_arg_line(const std::pair<std::string, std::string> &line) {
   auto split = utils::split(line.second, ':');
   std::optional<int> val;
   try {
@@ -105,7 +96,7 @@ std::pair<std::string, std::optional<int>> parse_arg_line(std::pair<std::string,
 RTSP_PACKET announce(const RTSP_PACKET &req, const state::StreamSession &session) {
 
   auto args = req.payloads //
-              | views::filter([](std::pair<std::string, std::string> line) {
+              | views::filter([](const std::pair<std::string, std::string> &line) {
                   return line.first == "a";                    // all args start with a=
                 })                                             //
               | views::transform(parse_arg_line)               // turns an arg line into a pair
@@ -184,7 +175,7 @@ RTSP_PACKET message_handler(const RTSP_PACKET &req, const state::StreamSession &
 
   switch (utils::hash(cmd)) {
   case utils::hash("OPTIONS"):
-    return options(req);
+    return ok_msg(req.seq_number);
   case utils::hash("DESCRIBE"):
     return describe(req, session);
   case utils::hash("SETUP"):
@@ -192,7 +183,7 @@ RTSP_PACKET message_handler(const RTSP_PACKET &req, const state::StreamSession &
   case utils::hash("ANNOUNCE"):
     return announce(req, session);
   case utils::hash("PLAY"):
-    return play(req, session);
+    return ok_msg(req.seq_number);
   default:
     logs::log(logs::warning, "[RTSP] command {} not found", cmd);
     return error_msg(404, "NOT FOUND", req.seq_number);

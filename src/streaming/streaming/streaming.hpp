@@ -16,16 +16,16 @@ void init();
 /**
  * @return the Gstreamer version we are linked to
  */
-inline std::string version() {
+inline std::string get_gst_version() {
   guint major, minor, micro, nano;
   gst_version(&major, &minor, &micro, &nano);
   return fmt::format("{}.{}.{}-{}", major, minor, micro, nano);
 }
 
-void start_streaming_video(immer::box<state::VideoSession> video_session,
+void start_streaming_video(const immer::box<state::VideoSession> &video_session,
                            unsigned short client_port,
-                           std::shared_ptr<boost::asio::thread_pool> t_pool);
+                           const std::shared_ptr<boost::asio::thread_pool> &t_pool);
 
-void start_streaming_audio(immer::box<state::AudioSession> audio_session, unsigned short client_port);
+void start_streaming_audio(const immer::box<state::AudioSession> &audio_session, unsigned short client_port);
 
 } // namespace streaming

@@ -68,7 +68,7 @@ public:
    * option in the message: Content-length which represent the size in bytes of the payload. We'll keep recursively call
    * receive_message() until our payload size matches the specified Content-length
    */
-  void receive_message(std::function<void(std::optional<RTSP_PACKET>)> on_msg_read) {
+  void receive_message(const std::function<void(std::optional<RTSP_PACKET>)> &on_msg_read) {
     deadline_.async_wait([self = shared_from_this()](auto error) {
       if (!error && self->deadline_.expiry() <= asio::steady_timer::clock_type::now()) { // The deadline has passed
         logs::log(logs::trace, "[RTSP] deadline over");
@@ -120,7 +120,8 @@ public:
    * Will fully write back the given message to the socket
    * calls on_sent(bytes_transferred) when over
    */
-  void send_message(const rtsp::RTSP_PACKET &response, std::function<void(int /* bytes_transferred */)> on_sent) {
+  void send_message(const rtsp::RTSP_PACKET &response,
+                    const std::function<void(int /* bytes_transferred */)> &on_sent) {
     auto raw_response = rtsp::to_string(response);
     logs::log(logs::trace, "[RTSP] sending reply: \n{}", raw_response);
     boost::asio::async_write(socket(),
@@ -137,7 +138,7 @@ public:
 protected:
   explicit tcp_connection(boost::asio::io_context &io_context, immer::box<state::StreamSession> state)
       : socket_(io_context), streambuf_(max_msg_size), deadline_(io_context), stream_session(std::move(state)),
-        prev_read_(""), prev_read_bytes_(0) {}
+        prev_read_bytes_(0) {}
   tcp::socket socket_;
 
   static constexpr auto max_msg_size = 2048;
@@ -200,7 +201,7 @@ private:
  *
  * @return the thread instance
  */
-void run_server(int port, immer::box<state::StreamSession> state) {
+void run_server(int port, const immer::box<state::StreamSession> &state) {
   try {
     boost::asio::io_context io_context;
     tcp_server server(io_context, port, state);
@@ -208,7 +209,7 @@ void run_server(int port, immer::box<state::StreamSession> state) {
     logs::log(logs::info, "RTSP server started on port: {}", port);
 
     auto stop_handler = state->event_bus->register_handler<immer::box<moonlight::control::TerminateEvent>>(
-        [sess_id = state->session_id, &io_context](immer::box<moonlight::control::TerminateEvent> term_ev) {
+        [sess_id = state->session_id, &io_context](const immer::box<moonlight::control::TerminateEvent> &term_ev) {
           if (term_ev->session_id == sess_id) {
             logs::log(logs::info, "RTSP received termination, stopping.");
             io_context.stop();

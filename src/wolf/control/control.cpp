@@ -69,7 +69,7 @@ std::pair<std::string /* ip */, int /* port */> get_ip(const sockaddr *const ip_
   return {std::string{data}, port};
 }
 
-void run_control(immer::box<state::ControlSession> control_sess, int timeout_millis) {
+void run_control(const immer::box<state::ControlSession> &control_sess, int timeout_millis) {
 
   enet_host host = create_host(control_sess->host, control_sess->port, control_sess->peers);
   logs::log(logs::info, "Control server started on port: {}", control_sess->port);
@@ -77,9 +77,9 @@ void run_control(immer::box<state::ControlSession> control_sess, int timeout_mil
   ENetEvent event;
   immer::atom<bool> terminated(false);
 
-  auto app_stop_handler = control_sess->event_bus->register_handler<process::AppStoppedEvent>(
-      [&terminated, sess_id = control_sess->session_id](process::AppStoppedEvent ev) {
-        if (ev.session_id == sess_id) {
+  auto app_stop_handler = control_sess->event_bus->register_handler<immer::box<process::AppStoppedEvent>>(
+      [&terminated, sess_id = control_sess->session_id](const immer::box<process::AppStoppedEvent> &ev) {
+        if (ev->session_id == sess_id) {
           terminated.store(true); // TODO: is there a way to better signal this to Moonlight?
         }
       });

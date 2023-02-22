@@ -15,6 +15,6 @@ struct AppStoppedEvent {
 
 namespace bp = boost::process;
 
-void run_process(immer::box<state::LaunchAPPEvent> process_ev);
+void run_process(const immer::box<state::LaunchAPPEvent> &process_ev);
 
 } // namespace process

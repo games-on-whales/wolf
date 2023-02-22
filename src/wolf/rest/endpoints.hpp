@@ -42,14 +42,14 @@ void serverinfo(std::shared_ptr<typename SimpleWeb::Server<T>::Response> respons
                                    -1,    // TODO: current_appid
                                    state::HTTPS_PORT,
                                    state::HTTP_PORT,
-                                   cfg.uuid,
-                                   cfg.hostname,
-                                   host.mac_address,
-                                   host.external_ip,
-                                   host.internal_ip,
-                                   host.display_modes,
+                                   cfg->uuid,
+                                   cfg->hostname,
+                                   host->mac_address,
+                                   host->external_ip,
+                                   host->internal_ip,
+                                   host->display_modes,
                                    is_https,
-                                   cfg.support_hevc);
+                                   cfg->support_hevc);
 
   send_xml<T>(response, SimpleWeb::StatusCode::success_ok, xml);
 }
@@ -82,12 +82,12 @@ void pair(std::shared_ptr<typename SimpleWeb::Server<T>::Response> response,
 
     future_pin->get_future().then(
         [state, salt, client_cert_str, cache_key, client_id, response](boost::future<std::string> fut_pin) {
-          auto server_pem = x509::get_cert_pem(*state->host.server_cert);
+          auto server_pem = x509::get_cert_pem(*state->host->server_cert);
           auto result = moonlight::pair::get_server_cert(fut_pin.get(), salt.value(), server_pem);
 
           auto client_cert_parsed = crypto::hex_to_str(client_cert_str.value(), true);
 
-          state->pairing_cache.update([&](const immer::map<std::string, state::PairCache> &pairing_cache) {
+          state->pairing_cache->update([&](const immer::map<std::string, state::PairCache> &pairing_cache) {
             return pairing_cache.set(cache_key,
                                      {client_id.value(),
                                       client_cert_parsed,
@@ -106,7 +106,7 @@ void pair(std::shared_ptr<typename SimpleWeb::Server<T>::Response> response,
     return;
   }
 
-  auto client_cache_it = state->pairing_cache.load()->find(cache_key);
+  auto client_cache_it = state->pairing_cache->load()->find(cache_key);
   if (client_cache_it == nullptr) {
     logs::log(logs::warning, "Unable to find {} {} in the pairing cache", client_id.value(), client_ip);
     return;
@@ -117,14 +117,14 @@ void pair(std::shared_ptr<typename SimpleWeb::Server<T>::Response> response,
   auto client_challenge = get_header(headers, "clientchallenge");
   if (client_challenge) {
 
-    auto server_cert_signature = x509::get_cert_signature(state->host.server_cert);
+    auto server_cert_signature = x509::get_cert_signature(state->host->server_cert);
     auto [xml, server_secret_pair] =
         moonlight::pair::send_server_challenge(client_cache.aes_key, client_challenge.value(), server_cert_signature);
 
     auto [server_secret, server_challenge] = server_secret_pair;
     client_cache.server_secret = server_secret;
     client_cache.server_challenge = server_challenge;
-    state->pairing_cache.update([&](const immer::map<std::string, state::PairCache> &pairing_cache) {
+    state->pairing_cache->update([&](const immer::map<std::string, state::PairCache> &pairing_cache) {
       return pairing_cache.set(cache_key, client_cache);
     });
 
@@ -140,11 +140,11 @@ void pair(std::shared_ptr<typename SimpleWeb::Server<T>::Response> response,
         client_cache.aes_key,
         client_cache.server_secret.value(),
         server_challenge.value(),
-        x509::get_pkey_content(const_cast<EVP_PKEY *>(state->host.server_pkey)));
+        x509::get_pkey_content(const_cast<EVP_PKEY *>(state->host->server_pkey)));
 
     client_cache.client_hash = client_hash;
 
-    state->pairing_cache.update([&](const immer::map<std::string, state::PairCache> &pairing_cache) {
+    state->pairing_cache->update([&](const immer::map<std::string, state::PairCache> &pairing_cache) {
       return pairing_cache.set(cache_key, client_cache);
     });
 
@@ -185,7 +185,7 @@ void pair(std::shared_ptr<typename SimpleWeb::Server<T>::Response> response,
     xml.put("root.<xmlattr>.status_code", 200);
 
     // Cleanup temporary pairing_cache
-    state->pairing_cache.update([&cache_key](const immer::map<std::string, state::PairCache> &pairing_cache) {
+    state->pairing_cache->update([&cache_key](const immer::map<std::string, state::PairCache> &pairing_cache) {
       return pairing_cache.erase(cache_key);
     });
 
@@ -204,7 +204,7 @@ void applist(std::shared_ptr<typename SimpleWeb::Server<T>::Response> response,
              const std::shared_ptr<state::AppState> &state) {
   log_req<T>(request);
 
-  auto base_apps = state->config.apps                                            //
+  auto base_apps = state->config->apps                                            //
                    | ranges::views::transform([](auto app) { return app.base; }) //
                    | ranges::to<immer::vector<moonlight::App>>();
   auto xml = moonlight::applist(base_apps);
@@ -252,7 +252,7 @@ void launch(std::shared_ptr<typename SimpleWeb::Server<T>::Response> response,
 
   state->event_bus->fire_event(shared_session); // Anyone listening for this event will be called
 
-  auto xml = moonlight::launch_success(state->host.external_ip, std::to_string(current_client.rtsp_port));
+  auto xml = moonlight::launch_success(state->host->external_ip, std::to_string(current_client.rtsp_port));
   send_xml<T>(response, SimpleWeb::StatusCode::success_ok, xml);
 }
 } // namespace https

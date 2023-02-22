@@ -72,8 +72,10 @@ auto initialize(std::string_view config_file, std::string_view pkey_filename, st
   auto display_modes = getDisplayModes();
 
   auto host = get_host_config(pkey_filename, cert_filename);
-  auto atom = new immer::atom<immer::map<std::string, state::PairCache>>();
-  state::AppState state = {config, host, *atom, std::make_shared<dp::event_bus>()};
+  state::AppState state = {config,
+                           host,
+                           std::make_shared<immer::atom<immer::map<std::string, state::PairCache>>>(),
+                           std::make_shared<dp::event_bus>()};
   return std::make_shared<state::AppState>(state);
 }
 
@@ -127,7 +129,7 @@ auto setup_sessions_handlers(std::shared_ptr<dp::event_bus> &event_bus, TreadsMa
 
   // RTSP
   handlers.push_back(event_bus->register_handler<immer::box<state::StreamSession>>(
-      [&threads](immer::box<state::StreamSession> stream_session) {
+      [&threads](const immer::box<state::StreamSession> &stream_session) {
         // Create pool
         auto t_pool = std::make_shared<ba::thread_pool>(6);
 
@@ -143,7 +145,7 @@ auto setup_sessions_handlers(std::shared_ptr<dp::event_bus> &event_bus, TreadsMa
   // Control thread
   control::init(); // Need to initialise enet once
   handlers.push_back(event_bus->register_handler<immer::box<state::ControlSession>>(
-      [&threads](immer::box<state::ControlSession> control_sess) {
+      [&threads](const immer::box<state::ControlSession> &control_sess) {
         auto t_pool = threads.load()->at(control_sess->session_id);
 
         // Start control stream
@@ -154,7 +156,7 @@ auto setup_sessions_handlers(std::shared_ptr<dp::event_bus> &event_bus, TreadsMa
       }));
 
   handlers.push_back(event_bus->register_handler<immer::box<state::LaunchAPPEvent>>(
-      [&threads](immer::box<state::LaunchAPPEvent> launch_ev) {
+      [&threads](const immer::box<state::LaunchAPPEvent> &launch_ev) {
         auto t_pool = threads.load()->at(launch_ev->session_id);
 
         // Start selected app
@@ -164,29 +166,29 @@ auto setup_sessions_handlers(std::shared_ptr<dp::event_bus> &event_bus, TreadsMa
   // GStreamer video
   streaming::init(); // Need to initialise streaming once
   handlers.push_back(event_bus->register_handler<immer::box<state::VideoSession>>(
-      [&threads](immer::box<state::VideoSession> video_sess) {
+      [&threads](const immer::box<state::VideoSession> &video_sess) {
         auto t_pool = threads.load()->at(video_sess->session_id);
 
         ba::post(*t_pool, [video_sess, t_pool]() {
           auto client_port = rtp::wait_for_ping(video_sess->port);
-          streaming::start_streaming_video(std::move(video_sess), client_port, t_pool);
+          streaming::start_streaming_video(video_sess, client_port, t_pool);
         });
       }));
 
   // GStreamer audio
   handlers.push_back(event_bus->register_handler<immer::box<state::AudioSession>>(
-      [&threads](immer::box<state::AudioSession> audio_sess) {
+      [&threads](const immer::box<state::AudioSession> &audio_sess) {
         auto t_pool = threads.load()->at(audio_sess->session_id);
 
         ba::post(*t_pool, [audio_sess]() {
           auto client_port = rtp::wait_for_ping(audio_sess->port);
-          streaming::start_streaming_audio(std::move(audio_sess), client_port);
+          streaming::start_streaming_audio(audio_sess, client_port);
         });
       }));
 
   // On control session end, let's wait for all threads to finish then clean them up
   handlers.push_back(event_bus->register_handler<immer::box<moonlight::control::TerminateEvent>>(
-      [&threads](immer::box<moonlight::control::TerminateEvent> event) {
+      [&threads](const immer::box<moonlight::control::TerminateEvent> &event) {
         // Events are dispatched from the calling thread; in this case it'll be the control stream thread.
         // We have to create a new thread to process the cleaning and detach it from the original thread
         auto cleanup_thread = std::thread([&threads, sess_id = event->session_id]() {

@@ -10,7 +10,7 @@ namespace process {
 
 using namespace moonlight::control;
 
-void run_process(immer::box<state::LaunchAPPEvent> process_ev) {
+void run_process(const immer::box<state::LaunchAPPEvent> &process_ev) {
   logs::log(logs::debug, "[PROCESS] Starting process: {}", process_ev->app_launch_cmd);
 
   std::future<std::string> std_out, err_out;
@@ -20,10 +20,10 @@ void run_process(immer::box<state::LaunchAPPEvent> process_ev) {
 
   try {
     auto env = boost::this_process::environment();
-    if(process_ev->wayland_socket){
+    if (process_ev->wayland_socket) {
       env["WAYLAND_DISPLAY"] = process_ev->wayland_socket.value();
     }
-    if(process_ev->xorg_socket){
+    if (process_ev->xorg_socket) {
       env["DISPLAY"] = process_ev->xorg_socket.value();
     }
     child_proc = bp::child(process_ev->app_launch_cmd,
@@ -41,7 +41,7 @@ void run_process(immer::box<state::LaunchAPPEvent> process_ev) {
   auto client_connected = immer::atom<bool>(true);
   auto terminate_handler = process_ev->event_bus->register_handler<immer::box<TerminateEvent>>(
       [&client_connected, &group_proc, sess_id = process_ev->session_id](
-          immer::box<TerminateEvent> terminate_ev) {
+          const immer::box<TerminateEvent> &terminate_ev) {
         if (terminate_ev->session_id == sess_id) {
           client_connected.store(false);
           group_proc.terminate(); // Manually terminate the process
@@ -52,7 +52,8 @@ void run_process(immer::box<state::LaunchAPPEvent> process_ev) {
 
   if (*client_connected.load()) {
     logs::log(logs::warning, "[PROCESS] Process terminated before the user closed the connection.");
-    process_ev->event_bus->fire_event(AppStoppedEvent{.session_id = process_ev->session_id});
+    process_ev->event_bus->fire_event(
+        immer::box<AppStoppedEvent>(AppStoppedEvent{.session_id = process_ev->session_id}));
   }
   child_proc.wait(); // to avoid a zombie process & get the exit code
 
