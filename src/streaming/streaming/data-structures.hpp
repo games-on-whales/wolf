@@ -90,11 +90,6 @@ struct LaunchAPPEvent {
   std::optional<std::string> xorg_socket;
 };
 
-struct InputsReadyEvent {
-  std::size_t session_id;
-  immer::array<immer::box<std::string>> devices_paths;
-};
-
 struct VideoRTPHeaders {
   // headers
   moonlight::RTP_PACKET rtp;

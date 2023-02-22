@@ -1,8 +1,10 @@
 #pragma once
+#include <boost/asio.hpp>
 #include <fmt/core.h>
 #include <fmt/format.h>
 #include <gst/gst.h>
 #include <immer/box.hpp>
+#include <memory>
 #include <moonlight/data-structures.hpp>
 #include <streaming/data-structures.hpp>
 
@@ -20,7 +22,9 @@ inline std::string version() {
   return fmt::format("{}.{}.{}-{}", major, minor, micro, nano);
 }
 
-void start_streaming_video(immer::box<state::VideoSession> video_session, unsigned short client_port);
+void start_streaming_video(immer::box<state::VideoSession> video_session,
+                           unsigned short client_port,
+                           std::shared_ptr<boost::asio::thread_pool> t_pool);
 
 void start_streaming_audio(immer::box<state::AudioSession> audio_session, unsigned short client_port);
 

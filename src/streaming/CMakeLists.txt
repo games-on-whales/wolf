@@ -49,6 +49,7 @@ endif ()
 target_link_libraries(streaming PUBLIC
         wolf::moonlight
         wolf::helpers
+        wolf::input
         fmt::fmt-header-only
         dp::eventbus
         ${GOBJECT_LIBRARIES}

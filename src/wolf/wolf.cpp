@@ -6,7 +6,6 @@
 #include <fstream>
 #include <immer/array.hpp>
 #include <immer/vector_transient.hpp>
-#include <input/input.hpp>
 #include <memory>
 #include <process/process.hpp>
 #include <rest/rest.hpp>
@@ -158,23 +157,8 @@ auto setup_sessions_handlers(std::shared_ptr<dp::event_bus> &event_bus, TreadsMa
       [&threads](immer::box<state::LaunchAPPEvent> launch_ev) {
         auto t_pool = threads.load()->at(launch_ev->session_id);
 
-        // Setup inputs and start selected app
-        ba::post(*t_pool, [launch_ev, t_pool]() {
-          // create virtual inputs
-          auto input_setup = input::setup_handlers(launch_ev->session_id, launch_ev->event_bus, t_pool);
-
-          launch_ev->event_bus->fire_event(
-              immer::box<state::InputsReadyEvent>(state::InputsReadyEvent{.session_id = launch_ev->session_id,
-                                                                          .devices_paths = input_setup.devices_paths}));
-
-          // Start app
-          process::run_process(launch_ev);
-
-          // when the app exits, cleanup
-          for (const auto &handler : input_setup.registered_handlers) {
-            handler->unregister();
-          }
-        });
+        // Start selected app
+        ba::post(*t_pool, [launch_ev]() { process::run_process(launch_ev); });
       }));
 
   // GStreamer video
@@ -183,9 +167,9 @@ auto setup_sessions_handlers(std::shared_ptr<dp::event_bus> &event_bus, TreadsMa
       [&threads](immer::box<state::VideoSession> video_sess) {
         auto t_pool = threads.load()->at(video_sess->session_id);
 
-        ba::post(*t_pool, [video_sess]() {
+        ba::post(*t_pool, [video_sess, t_pool]() {
           auto client_port = rtp::wait_for_ping(video_sess->port);
-          streaming::start_streaming_video(std::move(video_sess), client_port);
+          streaming::start_streaming_video(std::move(video_sess), client_port, t_pool);
         });
       }));
 

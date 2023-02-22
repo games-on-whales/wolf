@@ -1,9 +1,10 @@
 #include <functional>
 #include <helpers/logger.hpp>
 #include <immer/array.hpp>
+#include <immer/array_transient.hpp>
 #include <immer/box.hpp>
+#include <input/input.hpp>
 #include <memory>
-#include <moonlight/data-structures.hpp>
 #include <streaming/data-structures.hpp>
 #include <streaming/gst-plugin/gstrtpmoonlightpay_audio.hpp>
 #include <streaming/gst-plugin/gstrtpmoonlightpay_video.hpp>
@@ -85,14 +86,14 @@ bool run_pipeline(
   g_signal_connect(bus, "message::eos", G_CALLBACK(pipeline_eos_handler), loop.get());
   gst_object_unref(bus);
 
-  /* Let the calling thread set extra things */
-  auto handlers = on_pipeline_ready(pipeline, loop);
-
   /* Set the pipeline to "playing" state*/
   gst_element_set_state(pipeline.get(), GST_STATE_PLAYING);
   GST_DEBUG_BIN_TO_DOT_FILE_WITH_TS(reinterpret_cast<GstBin *>(pipeline.get()),
                                     GST_DEBUG_GRAPH_SHOW_ALL,
                                     "pipeline-start");
+
+  /* Let the calling thread set extra things */
+  auto handlers = on_pipeline_ready(pipeline, loop);
 
   /* The main loop will be run until someone calls g_main_loop_quit() */
   g_main_loop_run(loop.get());
@@ -109,6 +110,10 @@ bool run_pipeline(
   return true;
 }
 
+/**
+ * Here we receive all message::application that are sent in the pipeline,
+ * we want to fire an event on our side when the Wayland plugin has finished setting up the sockets
+ */
 void application_msg_handler(GstBus *bus, GstMessage *message, gpointer /* state::VideoSession */ data) {
   auto structure = gst_message_get_structure(message);
   auto name = std::string(gst_structure_get_name(structure));
@@ -126,7 +131,7 @@ void application_msg_handler(GstBus *bus, GstMessage *message, gpointer /* state
                                   .app_launch_cmd = launch_cmd.value(),
                                   .wayland_socket = wayland_display,
                                   .xorg_socket = x_display};
-      video_session->event_bus->fire_event(immer::box<state::LaunchAPPEvent>(event));
+      video_session->event_bus->fire_event(immer::box<state::LaunchAPPEvent>(event)); // Starts the selected application
     }
   } else {
     logs::log(logs::debug, "[GSTREAMER] Received message::application named: {} ignoring..", name);
@@ -146,7 +151,9 @@ void send_message(GstElement *recipient, GstStructure *message) {
 /**
  * Start VIDEO pipeline
  */
-void start_streaming_video(immer::box<state::VideoSession> video_session, unsigned short client_port) {
+void start_streaming_video(immer::box<state::VideoSession> video_session,
+                           unsigned short client_port,
+                           std::shared_ptr<boost::asio::thread_pool> t_pool) {
   std::string color_range = (static_cast<int>(video_session->color_range) == static_cast<int>(state::JPEG)) ? "jpeg"
                                                                                                             : "mpeg2";
   std::string color_space;
@@ -176,7 +183,7 @@ void start_streaming_video(immer::box<state::VideoSession> video_session, unsign
                               fmt::arg("color_space", color_space),
                               fmt::arg("color_range", color_range));
 
-  run_pipeline(pipeline, [video_session](auto pipeline, auto loop) {
+  run_pipeline(pipeline, [t_pool, video_session](auto pipeline, auto loop) {
     auto bus = gst_pipeline_get_bus(GST_PIPELINE(pipeline.get()));
     /**
      * Trigger an event when our custom wayland plugin sends a signal that the sockets are ready
@@ -187,30 +194,25 @@ void start_streaming_video(immer::box<state::VideoSession> video_session, unsign
                      &const_cast<state::VideoSession &>(video_session.get()));
     gst_object_unref(bus);
 
-    /**
-     * When we've finished setting up virtual devices we'll fire that event in the gstreamer pipeline
-     * it'll be picked up by our custom wayland plugin
-     */
-    auto inputs_handlers = video_session->event_bus->register_handler<immer::box<state::InputsReadyEvent>>(
-        [sess_id = video_session->session_id, pipeline](immer::box<state::InputsReadyEvent> inputs_ev) {
-          if (inputs_ev->session_id == sess_id) {
-            logs::log(logs::debug, "[GSTREAMER] Sending VirtualDevicesReady");
+    // create virtual inputs
+    auto input_setup = input::setup_handlers(video_session->session_id, video_session->event_bus, t_pool);
 
-            /* Copying to GArray */
-            auto size = inputs_ev->devices_paths.size();
-            GValueArray *devices = g_value_array_new(size);
-            for (const auto &path : inputs_ev->devices_paths) {
-              GValue value = G_VALUE_INIT;
-              g_value_init(&value, G_TYPE_STRING);
-              g_value_set_string(&value, path.get().c_str());
-              g_value_array_append(devices, &value);
-            }
+    /* Sending created virtual inputs to our custom wayland plugin */
+    {
+      /* Copying to GArray */
+      auto size = input_setup.devices_paths.size();
+      GValueArray *devices = g_value_array_new(size);
+      for (const auto &path : input_setup.devices_paths) {
+        GValue value = G_VALUE_INIT;
+        g_value_init(&value, G_TYPE_STRING);
+        g_value_set_string(&value, path.get().c_str());
+        g_value_array_append(devices, &value);
+      }
 
-            send_message(pipeline.get(),
-                         gst_structure_new("VirtualDevicesReady", "paths", G_TYPE_VALUE_ARRAY, devices, NULL));
-            g_value_array_free(devices);
-          }
-        });
+      send_message(pipeline.get(),
+                   gst_structure_new("VirtualDevicesReady", "paths", G_TYPE_VALUE_ARRAY, devices, NULL));
+      g_value_array_free(devices);
+    }
 
     /*
      * The force IDR event will be triggered by the control stream.
@@ -237,9 +239,10 @@ void start_streaming_video(immer::box<state::VideoSession> video_session, unsign
           }
         });
 
-    return immer::array<immer::box<dp::handler_registration>>{std::move(idr_handler),
-                                                              std::move(terminate_handler),
-                                                              std::move(inputs_handlers)};
+    auto handlers = input_setup.registered_handlers.transient();
+    handlers.push_back(std::move(idr_handler));
+    handlers.push_back(std::move(terminate_handler));
+    return handlers.persistent();
   });
 }
 
