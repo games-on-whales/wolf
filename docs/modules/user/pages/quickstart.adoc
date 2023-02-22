@@ -12,7 +12,7 @@ The only way to run Wolf right now is to manually compile it.
 .Build dependencies
 [source,bash]
 ....
-apt install -y ninja-build cmake clang libboost-thread-dev libboost-filesystem-dev libboost-log-dev libboost-stacktrace-dev libssl-dev libgstreamer1.0-dev  libgstreamer-plugins-base1.0-dev libevdev-dev
+apt install -y ninja-build cmake clang libboost-locale-dev libboost-thread-dev libboost-filesystem-dev libboost-log-dev libboost-stacktrace-dev libssl-dev libgstreamer1.0-dev  libgstreamer-plugins-base1.0-dev libevdev-dev
 ....
 
 .Compile

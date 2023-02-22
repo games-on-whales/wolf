@@ -1,9 +1,9 @@
 #include "input/input.hpp"
+#include <immer/array.hpp>
 #include <libevdev/libevdev-uinput.h>
 #include <libevdev/libevdev.h>
 #include <memory>
 #include <optional>
-#include <immer/array.hpp>
 
 namespace input {
 
@@ -31,6 +31,8 @@ void move_mouse_abs(libevdev_uinput *mouse, const data::MOUSE_MOVE_ABS_PACKET &m
 void mouse_press(libevdev_uinput *mouse, const data::MOUSE_BUTTON_PACKET &btn_pkt);
 
 void mouse_scroll(libevdev_uinput *mouse, const data::MOUSE_SCROLL_PACKET &scroll_pkt);
+
+void mouse_scroll_horizontal(libevdev_uinput *mouse, const data::MOUSE_HSCROLL_PACKET &scroll_pkt);
 } // namespace mouse
 
 namespace keyboard {
@@ -43,6 +45,8 @@ struct Action {
 };
 
 std::optional<Action> keyboard_handle(libevdev_uinput *keyboard, const data::KEYBOARD_PACKET &key_pkt);
+void paste_utf(libevdev_uinput *kb, const data::UTF8_TEXT_PACKET &pkt);
+std::string to_hex(const std::basic_string<char32_t> &str);
 
 } // namespace keyboard
 

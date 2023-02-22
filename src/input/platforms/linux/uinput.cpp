@@ -12,16 +12,21 @@
 #include "uinput.hpp"
 #include "keyboard.hpp"
 #include <boost/endian/conversion.hpp>
+#include <boost/locale.hpp>
 #include <chrono>
 #include <helpers/logger.hpp>
 #include <immer/array.hpp>
 #include <immer/array_transient.hpp>
 #include <immer/atom.hpp>
+#include <iomanip>
 #include <range/v3/view.hpp>
+#include <sstream>
 
 namespace input {
 
 using namespace std::chrono_literals;
+using namespace std::string_literals;
+
 using namespace moonlight::control;
 
 constexpr int ABS_MAX_WIDTH = 1920;
@@ -139,7 +144,7 @@ void move_mouse_abs(libevdev_uinput *mouse, const data::MOUSE_MOVE_ABS_PACKET &m
 void mouse_press(libevdev_uinput *mouse, const data::MOUSE_BUTTON_PACKET &btn_pkt) {
   int btn_type;
   int scan;
-  auto release = btn_pkt.action == data::MOUSE_BUTTON_RELEASED;
+  auto release = btn_pkt.type == data::MOUSE_BUTTON_RELEASE;
 
   if (btn_pkt.button == 1) {
     btn_type = BTN_LEFT;
@@ -169,6 +174,15 @@ void mouse_scroll(libevdev_uinput *mouse, const data::MOUSE_SCROLL_PACKET &scrol
 
   libevdev_uinput_write_event(mouse, EV_REL, REL_WHEEL, distance);
   libevdev_uinput_write_event(mouse, EV_REL, REL_WHEEL_HI_RES, high_res_distance);
+  libevdev_uinput_write_event(mouse, EV_SYN, SYN_REPORT, 0);
+}
+
+void mouse_scroll_horizontal(libevdev_uinput *mouse, const data::MOUSE_HSCROLL_PACKET &scroll_pkt) {
+  int high_res_distance = boost::endian::big_to_native(scroll_pkt.scroll_amount);
+  int distance = high_res_distance / 120;
+
+  libevdev_uinput_write_event(mouse, EV_REL, REL_HWHEEL, distance);
+  libevdev_uinput_write_event(mouse, EV_REL, REL_HWHEEL_HI_RES, high_res_distance);
   libevdev_uinput_write_event(mouse, EV_SYN, SYN_REPORT, 0);
 }
 
@@ -204,20 +218,84 @@ std::optional<libevdev_uinput *> create_keyboard(libevdev *dev) {
   return uidev;
 }
 
+void keyboard_ev(libevdev_uinput *keyboard, int linux_code, int event_code = 1) {
+  libevdev_uinput_write_event(keyboard, EV_KEY, linux_code, event_code);
+  libevdev_uinput_write_event(keyboard, EV_SYN, SYN_REPORT, 0);
+}
+
 void keyboard_repeat_press(libevdev_uinput *keyboard, const immer::array<int> &linux_codes) {
   for (auto code : linux_codes) {
-    libevdev_uinput_write_event(keyboard, EV_KEY, code, 2);
-    libevdev_uinput_write_event(keyboard, EV_SYN, SYN_REPORT, 0);
+    keyboard_ev(keyboard, code, 2);
   }
 }
 
+/**
+ * Takes an UTF-32 encoded string and returns a hex string representation of the bytes (uppercase)
+ *
+ * ex: ['💩'] = "1F4A9" // see UTF encoding at https://www.compart.com/en/unicode/U+1F4A9
+ *
+ * adapted from: https://stackoverflow.com/a/7639754
+ */
+std::string to_hex(const std::basic_string<char32_t> &str) {
+  std::stringstream ss;
+  ss << std::hex << std::setfill('0');
+  for (const auto &ch : str) {
+    ss << ch;
+  }
+
+  std::string hex_unicode(ss.str());
+  std::transform(hex_unicode.begin(), hex_unicode.end(), hex_unicode.begin(), ::toupper);
+  return hex_unicode;
+}
+
+/**
+ * Here we receive a single UTF-8 encoded char at a time,
+ * the trick is to convert it to UTF-32 then send CTRL+SHIFT+U+<HEXCODE> in order to produce any
+ * unicode character, see: https://en.wikipedia.org/wiki/Unicode_input
+ *
+ * ex:
+ * - when receiving UTF-8 [0xF0 0x9F 0x92 0xA9] (which is '💩')
+ * - we'll convert it to UTF-32 [0x1F4A9]
+ * - then type: CTRL+SHIFT+U+1F4A9
+ * see the conversion at: https://www.compart.com/en/unicode/U+1F4A9
+ */
+void paste_utf(libevdev_uinput *kb, const data::UTF8_TEXT_PACKET &pkt) {
+  auto size = boost::endian::big_to_native(pkt.data_size) - sizeof(pkt.packet_type) - 2;
+
+  /* Reading input text as UTF-8 */
+  auto utf8 = boost::locale::conv::to_utf<wchar_t>(pkt.text, pkt.text + size, "UTF-8");
+  /* Converting to UTF-32 */
+  auto utf32 = boost::locale::conv::utf_to_utf<char32_t>(utf8);
+  /* To HEX string */
+  auto hex_unicode = to_hex(utf32);
+  logs::log(logs::debug, "[INPUT] Typing U+{}", hex_unicode);
+
+  keyboard::keyboard_ev(kb, KEY_LEFTCTRL, 1);
+  keyboard::keyboard_ev(kb, KEY_LEFTSHIFT, 1);
+  keyboard::keyboard_ev(kb, KEY_U, 1);
+  keyboard::keyboard_ev(kb, KEY_U, 0);
+
+  for (auto &ch : hex_unicode) {
+    auto key_str = "KEY_"s + ch;
+    auto keycode = libevdev_event_code_from_name(EV_KEY, key_str.c_str());
+    if (keycode == -1) {
+      logs::log(logs::warning, "[INPUT] Unable to find keycode for: {}", ch);
+    } else {
+      keyboard::keyboard_ev(kb, keycode, 1);
+      keyboard::keyboard_ev(kb, keycode, 0);
+    }
+  }
+
+  keyboard::keyboard_ev(kb, KEY_LEFTSHIFT, 0);
+  keyboard::keyboard_ev(kb, KEY_LEFTCTRL, 0);
+}
+
 std::optional<Action> keyboard_handle(libevdev_uinput *keyboard, const data::KEYBOARD_PACKET &key_pkt) {
-  auto release = key_pkt.key_action == data::KEYBOARD_BUTTON_RELEASED;
-  auto moonlight_key = (short)boost::endian::big_to_native((short)key_pkt.key_code);
+  auto release = key_pkt.type == data::KEY_RELEASE;
+  // moonlight always sets the high bit; not sure why but mask it off here
+  auto moonlight_key = (short)boost::endian::little_to_native((short)key_pkt.key_code) & 0x7fff;
 
-  logs::log(logs::trace, "[INPUT] keyboard: code: {}, release?: {}", moonlight_key, release);
-
-  auto search_key = keyboard::key_mappings.find(moonlight_key);
+  auto search_key = keyboard::key_mappings.find(static_cast<short>(moonlight_key));
   if (search_key == keyboard::key_mappings.end()) {
     logs::log(logs::warning,
               "[INPUT] Moonlight sent keyboard code {} which is not recognised; ignoring.",
@@ -229,8 +307,7 @@ std::optional<Action> keyboard_handle(libevdev_uinput *keyboard, const data::KEY
       libevdev_uinput_write_event(keyboard, EV_MSC, MSC_SCAN, mapped_key.scan_code);
     }
 
-    libevdev_uinput_write_event(keyboard, EV_KEY, mapped_key.linux_code, release ? 0 : 1);
-    libevdev_uinput_write_event(keyboard, EV_SYN, SYN_REPORT, 0);
+    keyboard_ev(keyboard, mapped_key.linux_code, release ? 0 : 1);
 
     return Action{.pressed = !release, .linux_code = mapped_key.linux_code};
   }
@@ -423,7 +500,7 @@ InputReady setup_handlers(std::size_t session_id,
         if (ctrl_ev->session_id == sess_id && ctrl_ev->type == INPUT_DATA) {
           auto input = (const data::INPUT_PKT *)(ctrl_ev->raw_packet.data());
 
-          switch ((int)boost::endian::big_to_native((int)input->type)) {
+          switch (input->type) {
           case data::MOUSE_MOVE_REL:
             logs::log(logs::trace, "[INPUT] Received input of type: MOUSE_MOVE_REL");
             if (v_devices->mouse) {
@@ -436,39 +513,48 @@ InputReady setup_handlers(std::size_t session_id,
               mouse::move_mouse_abs(v_devices->mouse_abs->get(), *(data::MOUSE_MOVE_ABS_PACKET *)input);
             }
             break;
-          case data::MOUSE_BUTTON:
+          case data::MOUSE_BUTTON_PRESS:
+          case data::MOUSE_BUTTON_RELEASE:
             logs::log(logs::trace, "[INPUT] Received input of type: MOUSE_BUTTON");
             if (v_devices->mouse) {
               mouse::mouse_press(v_devices->mouse->get(), *(data::MOUSE_BUTTON_PACKET *)input);
             }
             break;
-          case data::KEYBOARD_OR_SCROLL: {
-            char *sub_input_type = (char *)input + 8;
-            if (sub_input_type[0] == data::KEYBOARD_OR_SCROLL) {
-              logs::log(logs::trace, "[INPUT] Received input of type: MOUSE_SCROLL_PACKET");
-              if (v_devices->mouse) {
-                mouse::mouse_scroll(v_devices->mouse->get(), *(data::MOUSE_SCROLL_PACKET *)input);
-              }
-            } else {
-              logs::log(logs::trace, "[INPUT] Received input of type: KEYBOARD_PACKET");
-              if (v_devices->keyboard) {
-                auto kb_action = keyboard::keyboard_handle(v_devices->keyboard->get(), *(data::KEYBOARD_PACKET *)input);
 
-                // Setting up the shared keyboard_state with the currently pressed keys
-                if (kb_action) {
-                  if (kb_action->pressed) { // Pressed key, add it to the key_codes
-                    keyboard_state->update([&kb_action](const immer::array<int> &key_codes) {
-                      return key_codes.push_back(kb_action->linux_code);
-                    });
-                  } else { // Released key, remove it from the key_codes
-                    keyboard_state->update([&kb_action](const immer::array<int> &key_codes) {
-                      return key_codes                                        //
-                             | ranges::views::filter([&kb_action](int code) { //
-                                 return code != kb_action->linux_code;        //
-                               })                                             //
-                             | ranges::to<immer::array<int>>();               //
-                    });
-                  }
+          case data::MOUSE_SCROLL:
+            logs::log(logs::trace, "[INPUT] Received input of type: MOUSE_SCROLL_PACKET");
+            if (v_devices->mouse) {
+              mouse::mouse_scroll(v_devices->mouse->get(), *(data::MOUSE_SCROLL_PACKET *)input);
+            }
+            break;
+
+          case data::MOUSE_HSCROLL:
+            logs::log(logs::trace, "[INPUT] Received input of type: MOUSE_HSCROLL_PACKET");
+            if (v_devices->mouse) {
+              mouse::mouse_scroll_horizontal(v_devices->mouse->get(), *(data::MOUSE_HSCROLL_PACKET *)input);
+            }
+            break;
+
+          case data::KEY_PRESS:
+          case data::KEY_RELEASE: {
+            logs::log(logs::trace, "[INPUT] Received input of type: KEYBOARD_PACKET");
+            if (v_devices->keyboard) {
+              auto kb_action = keyboard::keyboard_handle(v_devices->keyboard->get(), *(data::KEYBOARD_PACKET *)input);
+
+              // Setting up the shared keyboard_state with the currently pressed keys
+              if (kb_action) {
+                if (kb_action->pressed) { // Pressed key, add it to the key_codes
+                  keyboard_state->update([&kb_action](const immer::array<int> &key_codes) {
+                    return key_codes.push_back(kb_action->linux_code);
+                  });
+                } else { // Released key, remove it from the key_codes
+                  keyboard_state->update([&kb_action](const immer::array<int> &key_codes) {
+                    return key_codes                                        //
+                           | ranges::views::filter([&kb_action](int code) { //
+                               return code != kb_action->linux_code;        //
+                             })                                             //
+                           | ranges::to<immer::array<int>>();               //
+                  });
                 }
               }
             }
@@ -490,9 +576,12 @@ InputReady setup_handlers(std::size_t session_id,
             }
             break;
           }
-          case data::CONTROLLER:
-            logs::log(logs::warning, "[INPUT] Received input of type: CONTROLLER ignoring...");
-            break;
+          case data::UTF8_TEXT: {
+            auto txt_pkt = (data::UTF8_TEXT_PACKET *)input;
+            if (v_devices->keyboard) {
+              keyboard::paste_utf(v_devices->keyboard->get(), *txt_pkt);
+            }
+          }
           }
         }
       });

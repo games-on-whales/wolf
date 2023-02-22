@@ -13,7 +13,7 @@ RUN apt-get update -y && \
     ccache \
     git \
     clang \
-    libboost-thread-dev libboost-filesystem-dev libboost-log-dev libboost-stacktrace-dev \
+    libboost-thread-dev libboost-locale-dev libboost-filesystem-dev libboost-log-dev libboost-stacktrace-dev \
     libssl-dev \
     libevdev-dev \
     libunwind-dev \

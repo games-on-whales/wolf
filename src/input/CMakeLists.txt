@@ -20,6 +20,9 @@ if (UNIX AND NOT APPLE)
     message(STATUS "Adding input implementation for LINUX")
     list(APPEND SRC_LIST "platforms/linux/uinput.cpp")
     list(APPEND HEADER_LIST "platforms/linux/keyboard.hpp" "platforms/linux/uinput.hpp")
+
+    find_package(ICU 61.0 COMPONENTS uc REQUIRED)
+    target_link_libraries(wolf_input PRIVATE ICU::uc)
 else () # TODO: other platforms??
     message(WARNING "Missing virtual input implementation for the current platform")
     list(APPEND SRC_LIST "platforms/unknown/input.cpp")
@@ -40,9 +43,12 @@ target_include_directories(wolf_input PUBLIC .)
 set_target_properties(wolf_input PROPERTIES PUBLIC_HEADER .)
 set_target_properties(wolf_input PROPERTIES OUTPUT_NAME "input")
 
+find_package(Boost REQUIRED COMPONENTS locale)
+include_directories(${Boost_INCLUDE_DIRS})
 
 # This library depends on:
 target_link_libraries(wolf_input PUBLIC
+        ${Boost_LIBRARIES}
         wolf::helpers
         wolf::moonlight
         dp::eventbus)
