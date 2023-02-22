@@ -21,6 +21,7 @@ use smithay::{
 use std::{
     os::{fd::FromRawFd, unix::io::OwnedFd},
     path::Path,
+    time::Instant,
 };
 
 pub struct NixInterface;
@@ -62,6 +63,7 @@ impl State {
                 );
             }
             InputEvent::PointerMotion { event, .. } => {
+                self.last_pointer_movement = Instant::now();
                 let serial = SERIAL_COUNTER.next_serial();
                 let delta = event.delta();
                 self.pointer_location += delta;
@@ -92,6 +94,7 @@ impl State {
                 )
             }
             InputEvent::PointerMotionAbsolute { event } => {
+                self.last_pointer_movement = Instant::now();
                 let serial = SERIAL_COUNTER.next_serial();
                 if let Some(output) = self.output.as_ref() {
                     let output_size = output
@@ -124,6 +127,7 @@ impl State {
                 }
             }
             InputEvent::PointerButton { event, .. } => {
+                self.last_pointer_movement = Instant::now();
                 let serial = SERIAL_COUNTER.next_serial();
                 let button = event.button_code();
 
@@ -142,6 +146,7 @@ impl State {
                 );
             }
             InputEvent::PointerAxis { event, .. } => {
+                self.last_pointer_movement = Instant::now();
                 let horizontal_amount = event
                     .amount(Axis::Horizontal)
                     .or_else(|| event.amount_discrete(Axis::Horizontal).map(|x| x * 2.0))

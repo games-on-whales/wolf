@@ -121,6 +121,7 @@ struct State {
     space: Space<Window>,
     popups: PopupManager,
     pointer_location: Point<f64, Logical>,
+    last_pointer_movement: Instant,
     cursor_element: MemoryRenderBuffer,
     cursor_state: CursorImageStatus,
     pending_windows: Vec<Window>,
@@ -421,30 +422,35 @@ impl State {
         assert!(self.video_info.is_some());
         assert!(self.renderbuffer.is_some());
 
-        let elements = match &self.cursor_state {
-            CursorImageStatus::Default => vec![CursorElement::Memory(
-                MemoryRenderBufferRenderElement::from_buffer(
-                    &mut self.renderer,
-                    self.pointer_location.to_physical_precise_round(1),
-                    &self.cursor_element,
-                    None,
-                    None,
-                    None,
-                    None,
-                )
-                .map_err(DTRError::Rendering)?,
-            )],
-            CursorImageStatus::Surface(wl_surface) => {
-                smithay::backend::renderer::element::surface::render_elements_from_surface_tree(
-                    &mut self.renderer,
-                    wl_surface,
-                    self.pointer_location.to_physical_precise_round(1),
-                    1.,
-                    None,
-                )
+        let elements =
+            if Instant::now().duration_since(self.last_pointer_movement) < Duration::from_secs(5) {
+                match &self.cursor_state {
+                CursorImageStatus::Default => vec![CursorElement::Memory(
+                    MemoryRenderBufferRenderElement::from_buffer(
+                        &mut self.renderer,
+                        self.pointer_location.to_physical_precise_round(1),
+                        &self.cursor_element,
+                        None,
+                        None,
+                        None,
+                        None,
+                    )
+                    .map_err(DTRError::Rendering)?,
+                )],
+                CursorImageStatus::Surface(wl_surface) => {
+                    smithay::backend::renderer::element::surface::render_elements_from_surface_tree(
+                        &mut self.renderer,
+                        wl_surface,
+                        self.pointer_location.to_physical_precise_round(1),
+                        1.,
+                        None,
+                    )
+                }
+                CursorImageStatus::Hidden => vec![],
             }
-            CursorImageStatus::Hidden => vec![],
-        };
+            } else {
+                vec![]
+            };
 
         self.renderer
             .bind(self.renderbuffer.clone().unwrap())
@@ -776,6 +782,7 @@ pub fn init(command_src: Channel<Command>, render_node: DrmNode, elem: gst::Elem
         seat,
         output: None,
         pointer_location: (0., 0.).into(),
+        last_pointer_movement: Instant::now(),
         cursor_element,
         cursor_state: CursorImageStatus::Default,
         pending_windows: Vec::new(),
