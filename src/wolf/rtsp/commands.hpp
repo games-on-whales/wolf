@@ -1,5 +1,6 @@
 #pragma once
 
+#include <chrono>
 #include <helpers/logger.hpp>
 #include <helpers/utils.hpp>
 #include <process/process.hpp>
@@ -11,6 +12,7 @@ namespace rtsp::commands {
 
 using namespace ranges;
 using namespace std::string_literals;
+using namespace std::chrono_literals;
 using namespace rtsp;
 
 RTSP_PACKET error_msg(unsigned short status_code, std::string_view error_msg, int sequence_number = 0) {
@@ -80,6 +82,7 @@ RTSP_PACKET setup(const RTSP_PACKET &req, const state::StreamSession &session) {
 }
 
 RTSP_PACKET play(const RTSP_PACKET &req, const state::StreamSession &session) {
+  std::this_thread::sleep_for(500ms); // Let's give some time for the gstreamer pipeline to startup
   return ok_msg(req.seq_number);
 }
 

@@ -144,10 +144,12 @@ impl State {
             InputEvent::PointerAxis { event, .. } => {
                 let horizontal_amount = event
                     .amount(Axis::Horizontal)
-                    .unwrap_or_else(|| event.amount_discrete(Axis::Horizontal).unwrap() * 2.0);
+                    .or_else(|| event.amount_discrete(Axis::Horizontal).map(|x| x * 2.0))
+                    .unwrap_or(0.0);
                 let vertical_amount = event
                     .amount(Axis::Vertical)
-                    .unwrap_or_else(|| event.amount_discrete(Axis::Vertical).unwrap() * 2.0);
+                    .or_else(|| event.amount_discrete(Axis::Vertical).map(|y| y * 2.0))
+                    .unwrap_or(0.0);
                 let horizontal_amount_discrete = event.amount_discrete(Axis::Horizontal);
                 let vertical_amount_discrete = event.amount_discrete(Axis::Vertical);
 
