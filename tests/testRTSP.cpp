@@ -255,7 +255,6 @@ state::SessionsAtoms test_init_state() {
       .aes_key = crypto::hex_to_str("9d804e47a6aa6624b7d4b502b32cc522", true),
       .aes_iv = crypto::hex_to_str("01234567890", true),
       .client_cert_hash = 1234,
-      .unique_id = "0f691f13730748328a22a6952a5ac3a2",
       .ip = "127.0.0.1",
   };
   return std::make_shared<immer::atom<immer::vector<StreamSession>>>(immer::vector<StreamSession>{session});
