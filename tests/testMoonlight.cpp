@@ -58,18 +58,6 @@ TEST_CASE("LocalState load TOML", "[LocalState]") {
 
   SECTION("Paired Clients") {
     REQUIRE_THAT(state.paired_clients.load().get(), Catch::Matchers::SizeIs(2));
-
-    auto paired_client = state.paired_clients.load().get()[0];
-    REQUIRE(paired_client->rtsp_port == RTSP_SETUP_PORT);
-    REQUIRE(paired_client->control_port == CONTROL_PORT);
-    REQUIRE(paired_client->video_port == VIDEO_STREAM_PORT);
-    REQUIRE(paired_client->audio_port == AUDIO_STREAM_PORT);
-
-    paired_client = state.paired_clients.load().get()[1];
-    REQUIRE(paired_client->rtsp_port == 3000);
-    REQUIRE(paired_client->control_port == 3001);
-    REQUIRE(paired_client->video_port == 3002);
-    REQUIRE(paired_client->audio_port == 3003);
   }
 }
 

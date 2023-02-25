@@ -38,23 +38,21 @@ void run_process(const immer::box<state::LaunchAPPEvent> &process_ev) {
     return;
   }
 
-  auto client_connected = immer::atom<bool>(true);
-  auto terminate_handler = process_ev->event_bus->register_handler<immer::box<TerminateEvent>>(
-      [&client_connected, &group_proc, sess_id = process_ev->session_id](
-          const immer::box<TerminateEvent> &terminate_ev) {
+  auto terminate_handler = process_ev->event_bus->register_handler<immer::box<moonlight::StopStreamEvent>>(
+      [&group_proc, sess_id = process_ev->session_id](const immer::box<moonlight::StopStreamEvent> &terminate_ev) {
         if (terminate_ev->session_id == sess_id) {
-          client_connected.store(false);
           group_proc.terminate(); // Manually terminate the process
         }
       });
 
-  ios.run(); // This will stop here until the process is over
+  auto pause_handler = process_ev->event_bus->register_handler<immer::box<moonlight::PauseStreamEvent>>(
+      [&group_proc, sess_id = process_ev->session_id](const immer::box<moonlight::PauseStreamEvent> &terminate_ev) {
+        if (terminate_ev->session_id == sess_id) {
+          group_proc.terminate(); // Manually terminate the process
+        }
+      });
 
-  if (*client_connected.load()) {
-    logs::log(logs::warning, "[PROCESS] Process terminated before the user closed the connection.");
-    process_ev->event_bus->fire_event(
-        immer::box<AppStoppedEvent>(AppStoppedEvent{.session_id = process_ev->session_id}));
-  }
+  ios.run();         // This will stop here until the process is over
   child_proc.wait(); // to avoid a zombie process & get the exit code
 
   auto ex_code = child_proc.exit_code();

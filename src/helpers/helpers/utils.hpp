@@ -33,7 +33,7 @@ inline std::vector<std::string_view> split(std::string_view str, char separator)
   return str                                                                                              //
          | views::split(separator)                                                                        //
          | views::transform([](auto &&ptrs) { return std::string_view(&*ptrs.begin(), distance(ptrs)); }) //
-         | to_vector;                                                                                    //
+         | to_vector;                                                                                     //
 }
 
 } // namespace utils

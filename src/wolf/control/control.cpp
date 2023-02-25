@@ -2,7 +2,7 @@
 #include <control/control.hpp>
 #include <control/packet_utils.hpp>
 #include <immer/box.hpp>
-#include <process/process.hpp>
+#include <state/sessions.hpp>
 #include <sys/socket.h>
 
 namespace control {
@@ -69,77 +69,79 @@ std::pair<std::string /* ip */, int /* port */> get_ip(const sockaddr *const ip_
   return {std::string{data}, port};
 }
 
-void run_control(const immer::box<state::ControlSession> &control_sess, int timeout_millis) {
+void run_control(int port,
+                 const state::SessionsAtoms &running_sessions,
+                 const std::shared_ptr<dp::event_bus> &event_bus,
+                 int peers,
+                 std::chrono::milliseconds timeout,
+                 const std::string &host_ip) {
 
-  enet_host host = create_host(control_sess->host, control_sess->port, control_sess->peers);
-  logs::log(logs::info, "Control server started on port: {}", control_sess->port);
+  enet_host host = create_host(host_ip, port, peers);
+  logs::log(logs::info, "Control server started on port: {}", port);
 
   ENetEvent event;
-  immer::atom<bool> terminated(false);
 
-  auto app_stop_handler = control_sess->event_bus->register_handler<immer::box<process::AppStoppedEvent>>(
-      [&terminated, sess_id = control_sess->session_id](const immer::box<process::AppStoppedEvent> &ev) {
-        if (ev->session_id == sess_id) {
-          terminated.store(true); // TODO: is there a way to better signal this to Moonlight?
-        }
-      });
+  // TODO: send termination when stream is stopped, see: IDX_TERMINATION
 
-  while (!terminated.load() && enet_host_service(host.get(), &event, timeout_millis) > 0) {
-    auto [client_ip, client_port] = get_ip((sockaddr *)&event.peer->address.address);
+  while (true) {
+    if (enet_host_service(host.get(), &event, timeout.count()) > 0) {
+      auto [client_ip, client_port] = get_ip((sockaddr *)&event.peer->address.address);
+      auto client_session = get_session_by_ip(running_sessions->load(), client_ip);
+      if (client_session) {
+        switch (event.type) {
+        case ENET_EVENT_TYPE_NONE:
+          break;
+        case ENET_EVENT_TYPE_CONNECT:
+          logs::log(logs::debug, "[ENET] connected client: {}:{}", client_ip, client_port);
+          event_bus->fire_event(immer::box<moonlight::ResumeStreamEvent>(
+              moonlight::ResumeStreamEvent{.session_id = client_session->client_cert_hash}));
+          break;
+        case ENET_EVENT_TYPE_DISCONNECT:
+          logs::log(logs::debug, "[ENET] disconnected client: {}:{}", client_ip, client_port);
+          event_bus->fire_event(immer::box<moonlight::PauseStreamEvent>(
+              moonlight::PauseStreamEvent{.session_id = client_session->client_cert_hash}));
+          break;
+        case ENET_EVENT_TYPE_RECEIVE:
+          enet_packet packet = {event.packet, enet_packet_destroy};
 
-    switch (event.type) {
-    case ENET_EVENT_TYPE_NONE:
-      break;
-    case ENET_EVENT_TYPE_CONNECT:
-      logs::log(logs::debug, "[ENET] connected client: {}:{}", client_ip, client_port);
-      break;
-    case ENET_EVENT_TYPE_DISCONNECT:
-      logs::log(logs::debug, "[ENET] disconnected client: {}:{}", client_ip, client_port);
-      terminated.store(true);
-      break;
-    case ENET_EVENT_TYPE_RECEIVE:
-      enet_packet packet = {event.packet, enet_packet_destroy};
-
-      auto type = get_type(packet->data);
-
-      logs::log(logs::trace,
-                "[ENET] received {} of {} bytes from: {}:{} HEX: {}",
-                packet_type_to_str(type),
-                packet->dataLength,
-                client_ip,
-                client_port,
-                crypto::str_to_hex({(char *)packet->data, packet->dataLength}));
-
-      if (type == ENCRYPTED) {
-        try {
-          auto decrypted = decrypt_packet(packet->data, control_sess->aes_key);
-
-          auto sub_type = get_type(reinterpret_cast<const enet_uint8 *>(decrypted.data()));
+          auto type = get_type(packet->data);
 
           logs::log(logs::trace,
-                    "[ENET] decrypted sub_type: {} HEX: {}",
-                    packet_type_to_str(sub_type),
-                    crypto::str_to_hex(decrypted));
+                    "[ENET] received {} of {} bytes from: {}:{} HEX: {}",
+                    packet_type_to_str(type),
+                    packet->dataLength,
+                    client_ip,
+                    client_port,
+                    crypto::str_to_hex({(char *)packet->data, packet->dataLength}));
 
-          if (sub_type == TERMINATION) {
-            terminated = true;
+          if (type == ENCRYPTED) {
+            try {
+              auto decrypted = decrypt_packet(packet->data, client_session->aes_key);
+
+              auto sub_type = get_type(reinterpret_cast<const enet_uint8 *>(decrypted.data()));
+
+              logs::log(logs::trace,
+                        "[ENET] decrypted sub_type: {} HEX: {}",
+                        packet_type_to_str(sub_type),
+                        crypto::str_to_hex(decrypted));
+
+              if (sub_type == TERMINATION) {
+                // TODO: moonlight asks to terminate (pause or end?)
+              }
+
+              auto ev = ControlEvent{client_session->client_cert_hash, sub_type, decrypted};
+              event_bus->fire_event(immer::box<ControlEvent>{ev});
+            } catch (std::runtime_error &e) {
+              logs::log(logs::warning, "[ENET] Unable to decrypt incoming packet: {}", e.what());
+            }
           }
-
-          auto ev = ControlEvent{control_sess->session_id, sub_type, decrypted};
-          control_sess->event_bus->fire_event(immer::box<ControlEvent>{ev});
-        } catch (std::runtime_error &e) {
-          logs::log(logs::error, "[ENET] Unable to decrypt incoming packet: {}", e.what());
+          break;
         }
+      } else {
+        logs::log(logs::warning, "[ENET] Received packet from unrecognised client {}:{}", client_ip, client_port);
       }
-      break;
     }
   }
-  // Failsafe, when we get out of the loop we have to signal to terminate the session
-  logs::log(logs::debug, "[ENET] terminating session: {}", control_sess->session_id);
-  app_stop_handler.unregister();
-
-  auto terminate_ev = TerminateEvent{control_sess->session_id};
-  control_sess->event_bus->fire_event(immer::box<TerminateEvent>{terminate_ev});
 }
 
 } // namespace control

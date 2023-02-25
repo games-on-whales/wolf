@@ -68,7 +68,7 @@ std::optional<libevdev_uinput *> create_mouse(libevdev *dev) {
 
   auto err = libevdev_uinput_create_from_device(dev, LIBEVDEV_UINPUT_OPEN_MANAGED, &uidev);
   if (err != 0) {
-    logs::log(logs::error, "Unable to create mouse device, error code: {}", err);
+    logs::log(logs::error, "Unable to create mouse device, error code: {}", strerror(-err));
     return {};
   }
 
@@ -103,7 +103,7 @@ std::optional<libevdev_uinput *> create_mouse_abs(libevdev *dev) {
 
   auto err = libevdev_uinput_create_from_device(dev, LIBEVDEV_UINPUT_OPEN_MANAGED, &uidev);
   if (err != 0) {
-    logs::log(logs::error, "Unable to create mouse device, error code: {}", err);
+    logs::log(logs::error, "Unable to create mouse device, error code: {}", strerror(-err));
     return {};
   }
 
@@ -209,7 +209,7 @@ std::optional<libevdev_uinput *> create_keyboard(libevdev *dev) {
 
   auto err = libevdev_uinput_create_from_device(dev, LIBEVDEV_UINPUT_OPEN_MANAGED, &uidev);
   if (err != 0) {
-    logs::log(logs::error, "Unable to create mouse device, error code: {}", err);
+    logs::log(logs::error, "Unable to create mouse device, error code: {}", strerror(-err));
     return {};
   }
 
@@ -223,7 +223,7 @@ void keyboard_ev(libevdev_uinput *keyboard, int linux_code, int event_code = 1) 
   libevdev_uinput_write_event(keyboard, EV_SYN, SYN_REPORT, 0);
 }
 
-void keyboard_repeat_press(libevdev_uinput *keyboard, const immer::array<int> &linux_codes) {
+void keyboard_repeat_press(libevdev_uinput *keyboard, const immer::array<int>& linux_codes) {
   for (auto code : linux_codes) {
     keyboard_ev(keyboard, code, 2);
   }
@@ -365,7 +365,7 @@ std::optional<libevdev_uinput *> create_controller(libevdev *dev) {
 
   auto err = libevdev_uinput_create_from_device(dev, LIBEVDEV_UINPUT_OPEN_MANAGED, &uidev);
   if (err != 0) {
-    logs::log(logs::error, "Unable to create controller device, error code: {}", err);
+    logs::log(logs::error, "Unable to create controller device, error code: {}", strerror(-err));
     return {};
   }
 
@@ -461,7 +461,7 @@ void controller_handle(libevdev_uinput *controller,
 
 InputReady setup_handlers(std::size_t session_id,
                           const std::shared_ptr<dp::event_bus> &event_bus,
-                          std::shared_ptr<boost::asio::thread_pool> t_pool) {
+                          const std::shared_ptr<boost::asio::thread_pool> &t_pool) {
   logs::log(logs::debug, "Setting up input handlers for session: {}", session_id);
 
   auto v_devices = std::make_shared<VirtualDevices>();
@@ -496,7 +496,7 @@ InputReady setup_handlers(std::size_t session_id,
   auto keyboard_state = std::make_shared<immer::atom<immer::array<int> /* key codes */>>();
 
   auto ctrl_handler = event_bus->register_handler<immer::box<ControlEvent>>(
-      [sess_id = session_id, v_devices, controller_state, keyboard_state](immer::box<ControlEvent> ctrl_ev) {
+      [sess_id = session_id, v_devices, controller_state, keyboard_state](const immer::box<ControlEvent> &ctrl_ev) {
         if (ctrl_ev->session_id == sess_id && ctrl_ev->type == INPUT_DATA) {
           auto input = (const data::INPUT_PKT *)(ctrl_ev->raw_packet.data());
 
@@ -544,11 +544,11 @@ InputReady setup_handlers(std::size_t session_id,
               // Setting up the shared keyboard_state with the currently pressed keys
               if (kb_action) {
                 if (kb_action->pressed) { // Pressed key, add it to the key_codes
-                  keyboard_state->update([&kb_action](const immer::array<int> &key_codes) {
+                  keyboard_state->update([&kb_action](const immer::array<int>& key_codes) {
                     return key_codes.push_back(kb_action->linux_code);
                   });
                 } else { // Released key, remove it from the key_codes
-                  keyboard_state->update([&kb_action](const immer::array<int> &key_codes) {
+                  keyboard_state->update([&kb_action](const immer::array<int>& key_codes) {
                     return key_codes                                        //
                            | ranges::views::filter([&kb_action](int code) { //
                                return code != kb_action->linux_code;        //
@@ -601,8 +601,8 @@ InputReady setup_handlers(std::size_t session_id,
     }
   }));
 
-  auto end_handler = event_bus->register_handler<immer::box<moonlight::control::TerminateEvent>>(
-      [sess_id = session_id, kb_thread_over](immer::box<moonlight::control::TerminateEvent> event) {
+  auto end_handler = event_bus->register_handler<immer::box<moonlight::StopStreamEvent>>(
+      [sess_id = session_id, kb_thread_over](const immer::box<moonlight::StopStreamEvent> &event) {
         if (event->session_id == sess_id) {
           kb_thread_over->update([](bool terminate) { return true; });
         }

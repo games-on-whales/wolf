@@ -62,8 +62,9 @@ Config load_or_default(const std::string &source) {
       auto default_app = toml::value{{"title", "Test ball (auto)"}, {"video", {{"source", video_test}}}};
       auto x11_auto =
           toml::value{{"title", "X11 (auto)"}, {"video", {{"source", x11_src}}}, {"audio", {{"source", pulse_src}}}};
-      auto wayland_auto =
-          toml::value{{"title", "Wayland Display (auto)"}, {"video", {{"source", wayland_src}}}, {"audio", {{"source", pulse_src}}}};
+      auto wayland_auto = toml::value{{"title", "Wayland Display (auto)"},
+                                      {"video", {{"source", wayland_src}}},
+                                      {"audio", {{"source", pulse_src}}}};
 
       /* VAAPI specific encoder */
 
@@ -91,12 +92,12 @@ Config load_or_default(const std::string &source) {
                                      {"video_params", video_vaapi}}},
                                    {"audio", {{"source", pulse_src}}}};
       auto wayland_vaapi = toml::value{{"title", "Wayland Display (VAAPI)"},
-                                   {"video",
-                                    {{"source", wayland_src},
-                                     {"h264_encoder", h264_vaapi},
-                                     {"hevc_encoder", hevc_vaapi},
-                                     {"video_params", video_vaapi}}},
-                                   {"audio", {{"source", pulse_src}}}};
+                                       {"video",
+                                        {{"source", wayland_src},
+                                         {"h264_encoder", h264_vaapi},
+                                         {"hevc_encoder", hevc_vaapi},
+                                         {"video_params", video_vaapi}}},
+                                       {"audio", {{"source", pulse_src}}}};
 
       /* CUDA specific encoder */
       // TODO: gop-size here should be -1 but it's not playing with Moonlight
@@ -127,18 +128,27 @@ Config load_or_default(const std::string &source) {
                                     {"video_params", video_cuda}}},
                                   {"audio", {{"source", pulse_src}}}};
       auto wayland_cuda = toml::value{{"title", "Wayland Display (CUDA)"},
-                                  {"video",
-                                   {{"source", wayland_src},
-                                    {"h264_encoder", h264_cuda},
-                                    {"hevc_encoder", hevc_cuda},
-                                    {"video_params", video_cuda}}},
-                                  {"audio", {{"source", pulse_src}}}};
+                                      {"video",
+                                       {{"source", wayland_src},
+                                        {"h264_encoder", h264_cuda},
+                                        {"hevc_encoder", hevc_cuda},
+                                        {"video_params", video_cuda}}},
+                                      {"audio", {{"source", pulse_src}}}};
 
       const toml::value data = {{"uuid", gen_uuid()},
                                 {"hostname", "Wolf"},
                                 {"support_hevc", true},
                                 {"paired_clients", toml::array{}},
-                                {"apps", {default_app, x11_auto, wayland_auto, test_vaapi, x11_vaapi, wayland_vaapi, test_cuda, x11_cuda, wayland_cuda}},
+                                {"apps",
+                                 {default_app,
+                                  x11_auto,
+                                  wayland_auto,
+                                  test_vaapi,
+                                  x11_vaapi,
+                                  wayland_vaapi,
+                                  test_cuda,
+                                  x11_cuda,
+                                  wayland_cuda}},
                                 {"gstreamer", // key
                                  {            // array
                                   {
@@ -240,14 +250,7 @@ void pair(const Config &cfg, const PairedClient &client) {
   // Update TOML
   toml::value tml = toml::parse<toml::preserve_comments>(cfg.config_source);
 
-  tml.at("paired_clients")
-      .as_array()
-      .push_back({{"client_id", client.client_id},
-                  {"client_cert", client.client_cert},
-                  {"rtsp_port", client.rtsp_port},
-                  {"control_port", client.control_port},
-                  {"video_port", client.video_port},
-                  {"audio_port", client.audio_port}});
+  tml.at("paired_clients").as_array().push_back({{"client_id", client.client_id}, {"client_cert", client.client_cert}});
 
   write(tml, cfg.config_source);
 }
@@ -283,25 +286,14 @@ namespace toml {
 template <> struct from<state::PairedClient> {
 
   static state::PairedClient from_toml(const value &v) {
-    return state::PairedClient{
-        .client_id = toml::find<std::string>(v, "client_id"),
-        .client_cert = toml::find<std::string>(v, "client_cert"),
-        .rtsp_port = toml::find_or<unsigned short>(v, "rtsp_port", state::RTSP_SETUP_PORT),
-        .control_port = toml::find_or<unsigned short>(v, "control_port", state::CONTROL_PORT),
-        .video_port = toml::find_or<unsigned short>(v, "video_port", state::VIDEO_STREAM_PORT),
-        .audio_port = toml::find_or<unsigned short>(v, "audio_port", state::AUDIO_STREAM_PORT),
-    };
+    return state::PairedClient{.client_id = toml::find<std::string>(v, "client_id"),
+                               .client_cert = toml::find<std::string>(v, "client_cert")};
   }
 };
 
 template <> struct into<state::PairedClient> {
   static toml::value into_toml(const state::PairedClient &f) {
-    return toml::value{{"client_id", f.client_id},
-                       {"client_cert", f.client_cert},
-                       {"rtsp_port", f.rtsp_port},
-                       {"control_port", f.control_port},
-                       {"video_port", f.video_port},
-                       {"audio_port", f.audio_port}};
+    return toml::value{{"client_id", f.client_id}, {"client_cert", f.client_cert}};
   }
 };
 

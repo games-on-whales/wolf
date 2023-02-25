@@ -2,10 +2,11 @@
 
 #include <chrono>
 #include <eventbus/event_bus.hpp>
-#include <memory>
-#include <moonlight/data-structures.hpp>
 #include <immer/array.hpp>
 #include <immer/box.hpp>
+#include <input/input.hpp>
+#include <memory>
+#include <moonlight/data-structures.hpp>
 #include <optional>
 
 namespace state {
@@ -26,12 +27,12 @@ enum ColorSpace : int {
  */
 struct VideoSession {
   moonlight::DisplayMode display_mode;
-  bool video_format_h264; // true if h264 is requested
-  std::string_view gst_pipeline;
+  std::string gst_pipeline;
+
+  immer::box<input::InputReady> virtual_inputs;
 
   // A unique ID that identifies this session
   std::size_t session_id;
-  std::shared_ptr<dp::event_bus> event_bus;
 
   std::uint16_t port;
   std::chrono::milliseconds timeout;
@@ -55,11 +56,10 @@ struct VideoSession {
 };
 
 struct AudioSession {
-  std::string_view gst_pipeline;
+  std::string gst_pipeline;
 
   // A unique ID that identifies this session
   std::size_t session_id;
-  std::shared_ptr<dp::event_bus> event_bus;
 
   bool encrypt_audio;
   std::string aes_key;

@@ -1,5 +1,6 @@
 #pragma once
 
+#include <boost/asio.hpp>
 #include <chrono>
 #include <eventbus/event_bus.hpp>
 #include <immer/array.hpp>
@@ -7,6 +8,7 @@
 #include <immer/box.hpp>
 #include <immer/map.hpp>
 #include <immer/vector.hpp>
+#include <input/input.hpp>
 #include <moonlight/data-structures.hpp>
 #include <openssl/x509.h>
 #include <optional>
@@ -18,6 +20,7 @@
 
 namespace state {
 using namespace std::chrono_literals;
+namespace ba = boost::asio;
 
 /**
  * All ports are derived from a base port, default: 47989
@@ -25,20 +28,15 @@ using namespace std::chrono_literals;
 enum STANDARD_PORTS_MAPPING {
   HTTPS_PORT = 47984,
   HTTP_PORT = 47989,
-  VIDEO_STREAM_PORT = 47998,
   CONTROL_PORT = 47999,
-  AUDIO_STREAM_PORT = 48000,
+  VIDEO_PING_PORT = 47998,
+  AUDIO_PING_PORT = 48000,
   RTSP_SETUP_PORT = 48010
 };
 
 struct PairedClient {
   std::string client_id;
   std::string client_cert;
-
-  unsigned short rtsp_port = RTSP_SETUP_PORT;
-  unsigned short control_port = CONTROL_PORT;
-  unsigned short video_port = VIDEO_STREAM_PORT;
-  unsigned short audio_port = AUDIO_STREAM_PORT;
 };
 
 struct PairSignal {
@@ -169,6 +167,28 @@ struct PairCache : PairedClient {
 };
 
 /**
+ * A StreamSession is created when a Moonlight user call `launch`
+ *
+ * This will then be fired up in the event_bus so that the rtsp, command, audio and video threads
+ * can start working their magic.
+ */
+struct StreamSession {
+  moonlight::DisplayMode display_mode;
+  AudioMode audio_mode;
+  input::InputReady virtual_inputs;
+
+  App app;
+  // gcm encryption keys
+  std::string aes_key;
+  std::string aes_iv;
+  // client info
+  std::size_t client_cert_hash;
+  std::string ip;
+};
+
+using SessionsAtoms = std::shared_ptr<immer::atom<immer::vector<StreamSession>>>;
+
+/**
  * The whole application state as a composition of immutable datastructures
  */
 struct AppState {
@@ -192,35 +212,16 @@ struct AppState {
    * A shared bus of events so that we can decouple modules
    */
   std::shared_ptr<dp::event_bus> event_bus;
-};
 
-/**
- * A StreamSession is created when a Moonlight user call `launch`
- *
- * This will then be fired up in the event_bus so that the rtsp, command, audio and video threads
- * can start working their magic.
- */
-struct StreamSession {
-  // A unique ID that identifies this session
-  std::size_t session_id;
+  /**
+   * A list of all currently running (and paused) streaming sessions
+   */
+  SessionsAtoms running_sessions;
 
-  std::shared_ptr<dp::event_bus> event_bus;
-
-  moonlight::DisplayMode display_mode;
-  AudioMode audio_mode;
-
-  App app;
-
-  std::string gcm_key;
-  std::string gcm_iv_key;
-
-  std::string unique_id;
-  std::string ip;
-
-  std::uint16_t rtsp_port{};
-  std::uint16_t control_port{};
-  std::uint16_t audio_port{};
-  std::uint16_t video_port{};
+  /**
+   *
+   */
+  std::shared_ptr<ba::thread_pool> t_pool;
 };
 
 /**

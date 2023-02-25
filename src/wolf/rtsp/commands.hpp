@@ -52,7 +52,7 @@ RTSP_PACKET describe(const RTSP_PACKET &req, const state::StreamSession &session
   return ok_msg(req.seq_number, {}, {{"", video_params}, {"a", audio_params}});
 }
 
-RTSP_PACKET setup(const RTSP_PACKET &req, const state::StreamSession &session) {
+RTSP_PACKET setup(const RTSP_PACKET &req) {
 
   int service_port;
   auto type = req.request.stream.type;
@@ -60,13 +60,13 @@ RTSP_PACKET setup(const RTSP_PACKET &req, const state::StreamSession &session) {
 
   switch (utils::hash(type)) {
   case utils::hash("audio"):
-    service_port = session.audio_port;
+    service_port = state::AUDIO_PING_PORT;
     break;
   case utils::hash("video"):
-    service_port = session.video_port;
+    service_port = state::VIDEO_PING_PORT;
     break;
   case utils::hash("control"):
-    service_port = session.control_port;
+    service_port = state::CONTROL_PORT;
     break;
   default:
     return error_msg(404, "NOT FOUND", req.seq_number);
@@ -93,7 +93,8 @@ std::pair<std::string, std::optional<int>> parse_arg_line(const std::pair<std::s
   return std::make_pair(std::string{split[0].data(), split[0].size()}, val);
 }
 
-RTSP_PACKET announce(const RTSP_PACKET &req, const state::StreamSession &session) {
+RTSP_PACKET
+announce(const RTSP_PACKET &req, const state::StreamSession &session, dp::event_bus &event_bus) {
 
   auto args = req.payloads //
               | views::filter([](const std::pair<std::string, std::string> &line) {
@@ -101,17 +102,6 @@ RTSP_PACKET announce(const RTSP_PACKET &req, const state::StreamSession &session
                 })                                             //
               | views::transform(parse_arg_line)               // turns an arg line into a pair
               | to<std::map<std::string, std::optional<int>>>; // to map
-
-  // Control session
-  state::ControlSession ctrl = {.session_id = session.session_id,
-                                .event_bus = session.event_bus,
-
-                                .port = session.control_port,
-                                .peers = 4, // TODO: peers from config?
-                                .protocol_type = args["x-nv-general.useReliableUdp"].value_or(0),
-                                .aes_key = session.gcm_key,
-                                .aes_iv = session.gcm_iv_key};
-  session.event_bus->fire_event(immer::box<state::ControlSession>(ctrl));
 
   // Video session
   moonlight::DisplayMode display = {
@@ -126,13 +116,12 @@ RTSP_PACKET announce(const RTSP_PACKET &req, const state::StreamSession &session
 
   state::VideoSession video = {
       .display_mode = display,
-      .video_format_h264 = video_format_h264,
       .gst_pipeline = video_format_h264 ? session.app.h264_gst_pipeline : session.app.hevc_gst_pipeline,
+      .virtual_inputs = session.virtual_inputs,
 
-      .session_id = session.session_id,
-      .event_bus = session.event_bus,
+      .session_id = session.client_cert_hash,
 
-      .port = session.video_port,
+      .port = state::VIDEO_PING_PORT,
       .timeout = std::chrono::milliseconds(args["x-nv-video[0].timeoutLengthMs"].value()),
       .packet_size = args["x-nv-video[0].packetSize"].value(),
       .frames_with_invalid_ref_threshold = args["x-nv-video[0].framesWithInvalidRefThreshold"].value(),
@@ -146,30 +135,30 @@ RTSP_PACKET announce(const RTSP_PACKET &req, const state::StreamSession &session
 
       .client_ip = session.ip,
       .app_launch_cmd = session.app.run_cmd};
-  session.event_bus->fire_event(immer::box<state::VideoSession>(video));
+  event_bus.fire_event(immer::box<state::VideoSession>(video));
 
   // Audio session
   state::AudioSession audio = {.gst_pipeline = session.app.opus_gst_pipeline,
 
-                               .session_id = session.session_id,
-                               .event_bus = session.event_bus,
+                               .session_id = session.client_cert_hash,
 
                                .encrypt_audio = static_cast<bool>(args["x-nv-general.featureFlags"].value() & 0x20),
-                               .aes_key = session.gcm_key,
-                               .aes_iv = session.gcm_iv_key,
+                               .aes_key = session.aes_key,
+                               .aes_iv = session.aes_iv,
 
-                               .port = session.audio_port,
+                               .port = state::AUDIO_PING_PORT,
                                .client_ip = session.ip,
 
                                .packet_duration = args["x-nv-aqos.packetDuration"].value(),
                                .channels = args["x-nv-audio.surround.numChannels"].value(),
                                .mask = args["x-nv-audio.surround.channelMask"].value()};
-  session.event_bus->fire_event(immer::box<state::AudioSession>(audio));
+  event_bus.fire_event(immer::box<state::AudioSession>(audio));
 
   return ok_msg(req.seq_number);
 }
 
-RTSP_PACKET message_handler(const RTSP_PACKET &req, const state::StreamSession &session) {
+RTSP_PACKET
+message_handler(const RTSP_PACKET &req, const state::StreamSession &session, dp::event_bus &event_bus) {
   auto cmd = req.request.cmd;
   logs::log(logs::debug, "[RTSP] received command {}", cmd);
 
@@ -179,9 +168,9 @@ RTSP_PACKET message_handler(const RTSP_PACKET &req, const state::StreamSession &
   case utils::hash("DESCRIBE"):
     return describe(req, session);
   case utils::hash("SETUP"):
-    return setup(req, session);
+    return setup(req);
   case utils::hash("ANNOUNCE"):
-    return announce(req, session);
+    return announce(req, session, event_bus);
   case utils::hash("PLAY"):
     return ok_msg(req.seq_number);
   default:

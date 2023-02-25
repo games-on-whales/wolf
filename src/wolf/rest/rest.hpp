@@ -44,7 +44,7 @@ using XML = moonlight::XML;
 
 namespace HTTPServers {
 
-std::thread startServer(HttpServer *server, const std::shared_ptr<state::AppState> &state, int port);
+void startServer(HttpServer *server, const immer::box<state::AppState> state, int port);
 
-std::thread startServer(HttpsServer *server, const std::shared_ptr<state::AppState> &state, int port);
+void startServer(HttpsServer *server, const immer::box<state::AppState> state, int port);
 } // namespace HTTPServers

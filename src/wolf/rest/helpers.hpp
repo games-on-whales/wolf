@@ -11,10 +11,14 @@ using namespace std::literals;
 using XML = moonlight::XML;
 namespace pt = boost::property_tree;
 
-inline std::string xml_to_str(const XML& xml) {
+inline std::string xml_to_str(const XML &xml) {
   std::stringstream ss;
   pt::write_xml(ss, xml);
   return ss.str();
+}
+
+template <class T> std::string get_client_ip(std::shared_ptr<typename SimpleWeb::ServerBase<T>::Request> request) {
+  return request->remote_endpoint().address().to_string();
 }
 
 /**
@@ -22,7 +26,8 @@ inline std::string xml_to_str(const XML& xml) {
  */
 template <class T> inline void log_req(std::shared_ptr<typename SimpleWeb::ServerBase<T>::Request> request) {
   logs::log(logs::debug,
-            "[{}] {}://{}{}",
+            "{} [{}] {}://{}{}",
+            get_client_ip<T>(request),
             request->method,
             std::is_same_v<SimpleWeb::HTTP, T> ? "HTTP" : "HTTPS",
             request->local_endpoint().address().to_string(),

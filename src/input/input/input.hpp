@@ -23,7 +23,7 @@ struct InputReady {
  */
 InputReady setup_handlers(std::size_t session_id,
                           const std::shared_ptr<dp::event_bus> &event_bus,
-                          std::shared_ptr<boost::asio::thread_pool> t_pool);
+                          const std::shared_ptr<boost::asio::thread_pool>& t_pool);
 
 /**
  * A packet of type INPUT_DATA will have different shapes based on the type

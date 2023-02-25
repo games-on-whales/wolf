@@ -1,5 +1,6 @@
 #pragma once
 
+#include <chrono>
 #include <helpers/logger.hpp>
 #include <range/v3/view.hpp>
 #include <state/data-structures.hpp>
@@ -7,7 +8,14 @@
 
 namespace control {
 
-void run_control(const immer::box<state::ControlSession> &control_sess, int timeout_millis = 1000);
+using namespace std::chrono_literals;
+
+void run_control(int port,
+                 const state::SessionsAtoms &running_sessions,
+                 const std::shared_ptr<dp::event_bus> &event_bus,
+                 int peers = 20,
+                 std::chrono::milliseconds timeout = 1000ms,
+                 const std::string &host_ip = "0.0.0.0");
 
 bool init();
 

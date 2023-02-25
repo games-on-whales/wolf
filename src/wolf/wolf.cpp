@@ -3,7 +3,6 @@
 #include <boost/stacktrace.hpp>
 #include <control/control.hpp>
 #include <csignal>
-#include <fstream>
 #include <immer/array.hpp>
 #include <immer/vector_transient.hpp>
 #include <memory>
@@ -16,6 +15,11 @@
 #include <vector>
 
 namespace ba = boost::asio;
+
+const char *get_env(const char *tag, const char *def = nullptr) noexcept {
+  const char *ret = std::getenv(tag);
+  return ret ? ret : def;
+}
 
 /**
  * @brief Will try to load the config file and fallback to defaults
@@ -67,16 +71,22 @@ state::Host get_host_config(std::string_view pkey_filename, std::string_view cer
 /**
  * @brief Local state initialization
  */
-auto initialize(std::string_view config_file, std::string_view pkey_filename, std::string_view cert_filename) {
+auto initialize(std::string_view config_file,
+                int t_pool_size,
+                std::string_view pkey_filename,
+                std::string_view cert_filename) {
   auto config = load_config(config_file);
   auto display_modes = getDisplayModes();
 
   auto host = get_host_config(pkey_filename, cert_filename);
-  state::AppState state = {config,
-                           host,
-                           std::make_shared<immer::atom<immer::map<std::string, state::PairCache>>>(),
-                           std::make_shared<dp::event_bus>()};
-  return std::make_shared<state::AppState>(state);
+  auto state = state::AppState{
+      .config = config,
+      .host = host,
+      .pairing_cache = std::make_shared<immer::atom<immer::map<std::string, state::PairCache>>>(),
+      .event_bus = std::make_shared<dp::event_bus>(),
+      .running_sessions = std::make_shared<immer::atom<immer::vector<state::StreamSession>>>(),
+      .t_pool = std::make_shared<boost::asio::thread_pool>(t_pool_size)};
+  return immer::box<state::AppState>(state);
 }
 
 /**
@@ -106,133 +116,100 @@ void check_exceptions() {
   }
 }
 
-const char *get_env(const char *tag, const char *def = nullptr) noexcept {
-  const char *ret = std::getenv(tag);
-  return ret ? ret : def;
-}
-
-/**
- * A bit tricky here: on a basic level we want a map of [session_id] -> thread_pool
- */
-typedef immer::atom<immer::map<std::size_t, std::shared_ptr<boost::asio::thread_pool>>> TreadsMapAtom;
-
-/**
- * Glue code in order to start the sessions in response to events fired in the bus
- *
- * @param event_bus: the shared bus where the handlers will be registered
- * @param threads: holds reference to all running threads, grouped by session_id
- *
- * @returns a list of signals handlers that have been created
- */
-auto setup_sessions_handlers(std::shared_ptr<dp::event_bus> &event_bus, TreadsMapAtom &threads) {
+auto setup_sessions_handlers(const immer::box<state::AppState> &app_state) {
   immer::vector_transient<immer::box<dp::handler_registration>> handlers;
+  auto t_pool = app_state->t_pool;
 
-  // RTSP
-  handlers.push_back(event_bus->register_handler<immer::box<state::StreamSession>>(
-      [&threads](const immer::box<state::StreamSession> &stream_session) {
-        // Create pool
-        auto t_pool = std::make_shared<ba::thread_pool>(6);
-
-        // Start RTSP
-        ba::post(*t_pool, [stream_session]() { rtsp::run_server(stream_session->rtsp_port, stream_session); });
-
-        // Store pool for others
-        threads.update([sess_id = stream_session->session_id, t_pool](auto t_map) {
-          return t_map.update(sess_id, [t_pool](auto box) { return t_pool; });
-        });
-      }));
-
-  // Control thread
-  control::init(); // Need to initialise enet once
-  handlers.push_back(event_bus->register_handler<immer::box<state::ControlSession>>(
-      [&threads](const immer::box<state::ControlSession> &control_sess) {
-        auto t_pool = threads.load()->at(control_sess->session_id);
-
-        // Start control stream
-        ba::post(*t_pool, [control_sess]() {
-          int timeout_millis = 1000; // TODO: config?
-          control::run_control(control_sess, timeout_millis);
-        });
-      }));
-
-  handlers.push_back(event_bus->register_handler<immer::box<state::LaunchAPPEvent>>(
-      [&threads](const immer::box<state::LaunchAPPEvent> &launch_ev) {
-        auto t_pool = threads.load()->at(launch_ev->session_id);
-
+  // Run process when the event is raised
+  handlers.push_back(app_state->event_bus->register_handler<immer::box<state::LaunchAPPEvent>>(
+      [t_pool](const immer::box<state::LaunchAPPEvent> &launch_ev) {
         // Start selected app
-        ba::post(*t_pool, [launch_ev]() { process::run_process(launch_ev); });
+        ba::post(*t_pool, [=]() { process::run_process(launch_ev); });
       }));
 
-  // GStreamer video
-  streaming::init(); // Need to initialise streaming once
-  handlers.push_back(event_bus->register_handler<immer::box<state::VideoSession>>(
-      [&threads](const immer::box<state::VideoSession> &video_sess) {
-        auto t_pool = threads.load()->at(video_sess->session_id);
+  /* Audio/Video streaming */
+  auto video_sessions = std::make_shared<immer::atom<immer::map<std::string, immer::box<state::VideoSession>>>>();
+  auto audio_sessions = std::make_shared<immer::atom<immer::map<std::string, immer::box<state::AudioSession>>>>();
 
-        ba::post(*t_pool, [video_sess, t_pool]() {
-          auto client_port = rtp::wait_for_ping(video_sess->port);
-          streaming::start_streaming_video(video_sess, client_port, t_pool);
+  handlers.push_back(app_state->event_bus->register_handler<immer::box<state::VideoSession>>(
+      [video_sessions](const immer::box<state::VideoSession> &sess) {
+        video_sessions->update([=](const auto map) { return map.set(sess->client_ip, sess); });
+      }));
+
+  handlers.push_back(app_state->event_bus->register_handler<immer::box<state::AudioSession>>(
+      [audio_sessions](const immer::box<state::AudioSession> &sess) {
+        audio_sessions->update([=](const auto map) { return map.set(sess->client_ip, sess); });
+      }));
+
+  ba::post(*t_pool, [=]() {
+    rtp::wait_for_ping(state::VIDEO_PING_PORT, [=](unsigned short client_port, const std::string &client_ip) {
+      auto video_sess = video_sessions->load()->find(client_ip);
+      if (video_sess != nullptr) {
+        ba::post(*t_pool, [=, sess = *video_sess]() {
+          streaming::start_streaming_video(sess, app_state->event_bus, client_port, t_pool);
         });
-      }));
+        video_sessions->update([&client_ip](const auto &map) { return map.erase(client_ip); });
+      }
+    });
+  });
 
-  // GStreamer audio
-  handlers.push_back(event_bus->register_handler<immer::box<state::AudioSession>>(
-      [&threads](const immer::box<state::AudioSession> &audio_sess) {
-        auto t_pool = threads.load()->at(audio_sess->session_id);
-
-        ba::post(*t_pool, [audio_sess]() {
-          auto client_port = rtp::wait_for_ping(audio_sess->port);
-          streaming::start_streaming_audio(audio_sess, client_port);
+  ba::post(*t_pool, [=]() {
+    rtp::wait_for_ping(state::AUDIO_PING_PORT, [=](unsigned short client_port, const std::string &client_ip) {
+      auto audio_sess = audio_sessions->load()->find(client_ip);
+      if (audio_sess != nullptr) {
+        ba::post(*t_pool, [=, sess = *audio_sess]() {
+          streaming::start_streaming_audio(sess, app_state->event_bus, client_port);
         });
-      }));
+        audio_sessions->update([&client_ip](const auto &map) { return map.erase(client_ip); });
+      }
+    });
+  });
 
-  // On control session end, let's wait for all threads to finish then clean them up
-  handlers.push_back(event_bus->register_handler<immer::box<moonlight::control::TerminateEvent>>(
-      [&threads](const immer::box<moonlight::control::TerminateEvent> &event) {
-        // Events are dispatched from the calling thread; in this case it'll be the control stream thread.
-        // We have to create a new thread to process the cleaning and detach it from the original thread
-        auto cleanup_thread = std::thread([&threads, sess_id = event->session_id]() {
-          auto t_pool = threads.load()->at(sess_id);
-          logs::log(logs::debug, "Terminated session: {}, waiting for thread_pool to finish", sess_id);
-
-          t_pool->wait();
-
-          logs::log(logs::info, "Closed session: {}", sess_id);
-          threads.update([sess_id](auto t_map) { return t_map.erase(sess_id); });
-        });
-
-        cleanup_thread.detach();
-      }));
-
-  return handlers.persistent();
+  return std::make_pair(handlers.persistent(), t_pool);
 }
 
 /**
  * @brief here's where the magic starts
  */
 int main(int argc, char *argv[]) {
-  logs::init(logs::parse_level(get_env("LOG_LEVEL", "INFO")));
+  logs::init(logs::parse_level(get_env("WOLF_LOG_LEVEL", "INFO")));
   check_exceptions();
 
-  auto config_file = get_env("CFG_FILE", "config.toml");
-  auto p_key_file = get_env("PRIVATE_KEY_FILE", "key.pem");
-  auto p_cert_file = get_env("PRIVATE_CERT_FILE", "cert.pem");
-  auto local_state = initialize(config_file, p_key_file, p_cert_file);
+  streaming::init(); // Need to initialise gstreamer once
+  control::init();   // Need to initialise enet once
 
-  // REST HTTP/S APIs
-  auto http_server = std::make_unique<HttpServer>();
-  auto http_thread = HTTPServers::startServer(http_server.get(), local_state, state::HTTP_PORT);
+  auto config_file = get_env("WOLF_CFG_FILE", "config.toml");
+  auto p_key_file = get_env("WOLF_PRIVATE_KEY_FILE", "key.pem");
+  auto p_cert_file = get_env("WOLF_PRIVATE_CERT_FILE", "cert.pem");
+  auto local_state =
+      initialize(config_file, std::stoi(get_env("WOLF_THREAD_POOL_SIZE", "30")), p_key_file, p_cert_file);
 
-  auto https_server = std::make_unique<HttpsServer>(p_cert_file, p_key_file);
-  auto https_thread = HTTPServers::startServer(https_server.get(), local_state, state::HTTPS_PORT);
+  // HTTP APIs
+  ba::post(*local_state->t_pool, [local_state]() {
+    HttpServer server = HttpServer();
+    HTTPServers::startServer(&server, local_state, state::HTTP_PORT);
+  });
 
-  // Holds reference to all running threads, grouped by session_id
-  auto threads = TreadsMapAtom{};
-  // RTSP, RTP, Control and all the rest of Moonlight protocol will be started/stopped on demand via HTTPS
-  auto sess_handlers = setup_sessions_handlers(local_state->event_bus, threads);
+  // HTTPS APIs
+  ba::post(*local_state->t_pool, [local_state, p_key_file, p_cert_file]() {
+    HttpsServer server = HttpsServer(p_cert_file, p_key_file);
+    HTTPServers::startServer(&server, local_state, state::HTTPS_PORT);
+  });
+
+  // RTSP
+  ba::post(*local_state->t_pool, [sessions = local_state->running_sessions, ev_bus = local_state->event_bus]() {
+    rtsp::run_server(state::RTSP_SETUP_PORT, sessions, ev_bus);
+  });
+
+  // Control
+  ba::post(*local_state->t_pool, [sessions = local_state->running_sessions, ev_bus = local_state->event_bus]() {
+    control::run_control(state::CONTROL_PORT, sessions, ev_bus);
+  });
+
+  auto sess_handlers = setup_sessions_handlers(local_state);
 
   // Exception and termination handling
-  shutdown_handler = [&sess_handlers, &threads](int signum) {
+  shutdown_handler = [&sess_handlers](int signum) {
     logs::log(logs::info, "Received interrupt signal {}, clean exit", signum);
     if (signum == SIGABRT || signum == SIGSEGV) {
       auto trace_file = "./backtrace.dump";
@@ -240,11 +217,10 @@ int main(int argc, char *argv[]) {
       boost::stacktrace::safe_dump_to(trace_file);
     }
 
-    for (const auto &thread_pool : *threads.load()) {
-      thread_pool.second->stop();
-    }
+    // Stop the thread pool
+    sess_handlers.second->stop();
 
-    for (const auto &handler : sess_handlers) {
+    for (const auto &handler : sess_handlers.first) {
       handler->unregister();
     }
 
@@ -257,7 +233,6 @@ int main(int argc, char *argv[]) {
   std::signal(SIGSEGV, signal_handler);
   std::signal(SIGABRT, signal_handler);
 
-  // Let's park the main thread over here, HTTP/S should never stop
-  https_thread.join();
-  http_thread.join();
+  // Let's park the main thread over here
+  local_state->t_pool->wait();
 }
