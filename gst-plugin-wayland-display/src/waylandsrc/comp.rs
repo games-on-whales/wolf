@@ -1,4 +1,5 @@
 use std::{
+    collections::HashSet,
     ffi::OsString,
     os::unix::prelude::AsRawFd,
     time::{Duration, Instant},
@@ -54,7 +55,7 @@ use smithay::{
         },
     },
     render_elements,
-    utils::{Logical, Physical, Point, Rectangle, Serial, Size, Transform},
+    utils::{Logical, Physical, Point, Rectangle, Serial, Size, Transform, SERIAL_COUNTER},
     wayland::{
         buffer::BufferHandler,
         compositor::{with_states, CompositorHandler, CompositorState},
@@ -124,6 +125,7 @@ struct State {
     last_pointer_movement: Instant,
     cursor_element: MemoryRenderBuffer,
     cursor_state: CursorImageStatus,
+    surpressed_keys: HashSet<u32>,
     pending_windows: Vec<Window>,
     input_context: Libinput,
 
@@ -252,7 +254,13 @@ impl CompositorHandler for State {
                     (output_size.w / 2) - (window_size.w / 2),
                     (output_size.h / 2) - (window_size.h / 2),
                 );
-                self.space.map_element(Window::Wayland(window), loc, false);
+                let window = Window::Wayland(window);
+                self.space.map_element(window.clone(), loc, true);
+                self.seat.get_keyboard().unwrap().set_focus(
+                    self,
+                    Some(FocusTarget::from(window)),
+                    SERIAL_COUNTER.next_serial(),
+                );
             }
 
             return;
@@ -523,9 +531,13 @@ impl XwmHandler for Data {
             let _ = window.set_activated(true);
             let _ = window.configure(geo);
             let _ = self.xwm_state(id).raise_window(&window);
-            self.state
-                .space
-                .map_element(Window::from(window), geo.loc, true);
+            let window = Window::X11(window);
+            self.state.space.map_element(window.clone(), geo.loc, true);
+            self.state.seat.get_keyboard().unwrap().set_focus(
+                &mut self.state,
+                Some(FocusTarget::from(window)),
+                SERIAL_COUNTER.next_serial(),
+            );
             return;
         }
 
@@ -570,16 +582,22 @@ impl XwmHandler for Data {
         let _ = window.set_activated(true);
         let _ = window.configure(Rectangle::from_loc_and_size(window_loc, window_size));
         let _ = self.xwm_state(id).raise_window(&window);
+
+        let window = Window::X11(window);
         self.state
             .space
-            .map_element(Window::X11(window), window_loc, true);
+            .map_element(window.clone(), window_loc, true);
+        self.state.seat.get_keyboard().unwrap().set_focus(
+            &mut self.state,
+            Some(FocusTarget::from(window)),
+            SERIAL_COUNTER.next_serial(),
+        );
     }
 
     fn mapped_override_redirect_window(&mut self, _: XwmId, window: X11Surface) {
         let geo = window.geometry();
-        self.state
-            .space
-            .map_element(Window::from(window), geo.loc, true);
+        let window = Window::from(window);
+        self.state.space.map_element(window.clone(), geo.loc, true);
     }
 
     fn unmapped_window(&mut self, _: XwmId, window: X11Surface) {
@@ -603,21 +621,29 @@ impl XwmHandler for Data {
         &mut self,
         _: XwmId,
         window: X11Surface,
-        _x: Option<i32>,
-        _y: Option<i32>,
+        x: Option<i32>,
+        y: Option<i32>,
         w: Option<u32>,
         h: Option<u32>,
         _reorder: Option<Reorder>,
     ) {
         let mut geo = window.geometry();
-        /*
-        if let Some(x) = x {
-            geo.loc.x = x;
+        if !self
+            .state
+            .space
+            .elements()
+            .find(|e| matches!(e, Window::X11(w) if w == &window))
+            .is_some()
+        {
+            // The window is not yet mapped, lets respect the initial position
+            if let Some(x) = x {
+                geo.loc.x = x;
+            }
+            if let Some(y) = y {
+                geo.loc.y = y;
+            }
         }
-        if let Some(y) = y {
-            geo.loc.y = y;
-        }
-        */
+
         if let Some(w) = w {
             geo.size.w = w as i32;
         }
@@ -625,17 +651,6 @@ impl XwmHandler for Data {
             geo.size.h = h as i32;
         }
         let _ = window.configure(geo);
-
-        /*
-        let Some(elem) = self
-            .state
-            .space
-            .elements()
-            .find(|e| matches!(e, Window::X11(w) if w == &window))
-            .cloned()
-        else { return };
-        self.state.space.map_element(elem, geo.loc, false);
-        */
     }
 
     fn configure_notify(
@@ -705,7 +720,12 @@ impl XwmHandler for Data {
             if window_geo != output_geo {
                 let _ = window.configure(output_geo);
                 let _ = self.xwm_state(id).raise_window(&window);
-                self.state.space.map_element(elem, (0, 0), true);
+                self.state.space.map_element(elem.clone(), (0, 0), true);
+                self.state.seat.get_keyboard().unwrap().set_focus(
+                    &mut self.state,
+                    Some(FocusTarget::from(elem)),
+                    SERIAL_COUNTER.next_serial(),
+                );
             }
         }
     }
@@ -785,6 +805,7 @@ pub fn init(command_src: Channel<Command>, render_node: DrmNode, elem: gst::Elem
         last_pointer_movement: Instant::now(),
         cursor_element,
         cursor_state: CursorImageStatus::Default,
+        surpressed_keys: HashSet::new(),
         pending_windows: Vec::new(),
         input_context,
 

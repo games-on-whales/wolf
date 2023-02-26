@@ -2,13 +2,13 @@ use super::{focus::FocusTarget, State};
 use smithay::{
     backend::{
         input::{
-            Axis, AxisSource, Event, InputEvent, KeyboardKeyEvent, PointerAxisEvent,
+            Axis, AxisSource, Event, InputEvent, KeyState, KeyboardKeyEvent, PointerAxisEvent,
             PointerButtonEvent, PointerMotionEvent,
         },
         libinput::LibinputInputBackend,
     },
     input::{
-        keyboard::FilterResult,
+        keyboard::{keysyms, FilterResult},
         pointer::{AxisFrame, ButtonEvent, MotionEvent, RelativeMotionEvent},
     },
     reexports::{
@@ -59,7 +59,57 @@ impl State {
                     state,
                     serial,
                     time,
-                    |_data, _modifiers, _handle| FilterResult::Forward,
+                    |data, modifiers, handle| {
+                        if state == KeyState::Pressed {
+                            if modifiers.ctrl
+                                && modifiers.shift
+                                && !modifiers.alt
+                                && !modifiers.logo
+                            {
+                                match handle.modified_sym() {
+                                    keysyms::KEY_Tab => {
+                                        if let Some(element) = data.space.elements().last().cloned()
+                                        {
+                                            data.surpressed_keys.insert(keysyms::KEY_Tab);
+                                            let location =
+                                                data.space.element_location(&element).unwrap();
+                                            data.space.map_element(element.clone(), location, true);
+                                            data.seat.get_keyboard().unwrap().set_focus(
+                                                data,
+                                                Some(FocusTarget::from(element)),
+                                                serial,
+                                            );
+                                            return FilterResult::Intercept(());
+                                        }
+                                    }
+                                    keysyms::KEY_Q => {
+                                        if let Some(target) =
+                                            data.seat.get_keyboard().unwrap().current_focus()
+                                        {
+                                            match target {
+                                                FocusTarget::Wayland(window) => {
+                                                    window.toplevel().send_close();
+                                                }
+                                                FocusTarget::X11(surface) => {
+                                                    let _ = surface.close();
+                                                }
+                                                _ => return FilterResult::Forward,
+                                            };
+                                            data.surpressed_keys.insert(keysyms::KEY_Q);
+                                            return FilterResult::Intercept(());
+                                        }
+                                    }
+                                    _ => {}
+                                }
+                            }
+                        } else {
+                            if data.surpressed_keys.remove(&handle.modified_sym()) {
+                                return FilterResult::Intercept(());
+                            }
+                        }
+
+                        FilterResult::Forward
+                    },
                 );
             }
             InputEvent::PointerMotion { event, .. } => {
