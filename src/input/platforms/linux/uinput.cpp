@@ -39,9 +39,9 @@ std::optional<libevdev_uinput *> create_mouse(libevdev *dev) {
 
   libevdev_set_uniq(dev, "Wolf Mouse");
   libevdev_set_name(dev, "Wolf mouse virtual device");
-  libevdev_set_id_vendor(dev, 0xAB01);
-  libevdev_set_id_product(dev, 0xAB02);
-  libevdev_set_id_version(dev, 0xAB03);
+  libevdev_set_id_vendor(dev, 0xAB00);
+  libevdev_set_id_product(dev, 0xAB01);
+  libevdev_set_id_version(dev, 0xAB00);
   libevdev_set_id_bustype(dev, BUS_USB);
 
   libevdev_enable_event_type(dev, EV_KEY);
@@ -82,9 +82,9 @@ std::optional<libevdev_uinput *> create_mouse_abs(libevdev *dev) {
 
   libevdev_set_uniq(dev, "Wolf Touchpad");
   libevdev_set_name(dev, "Wolf touchpad virtual device");
-  libevdev_set_id_vendor(dev, 0xAB11);
-  libevdev_set_id_product(dev, 0xAB12);
-  libevdev_set_id_version(dev, 0xAB13);
+  libevdev_set_id_vendor(dev, 0xAB00);
+  libevdev_set_id_product(dev, 0xAB02);
+  libevdev_set_id_version(dev, 0xAB00);
   libevdev_set_id_bustype(dev, BUS_USB);
 
   libevdev_enable_property(dev, INPUT_PROP_DIRECT);
@@ -195,9 +195,9 @@ std::optional<libevdev_uinput *> create_keyboard(libevdev *dev) {
 
   libevdev_set_uniq(dev, "Wolf Keyboard");
   libevdev_set_name(dev, "Wolf keyboard virtual device");
-  libevdev_set_id_vendor(dev, 0xAB21);
-  libevdev_set_id_product(dev, 0xAB22);
-  libevdev_set_id_version(dev, 0xAB33);
+  libevdev_set_id_vendor(dev, 0xAB00);
+  libevdev_set_id_product(dev, 0xAB03);
+  libevdev_set_id_version(dev, 0xAB00);
   libevdev_set_id_bustype(dev, BUS_USB);
 
   libevdev_enable_event_type(dev, EV_KEY);
@@ -324,10 +324,10 @@ std::optional<libevdev_uinput *> create_controller(libevdev *dev) {
   libevdev_set_name(dev, "Wolf X-Box One (virtual) pad");
   // Vendor and product are very important
   // see the full list at: https://github.com/torvalds/linux/blob/master/drivers/input/joystick/xpad.c#L147
-  libevdev_set_id_product(dev, 0x02d1);
-  libevdev_set_id_vendor(dev, 0x045e);
+  libevdev_set_id_product(dev, 0x02D1);
+  libevdev_set_id_vendor(dev, 0x045E);
   libevdev_set_id_bustype(dev, BUS_USB);
-  libevdev_set_id_version(dev, 0xAB34);
+  libevdev_set_id_version(dev, 0xAB00);
 
   libevdev_enable_event_type(dev, EV_KEY);
   libevdev_enable_event_code(dev, EV_KEY, BTN_WEST, nullptr);
