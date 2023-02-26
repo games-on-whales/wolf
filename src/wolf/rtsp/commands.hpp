@@ -150,8 +150,7 @@ announce(const RTSP_PACKET &req, const state::StreamSession &session, dp::event_
                                .client_ip = session.ip,
 
                                .packet_duration = args["x-nv-aqos.packetDuration"].value(),
-                               .channels = args["x-nv-audio.surround.numChannels"].value(),
-                               .mask = args["x-nv-audio.surround.channelMask"].value()};
+                               .channels = args["x-nv-audio.surround.numChannels"].value()};
   event_bus.fire_event(immer::box<state::AudioSession>(audio));
 
   return ok_msg(req.seq_number);

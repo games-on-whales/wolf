@@ -1,6 +1,8 @@
+#include <audio/audio.hpp>
 #include <boost/asio.hpp>
 #include <boost/filesystem.hpp>
 #include <boost/stacktrace.hpp>
+#include <chrono>
 #include <control/control.hpp>
 #include <csignal>
 #include <immer/array.hpp>
@@ -15,6 +17,8 @@
 #include <vector>
 
 namespace ba = boost::asio;
+using namespace std::string_literals;
+using namespace std::chrono_literals;
 
 const char *get_env(const char *tag, const char *def = nullptr) noexcept {
   const char *ret = std::getenv(tag);
@@ -124,7 +128,7 @@ auto setup_sessions_handlers(const immer::box<state::AppState> &app_state) {
   handlers.push_back(app_state->event_bus->register_handler<immer::box<state::LaunchAPPEvent>>(
       [t_pool](const immer::box<state::LaunchAPPEvent> &launch_ev) {
         // Start selected app
-        ba::post(*t_pool, [=]() { process::run_process(launch_ev); });
+        ba::post(*t_pool, [launch_ev]() { process::run_process(launch_ev); });
       }));
 
   /* Audio/Video streaming */
@@ -154,11 +158,23 @@ auto setup_sessions_handlers(const immer::box<state::AppState> &app_state) {
   });
 
   ba::post(*t_pool, [=]() {
+    auto audio_server = audio::connect(*t_pool);
+
     rtp::wait_for_ping(state::AUDIO_PING_PORT, [=](unsigned short client_port, const std::string &client_ip) {
       auto audio_sess = audio_sessions->load()->find(client_ip);
       if (audio_sess != nullptr) {
         ba::post(*t_pool, [=, sess = *audio_sess]() {
-          streaming::start_streaming_audio(sess, app_state->event_bus, client_port);
+          /* Create virtual audio device */
+          auto sink_name = fmt::format("virtual_sink_{}", sess->session_id);
+          auto v_device = audio::create_virtual_sink(
+              audio_server,
+              audio::AudioDevice{.sink_name = sink_name, .n_channels = sess->channels, .bitrate = sess->bitrate});
+
+          /* Start the gstreamer pipeline */
+          streaming::start_streaming_audio(sess, app_state->event_bus, client_port, sink_name + ".monitor");
+
+          /* Clean, remove virtual audio device */
+          audio::delete_virtual_sink(audio_server, v_device);
         });
         audio_sessions->update([&client_ip](const auto &map) { return map.erase(client_ip); });
       }

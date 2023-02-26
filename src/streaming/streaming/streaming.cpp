@@ -162,9 +162,13 @@ void application_msg_handler(GstBus *bus, GstMessage *message, gpointer /* state
     logs::log(logs::debug, "[GSTREAMER] Received WAYLAND_DISPLAY={} DISPLAY={}", wayland_display, x_display);
 
     auto launch_ev = (state::LaunchAPPEvent *)data;
-    launch_ev->xorg_socket = x_display;
-    launch_ev->wayland_socket = wayland_display;
-    launch_ev->event_bus->fire_event(immer::box<state::LaunchAPPEvent>{*launch_ev});
+    launch_ev->event_bus->fire_event(immer::box<state::LaunchAPPEvent>(state::LaunchAPPEvent{
+        .session_id = launch_ev->session_id,
+        .event_bus = launch_ev->event_bus,
+        .app_launch_cmd = launch_ev->app_launch_cmd,
+        .wayland_socket = wayland_display,
+        .xorg_socket = x_display,
+    }));
   } else {
     logs::log(logs::debug, "[GSTREAMER] Received message::application named: {} ignoring..", name);
   }
@@ -215,24 +219,22 @@ void start_streaming_video(const immer::box<state::VideoSession> &video_session,
                               fmt::arg("color_range", color_range));
   logs::log(logs::debug, "Starting video pipeline: {}", pipeline);
 
+  auto run_app_ev = std::make_shared<state::LaunchAPPEvent>(state::LaunchAPPEvent{
+      .session_id = video_session->session_id,
+      .event_bus = event_bus,
+      .app_launch_cmd = video_session->app_launch_cmd.value_or(""),
+  });
+
   run_pipeline(pipeline,
                video_session->session_id,
                event_bus,
-               [t_pool, video_session, event_bus](auto pipeline, auto loop) {
+               [t_pool, video_session, event_bus, run_app_ev](auto pipeline, auto loop) {
                  auto bus = gst_pipeline_get_bus(GST_PIPELINE(pipeline.get()));
                  /**
                   * Trigger an event when our custom wayland plugin sends a signal that the sockets are ready
                   */
                  if (auto launch_cmd = video_session->app_launch_cmd) {
-                   auto ev = immer::box<state::LaunchAPPEvent>(state::LaunchAPPEvent{
-                       .session_id = video_session->session_id,
-                       .event_bus = event_bus,
-                       .app_launch_cmd = launch_cmd.value(),
-                   });
-                   g_signal_connect(bus,
-                                    "message::application",
-                                    G_CALLBACK(application_msg_handler),
-                                    &const_cast<state::LaunchAPPEvent &>(ev.get()));
+                   g_signal_connect(bus, "message::application", G_CALLBACK(application_msg_handler), run_app_ev.get());
                    gst_object_unref(bus);
                  }
 
@@ -280,10 +282,12 @@ void start_streaming_video(const immer::box<state::VideoSession> &video_session,
  */
 void start_streaming_audio(const immer::box<state::AudioSession> &audio_session,
                            const std::shared_ptr<dp::event_bus> &event_bus,
-                           unsigned short client_port) {
+                           unsigned short client_port,
+                           const std::string &sink_name) {
   auto pipeline = fmt::format(audio_session->gst_pipeline,
                               fmt::arg("channels", audio_session->channels),
                               fmt::arg("bitrate", audio_session->bitrate),
+                              fmt::arg("sink_name", sink_name),
                               fmt::arg("packet_duration", audio_session->packet_duration),
                               fmt::arg("aes_key", audio_session->aes_key),
                               fmt::arg("aes_iv", audio_session->aes_iv),

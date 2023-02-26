@@ -26,6 +26,10 @@ void run_process(const immer::box<state::LaunchAPPEvent> &process_ev) {
     if (process_ev->xorg_socket) {
       env["DISPLAY"] = process_ev->xorg_socket.value();
     }
+    auto pulse_dev = fmt::format("virtual_sink_{}", process_ev->session_id);
+    env["PULSE_SINK"] = pulse_dev;
+    env["PULSE_SOURCE"] = pulse_dev + ".monitor";
+
     child_proc = bp::child(process_ev->app_launch_cmd,
                            env,
                            bp::std_in.close(),

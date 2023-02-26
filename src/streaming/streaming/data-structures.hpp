@@ -70,7 +70,6 @@ struct AudioSession {
 
   int packet_duration;
   int channels;
-  int mask;
   int bitrate = 48000;
 };
 

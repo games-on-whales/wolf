@@ -13,10 +13,7 @@
 #include <openssl/x509.h>
 #include <optional>
 #include <streaming/data-structures.hpp>
-
-#define BOOST_THREAD_PROVIDES_FUTURE_CONTINUATION
-#define BOOST_THREAD_PROVIDES_FUTURE
-#include <boost/thread/future.hpp>
+#include <audio/audio.hpp>
 
 namespace state {
 using namespace std::chrono_literals;
@@ -219,7 +216,7 @@ struct AppState {
   SessionsAtoms running_sessions;
 
   /**
-   *
+   * A thread pool, used to start all kind of concurrent operations
    */
   std::shared_ptr<ba::thread_pool> t_pool;
 };

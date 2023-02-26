@@ -29,6 +29,7 @@ void start_streaming_video(const immer::box<state::VideoSession> &video_session,
 
 void start_streaming_audio(const immer::box<state::AudioSession> &audio_session,
                            const std::shared_ptr<dp::event_bus> &event_bus,
-                           unsigned short client_port);
+                           unsigned short client_port,
+                           const std::string &sink_name);
 
 } // namespace streaming
