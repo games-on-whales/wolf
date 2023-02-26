@@ -16,6 +16,7 @@ RUN apt-get update -y && \
     libboost-thread-dev libboost-locale-dev libboost-filesystem-dev libboost-log-dev libboost-stacktrace-dev \
     libssl-dev \
     libevdev-dev \
+    libpulse-dev \
     libunwind-dev \
     && rm -rf /var/lib/apt/lists/*
 
