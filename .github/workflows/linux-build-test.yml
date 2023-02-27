@@ -59,6 +59,7 @@ jobs:
                 -DCMAKE_CXX_EXTENSIONS=OFF \
                 -DCATCH_DEVELOPMENT_BUILD=ON \
                 -DTEST_UINPUT=OFF \
+                -DTEST_DOCKER=OFF \
                 -G Ninja
 
       - name: Build tests + lib

@@ -5,6 +5,7 @@
 #include <chrono>
 #include <control/control.hpp>
 #include <csignal>
+#include <docker/docker.hpp>
 #include <immer/array.hpp>
 #include <immer/vector_transient.hpp>
 #include <memory>
@@ -193,6 +194,7 @@ int main(int argc, char *argv[]) {
 
   streaming::init(); // Need to initialise gstreamer once
   control::init();   // Need to initialise enet once
+  docker::init();    // Need to initialise libcurl once
 
   auto config_file = get_env("WOLF_CFG_FILE", "config.toml");
   auto p_key_file = get_env("WOLF_PRIVATE_KEY_FILE", "key.pem");

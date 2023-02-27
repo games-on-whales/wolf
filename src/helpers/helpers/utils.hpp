@@ -1,5 +1,7 @@
 #pragma once
-#include "range/v3/view.hpp"
+#include <algorithm>
+#include <range/v3/view.hpp>
+#include <sstream>
 #include <string>
 
 namespace utils {
@@ -26,6 +28,12 @@ inline std::string_view sub_string(std::string_view str, char begin, char end) {
   return str.substr(s + 1, e - s - 1);
 }
 
+inline std::string to_lower(std::string_view str) {
+  std::string result(str);
+  std::transform(str.begin(), str.end(), result.begin(), [](unsigned char c) { return std::tolower(c); });
+  return result;
+}
+
 /**
  * Splits the given string into an array of strings at any given separator
  */
@@ -34,6 +42,13 @@ inline std::vector<std::string_view> split(std::string_view str, char separator)
          | views::split(separator)                                                                        //
          | views::transform([](auto &&ptrs) { return std::string_view(&*ptrs.begin(), distance(ptrs)); }) //
          | to_vector;                                                                                     //
+}
+
+/**
+ * Join a list of strings into a single string with separator in between elements
+ */
+template <class T> inline std::string join(const std::vector<T> &vec, std::string_view separator) {
+  return vec | views::join(separator);
 }
 
 } // namespace utils

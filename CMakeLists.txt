@@ -1,4 +1,3 @@
-# Works with 3.11 and tested through 3.24
 cmake_minimum_required(VERSION 3.13...3.24)
 
 # Project name and a few useful settings. Other commands can pick up the results
@@ -50,6 +49,7 @@ add_subdirectory(src/moonlight)
 add_subdirectory(src/streaming)
 add_subdirectory(src/input)
 add_subdirectory(src/audio)
+add_subdirectory(src/docker)
 add_subdirectory(src/wolf)
 
 # Testing only available if this is the main app

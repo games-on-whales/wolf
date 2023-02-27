@@ -29,4 +29,4 @@ else ()
 endif ()
 
 # All users of this library will need at least C++17
-target_compile_features(moonlight PUBLIC cxx_std_17)
+target_compile_features(wolf_audio PUBLIC cxx_std_17)

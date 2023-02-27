@@ -17,6 +17,11 @@ if (TEST_UINPUT AND UNIX AND NOT APPLE)
     list(APPEND SRC_LIST "platforms/linux/input.cpp")
 endif ()
 
+option(TEST_DOCKER "Enable docker tests" ON)
+if (TEST_DOCKER)
+    list(APPEND SRC_LIST "docker/testDocker.cpp")
+endif ()
+
 target_sources(wolftests PRIVATE ${SRC_LIST})
 
 # I'm using C++17 in the test

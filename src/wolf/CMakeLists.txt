@@ -83,6 +83,7 @@ target_link_libraries(
         wolf::input
         wolf::helpers
         wolf::audio
+        wolf::docker
         ${Boost_LIBRARIES}
         ${CMAKE_DL_LIBS}
         ${CMAKE_THREAD_LIBS_INIT}
