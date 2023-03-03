@@ -14,10 +14,17 @@ TEST_CASE("Docker API", "DOCKER") {
       .ports = {docker::Port{.private_port = 1234, .public_port = 1235, .type = docker::TCP}},
       .mounts = {docker::MountPoint{.source = "/tmp/", .destination = "/tmp/", .mode = "ro"}},
       .env = {"ASD=true"}};
-  auto result = docker::create(container);
-  // auto containers = docker::get_containers(true);
-  REQUIRE(result.has_value());
-  REQUIRE(docker::start_by_id(result.value().id));
-  REQUIRE(docker::stop_by_id(result.value().id));
-  REQUIRE(docker::remove_by_id(result.value().id));
+
+  auto first_container = docker::create(container);
+  REQUIRE(first_container.has_value());
+  REQUIRE(docker::start_by_id(first_container.value().id));
+  REQUIRE(docker::stop_by_id(first_container.value().id));
+
+  // This should remove the first container and create a new one with the same name
+  auto second_container = docker::create(first_container.value());
+  REQUIRE(second_container.has_value());
+  REQUIRE(first_container->id != second_container->id);
+  REQUIRE(first_container->name == second_container->name);
+  REQUIRE(!docker::remove_by_id(first_container->id)); // This container doesn't exist anymore
+  REQUIRE(docker::remove_by_id(second_container->id));
 }

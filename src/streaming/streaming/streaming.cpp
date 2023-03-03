@@ -166,6 +166,7 @@ void application_msg_handler(GstBus *bus, GstMessage *message, gpointer /* state
         .session_id = launch_ev->session_id,
         .event_bus = launch_ev->event_bus,
         .app_launch_cmd = launch_ev->app_launch_cmd,
+        .pulse_server = launch_ev->pulse_server,
         .wayland_socket = wayland_display,
         .xorg_socket = x_display,
     }));
@@ -188,7 +189,8 @@ void send_message(GstElement *recipient, GstStructure *message) {
 void start_streaming_video(const immer::box<state::VideoSession> &video_session,
                            const std::shared_ptr<dp::event_bus> &event_bus,
                            unsigned short client_port,
-                           const std::shared_ptr<boost::asio::thread_pool> &t_pool) {
+                           const std::shared_ptr<boost::asio::thread_pool> &t_pool,
+                           const std::optional<std::string> &pulse_server) {
   std::string color_range = (static_cast<int>(video_session->color_range) == static_cast<int>(state::JPEG)) ? "jpeg"
                                                                                                             : "mpeg2";
   std::string color_space;
@@ -219,11 +221,11 @@ void start_streaming_video(const immer::box<state::VideoSession> &video_session,
                               fmt::arg("color_range", color_range));
   logs::log(logs::debug, "Starting video pipeline: {}", pipeline);
 
-  auto run_app_ev = std::make_shared<state::LaunchAPPEvent>(state::LaunchAPPEvent{
-      .session_id = video_session->session_id,
-      .event_bus = event_bus,
-      .app_launch_cmd = video_session->app_launch_cmd.value_or(""),
-  });
+  auto run_app_ev = std::make_shared<state::LaunchAPPEvent>(
+      state::LaunchAPPEvent{.session_id = video_session->session_id,
+                            .event_bus = event_bus,
+                            .app_launch_cmd = video_session->app_launch_cmd.value_or(""),
+                            .pulse_server = pulse_server});
 
   run_pipeline(pipeline,
                video_session->session_id,
@@ -283,11 +285,13 @@ void start_streaming_video(const immer::box<state::VideoSession> &video_session,
 void start_streaming_audio(const immer::box<state::AudioSession> &audio_session,
                            const std::shared_ptr<dp::event_bus> &event_bus,
                            unsigned short client_port,
-                           const std::string &sink_name) {
+                           const std::string &sink_name,
+                           const std::string &server_name) {
   auto pipeline = fmt::format(audio_session->gst_pipeline,
                               fmt::arg("channels", audio_session->channels),
                               fmt::arg("bitrate", audio_session->bitrate),
                               fmt::arg("sink_name", sink_name),
+                              fmt::arg("server_name", server_name),
                               fmt::arg("packet_duration", audio_session->packet_duration),
                               fmt::arg("aes_key", audio_session->aes_key),
                               fmt::arg("aes_iv", audio_session->aes_iv),

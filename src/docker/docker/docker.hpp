@@ -72,8 +72,14 @@ std::optional<Container> get_by_id(std::string_view id);
  *  - `env` will be the merged with the original container ENV variables
  *
  *  https://docs.docker.com/engine/api/v1.30/#tag/Container/operation/ContainerCreate
+ *
+ *  @param registry_auth: optional, base64 encoded registry auth in case the image is missing
+ *  @see https://docs.docker.com/engine/api/v1.30/#section/Authentication
+ *
+ *  @param force_recreate_if_present: if a container with the same name is already present it will be removed
  */
-std::optional<Container> create(const Container &container);
+std::optional<Container>
+create(const Container &container, std::string_view registry_auth = {}, bool force_recreate_if_present = true);
 
 /**
  * Starts the container
@@ -100,5 +106,15 @@ bool stop_by_id(std::string_view id, int timeout_seconds = 1000);
  * @param link: Remove the specified link associated with the container.
  */
 bool remove_by_id(std::string_view id, bool remove_volumes = false, bool force = false, bool link = false);
+
+/**
+ * Searches for a container with the given name and then removes it if present.
+ */
+bool remove_by_name(std::string_view name, bool remove_volumes = false, bool force = false, bool link = false);
+
+/**
+ * Downloads a Docker image
+ */
+bool pull_image(std::string_view image_name, std::string_view registry_auth = {});
 
 } // namespace docker

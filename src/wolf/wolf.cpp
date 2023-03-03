@@ -36,7 +36,6 @@ auto load_config(std::string_view config_file) {
 
 /**
  * @brief Get the Display Modes
- * TODO: get them from the host properly
  */
 immer::array<moonlight::DisplayMode> getDisplayModes() {
   return {{1920, 1080, 60}, {1024, 768, 30}};
@@ -44,7 +43,6 @@ immer::array<moonlight::DisplayMode> getDisplayModes() {
 
 /**
  * @brief Get the Audio Modes
- * TODO: get them from the host properly
  */
 immer::array<state::AudioMode> getAudioModes() {
   // Stereo
@@ -121,7 +119,43 @@ void check_exceptions() {
   }
 }
 
-auto setup_sessions_handlers(const immer::box<state::AppState> &app_state) {
+struct AudioServer {
+  std::shared_ptr<audio::Server> server;
+  std::optional<docker::Container> container = {};
+};
+
+/**
+ * We first try to connect to a running PulseAudio server
+ * if that fails, we run our own PulseAudio container and connect to it
+ * if that fails, we can't return an AudioServer, hence the optional!
+ */
+std::optional<AudioServer> setup_audio_server(boost::asio::thread_pool &t_pool) {
+  auto audio_server = audio::connect(t_pool);
+  if (audio::connected(audio_server)) {
+    return {{.server = audio_server}};
+  } else {
+    logs::log(logs::info, "Starting PulseAudio docker container");
+    auto docker_auth_token = std::string(get_env("DOCKER_AUTH_B64", ""));
+    auto container = docker::create(
+        docker::Container{
+            .id = "",
+            .name = "WolfPulseAudio",
+            .image = get_env("WOLF_PULSE_IMAGE", "ghcr.io/games-on-whales/pulseaudio:master"),
+            .status = docker::CREATED,
+            .ports = {},
+            .mounts = {docker::MountPoint{.source = "/tmp/pulse/", .destination = "/tmp/pulse/", .mode = "rw"}},
+            .env = {}},
+        docker_auth_token);
+    if (container && docker::start_by_id(container.value().id)) {
+      std::this_thread::sleep_for(1000ms); // TODO: configurable? Better way of knowing when ready?
+      return {{.server = audio::connect(t_pool, "/tmp/pulse/pulse-socket"), .container = container}};
+    }
+  }
+
+  return {};
+}
+
+auto setup_sessions_handlers(const immer::box<state::AppState> &app_state, std::optional<AudioServer> audio_server) {
   immer::vector_transient<immer::box<dp::handler_registration>> handlers;
   auto t_pool = app_state->t_pool;
 
@@ -135,6 +169,8 @@ auto setup_sessions_handlers(const immer::box<state::AppState> &app_state) {
   /* Audio/Video streaming */
   auto video_sessions = std::make_shared<immer::atom<immer::map<std::string, immer::box<state::VideoSession>>>>();
   auto audio_sessions = std::make_shared<immer::atom<immer::map<std::string, immer::box<state::AudioSession>>>>();
+  std::optional<std::string> audio_server_name = audio_server ? audio::get_server_name(audio_server->server)
+                                                              : std::optional<std::string>();
 
   handlers.push_back(app_state->event_bus->register_handler<immer::box<state::VideoSession>>(
       [video_sessions](const immer::box<state::VideoSession> &sess) {
@@ -151,7 +187,7 @@ auto setup_sessions_handlers(const immer::box<state::AppState> &app_state) {
       auto video_sess = video_sessions->load()->find(client_ip);
       if (video_sess != nullptr) {
         ba::post(*t_pool, [=, sess = *video_sess]() {
-          streaming::start_streaming_video(sess, app_state->event_bus, client_port, t_pool);
+          streaming::start_streaming_video(sess, app_state->event_bus, client_port, t_pool, audio_server_name);
         });
         video_sessions->update([&client_ip](const auto &map) { return map.erase(client_ip); });
       }
@@ -159,23 +195,30 @@ auto setup_sessions_handlers(const immer::box<state::AppState> &app_state) {
   });
 
   ba::post(*t_pool, [=]() {
-    auto audio_server = audio::connect(*t_pool);
-
     rtp::wait_for_ping(state::AUDIO_PING_PORT, [=](unsigned short client_port, const std::string &client_ip) {
       auto audio_sess = audio_sessions->load()->find(client_ip);
       if (audio_sess != nullptr) {
         ba::post(*t_pool, [=, sess = *audio_sess]() {
           /* Create virtual audio device */
           auto sink_name = fmt::format("virtual_sink_{}", sess->session_id);
-          auto v_device = audio::create_virtual_sink(
-              audio_server,
-              audio::AudioDevice{.sink_name = sink_name, .n_channels = sess->channels, .bitrate = sess->bitrate});
+          std::shared_ptr<audio::VSink> v_device;
+          if (audio_server && audio_server->server) {
+            v_device = audio::create_virtual_sink(
+                audio_server->server,
+                audio::AudioDevice{.sink_name = sink_name, .n_channels = sess->channels, .bitrate = sess->bitrate});
+          }
 
           /* Start the gstreamer pipeline */
-          streaming::start_streaming_audio(sess, app_state->event_bus, client_port, sink_name + ".monitor");
+          streaming::start_streaming_audio(sess,
+                                           app_state->event_bus,
+                                           client_port,
+                                           sink_name + ".monitor",
+                                           audio_server_name ? audio_server_name.value() : "");
 
-          /* Clean, remove virtual audio device */
-          audio::delete_virtual_sink(audio_server, v_device);
+          if (audio_server && audio_server->server) {
+            /* Clean, remove virtual audio device */
+            audio::delete_virtual_sink(audio_server->server, v_device);
+          }
         });
         audio_sessions->update([&client_ip](const auto &map) { return map.erase(client_ip); });
       }
@@ -224,10 +267,11 @@ int main(int argc, char *argv[]) {
     control::run_control(state::CONTROL_PORT, sessions, ev_bus);
   });
 
-  auto sess_handlers = setup_sessions_handlers(local_state);
+  auto audio_server = setup_audio_server(*local_state->t_pool);
+  auto sess_handlers = setup_sessions_handlers(local_state, audio_server);
 
   // Exception and termination handling
-  shutdown_handler = [&sess_handlers](int signum) {
+  shutdown_handler = [&sess_handlers, &audio_server](int signum) {
     logs::log(logs::info, "Received interrupt signal {}, clean exit", signum);
     if (signum == SIGABRT || signum == SIGSEGV) {
       auto trace_file = "./backtrace.dump";
@@ -237,6 +281,17 @@ int main(int argc, char *argv[]) {
 
     // Stop the thread pool
     sess_handlers.second->stop();
+
+    // Stop pulse connection
+    if (audio_server && audio_server->server) {
+      audio::disconnect(audio_server->server);
+    }
+    // Stop PulseAudio docker container (if started)
+    if (audio_server && audio_server->container) {
+      logs::log(logs::debug, "Stopping PulseAudio container {}", audio_server->container->name);
+      docker::stop_by_id(audio_server->container->id);
+      docker::remove_by_id(audio_server->container->id);
+    }
 
     for (const auto &handler : sess_handlers.first) {
       handler->unregister();

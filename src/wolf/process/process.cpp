@@ -29,6 +29,9 @@ void run_process(const immer::box<state::LaunchAPPEvent> &process_ev) {
     auto pulse_dev = fmt::format("virtual_sink_{}", process_ev->session_id);
     env["PULSE_SINK"] = pulse_dev;
     env["PULSE_SOURCE"] = pulse_dev + ".monitor";
+    if (process_ev->pulse_server) {
+      env["PULSE_SERVER"] = process_ev->pulse_server.value();
+    }
 
     child_proc = bp::child(process_ev->app_launch_cmd,
                            env,

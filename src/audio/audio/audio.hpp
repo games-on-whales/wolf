@@ -13,7 +13,7 @@ namespace audio {
 
 typedef struct Server Server;
 
-std::shared_ptr<Server> connect(boost::asio::thread_pool &t_pool);
+std::shared_ptr<Server> connect(boost::asio::thread_pool &t_pool, std::string_view server = {});
 
 struct AudioDevice {
   std::string_view sink_name;
@@ -26,7 +26,17 @@ struct VSink {
   boost::promise<unsigned int> sink_idx;
 };
 
+/**
+ * Will sit here and wait until the server accepts the connection or some error happens
+ */
+bool connected(const std::shared_ptr<Server> &server);
+
 std::shared_ptr<VSink> create_virtual_sink(const std::shared_ptr<Server> &server, const AudioDevice &device);
+
 void delete_virtual_sink(const std::shared_ptr<Server> &server, const std::shared_ptr<VSink> &vsink);
+
+void disconnect(const std::shared_ptr<Server> &server);
+
+std::string get_server_name(const std::shared_ptr<Server> &server);
 
 } // namespace audio

@@ -85,6 +85,7 @@ struct LaunchAPPEvent {
    */
   std::string app_launch_cmd;
 
+  std::optional<std::string> pulse_server;
   std::optional<std::string> wayland_socket;
   std::optional<std::string> xorg_socket;
 };

@@ -12,7 +12,7 @@ struct Server {
   boost::future<bool> on_ready_fut;
 };
 
-std::shared_ptr<Server> connect(boost::asio::thread_pool &t_pool) {
+std::shared_ptr<Server> connect(boost::asio::thread_pool &t_pool, std::string_view server) {
   {
     auto loop = pa_mainloop_new();
     auto ctx = pa_context_new(pa_mainloop_get_api(loop), "wolf");
@@ -47,7 +47,7 @@ std::shared_ptr<Server> connect(boost::asio::thread_pool &t_pool) {
         },
         state.get());
 
-    auto err = pa_context_connect(ctx, nullptr, PA_CONTEXT_NOFLAGS, nullptr);
+    auto err = pa_context_connect(ctx, server.empty() ? nullptr : server.data(), PA_CONTEXT_NOFLAGS, nullptr);
     if (err) {
       logs::log(logs::warning, "[PULSE] Unable to connect, {}", pa_strerror(err));
     }
@@ -62,6 +62,10 @@ std::shared_ptr<Server> connect(boost::asio::thread_pool &t_pool) {
 
     return state;
   }
+}
+
+bool connected(const std::shared_ptr<Server> &server) {
+  return server->on_ready_fut.get();
 }
 
 void queue_op(const std::shared_ptr<Server> &server, const std::function<void()> &op) {
@@ -119,6 +123,15 @@ void delete_virtual_sink(const std::shared_ptr<Server> &server, const std::share
     logs::log(logs::debug, "[PULSE] Removed virtual sink, status: {}", status);
     pa_operation_unref(operation);
   });
+}
+
+void disconnect(const std::shared_ptr<Server> &server) {
+  server->on_ready = boost::promise<bool>(); // Creates a new promise
+  pa_context_disconnect(server->ctx);
+}
+
+std::string get_server_name(const std::shared_ptr<Server> &server) {
+  return pa_context_get_server(server->ctx);
 }
 
 } // namespace audio
