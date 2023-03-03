@@ -1,7 +1,9 @@
 #include <boost/asio.hpp>
+#include <boost/json/src.hpp>
 #include <curl/curl.h>
 #include <docker/docker.hpp>
 #include <docker/formatters.hpp>
+#include <docker/json_formatters.hpp>
 #include <helpers/logger.hpp>
 #include <memory>
 #include <range/v3/view.hpp>
