@@ -41,6 +41,7 @@ jobs:
               libboost-locale-dev libboost-thread-dev libboost-filesystem-dev libboost-log-dev libboost-stacktrace-dev \
               libssl-dev \
               libgstreamer1.0-dev \
+              libcurl4-openssl-dev \
               libpulse-dev \
               libevdev-dev \
               ${{ join(matrix.other_pkgs, ' ') }}

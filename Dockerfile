@@ -14,6 +14,7 @@ RUN apt-get update -y && \
     git \
     clang \
     libboost-thread-dev libboost-locale-dev libboost-filesystem-dev libboost-log-dev libboost-stacktrace-dev \
+    libcurl4-openssl-dev \
     libssl-dev \
     libevdev-dev \
     libpulse-dev \
@@ -63,10 +64,9 @@ FROM gameonwhales/gstreamer:$GSTREAMER_VERSION AS runner
 ENV DEBIAN_FRONTEND=noninteractive
 
 # Wolf runtime dependencies
-# curl only used by plugin curlhttpsrc (remote video play)
 RUN apt-get update -y && \
     apt-get install -y --no-install-recommends \
-    ca-certificates libcurl4 \
+    ca-certificates \
     tini \
     libssl3 \
     libevdev2 \
