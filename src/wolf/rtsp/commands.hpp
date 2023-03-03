@@ -3,7 +3,6 @@
 #include <chrono>
 #include <helpers/logger.hpp>
 #include <helpers/utils.hpp>
-#include <process/process.hpp>
 #include <rtsp/parser.hpp>
 #include <state/data-structures.hpp>
 #include <string>
@@ -116,7 +115,7 @@ announce(const RTSP_PACKET &req, const state::StreamSession &session, dp::event_
 
   state::VideoSession video = {
       .display_mode = display,
-      .gst_pipeline = video_format_h264 ? session.app.h264_gst_pipeline : session.app.hevc_gst_pipeline,
+      .gst_pipeline = video_format_h264 ? session.app->h264_gst_pipeline : session.app->hevc_gst_pipeline,
       .virtual_inputs = session.virtual_inputs,
 
       .session_id = session.session_id,
@@ -133,12 +132,11 @@ announce(const RTSP_PACKET &req, const state::StreamSession &session, dp::event_
       .color_range = (csc & 0x1) ? state::JPEG : state::MPEG,
       .color_space = state::ColorSpace(csc >> 1),
 
-      .client_ip = session.ip,
-      .app_launch_cmd = session.app.run_cmd};
+      .client_ip = session.ip};
   event_bus.fire_event(immer::box<state::VideoSession>(video));
 
   // Audio session
-  state::AudioSession audio = {.gst_pipeline = session.app.opus_gst_pipeline,
+  state::AudioSession audio = {.gst_pipeline = session.app->opus_gst_pipeline,
 
                                .session_id = session.session_id,
 

@@ -13,7 +13,7 @@
 namespace input {
 
 struct InputReady {
-  immer::array<immer::box<std::string>> devices_paths;
+  immer::array<std::string_view> devices_paths;
   immer::array<immer::box<dp::handler_registration>> registered_handlers;
 };
 

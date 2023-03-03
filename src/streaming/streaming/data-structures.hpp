@@ -48,11 +48,6 @@ struct VideoSession {
   ColorSpace color_space;
 
   std::string client_ip;
-
-  /**
-   * The full command to be launched
-   */
-  std::optional<std::string> app_launch_cmd;
 };
 
 struct AudioSession {

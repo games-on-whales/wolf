@@ -9,7 +9,6 @@
 #include <immer/array.hpp>
 #include <immer/vector_transient.hpp>
 #include <memory>
-#include <process/process.hpp>
 #include <rest/rest.hpp>
 #include <rtp/udp-ping.hpp>
 #include <rtsp/net.hpp>
@@ -29,9 +28,9 @@ const char *get_env(const char *tag, const char *def = nullptr) noexcept {
 /**
  * @brief Will try to load the config file and fallback to defaults
  */
-auto load_config(std::string_view config_file) {
+auto load_config(std::string_view config_file, const std::shared_ptr<dp::event_bus> &ev_bus) {
   logs::log(logs::info, "Reading config file from: {}", config_file);
-  return state::load_or_default(config_file.data());
+  return state::load_or_default(config_file.data(), ev_bus);
 }
 
 /**
@@ -78,7 +77,8 @@ auto initialize(std::string_view config_file,
                 int t_pool_size,
                 std::string_view pkey_filename,
                 std::string_view cert_filename) {
-  auto config = load_config(config_file);
+  auto event_bus = std::make_shared<dp::event_bus>();
+  auto config = load_config(config_file, event_bus);
   auto display_modes = getDisplayModes();
 
   auto host = get_host_config(pkey_filename, cert_filename);
@@ -86,7 +86,7 @@ auto initialize(std::string_view config_file,
       .config = config,
       .host = host,
       .pairing_cache = std::make_shared<immer::atom<immer::map<std::string, state::PairCache>>>(),
-      .event_bus = std::make_shared<dp::event_bus>(),
+      .event_bus = event_bus,
       .running_sessions = std::make_shared<immer::atom<immer::vector<state::StreamSession>>>(),
       .t_pool = std::make_shared<boost::asio::thread_pool>(t_pool_size)};
   return immer::box<state::AppState>(state);
@@ -166,10 +166,15 @@ auto setup_sessions_handlers(const immer::box<state::AppState> &app_state, std::
         ba::post(*t_pool, [=]() {
           auto current_session = get_session_by_id(app_state->running_sessions->load(), launch_ev->session_id);
           if (current_session) {
-            process::run_process(app_state->event_bus,
-                                 current_session.value(),
-                                 launch_ev,
-                                 audio_server ? audio::get_server_name(audio_server->server) : "");
+            auto pulse_dev = fmt::format("virtual_sink_{}", current_session->session_id);
+            current_session->app->runner->run(
+                current_session->session_id,
+                current_session->virtual_inputs.devices_paths,
+                {{"WAYLAND_DISPLAY", launch_ev->wayland_socket},
+                 {"DISPLAY", launch_ev->xorg_socket},
+                 {"PULSE_SINK", pulse_dev},
+                 {"PULSE_SOURCE", pulse_dev + ".monitor"},
+                 {"PULSE_SERVER", audio_server ? audio::get_server_name(audio_server->server) : ""}});
           }
         });
       }));

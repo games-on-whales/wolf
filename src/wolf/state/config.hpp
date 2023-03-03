@@ -13,7 +13,7 @@ namespace state {
  *
  * If the source is not present, it'll provide some sensible defaults
  */
-Config load_or_default(const std::string &source);
+Config load_or_default(const std::string &source, const std::shared_ptr<dp::event_bus> &ev_bus);
 
 /**
  * Side effect, will atomically update the paired clients list in cfg

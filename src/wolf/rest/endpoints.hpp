@@ -44,7 +44,7 @@ void serverinfo(const std::shared_ptr<typename SimpleWeb::Server<T>::Response> &
 
   auto session = get_session_by_ip(state->running_sessions->load(), get_client_ip<T>(request));
   bool is_busy = session.has_value();
-  int app_id = session.has_value() ? std::stoi(session->app.base.id) : -1;
+  int app_id = session.has_value() ? std::stoi(session->app->base.id) : -1;
 
   auto xml = moonlight::serverinfo(is_busy,
                                    app_id,
@@ -230,7 +230,7 @@ create_run_session(const immer::box<input::InputReady> &inputs,
   return state::StreamSession{.display_mode = display_mode,
                               .audio_mode = audio_mode,
                               .virtual_inputs = inputs,
-                              .app = run_app,
+                              .app = std::make_shared<state::App>(run_app),
                               // gcm encryption keys
                               .aes_key = get_header(headers, "rikey").value(),
                               .aes_iv = get_header(headers, "rikeyid").value(),
@@ -266,7 +266,7 @@ void resume(const std::shared_ptr<typename SimpleWeb::Server<SimpleWeb::HTTPS>::
   auto client_ip = get_client_ip<SimpleWeb::HTTPS>(request);
   auto old_session = get_session_by_ip(state->running_sessions->load(), client_ip);
   if (old_session) {
-    auto new_session = create_run_session(old_session->virtual_inputs, request, current_client, old_session->app);
+    auto new_session = create_run_session(old_session->virtual_inputs, request, current_client, *old_session->app);
     state->running_sessions->update([&old_session, &new_session](const immer::vector<state::StreamSession> ses_v) {
       return remove_session(ses_v, old_session.value()).push_back(new_session);
     });
@@ -291,8 +291,8 @@ void cancel(const std::shared_ptr<typename SimpleWeb::Server<SimpleWeb::HTTPS>::
   auto client_ip = get_client_ip<SimpleWeb::HTTPS>(request);
   auto client_session = get_session_by_ip(state->running_sessions->load(), client_ip);
   if (client_session) {
-    state->event_bus->fire_event(immer::box<moonlight::StopStreamEvent>(
-        moonlight::StopStreamEvent{.session_id = client_session->session_id}));
+    state->event_bus->fire_event(
+        immer::box<moonlight::StopStreamEvent>(moonlight::StopStreamEvent{.session_id = client_session->session_id}));
 
     state->running_sessions->update([&client_session](const immer::vector<state::StreamSession> &ses_v) {
       return remove_session(ses_v, client_session.value());

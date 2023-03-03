@@ -14,10 +14,21 @@
 #include <openssl/x509.h>
 #include <optional>
 #include <streaming/data-structures.hpp>
+#include <toml.hpp>
+#include <utility>
 
 namespace state {
 using namespace std::chrono_literals;
 namespace ba = boost::asio;
+
+struct Runner {
+
+  virtual void run(std::size_t session_id,
+                   const immer::array<std::string_view> &virtual_inputs,
+                   const immer::map<std::string_view, std::string_view> &env_variables) = 0;
+
+  virtual toml::value serialise() = 0;
+};
 
 /**
  * All ports are derived from a base port, default: 47989
@@ -91,8 +102,7 @@ struct App {
   std::string h264_gst_pipeline;
   std::string hevc_gst_pipeline;
   std::string opus_gst_pipeline;
-
-  std::string run_cmd;
+  std::shared_ptr<Runner> runner;
 };
 
 /**
@@ -174,7 +184,7 @@ struct StreamSession {
   AudioMode audio_mode;
   input::InputReady virtual_inputs;
 
-  App app;
+  std::shared_ptr<App> app;
   // gcm encryption keys
   std::string aes_key;
   std::string aes_iv;

@@ -3,17 +3,16 @@
 #include <helpers/logger.hpp>
 #include <immer/atom.hpp>
 #include <moonlight/data-structures.hpp>
-#include <process/process.hpp>
+#include <runners/process.hpp>
 
 namespace process {
 
 using namespace moonlight::control;
 
-void run_process(const std::shared_ptr<dp::event_bus> &event_bus,
-                 const state::StreamSession &running_session,
-                 const state::SocketReadyEV &video_sockets,
-                 const std::string &audio_server) {
-  logs::log(logs::debug, "[PROCESS] Starting process: {}", running_session.app.run_cmd);
+void RunProcess::run(std::size_t session_id,
+                     const immer::array<std::string_view> &virtual_inputs,
+                     const immer::map<std::string_view, std::string_view> &env_variables) {
+  logs::log(logs::debug, "[PROCESS] Starting process: {}", this->run_cmd);
 
   std::future<std::string> std_out, err_out;
   boost::asio::io_service ios;
@@ -22,35 +21,33 @@ void run_process(const std::shared_ptr<dp::event_bus> &event_bus,
 
   try {
     auto env = boost::this_process::environment();
-    env["WAYLAND_DISPLAY"] = video_sockets.wayland_socket;
-    env["DISPLAY"] = video_sockets.xorg_socket;
-    auto pulse_dev = fmt::format("virtual_sink_{}", running_session.session_id);
-    env["PULSE_SINK"] = pulse_dev;
-    env["PULSE_SOURCE"] = pulse_dev + ".monitor";
-    env["PULSE_SERVER"] = audio_server;
+    for (const auto &env_var : env_variables) {
+      env[env_var.first.data()] = env_var.second.data();
+    };
 
-    child_proc = bp::child(running_session.app.run_cmd,
+    child_proc = bp::child(this->run_cmd,
                            env,
                            bp::std_in.close(),
                            bp::std_out > std_out,
                            bp::std_err > err_out,
                            ios,
                            group_proc);
+
   } catch (const std::system_error &e) {
     logs::log(logs::error, "Unable to start process, error: {} - {}", e.code().value(), e.what());
     return;
   }
 
-  auto terminate_handler = event_bus->register_handler<immer::box<moonlight::StopStreamEvent>>(
-      [&group_proc, sess_id = running_session.session_id](const immer::box<moonlight::StopStreamEvent> &terminate_ev) {
-        if (terminate_ev->session_id == sess_id) {
+  auto terminate_handler = this->ev_bus->register_handler<immer::box<moonlight::StopStreamEvent>>(
+      [&group_proc, session_id](const immer::box<moonlight::StopStreamEvent> &terminate_ev) {
+        if (terminate_ev->session_id == session_id) {
           group_proc.terminate(); // Manually terminate the process
         }
       });
 
-  auto pause_handler = event_bus->register_handler<immer::box<moonlight::PauseStreamEvent>>(
-      [&group_proc, sess_id = running_session.session_id](const immer::box<moonlight::PauseStreamEvent> &terminate_ev) {
-        if (terminate_ev->session_id == sess_id) {
+  auto pause_handler = this->ev_bus->register_handler<immer::box<moonlight::PauseStreamEvent>>(
+      [&group_proc, session_id](const immer::box<moonlight::PauseStreamEvent> &terminate_ev) {
+        if (terminate_ev->session_id == session_id) {
           group_proc.terminate(); // Manually terminate the process
         }
       });
@@ -66,6 +63,10 @@ void run_process(const std::shared_ptr<dp::event_bus> &event_bus,
   }
 
   terminate_handler.unregister();
+}
+
+toml::value RunProcess::serialise() {
+  return {{"type", "RunProcess"}, {"run_cmd", this->run_cmd}};
 }
 
 } // namespace process

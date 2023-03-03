@@ -223,7 +223,7 @@ void keyboard_ev(libevdev_uinput *keyboard, int linux_code, int event_code = 1) 
   libevdev_uinput_write_event(keyboard, EV_SYN, SYN_REPORT, 0);
 }
 
-void keyboard_repeat_press(libevdev_uinput *keyboard, const immer::array<int>& linux_codes) {
+void keyboard_repeat_press(libevdev_uinput *keyboard, const immer::array<int> &linux_codes) {
   for (auto code : linux_codes) {
     keyboard_ev(keyboard, code, 2);
   }
@@ -465,7 +465,7 @@ InputReady setup_handlers(std::size_t session_id,
   logs::log(logs::debug, "Setting up input handlers for session: {}", session_id);
 
   auto v_devices = std::make_shared<VirtualDevices>();
-  auto devices_paths = immer::array<immer::box<std::string>>().transient();
+  auto devices_paths = immer::array<std::string_view>().transient();
 
   libevdev_ptr mouse_dev(libevdev_new(), ::libevdev_free);
   if (auto mouse_el = mouse::create_mouse(mouse_dev.get())) {
@@ -544,11 +544,11 @@ InputReady setup_handlers(std::size_t session_id,
               // Setting up the shared keyboard_state with the currently pressed keys
               if (kb_action) {
                 if (kb_action->pressed) { // Pressed key, add it to the key_codes
-                  keyboard_state->update([&kb_action](const immer::array<int>& key_codes) {
+                  keyboard_state->update([&kb_action](const immer::array<int> &key_codes) {
                     return key_codes.push_back(kb_action->linux_code);
                   });
                 } else { // Released key, remove it from the key_codes
-                  keyboard_state->update([&kb_action](const immer::array<int>& key_codes) {
+                  keyboard_state->update([&kb_action](const immer::array<int> &key_codes) {
                     return key_codes                                        //
                            | ranges::views::filter([&kb_action](int code) { //
                                return code != kb_action->linux_code;        //

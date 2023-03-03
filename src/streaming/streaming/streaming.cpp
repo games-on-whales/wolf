@@ -225,10 +225,8 @@ void start_streaming_video(const immer::box<state::VideoSession> &video_session,
                  /**
                   * Trigger an event when our custom wayland plugin sends a signal that the sockets are ready
                   */
-                 if (auto launch_cmd = video_session->app_launch_cmd) {
-                   g_signal_connect(bus, "message::application", G_CALLBACK(application_msg_handler), &launch_data);
-                   gst_object_unref(bus);
-                 }
+                 g_signal_connect(bus, "message::application", G_CALLBACK(application_msg_handler), &launch_data);
+                 gst_object_unref(bus);
 
                  /* Sending created virtual inputs to our custom wayland plugin */
                  {
@@ -238,7 +236,7 @@ void start_streaming_video(const immer::box<state::VideoSession> &video_session,
                    for (const auto &path : video_session->virtual_inputs->devices_paths) {
                      GValue value = G_VALUE_INIT;
                      g_value_init(&value, G_TYPE_STRING);
-                     g_value_set_string(&value, path.get().c_str());
+                     g_value_set_string(&value, path.data());
                      g_value_array_append(devices, &value);
                    }
 
