@@ -24,9 +24,7 @@ inline std::string get_gst_version() {
 
 void start_streaming_video(const immer::box<state::VideoSession> &video_session,
                            const std::shared_ptr<dp::event_bus> &event_bus,
-                           unsigned short client_port,
-                           const std::shared_ptr<boost::asio::thread_pool> &t_pool,
-                           const std::optional<std::string> &pulse_server);
+                           unsigned short client_port);
 
 void start_streaming_audio(const immer::box<state::AudioSession> &audio_session,
                            const std::shared_ptr<dp::event_bus> &event_bus,

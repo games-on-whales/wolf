@@ -76,18 +76,11 @@ struct AudioSession {
 /**
  * This event will trigger the start of the application command
  */
-struct LaunchAPPEvent {
+struct SocketReadyEV {
   std::size_t session_id;
-  std::shared_ptr<dp::event_bus> event_bus;
 
-  /**
-   * The full command to be launched
-   */
-  std::string app_launch_cmd;
-
-  std::optional<std::string> pulse_server;
-  std::optional<std::string> wayland_socket;
-  std::optional<std::string> xorg_socket;
+  std::string wayland_socket;
+  std::string xorg_socket;
 };
 
 struct VideoRTPHeaders {

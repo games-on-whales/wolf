@@ -1,5 +1,4 @@
 #include <boost/asio/io_service.hpp>
-#include <boost/thread.hpp>
 #include <future>
 #include <helpers/logger.hpp>
 #include <immer/atom.hpp>
@@ -10,8 +9,11 @@ namespace process {
 
 using namespace moonlight::control;
 
-void run_process(const immer::box<state::LaunchAPPEvent> &process_ev) {
-  logs::log(logs::debug, "[PROCESS] Starting process: {}", process_ev->app_launch_cmd);
+void run_process(const std::shared_ptr<dp::event_bus> &event_bus,
+                 const state::StreamSession &running_session,
+                 const state::SocketReadyEV &video_sockets,
+                 const std::string &audio_server) {
+  logs::log(logs::debug, "[PROCESS] Starting process: {}", running_session.app.run_cmd);
 
   std::future<std::string> std_out, err_out;
   boost::asio::io_service ios;
@@ -20,20 +22,14 @@ void run_process(const immer::box<state::LaunchAPPEvent> &process_ev) {
 
   try {
     auto env = boost::this_process::environment();
-    if (process_ev->wayland_socket) {
-      env["WAYLAND_DISPLAY"] = process_ev->wayland_socket.value();
-    }
-    if (process_ev->xorg_socket) {
-      env["DISPLAY"] = process_ev->xorg_socket.value();
-    }
-    auto pulse_dev = fmt::format("virtual_sink_{}", process_ev->session_id);
+    env["WAYLAND_DISPLAY"] = video_sockets.wayland_socket;
+    env["DISPLAY"] = video_sockets.xorg_socket;
+    auto pulse_dev = fmt::format("virtual_sink_{}", running_session.session_id);
     env["PULSE_SINK"] = pulse_dev;
     env["PULSE_SOURCE"] = pulse_dev + ".monitor";
-    if (process_ev->pulse_server) {
-      env["PULSE_SERVER"] = process_ev->pulse_server.value();
-    }
+    env["PULSE_SERVER"] = audio_server;
 
-    child_proc = bp::child(process_ev->app_launch_cmd,
+    child_proc = bp::child(running_session.app.run_cmd,
                            env,
                            bp::std_in.close(),
                            bp::std_out > std_out,
@@ -45,15 +41,15 @@ void run_process(const immer::box<state::LaunchAPPEvent> &process_ev) {
     return;
   }
 
-  auto terminate_handler = process_ev->event_bus->register_handler<immer::box<moonlight::StopStreamEvent>>(
-      [&group_proc, sess_id = process_ev->session_id](const immer::box<moonlight::StopStreamEvent> &terminate_ev) {
+  auto terminate_handler = event_bus->register_handler<immer::box<moonlight::StopStreamEvent>>(
+      [&group_proc, sess_id = running_session.session_id](const immer::box<moonlight::StopStreamEvent> &terminate_ev) {
         if (terminate_ev->session_id == sess_id) {
           group_proc.terminate(); // Manually terminate the process
         }
       });
 
-  auto pause_handler = process_ev->event_bus->register_handler<immer::box<moonlight::PauseStreamEvent>>(
-      [&group_proc, sess_id = process_ev->session_id](const immer::box<moonlight::PauseStreamEvent> &terminate_ev) {
+  auto pause_handler = event_bus->register_handler<immer::box<moonlight::PauseStreamEvent>>(
+      [&group_proc, sess_id = running_session.session_id](const immer::box<moonlight::PauseStreamEvent> &terminate_ev) {
         if (terminate_ev->session_id == sess_id) {
           group_proc.terminate(); // Manually terminate the process
         }

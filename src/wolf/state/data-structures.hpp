@@ -1,5 +1,6 @@
 #pragma once
 
+#include <audio/audio.hpp>
 #include <boost/asio.hpp>
 #include <chrono>
 #include <eventbus/event_bus.hpp>
@@ -13,7 +14,6 @@
 #include <openssl/x509.h>
 #include <optional>
 #include <streaming/data-structures.hpp>
-#include <audio/audio.hpp>
 
 namespace state {
 using namespace std::chrono_literals;
@@ -179,7 +179,7 @@ struct StreamSession {
   std::string aes_key;
   std::string aes_iv;
   // client info
-  std::size_t client_cert_hash;
+  std::size_t session_id;
   std::string ip;
 };
 
@@ -219,27 +219,6 @@ struct AppState {
    * A thread pool, used to start all kind of concurrent operations
    */
   std::shared_ptr<ba::thread_pool> t_pool;
-};
-
-/**
- * A ControlSessions is created after the param exchange over RTSP
- */
-struct ControlSession {
-  // A unique ID that identifies this session
-  std::size_t session_id;
-
-  std::shared_ptr<dp::event_bus> event_bus;
-
-  std::uint16_t port;
-  std::size_t peers;
-
-  int protocol_type;
-
-  std::string aes_key;
-  std::string aes_iv;
-
-  std::chrono::milliseconds timeout = 150ms;
-  std::string host = "0.0.0.0";
 };
 
 } // namespace state

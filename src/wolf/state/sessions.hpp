@@ -22,11 +22,28 @@ inline std::optional<state::StreamSession> get_session_by_ip(const immer::vector
   }
 }
 
+inline std::optional<state::StreamSession> get_session_by_id(const immer::vector<state::StreamSession> &sessions,
+                                                             const std::size_t id) {
+  auto results =
+      sessions |                                                                                            //
+      ranges::views::filter([id](const state::StreamSession &session) { return session.session_id == id; }) //
+      | ranges::views::take(1)                                                                              //
+      | ranges::to_vector;                                                                                  //
+  if (results.size() == 1) {
+    return results[0];
+  } else if (results.empty()) {
+    return {};
+  } else {
+    logs::log(logs::warning, "Found multiple sessions for a given ID: {}", id);
+    return {};
+  }
+}
+
 inline immer::vector<state::StreamSession> remove_session(const immer::vector<state::StreamSession> &sessions,
                                                           const state::StreamSession &session) {
-  return sessions                                                                                                //
-         | ranges::views::filter([remove_hash = session.client_cert_hash](const state::StreamSession &cur_ses) { //
-             return cur_ses.client_cert_hash != remove_hash;                                                     //
-           })                                                                                                    //
-         | ranges::to<immer::vector<state::StreamSession>>();                                                    //
+  return sessions                                                                                          //
+         | ranges::views::filter([remove_hash = session.session_id](const state::StreamSession &cur_ses) { //
+             return cur_ses.session_id != remove_hash;                                                     //
+           })                                                                                              //
+         | ranges::to<immer::vector<state::StreamSession>>();                                              //
 }

@@ -161,12 +161,9 @@ void application_msg_handler(GstBus *bus, GstMessage *message, gpointer /* state
     auto x_display = gst_structure_get_string(structure, "DISPLAY");
     logs::log(logs::debug, "[GSTREAMER] Received WAYLAND_DISPLAY={} DISPLAY={}", wayland_display, x_display);
 
-    auto launch_ev = (state::LaunchAPPEvent *)data;
-    launch_ev->event_bus->fire_event(immer::box<state::LaunchAPPEvent>(state::LaunchAPPEvent{
-        .session_id = launch_ev->session_id,
-        .event_bus = launch_ev->event_bus,
-        .app_launch_cmd = launch_ev->app_launch_cmd,
-        .pulse_server = launch_ev->pulse_server,
+    auto launch_ev = (std::pair<std::size_t, std::shared_ptr<dp::event_bus>> *)data;
+    launch_ev->second->fire_event(immer::box<state::SocketReadyEV>(state::SocketReadyEV{
+        .session_id = launch_ev->first,
         .wayland_socket = wayland_display,
         .xorg_socket = x_display,
     }));
@@ -188,9 +185,7 @@ void send_message(GstElement *recipient, GstStructure *message) {
  */
 void start_streaming_video(const immer::box<state::VideoSession> &video_session,
                            const std::shared_ptr<dp::event_bus> &event_bus,
-                           unsigned short client_port,
-                           const std::shared_ptr<boost::asio::thread_pool> &t_pool,
-                           const std::optional<std::string> &pulse_server) {
+                           unsigned short client_port) {
   std::string color_range = (static_cast<int>(video_session->color_range) == static_cast<int>(state::JPEG)) ? "jpeg"
                                                                                                             : "mpeg2";
   std::string color_space;
@@ -221,22 +216,17 @@ void start_streaming_video(const immer::box<state::VideoSession> &video_session,
                               fmt::arg("color_range", color_range));
   logs::log(logs::debug, "Starting video pipeline: {}", pipeline);
 
-  auto run_app_ev = std::make_shared<state::LaunchAPPEvent>(
-      state::LaunchAPPEvent{.session_id = video_session->session_id,
-                            .event_bus = event_bus,
-                            .app_launch_cmd = video_session->app_launch_cmd.value_or(""),
-                            .pulse_server = pulse_server});
-
+  auto launch_data = std::make_pair(video_session->session_id, event_bus);
   run_pipeline(pipeline,
                video_session->session_id,
                event_bus,
-               [t_pool, video_session, event_bus, run_app_ev](auto pipeline, auto loop) {
+               [video_session, event_bus, &launch_data](auto pipeline, auto loop) {
                  auto bus = gst_pipeline_get_bus(GST_PIPELINE(pipeline.get()));
                  /**
                   * Trigger an event when our custom wayland plugin sends a signal that the sockets are ready
                   */
                  if (auto launch_cmd = video_session->app_launch_cmd) {
-                   g_signal_connect(bus, "message::application", G_CALLBACK(application_msg_handler), run_app_ev.get());
+                   g_signal_connect(bus, "message::application", G_CALLBACK(application_msg_handler), &launch_data);
                    gst_object_unref(bus);
                  }
 

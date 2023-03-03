@@ -235,7 +235,7 @@ create_run_session(const immer::box<input::InputReady> &inputs,
                               .aes_key = get_header(headers, "rikey").value(),
                               .aes_iv = get_header(headers, "rikeyid").value(),
                               // client info
-                              .client_cert_hash = std::hash<std::string>{}(current_client.client_cert),
+                              .session_id = std::hash<std::string>{}(current_client.client_cert),
                               .ip = get_client_ip<SimpleWeb::HTTPS>(request)};
 }
 
@@ -292,7 +292,7 @@ void cancel(const std::shared_ptr<typename SimpleWeb::Server<SimpleWeb::HTTPS>::
   auto client_session = get_session_by_ip(state->running_sessions->load(), client_ip);
   if (client_session) {
     state->event_bus->fire_event(immer::box<moonlight::StopStreamEvent>(
-        moonlight::StopStreamEvent{.session_id = client_session->client_cert_hash}));
+        moonlight::StopStreamEvent{.session_id = client_session->session_id}));
 
     state->running_sessions->update([&client_session](const immer::vector<state::StreamSession> &ses_v) {
       return remove_session(ses_v, client_session.value());

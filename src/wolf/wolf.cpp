@@ -159,11 +159,19 @@ auto setup_sessions_handlers(const immer::box<state::AppState> &app_state, std::
   immer::vector_transient<immer::box<dp::handler_registration>> handlers;
   auto t_pool = app_state->t_pool;
 
-  // Run process when the event is raised
-  handlers.push_back(app_state->event_bus->register_handler<immer::box<state::LaunchAPPEvent>>(
-      [t_pool](const immer::box<state::LaunchAPPEvent> &launch_ev) {
+  // Run process when our custom compositor is ready to accept clients
+  handlers.push_back(app_state->event_bus->register_handler<immer::box<state::SocketReadyEV>>(
+      [=](const immer::box<state::SocketReadyEV> &launch_ev) {
         // Start selected app
-        ba::post(*t_pool, [launch_ev]() { process::run_process(launch_ev); });
+        ba::post(*t_pool, [=]() {
+          auto current_session = get_session_by_id(app_state->running_sessions->load(), launch_ev->session_id);
+          if (current_session) {
+            process::run_process(app_state->event_bus,
+                                 current_session.value(),
+                                 launch_ev,
+                                 audio_server ? audio::get_server_name(audio_server->server) : "");
+          }
+        });
       }));
 
   /* Audio/Video streaming */
@@ -187,7 +195,7 @@ auto setup_sessions_handlers(const immer::box<state::AppState> &app_state, std::
       auto video_sess = video_sessions->load()->find(client_ip);
       if (video_sess != nullptr) {
         ba::post(*t_pool, [=, sess = *video_sess]() {
-          streaming::start_streaming_video(sess, app_state->event_bus, client_port, t_pool, audio_server_name);
+          streaming::start_streaming_video(sess, app_state->event_bus, client_port);
         });
         video_sessions->update([&client_ip](const auto &map) { return map.erase(client_ip); });
       }

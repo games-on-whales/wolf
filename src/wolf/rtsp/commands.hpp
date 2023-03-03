@@ -119,7 +119,7 @@ announce(const RTSP_PACKET &req, const state::StreamSession &session, dp::event_
       .gst_pipeline = video_format_h264 ? session.app.h264_gst_pipeline : session.app.hevc_gst_pipeline,
       .virtual_inputs = session.virtual_inputs,
 
-      .session_id = session.client_cert_hash,
+      .session_id = session.session_id,
 
       .port = state::VIDEO_PING_PORT,
       .timeout = std::chrono::milliseconds(args["x-nv-video[0].timeoutLengthMs"].value()),
@@ -140,7 +140,7 @@ announce(const RTSP_PACKET &req, const state::StreamSession &session, dp::event_
   // Audio session
   state::AudioSession audio = {.gst_pipeline = session.app.opus_gst_pipeline,
 
-                               .session_id = session.client_cert_hash,
+                               .session_id = session.session_id,
 
                                .encrypt_audio = static_cast<bool>(args["x-nv-general.featureFlags"].value() & 0x20),
                                .aes_key = session.aes_key,

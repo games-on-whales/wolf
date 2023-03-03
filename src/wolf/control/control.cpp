@@ -94,12 +94,12 @@ void run_control(int port,
         case ENET_EVENT_TYPE_CONNECT:
           logs::log(logs::debug, "[ENET] connected client: {}:{}", client_ip, client_port);
           event_bus->fire_event(immer::box<moonlight::ResumeStreamEvent>(
-              moonlight::ResumeStreamEvent{.session_id = client_session->client_cert_hash}));
+              moonlight::ResumeStreamEvent{.session_id = client_session->session_id}));
           break;
         case ENET_EVENT_TYPE_DISCONNECT:
           logs::log(logs::debug, "[ENET] disconnected client: {}:{}", client_ip, client_port);
           event_bus->fire_event(immer::box<moonlight::PauseStreamEvent>(
-              moonlight::PauseStreamEvent{.session_id = client_session->client_cert_hash}));
+              moonlight::PauseStreamEvent{.session_id = client_session->session_id}));
           break;
         case ENET_EVENT_TYPE_RECEIVE:
           enet_packet packet = {event.packet, enet_packet_destroy};
@@ -129,7 +129,7 @@ void run_control(int port,
                 // TODO: moonlight asks to terminate (pause or end?)
               }
 
-              auto ev = ControlEvent{client_session->client_cert_hash, sub_type, decrypted};
+              auto ev = ControlEvent{client_session->session_id, sub_type, decrypted};
               event_bus->fire_event(immer::box<ControlEvent>{ev});
             } catch (std::runtime_error &e) {
               logs::log(logs::warning, "[ENET] Unable to decrypt incoming packet: {}", e.what());
