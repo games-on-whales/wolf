@@ -251,7 +251,11 @@ state::SessionsAtoms test_init_state() {
   StreamSession session = {
       .display_mode = {1920, 1080, 60},
       .audio_mode = {2, 1, 1, {state::AudioMode::FRONT_LEFT, state::AudioMode::FRONT_RIGHT}},
-      .app = {},
+      .app = std::make_shared<state::App>(state::App{.base = {},
+                                                     .h264_gst_pipeline = "",
+                                                     .hevc_gst_pipeline = "",
+                                                     .opus_gst_pipeline = "",
+                                                     .runner = nullptr}),
       .aes_key = crypto::hex_to_str("9d804e47a6aa6624b7d4b502b32cc522", true),
       .aes_iv = crypto::hex_to_str("01234567890", true),
       .session_id = 1234,

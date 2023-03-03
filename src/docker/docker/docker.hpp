@@ -3,7 +3,7 @@
 #include <optional>
 
 namespace docker {
-constexpr auto DOCKER_API_VERSION = "v1.30";
+constexpr auto DOCKER_API_VERSION = "v1.40";
 
 enum ContainerStatus {
   CREATED,
@@ -32,6 +32,12 @@ struct MountPoint {
   std::string mode;
 };
 
+struct Device{
+  std::string path_on_host;
+  std::string path_in_container;
+  std::string cgroup_permission;
+};
+
 struct Container {
   std::string id;
   std::string name;
@@ -42,6 +48,7 @@ struct Container {
 
   std::vector<Port> ports;
   std::vector<MountPoint> mounts;
+  std::vector<Device> devices;
   std::vector<std::string> env;
 };
 

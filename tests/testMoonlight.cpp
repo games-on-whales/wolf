@@ -13,7 +13,8 @@ using namespace ranges;
 using namespace gstreamer;
 
 TEST_CASE("LocalState load TOML", "[LocalState]") {
-  auto state = state::load_or_default("config.toml");
+  auto event_bus = std::make_shared<dp::event_bus>();
+  auto state = state::load_or_default("config.toml", event_bus);
   REQUIRE(state.hostname == "Wolf");
   REQUIRE(state.uuid == "16510e3e-61fd-4a85-97fa-0db82058b27a");
   REQUIRE(state.support_hevc);
@@ -64,8 +65,8 @@ TEST_CASE("LocalState load TOML", "[LocalState]") {
 TEST_CASE("LocalState pairing information", "[LocalState]") {
 
   std::remove("defaults.toml");
-
-  auto cfg = state::load_or_default("defaults.toml");
+  auto event_bus = std::make_shared<dp::event_bus>();
+  auto cfg = state::load_or_default("defaults.toml", event_bus);
   auto a_client_cert = "-----BEGIN CERTIFICATE-----\n"
                        "MIICvzCCAaegAwIBAgIBADANBgkqhkiG9w0BAQsFADAjMSEwHwYDVQQDDBhOVklE\n"
                        "SUEgR2FtZVN0cmVhbSBDbGllbnQwHhcNMjEwNzEwMDgzNjE3WhcNNDEwNzA1MDgz\n"
@@ -124,7 +125,8 @@ TEST_CASE("LocalState pairing information", "[LocalState]") {
 }
 
 TEST_CASE("Mocked serverinfo", "[MoonlightProtocol]") {
-  auto cfg = state::load_or_default("config.toml");
+  auto event_bus = std::make_shared<dp::event_bus>();
+  auto cfg = state::load_or_default("config.toml", event_bus);
   immer::array<DisplayMode> displayModes = {{1920, 1080, 60}, {1024, 768, 30}};
 
   SECTION("server_info conforms with the expected server_info_response.xml") {
@@ -290,7 +292,8 @@ TEST_CASE("Pairing moonlight", "[MoonlightProtocol]") {
 }
 
 TEST_CASE("applist", "[MoonlightProtocol]") {
-  auto cfg = state::load_or_default("config.toml");
+  auto event_bus = std::make_shared<dp::event_bus>();
+  auto cfg = state::load_or_default("config.toml", event_bus);
   auto base_apps = cfg.apps | views::transform([](auto app) { return app.base; }) | to<immer::vector<moonlight::App>>();
   auto result = applist(base_apps);
   REQUIRE(xml_to_str(result) == "<?xml version=\"1.0\" encoding=\"utf-8\"?>\n"
@@ -302,7 +305,8 @@ TEST_CASE("applist", "[MoonlightProtocol]") {
 }
 
 TEST_CASE("launch", "[MoonlightProtocol]") {
-  auto cfg = state::load_or_default("config.toml");
+  auto event_bus = std::make_shared<dp::event_bus>();
+  auto cfg = state::load_or_default("config.toml", event_bus);
   auto result = launch_success("192.168.1.1", "3021");
   REQUIRE(xml_to_str(result) == "<?xml version=\"1.0\" encoding=\"utf-8\"?>\n"
                                 "<root status_code=\"200\">"

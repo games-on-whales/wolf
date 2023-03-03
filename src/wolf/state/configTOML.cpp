@@ -1,5 +1,6 @@
 #include <fstream>
 #include <range/v3/view.hpp>
+#include <runners/docker.hpp>
 #include <runners/process.hpp>
 #include <state/config.hpp>
 #include <toml.hpp>
@@ -48,11 +49,13 @@ void write(const toml::value &data, const std::string &dest) {
 }
 
 std::shared_ptr<state::Runner> get_runner(const toml::value &item, const std::shared_ptr<dp::event_bus> &ev_bus) {
-  auto runner_obj = toml::find_or(item, "runner", {{"type", "RunProcess"}});
-  auto runner_type = toml::find_or(runner_obj, "type", "RunProcess");
-  if (runner_type == "RunProcess") {
+  auto runner_obj = toml::find_or(item, "runner", {{"type", "process"}});
+  auto runner_type = toml::find_or(runner_obj, "type", "process");
+  if (runner_type == "process") {
     auto run_cmd = toml::find_or(runner_obj, "run_cmd", "sh -c \"while :; do echo 'running...'; sleep 1; done\"");
     return std::make_shared<process::RunProcess>(ev_bus, run_cmd);
+  } else if (runner_type == "docker") {
+    return std::make_shared<docker::RunDocker>(docker::RunDocker::from_toml(ev_bus, runner_obj));
   } else {
     logs::log(logs::warning, "[TOML] Found runner of type: {}, valid types are: 'RunProcess' or 'Docker'", runner_type);
     return std::make_shared<process::RunProcess>(ev_bus, "sh -c \"while :; do echo 'running...'; sleep 1; done\"");

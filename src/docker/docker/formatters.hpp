@@ -36,11 +36,28 @@ void tag_invoke(value_from_tag, value &jv, const docker::MountPoint &mount) {
 }
 
 docker::MountPoint tag_invoke(value_to_tag<docker::MountPoint>, value const &jv) {
-  object const &obj = jv.as_object();
+  // ex: /home/ale/repos/gow/local_state:/home/retro:rw
+  auto bind = utils::split(std::string_view{jv.as_string().data(), jv.as_string().size()}, ':');
   return docker::MountPoint{
-      .source = json::value_to<std::string>(obj.at("Source")),
-      .destination = json::value_to<std::string>(obj.at("Destination")),
-      .mode = json::value_to<std::string>(obj.at("Mode")),
+      .source = utils::to_string(bind[0]),
+      .destination = utils::to_string(bind[1]),
+      .mode = utils::to_string(bind[2]),
+  };
+}
+
+void tag_invoke(value_from_tag, value &jv, const docker::Device &dev) {
+  // example: { "PathOnHost": "/dev/deviceName", "PathInContainer": "/dev/deviceName", "CgroupPermissions": "mrw"}
+  jv = {{"PathOnHost", dev.path_on_host},
+        {"PathInContainer", dev.path_in_container},
+        {"CgroupPermissions", dev.cgroup_permission}};
+}
+
+docker::Device tag_invoke(value_to_tag<docker::Device>, value const &jv) {
+  object const &obj = jv.as_object();
+  return docker::Device{
+      .path_on_host = json::value_to<std::string>(obj.at("PathOnHost")),
+      .path_in_container = json::value_to<std::string>(obj.at("PathInContainer")),
+      .cgroup_permission = json::value_to<std::string>(obj.at("CgroupPermissions")),
   };
 }
 
@@ -73,10 +90,11 @@ docker::Container tag_invoke(value_to_tag<docker::Container>, value const &jv) {
     break;
   }
 
+  const auto &host_config = obj.at("HostConfig");
+
   std::vector<docker::Port> ports;
-  auto bindings = obj.at("HostConfig").at("PortBindings");
-  if (!bindings.is_null()) {
-    for (auto const &port : bindings.as_object()) {
+  if (!host_config.at("PortBindings").is_null()) { // This can be `null` in the APIs for some reason
+    for (auto const &port : host_config.at("PortBindings").as_object()) {
       auto settings = utils::split(std::string_view(port.key().data(), port.key().size()), '/');
       ports.push_back(
           docker::Port{.private_port = std::stoi(port.value().as_array()[0].at("HostPort").as_string().data()),
@@ -85,19 +103,30 @@ docker::Container tag_invoke(value_to_tag<docker::Container>, value const &jv) {
     }
   }
 
+  std::vector<docker::MountPoint> mounts;
+  if (!host_config.at("Binds").is_null()) { // This can be `null` in the APIs for some reason
+    mounts = json::value_to<std::vector<docker::MountPoint>>(host_config.at("Binds"));
+  }
+
+  std::vector<docker::Device> devices;
+  if (!host_config.at("Devices").is_null()) { // This can be `null` in the APIs for some reason
+    devices = json::value_to<std::vector<docker::Device>>(host_config.at("Devices"));
+  }
+
   return docker::Container{.id = json::value_to<std::string>(obj.at("Id")),
                            .name = json::value_to<std::string>(obj.at("Name")),
                            .image = json::value_to<std::string>(obj.at("Config").at("Image")),
                            .status = status,
                            .ports = ports,
-                           .mounts = json::value_to<std::vector<docker::MountPoint>>(obj.at("Mounts")),
+                           .mounts = mounts,
+                           .devices = devices,
                            .env = json::value_to<std::vector<std::string>>(obj.at("Config").at("Env"))};
 }
 } // namespace boost::json
 
 namespace fmt {
 
-template <> struct formatter<docker::Port> {
+template <> struct [[maybe_unused]] formatter<docker::Port> {
 public:
   constexpr auto parse(format_parse_context &ctx) -> decltype(ctx.begin()) {
     return ctx.end();
@@ -112,7 +141,7 @@ public:
   }
 };
 
-template <> struct formatter<docker::MountPoint> {
+template <> struct [[maybe_unused]] formatter<docker::MountPoint> {
 public:
   constexpr auto parse(format_parse_context &ctx) -> decltype(ctx.begin()) {
     return ctx.end();
@@ -123,22 +152,35 @@ public:
   }
 };
 
-template <> struct formatter<docker::Container> {
+template <> struct [[maybe_unused]] formatter<docker::Device> {
+public:
+  constexpr auto parse(format_parse_context &ctx) -> decltype(ctx.begin()) {
+    return ctx.end();
+  }
+  template <typename FormatContext>
+  auto format(const docker::Device &dev, FormatContext &ctx) const -> decltype(ctx.out()) {
+    return format_to(ctx.out(), "{}:{}:{}", dev.path_on_host, dev.path_in_container, dev.cgroup_permission);
+  }
+};
+
+template <> struct [[maybe_unused]] formatter<docker::Container> {
 public:
   constexpr auto parse(format_parse_context &ctx) -> decltype(ctx.begin()) {
     return ctx.end();
   }
   template <typename FormatContext>
   auto format(const docker::Container &container, FormatContext &ctx) const -> decltype(ctx.out()) {
-    return format_to(ctx.out(),
-                     "{{\n id: {}\n name: {}\n image: {}\n status: {}\n ports: {}\n mounts: {}\n env: {}\n}}",
-                     container.id,
-                     container.name,
-                     container.image,
-                     container.status,
-                     container.ports,
-                     container.mounts,
-                     container.env);
+    return format_to(
+        ctx.out(),
+        "{{\n id: {}\n name: {}\n image: {}\n status: {}\n ports: {}\n mounts: {}\n devices: {}\n env: {}\n}}",
+        container.id,
+        container.name,
+        container.image,
+        container.status,
+        container.ports,
+        container.mounts,
+        container.devices,
+        container.env);
   }
 };
 } // namespace fmt

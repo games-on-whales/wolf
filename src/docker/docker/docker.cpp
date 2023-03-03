@@ -154,7 +154,14 @@ create(const Container &container, std::string_view registry_auth, bool force_re
         {"Image", container.image},
         {"Env", container.env},
         {"ExposedPorts", exposed_ports},
-        {"HostConfig", json::object{{"Binds", container.mounts}, {"PortBindings", container.ports}}}};
+        {"HostConfig",
+         json::object{
+             {"Binds", container.mounts},
+             {"PortBindings", container.ports},
+             {"Devices", container.devices},
+             {"IpcMode", "host"},
+             {"DeviceRequests",
+              json::array{{{"Driver", ""}, {"Count", -1}, {"Capabilities", json::array{json::array{"gpu"}}}}}}}}};
     auto raw_msg = req(conn.value().get(), POST, url, json::serialize(post_params));
     if (raw_msg && raw_msg->first == 201) {
       auto json = parse(raw_msg->second);
@@ -165,13 +172,15 @@ create(const Container &container, std::string_view registry_auth, bool force_re
       if (pull_image(container.image, registry_auth)) { // Download the image
         return create(container);                       // Then retry creating
       } else if (raw_msg) {
-        logs::log(logs::warning, "[CURL] error {} - {}", raw_msg->first, raw_msg->second);
+        logs::log(logs::warning, "[DOCKER] error {} - {}", raw_msg->first, raw_msg->second);
       }
     } else if (raw_msg && force_recreate_if_present && raw_msg->first == 409) { // 409 returned when there's a conflict
       logs::log(logs::warning, "[DOCKER] Container {} already present, removing first", container.name);
       if (remove_by_name(container.name, true, true, false)) {
         return create(container);
       }
+    } else if (raw_msg) {
+      logs::log(logs::warning, "[DOCKER] error {} - {}", raw_msg->first, raw_msg->second);
     }
   }
 
@@ -185,7 +194,7 @@ bool start_by_id(std::string_view id) {
     if (raw_msg && (raw_msg->first == 204 || raw_msg->first == 304)) {
       return true;
     } else if (raw_msg) {
-      logs::log(logs::warning, "[CURL] error {} - {}", raw_msg->first, raw_msg->second);
+      logs::log(logs::warning, "[DOCKER] error {} - {}", raw_msg->first, raw_msg->second);
     }
   }
 
@@ -201,7 +210,7 @@ bool stop_by_id(std::string_view id, int timeout_seconds) {
     if (raw_msg && (raw_msg->first == 204 || raw_msg->first == 304)) {
       return true;
     } else if (raw_msg) {
-      logs::log(logs::warning, "[CURL] error {} - {}", raw_msg->first, raw_msg->second);
+      logs::log(logs::warning, "[DOCKER] error {} - {}", raw_msg->first, raw_msg->second);
     }
   }
 
@@ -220,7 +229,7 @@ bool remove_by_id(std::string_view id, bool remove_volumes, bool force, bool lin
     if (raw_msg && raw_msg->first == 204) {
       return true;
     } else if (raw_msg) {
-      logs::log(logs::warning, "[CURL] error {} - {}", raw_msg->first, raw_msg->second);
+      logs::log(logs::warning, "[DOCKER] error {} - {}", raw_msg->first, raw_msg->second);
     }
   }
 
@@ -254,7 +263,7 @@ bool pull_image(std::string_view image_name, std::string_view registry_auth) {
     if (raw_msg && raw_msg->first == 200) {
       return true;
     } else if (raw_msg) {
-      logs::log(logs::warning, "[CURL] error {} - {}", raw_msg->first, raw_msg->second);
+      logs::log(logs::warning, "[DOCKER] error {} - {}", raw_msg->first, raw_msg->second);
       logs::log(logs::info,
                 "If it's an authentication error, you can try adding the env variable DOCKER_AUTH_B64, see: "
                 "https://docs.docker.com/engine/api/v1.30/#section/Authentication");

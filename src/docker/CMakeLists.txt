@@ -6,10 +6,10 @@ target_include_directories(wolf_docker PUBLIC .)
 target_sources(wolf_docker
         PUBLIC
         docker/docker.hpp
+        docker/formatters.hpp
 
         PRIVATE
-        docker/docker.cpp
-        docker/formatters.hpp)
+        docker/docker.cpp)
 
 find_package(Boost REQUIRED)
 

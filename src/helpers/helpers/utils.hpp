@@ -45,6 +45,14 @@ inline std::vector<std::string_view> split(std::string_view str, char separator)
 }
 
 /**
+ * Copies out a string_view content back to a string
+ * This differs from using .data() since it'll add the terminator
+ */
+inline std::string to_string(std::string_view str) {
+  return {str.begin(), str.end()};
+}
+
+/**
  * Join a list of strings into a single string with separator in between elements
  */
 template <class T> inline std::string join(const std::vector<T> &vec, std::string_view separator) {

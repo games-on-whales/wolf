@@ -13,6 +13,9 @@ TEST_CASE("Docker API", "DOCKER") {
       .status = docker::CREATED,
       .ports = {docker::Port{.private_port = 1234, .public_port = 1235, .type = docker::TCP}},
       .mounts = {docker::MountPoint{.source = "/tmp/", .destination = "/tmp/", .mode = "ro"}},
+      .devices = {docker::Device{.path_on_host = "/dev/input/mice",
+                                 .path_in_container = "/dev/input/mice",
+                                 .cgroup_permission = "mrw"}},
       .env = {"ASD=true"}};
 
   auto first_container = docker::create(container);

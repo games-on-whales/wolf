@@ -20,7 +20,9 @@ public:
            const immer::array<std::string_view> &virtual_inputs,
            const immer::map<std::string_view, std::string_view> &env_variables) override;
 
-  toml::value serialise() override;
+  toml::value serialise() override {
+    return {{"type", "process"}, {"run_cmd", this->run_cmd}};
+  }
 
 protected:
   std::string run_cmd;

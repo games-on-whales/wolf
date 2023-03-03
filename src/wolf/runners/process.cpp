@@ -65,8 +65,4 @@ void RunProcess::run(std::size_t session_id,
   terminate_handler.unregister();
 }
 
-toml::value RunProcess::serialise() {
-  return {{"type", "RunProcess"}, {"run_cmd", this->run_cmd}};
-}
-
 } // namespace process
