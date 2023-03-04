@@ -19,6 +19,8 @@ use gst_base::traits::BaseSrcExt;
 
 use crate::utils::CAT;
 
+use super::comp::RenderTarget;
+
 pub struct WaylandDisplaySrc {
     state: Mutex<Option<State>>,
     settings: Mutex<Settings>,
@@ -35,7 +37,7 @@ impl Default for WaylandDisplaySrc {
 
 #[derive(Debug, Default)]
 pub struct Settings {
-    render_node: Option<DrmNode>,
+    render_node: Option<RenderTarget>,
 }
 
 pub struct State {
@@ -78,7 +80,12 @@ impl ObjectImpl for WaylandDisplaySrc {
                 let node = value
                     .get::<Option<String>>()
                     .expect("type checked upstream")
-                    .map(|path| DrmNode::from_path(path).expect("No valid render_node"));
+                    .map(|path| match &*path {
+                        "software" => RenderTarget::Software,
+                        path => RenderTarget::Hardware(
+                            DrmNode::from_path(path).expect("Not a valid render_node"),
+                        ),
+                    });
                 settings.render_node = node;
             }
             _ => unreachable!(),
@@ -92,8 +99,12 @@ impl ObjectImpl for WaylandDisplaySrc {
                 settings
                     .render_node
                     .as_ref()
-                    .and_then(|node| node.dev_path())
-                    .map(|path| path.to_string_lossy().into_owned())
+                    .and_then(|target| match target {
+                        RenderTarget::Software => Some(String::from("software")),
+                        RenderTarget::Hardware(node) => node
+                            .dev_path()
+                            .map(|path| path.to_string_lossy().into_owned()),
+                    })
                     .unwrap_or_else(|| String::from("/dev/dri/renderD128"))
                     .to_value()
             }
@@ -242,9 +253,9 @@ impl BaseSrcImpl for WaylandDisplaySrc {
         }
 
         let settings = self.settings.lock().unwrap();
-        let render_node = settings.render_node.clone().unwrap_or_else(|| {
-            DrmNode::from_path("/dev/dri/renderD128").expect("Unable to open renderD128")
-        });
+        let render_target = settings.render_node.clone().unwrap_or_else(||
+            DrmNode::from_path("/dev/dri/renderD128").expect("Unable to open dri node. Set `render-node=software` to use software rendering.").into(),
+        );
 
         let elem = self.obj().upcast_ref::<gst::Element>().to_owned();
         let (tx, rx) = std::sync::mpsc::sync_channel(0);
@@ -253,7 +264,7 @@ impl BaseSrcImpl for WaylandDisplaySrc {
                 // calloops channel is not "UnwindSafe", but the std channel is... *sigh* lets workaround it creatively
                 let (command_tx, command_src) = smithay::reexports::calloop::channel::channel();
                 tx.send(command_tx).unwrap();
-                super::comp::init(command_src, render_node, elem);
+                super::comp::init(command_src, render_target, elem);
             }) {
                 gst::error!(CAT, "Compositor thread panic'ed: {:?}", err);
             }

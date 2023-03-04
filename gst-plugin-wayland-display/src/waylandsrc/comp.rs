@@ -1,13 +1,15 @@
 use std::{
-    collections::HashSet,
+    collections::{HashMap, HashSet},
     ffi::OsString,
     os::unix::prelude::AsRawFd,
+    sync::Mutex,
     time::{Duration, Instant},
 };
 
 use super::imp::Command;
 use gst::{message::Application, traits::ElementExt, Structure};
 use gst_video::VideoInfo;
+use once_cell::sync::Lazy;
 use slog::Drain;
 use smithay::{
     backend::{
@@ -89,6 +91,8 @@ use self::input::*;
 use self::window::*;
 
 const CURSOR_DATA_BYTES: &[u8] = include_bytes!("./comp/cursor.rgba");
+static EGL_DISPLAYS: Lazy<Mutex<HashMap<Option<DrmNode>, EGLDisplay>>> =
+    Lazy::new(|| Mutex::new(HashMap::new()));
 
 struct ClientState;
 impl ClientData for ClientState {
@@ -142,11 +146,11 @@ struct State {
     xwm: Option<X11Wm>,
 }
 
-pub fn get_egl_device_for_node(drm_node: DrmNode) -> EGLDevice {
+pub fn get_egl_device_for_node(drm_node: &DrmNode) -> EGLDevice {
     let drm_node = drm_node
         .node_with_type(NodeType::Render)
         .and_then(Result::ok)
-        .unwrap_or(drm_node);
+        .unwrap_or(drm_node.clone());
     EGLDevice::enumerate()
         .expect("Failed to enumerate EGLDevices")
         .find(|d| d.try_get_render_node().unwrap_or_default() == Some(drm_node))
@@ -734,7 +738,28 @@ impl XwmHandler for Data {
     }
 }
 
-pub fn init(command_src: Channel<Command>, render_node: DrmNode, elem: gst::Element) {
+#[derive(Debug, Clone, PartialEq)]
+pub enum RenderTarget {
+    Hardware(DrmNode),
+    Software,
+}
+
+impl Into<Option<DrmNode>> for RenderTarget {
+    fn into(self) -> Option<DrmNode> {
+        match self {
+            RenderTarget::Hardware(node) => Some(node),
+            RenderTarget::Software => None,
+        }
+    }
+}
+
+impl Into<RenderTarget> for DrmNode {
+    fn into(self) -> RenderTarget {
+        RenderTarget::Hardware(self)
+    }
+}
+
+pub fn init(command_src: Channel<Command>, render: impl Into<RenderTarget>, elem: gst::Element) {
     let log = ::slog::Logger::root(crate::utils::SlogGstDrain.fuse(), slog::o!());
 
     let mut display = Display::<State>::new().unwrap();
@@ -750,9 +775,27 @@ pub fn init(command_src: Channel<Command>, render_node: DrmNode, elem: gst::Elem
     let viewporter_state = ViewporterState::new::<State, _>(&dh, log.clone());
 
     // init render backend
-    let device = get_egl_device_for_node(render_node);
-    let egl = EGLDisplay::new(device, log.clone()).expect("Failed to initialize EGL display");
-    let context = EGLContext::new(&egl, log.clone()).expect("Failed to initialize EGL context");
+    let context = {
+        let mut displays = EGL_DISPLAYS.lock().unwrap();
+        let egl = displays
+            .entry(render.into().into())
+            .or_insert_with_key(|render_node| {
+                let device = match render_node {
+                    Some(render_node) => get_egl_device_for_node(render_node),
+                    None => EGLDevice::enumerate()
+                        .expect("Failed to enumerate EGLDevices")
+                        .find(|device| {
+                            device
+                                .extensions()
+                                .iter()
+                                .any(|e| e == "EGL_MESA_device_software")
+                        })
+                        .expect("Failed to find software device"),
+                };
+                EGLDisplay::new(device, log.clone()).expect("Failed to initialize EGL display")
+            });
+        EGLContext::new(&egl, log.clone()).expect("Failed to initialize EGL context")
+    };
     let renderer =
         unsafe { Gles2Renderer::new(context, log.clone()) }.expect("Failed to initialize renderer");
     let formats = Bind::<Dmabuf>::supported_formats(&renderer)
@@ -762,8 +805,6 @@ pub fn init(command_src: Channel<Command>, render_node: DrmNode, elem: gst::Elem
 
     // shm buffer
     let shm_state = ShmState::new::<State, _>(&dh, Vec::from(renderer.shm_formats()), log.clone());
-    // egl buffer
-    let _egl_guard = egl.bind_wl_display(&dh).expect("Failed to bind EGLDisplay");
     // dma buffer
     let dmabuf_global = dmabuf_state.create_global::<State, _>(&dh, formats.clone(), log.clone());
 
@@ -1057,6 +1098,4 @@ pub fn init(command_src: Channel<Command>, render_node: DrmNode, elem: gst::Elem
     }) {
         slog::error!(data.state.log, "Event loop broke: {}", err);
     }
-
-    std::mem::drop(_egl_guard);
 }
