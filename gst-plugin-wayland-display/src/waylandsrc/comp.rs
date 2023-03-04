@@ -81,6 +81,7 @@ use smithay::{
         X11Surface, X11Wm, XWayland, XWaylandEvent, XwmHandler,
     },
 };
+use wayland_backend::server::GlobalId;
 
 mod focus;
 mod input;
@@ -89,6 +90,7 @@ mod window;
 use self::focus::*;
 use self::input::*;
 use self::window::*;
+use crate::protocols::wl_drm::{create_drm_global, delegate_wl_drm};
 
 const CURSOR_DATA_BYTES: &[u8] = include_bytes!("./comp/cursor.rgba");
 static EGL_DISPLAYS: Lazy<Mutex<HashMap<Option<DrmNode>, EGLDisplay>>> =
@@ -116,7 +118,7 @@ struct State {
     dtr: Option<DamageTrackedRenderer>,
     renderbuffer: Option<Gles2Renderbuffer>,
     renderer: Gles2Renderer,
-    dmabuf_global: DmabufGlobal,
+    dmabuf_global: Option<(DmabufGlobal, GlobalId)>,
     last_render: Option<Instant>,
 
     // management
@@ -420,6 +422,7 @@ delegate_seat!(State);
 delegate_shm!(State);
 delegate_xdg_shell!(State);
 delegate_viewporter!(State);
+delegate_wl_drm!(State);
 
 render_elements! {
     CursorElement<R> where R: Renderer + ImportAll + ImportMem;
@@ -774,11 +777,13 @@ pub fn init(command_src: Channel<Command>, render: impl Into<RenderTarget>, elem
     let shell_state = XdgShellState::new::<State, _>(&dh, log.clone());
     let viewporter_state = ViewporterState::new::<State, _>(&dh, log.clone());
 
+    let render_target = render.into();
+
     // init render backend
     let context = {
         let mut displays = EGL_DISPLAYS.lock().unwrap();
         let egl = displays
-            .entry(render.into().into())
+            .entry(render_target.clone().into())
             .or_insert_with_key(|render_node| {
                 let device = match render_node {
                     Some(render_node) => get_egl_device_for_node(render_node),
@@ -798,15 +803,30 @@ pub fn init(command_src: Channel<Command>, render: impl Into<RenderTarget>, elem
     };
     let renderer =
         unsafe { Gles2Renderer::new(context, log.clone()) }.expect("Failed to initialize renderer");
-    let formats = Bind::<Dmabuf>::supported_formats(&renderer)
-        .expect("Failed to query formats")
-        .into_iter()
-        .collect::<Vec<_>>();
-
     // shm buffer
     let shm_state = ShmState::new::<State, _>(&dh, Vec::from(renderer.shm_formats()), log.clone());
-    // dma buffer
-    let dmabuf_global = dmabuf_state.create_global::<State, _>(&dh, formats.clone(), log.clone());
+
+    let dmabuf_global = if let RenderTarget::Hardware(node) = render_target {
+        let formats = Bind::<Dmabuf>::supported_formats(&renderer)
+            .expect("Failed to query formats")
+            .into_iter()
+            .collect::<Vec<_>>();
+
+        // dma buffer
+        let dmabuf_global =
+            dmabuf_state.create_global::<State, _>(&dh, formats.clone(), log.clone());
+        // wl_drm (mesa protocol, so we don't need EGL_WL_bind_display)
+        let wl_drm_global = create_drm_global::<State>(
+            &dh,
+            node.dev_path().expect("Failed to determine DrmNode path?"),
+            formats.clone(),
+            &dmabuf_global,
+        );
+
+        Some((dmabuf_global, wl_drm_global))
+    } else {
+        None
+    };
 
     let cursor_element =
         MemoryRenderBuffer::from_memory(CURSOR_DATA_BYTES, (64, 64), 1, Transform::Normal, None);

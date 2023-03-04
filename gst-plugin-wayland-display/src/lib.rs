@@ -1,5 +1,6 @@
 use gst::glib;
 
+pub mod protocols;
 pub mod utils;
 mod waylandsrc;
 

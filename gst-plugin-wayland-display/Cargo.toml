@@ -24,6 +24,8 @@ gst-base = { version = "0.20", package = "gstreamer-base", features = ["v1_18"] 
 gst-video = { version = "0.20", package = "gstreamer-video", features = ["v1_18"] }
 slog = "2.7.0"
 once_cell = "1.17.0"
+wayland-backend = "0.1.0"
+wayland-scanner = "0.30.0"
 
 [dependencies.smithay]
 git = "https://github.com/smithay/Smithay"
