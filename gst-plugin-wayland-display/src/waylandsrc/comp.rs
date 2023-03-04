@@ -110,8 +110,8 @@ struct State {
 
     // render
     dtr: Option<DamageTrackedRenderer>,
-    renderer: Gles2Renderer,
     renderbuffer: Option<Gles2Renderbuffer>,
+    renderer: Gles2Renderer,
     dmabuf_global: DmabufGlobal,
     last_render: Option<Instant>,
 

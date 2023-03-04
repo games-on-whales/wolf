@@ -247,9 +247,18 @@ impl BaseSrcImpl for WaylandDisplaySrc {
         });
 
         let elem = self.obj().upcast_ref::<gst::Element>().to_owned();
-        let (command_tx, command_src) = smithay::reexports::calloop::channel::channel();
-        let thread_handle =
-            std::thread::spawn(move || super::comp::init(command_src, render_node, elem));
+        let (tx, rx) = std::sync::mpsc::sync_channel(0);
+        let thread_handle = std::thread::spawn(move || {
+            if let Err(err) = std::panic::catch_unwind(|| {
+                // calloops channel is not "UnwindSafe", but the std channel is... *sigh* lets workaround it creatively
+                let (command_tx, command_src) = smithay::reexports::calloop::channel::channel();
+                tx.send(command_tx).unwrap();
+                super::comp::init(command_src, render_node, elem);
+            }) {
+                gst::error!(CAT, "Compositor thread panic'ed: {:?}", err);
+            }
+        });
+        let command_tx = rx.recv().unwrap();
 
         *state = Some(State {
             thread_handle,
@@ -266,10 +275,10 @@ impl BaseSrcImpl for WaylandDisplaySrc {
                 gst::warning!(CAT, "Failed to send stop command: {}", err);
                 return Ok(());
             };
-            std::mem::drop(state.command_tx);
             if state.thread_handle.join().is_err() {
                 gst::warning!(CAT, "Failed to join compositor thread");
             };
+            std::mem::drop(state.command_tx);
         }
 
         Ok(())
