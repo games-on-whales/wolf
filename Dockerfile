@@ -53,12 +53,12 @@ RUN apt-get update -y && \
     libgstreamer1.0-dev libgstreamer-plugins-base1.0-dev \
     && rm -rf /var/lib/apt/lists/*
 
-COPY gst-plugin-wayland-display /gst-plugin-wayland-display
+COPY src /src
+COPY Cargo.toml /
 
-WORKDIR /gst-plugin-wayland-display
+WORKDIR /
 
-RUN --mount=type=cache,target=/usr/local/cargo/registry cargo install cargo-c
-RUN --mount=type=cache,target=/usr/local/cargo/registry cargo cbuild --release
+RUN --mount=type=cache,target=/usr/local/cargo/registry cargo build --release -p gst-plugin-wayland-display
 
 ########################################################
 FROM gameonwhales/gstreamer:$GSTREAMER_VERSION AS runner
@@ -99,7 +99,7 @@ RUN if [ -n "$NV_VERSION" ]; then \
 
 ENV GST_PLUGIN_PATH=/usr/local/lib/x86_64-linux-gnu/gstreamer-1.0/
 COPY --from=wolf-builder /wolf/wolf /wolf/wolf
-COPY --from=gst-plugin-wayland /gst-plugin-wayland-display/target/x86_64-unknown-linux-gnu/release/libgstwaylanddisplay.so /usr/local/lib/x86_64-linux-gnu/gstreamer-1.0/libgstwaylanddisplay.so
+COPY --from=gst-plugin-wayland /target/release/libgstwaylanddisplaysrc.so /usr/local/lib/x86_64-linux-gnu/gstreamer-1.0/libgstwaylanddisplaysrc.so
 
 # Here is where the dynamically created wayland sockets will be stored
 ENV XDG_RUNTIME_DIR=/wolf/run/

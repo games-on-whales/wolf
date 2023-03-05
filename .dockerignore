@@ -3,6 +3,7 @@
 
 !gst-plugin-wayland-display
 !src
+!Cargo.toml
 !cmake
 !CMakeLists.txt
 !.clang-format
