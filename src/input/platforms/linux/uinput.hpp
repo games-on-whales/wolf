@@ -4,6 +4,7 @@
 #include <libevdev/libevdev.h>
 #include <memory>
 #include <optional>
+#include <libudev.h>
 
 namespace input {
 

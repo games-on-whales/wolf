@@ -1,5 +1,6 @@
 #include <functional>
 #include <helpers/logger.hpp>
+#include <helpers/utils.hpp>
 #include <immer/array.hpp>
 #include <immer/array_transient.hpp>
 #include <immer/box.hpp>
@@ -236,7 +237,7 @@ void start_streaming_video(const immer::box<state::VideoSession> &video_session,
                    for (const auto &path : video_session->virtual_inputs->devices_paths) {
                      GValue value = G_VALUE_INIT;
                      g_value_init(&value, G_TYPE_STRING);
-                     g_value_set_string(&value, path.data());
+                     g_value_set_string(&value, path.c_str());
                      g_value_array_append(devices, &value);
                    }
 

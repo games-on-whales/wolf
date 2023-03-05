@@ -24,7 +24,7 @@ namespace ba = boost::asio;
 struct Runner {
 
   virtual void run(std::size_t session_id,
-                   const immer::array<std::string_view> &virtual_inputs,
+                   const immer::array<std::string> &virtual_inputs,
                    const immer::map<std::string_view, std::string_view> &env_variables) = 0;
 
   virtual toml::value serialise() = 0;

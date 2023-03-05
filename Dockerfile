@@ -19,6 +19,7 @@ RUN apt-get update -y && \
     libevdev-dev \
     libpulse-dev \
     libunwind-dev \
+    libudev-dev \
     && rm -rf /var/lib/apt/lists/*
 
 COPY src /wolf/src
@@ -70,6 +71,7 @@ RUN apt-get update -y && \
     tini \
     libssl3 \
     libevdev2 \
+    libudev1 \
     va-driver-all intel-media-va-driver-non-free  \
     && rm -rf /var/lib/apt/lists/*
 

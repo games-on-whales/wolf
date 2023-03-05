@@ -15,7 +15,6 @@ using namespace std::chrono_literals;
 using namespace ranges::views;
 using namespace utils;
 
-
 class RunDocker : public state::Runner {
 public:
   static RunDocker from_toml(std::shared_ptr<dp::event_bus> ev_bus, const toml::value &runner_obj) {
@@ -62,7 +61,7 @@ public:
   }
 
   void run(std::size_t session_id,
-           const immer::array<std::string_view> &virtual_inputs,
+           const immer::array<std::string> &virtual_inputs,
            const immer::map<std::string_view, std::string_view> &env_variables) override;
 
   toml::value serialise() override {
@@ -87,7 +86,7 @@ protected:
 };
 
 void RunDocker::run(std::size_t session_id,
-                    const immer::array<std::string_view> &virtual_inputs,
+                    const immer::array<std::string> &virtual_inputs,
                     const immer::map<std::string_view, std::string_view> &env_variables) {
 
   std::vector<std::string> full_env;

@@ -44,6 +44,7 @@ jobs:
               libcurl4-openssl-dev \
               libpulse-dev \
               libevdev-dev \
+              libudev-dev \
               ${{ join(matrix.other_pkgs, ' ') }}
 
       - name: Configure build

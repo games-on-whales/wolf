@@ -1,6 +1,6 @@
 # Optionally glob, but only for CMake 3.12 or later:
-file(GLOB HEADER_LIST CONFIGURE_DEPENDS input/*.hpp)
-file(GLOB SRC_LIST SRCS input/*.cpp)
+file(GLOB PUBLIC_LIST CONFIGURE_DEPENDS input/*.hpp)
+file(GLOB PRIVATE_LIST SRCS input/*.cpp)
 
 # Make an automatic library - will be static or dynamic based on user setting
 add_library(wolf_input)
@@ -17,18 +17,25 @@ if (UNIX AND NOT APPLE)
     target_link_libraries(wolf_input PUBLIC evdev)
     target_include_directories(wolf_input PUBLIC ${LIBEVDEV_INCLUDE_DIR})
 
+    pkg_check_modules(LIBUDEV REQUIRED libudev)
+    target_link_libraries(wolf_input PUBLIC ${LIBUDEV_LIBRARIES})
+    target_include_directories(wolf_input PUBLIC ${LIBUDEV_INCLUDE_DIR})
+
+
     message(STATUS "Adding input implementation for LINUX")
-    list(APPEND SRC_LIST "platforms/linux/uinput.cpp")
-    list(APPEND HEADER_LIST "platforms/linux/keyboard.hpp" "platforms/linux/uinput.hpp")
+    list(APPEND PRIVATE_LIST
+            "platforms/linux/uinput.cpp"
+            "platforms/linux/keyboard.hpp"
+            "platforms/linux/uinput.hpp")
 
     find_package(ICU 61.0 COMPONENTS uc REQUIRED)
     target_link_libraries(wolf_input PRIVATE ICU::uc)
 else () # TODO: other platforms??
     message(WARNING "Missing virtual input implementation for the current platform")
-    list(APPEND SRC_LIST "platforms/unknown/input.cpp")
+    list(APPEND PRIVATE_LIST "platforms/unknown/input.cpp")
 endif ()
 
-target_sources(wolf_input PRIVATE ${SRC_LIST} PUBLIC ${HEADER_LIST})
+target_sources(wolf_input PRIVATE ${PRIVATE_LIST} PUBLIC ${PUBLIC_LIST})
 
 FetchContent_Declare(
         eventbus

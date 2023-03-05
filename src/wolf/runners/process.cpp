@@ -10,7 +10,7 @@ namespace process {
 using namespace moonlight::control;
 
 void RunProcess::run(std::size_t session_id,
-                     const immer::array<std::string_view> &virtual_inputs,
+                     const immer::array<std::string> &virtual_inputs,
                      const immer::map<std::string_view, std::string_view> &env_variables) {
   logs::log(logs::debug, "[PROCESS] Starting process: {}", this->run_cmd);
 

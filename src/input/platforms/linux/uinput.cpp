@@ -459,13 +459,44 @@ void controller_handle(libevdev_uinput *controller,
 
 } // namespace controller
 
+/**
+ * Joypads will also have one `/dev/input/js*` device as child, we want to expose that as well
+ */
+std::vector<std::string> get_child_dev_nodes(libevdev_uinput *device) {
+  std::vector<std::string> result;
+  auto udev = udev_new();
+  if (auto device_ptr = udev_device_new_from_syspath(udev, libevdev_uinput_get_syspath(device))) {
+    auto enumerate = udev_enumerate_new(udev);
+    udev_enumerate_add_match_parent(enumerate, device_ptr);
+    udev_enumerate_scan_devices(enumerate);
+
+    udev_list_entry *dev_list_entry;
+    auto devices = udev_enumerate_get_list_entry(enumerate);
+    udev_list_entry_foreach(dev_list_entry, devices) {
+      auto path = udev_list_entry_get_name(dev_list_entry);
+      auto child_dev = udev_device_new_from_syspath(udev, path);
+      if (auto dev_path = udev_device_get_devnode(child_dev)) {
+        result.emplace_back(dev_path);
+        logs::log(logs::debug, "[INPUT] Found child: {} - {}", path, dev_path);
+      }
+      udev_device_unref(child_dev);
+    }
+
+    udev_enumerate_unref(enumerate);
+    udev_device_unref(device_ptr);
+  }
+
+  udev_unref(udev);
+  return result;
+}
+
 InputReady setup_handlers(std::size_t session_id,
                           const std::shared_ptr<dp::event_bus> &event_bus,
                           const std::shared_ptr<boost::asio::thread_pool> &t_pool) {
   logs::log(logs::debug, "Setting up input handlers for session: {}", session_id);
 
   auto v_devices = std::make_shared<VirtualDevices>();
-  auto devices_paths = immer::array<std::string_view>().transient();
+  auto devices_paths = immer::array<std::string>().transient();
 
   libevdev_ptr mouse_dev(libevdev_new(), ::libevdev_free);
   if (auto mouse_el = mouse::create_mouse(mouse_dev.get())) {
@@ -489,7 +520,11 @@ InputReady setup_handlers(std::size_t session_id,
   libevdev_ptr controller_dev(libevdev_new(), ::libevdev_free);
   if (auto controller_el = controller::create_controller(controller_dev.get())) {
     v_devices->controllers = {{*controller_el, ::libevdev_uinput_destroy}};
-    devices_paths.push_back(libevdev_uinput_get_devnode(*controller_el));
+    auto child_nodes = get_child_dev_nodes(*controller_el);
+    for (auto const &node : child_nodes) {
+      devices_paths.push_back(node);
+    }
+    //    devices_paths.push_back(libevdev_uinput_get_devnode(*controller_el));
   }
 
   auto controller_state = std::make_shared<immer::atom<immer::box<data::CONTROLLER_MULTI_PACKET> /* prev packet */>>();
