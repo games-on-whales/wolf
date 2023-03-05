@@ -1,0 +1,26 @@
+[package]
+name = "gst-wayland-display"
+authors = ["Victoria Brekenfeld <git@drakulix.de>"]
+version = "0.1.0"
+edition = "2021"
+license = "MIT"
+description = "Wayland Compositor producing GStreamer buffers"
+
+[lib]
+name = "gstwaylanddisplay"
+crate-type = ["cdylib", "staticlib", "rlib"]
+path = "src/lib.rs"
+
+[dependencies]
+gst.workspace = true
+gst-video.workspace = true
+tracing.workspace = true
+once_cell.workspace = true
+wayland-backend = "0.1.0"
+wayland-scanner = "0.30.0"
+
+[dependencies.smithay]
+git = "https://github.com/smithay/Smithay"
+rev = "b1c682742a"
+default-features = false
+features = [ "backend_drm", "backend_egl", "backend_libinput", "backend_udev", "renderer_gl", "use_system_lib", "desktop", "wayland_frontend", "xwayland" ]

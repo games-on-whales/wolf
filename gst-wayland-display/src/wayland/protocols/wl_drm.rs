@@ -245,11 +245,11 @@ where
 macro_rules! delegate_wl_drm {
     ($(@<$( $lt:tt $( : $clt:tt $(+ $dlt:tt )* )? ),+>)? $ty: ty) => {
         smithay::reexports::wayland_server::delegate_global_dispatch!($(@< $( $lt $( : $clt $(+ $dlt )* )? ),+ >)? $ty: [
-            $crate::protocols::wl_drm::wl_drm::WlDrm: $crate::protocols::wl_drm::DrmGlobalData
-        ] => $crate::protocols::wl_drm::WlDrmState);
+            $crate::wayland::protocols::wl_drm::wl_drm::WlDrm: $crate::wayland::protocols::wl_drm::DrmGlobalData
+        ] => $crate::wayland::protocols::wl_drm::WlDrmState);
         smithay::reexports::wayland_server::delegate_dispatch!($(@< $( $lt $( : $clt $(+ $dlt )* )? ),+ >)? $ty: [
-            $crate::protocols::wl_drm::wl_drm::WlDrm: $crate::protocols::wl_drm::DrmInstanceData
-        ] => $crate::protocols::wl_drm::WlDrmState);
+            $crate::wayland::protocols::wl_drm::wl_drm::WlDrm: $crate::wayland::protocols::wl_drm::DrmInstanceData
+        ] => $crate::wayland::protocols::wl_drm::WlDrmState);
     };
 }
 pub(crate) use delegate_wl_drm;

@@ -1,25 +1,25 @@
-use std::sync::{
-    mpsc::{self, SyncSender},
-    Mutex,
-};
-use std::thread::JoinHandle;
+use std::sync::Mutex;
 
-use gst_video::{VideoCapsBuilder, VideoFormat, VideoInfo};
-use smithay::backend::{drm::DrmNode, SwapBuffersError};
-use smithay::reexports::calloop::channel::Sender;
+use gst::message::Application;
+use gst_video::{VideoCapsBuilder, VideoFormat};
 
-use gst::glib::{once_cell::sync::Lazy, ValueArray};
-use gst::prelude::*;
 use gst::subclass::prelude::*;
 use gst::{glib, Event, Fraction};
+use gst::{
+    glib::{once_cell::sync::Lazy, ValueArray},
+    LibraryError,
+};
+use gst::{prelude::*, Structure};
 
 use gst_base::subclass::base_src::CreateSuccess;
 use gst_base::subclass::prelude::*;
 use gst_base::traits::BaseSrcExt;
 
-use crate::utils::CAT;
+use gstwaylanddisplay::WaylandDisplay;
+use tracing_subscriber::layer::SubscriberExt;
+use tracing_subscriber::Registry;
 
-use super::comp::RenderTarget;
+use crate::utils::{GstLayer, CAT};
 
 pub struct WaylandDisplaySrc {
     state: Mutex<Option<State>>,
@@ -37,19 +37,11 @@ impl Default for WaylandDisplaySrc {
 
 #[derive(Debug, Default)]
 pub struct Settings {
-    render_node: Option<RenderTarget>,
+    render_node: Option<String>,
 }
 
 pub struct State {
-    thread_handle: JoinHandle<()>,
-    command_tx: Sender<Command>,
-}
-
-pub enum Command {
-    VideoInfo(VideoInfo),
-    InputDevice(String),
-    Buffer(SyncSender<Result<gst::Buffer, SwapBuffersError>>),
-    Quit,
+    display: WaylandDisplay,
 }
 
 #[glib::object_subclass]
@@ -77,16 +69,9 @@ impl ObjectImpl for WaylandDisplaySrc {
         match pspec.name() {
             "render-node" => {
                 let mut settings = self.settings.lock().unwrap();
-                let node = value
+                settings.render_node = value
                     .get::<Option<String>>()
-                    .expect("type checked upstream")
-                    .map(|path| match &*path {
-                        "software" => RenderTarget::Software,
-                        path => RenderTarget::Hardware(
-                            DrmNode::from_path(path).expect("Not a valid render_node"),
-                        ),
-                    });
-                settings.render_node = node;
+                    .expect("Type checked upstream");
             }
             _ => unreachable!(),
         }
@@ -98,13 +83,7 @@ impl ObjectImpl for WaylandDisplaySrc {
                 let settings = self.settings.lock().unwrap();
                 settings
                     .render_node
-                    .as_ref()
-                    .and_then(|target| match target {
-                        RenderTarget::Software => Some(String::from("software")),
-                        RenderTarget::Hardware(node) => node
-                            .dev_path()
-                            .map(|path| path.to_string_lossy().into_owned()),
-                    })
+                    .clone()
                     .unwrap_or_else(|| String::from("/dev/dri/renderD128"))
                     .to_value()
             }
@@ -214,16 +193,14 @@ impl BaseSrcImpl for WaylandDisplaySrc {
             let structure = event.structure().expect("Unable to get message structure");
             if structure.has_name("VirtualDevicesReady") {
                 let mut state = self.state.lock().unwrap();
-                let tx = &mut state.as_mut().unwrap().command_tx;
+                let display = &mut state.as_mut().unwrap().display;
 
                 let paths = structure
                     .get::<ValueArray>("paths")
                     .expect("Should contain paths");
                 for value in paths.into_iter() {
                     let path = value.get::<String>().expect("Paths are strings");
-                    if let Err(err) = tx.send(Command::InputDevice(path)) {
-                        gst::warning!(CAT, "Command channel dead: {}", err);
-                    }
+                    display.add_input_device(path);
                 }
 
                 return true;
@@ -234,14 +211,13 @@ impl BaseSrcImpl for WaylandDisplaySrc {
 
     fn set_caps(&self, caps: &gst::Caps) -> Result<(), gst::LoggableError> {
         let video_info = gst_video::VideoInfo::from_caps(caps).expect("failed to get video info");
-        let _ = self
-            .state
+        self.state
             .lock()
             .unwrap()
             .as_mut()
             .unwrap()
-            .command_tx
-            .send(Command::VideoInfo(video_info));
+            .display
+            .set_video_info(video_info);
 
         self.parent_set_caps(caps)
     }
@@ -253,28 +229,27 @@ impl BaseSrcImpl for WaylandDisplaySrc {
         }
 
         let settings = self.settings.lock().unwrap();
-        let render_target = settings.render_node.clone().unwrap_or_else(||
-            DrmNode::from_path("/dev/dri/renderD128").expect("Unable to open dri node. Set `render-node=software` to use software rendering.").into(),
-        );
-
         let elem = self.obj().upcast_ref::<gst::Element>().to_owned();
-        let (tx, rx) = std::sync::mpsc::sync_channel(0);
-        let thread_handle = std::thread::spawn(move || {
-            if let Err(err) = std::panic::catch_unwind(|| {
-                // calloops channel is not "UnwindSafe", but the std channel is... *sigh* lets workaround it creatively
-                let (command_tx, command_src) = smithay::reexports::calloop::channel::channel();
-                tx.send(command_tx).unwrap();
-                super::comp::init(command_src, render_target, elem);
-            }) {
-                gst::error!(CAT, "Compositor thread panic'ed: {:?}", err);
-            }
-        });
-        let command_tx = rx.recv().unwrap();
+        let subscriber = Registry::default().with(GstLayer);
 
-        *state = Some(State {
-            thread_handle,
-            command_tx,
-        });
+        let Ok(mut display) = tracing::subscriber::with_default(subscriber, || WaylandDisplay::new(settings.render_node.clone())) else {
+            return Err(gst::error_msg!(LibraryError::Failed, ("Failed to open drm node {}, if you want to utilize software rendering set `render-node=software`.", settings.render_node.as_deref().unwrap_or("/dev/dri/renderD128"))));
+        };
+
+        let mut structure = Structure::builder("wayland.src");
+        for (key, var) in display
+            .env_vars()
+            .iter()
+            .flat_map(|var| var.split_once("="))
+        {
+            structure = structure.field(key, var);
+        }
+        let structure = structure.build();
+        if let Err(err) = elem.post_message(Application::builder(structure).src(&elem).build()) {
+            gst::warning!(CAT, "Failed to post environment to gstreamer bus: {}", err);
+        }
+
+        *state = Some(State { display });
 
         Ok(())
     }
@@ -282,16 +257,9 @@ impl BaseSrcImpl for WaylandDisplaySrc {
     fn stop(&self) -> Result<(), gst::ErrorMessage> {
         let mut state = self.state.lock().unwrap();
         if let Some(state) = state.take() {
-            if let Err(err) = state.command_tx.send(Command::Quit) {
-                gst::warning!(CAT, "Failed to send stop command: {}", err);
-                return Ok(());
-            };
-            if state.thread_handle.join().is_err() {
-                gst::warning!(CAT, "Failed to join compositor thread");
-            };
-            std::mem::drop(state.command_tx);
+            let subscriber = Registry::default().with(GstLayer);
+            tracing::subscriber::with_default(subscriber, || std::mem::drop(state.display));
         }
-
         Ok(())
     }
 
@@ -310,23 +278,9 @@ impl PushSrcImpl for WaylandDisplaySrc {
             return Err(gst::FlowError::Eos);
         };
 
-        let (buffer_tx, buffer_rx) = mpsc::sync_channel(0);
-        if let Err(err) = state.command_tx.send(Command::Buffer(buffer_tx)) {
-            gst::warning!(CAT, "Failed to send buffer command: {}", err);
-            return Err(gst::FlowError::Eos);
-        }
-
-        match buffer_rx.recv() {
-            Ok(Ok(buffer)) => Ok(CreateSuccess::NewBuffer(buffer)),
-            Ok(Err(err)) => match err {
-                SwapBuffersError::AlreadySwapped => unreachable!(),
-                SwapBuffersError::ContextLost(_) => Err(gst::FlowError::Eos),
-                SwapBuffersError::TemporaryFailure(_) => Err(gst::FlowError::Error),
-            },
-            Err(err) => {
-                gst::warning!(CAT, "Failed to recv buffer ack: {}", err);
-                Err(gst::FlowError::Error)
-            }
-        }
+        let subscriber = Registry::default().with(GstLayer);
+        tracing::subscriber::with_default(subscriber, || {
+            state.display.frame().map(CreateSuccess::NewBuffer)
+        })
     }
 }

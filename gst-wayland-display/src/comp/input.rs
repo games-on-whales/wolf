@@ -26,12 +26,6 @@ use std::{
 
 pub struct NixInterface;
 
-impl NixInterface {
-    pub fn new(_log: impl Into<slog::Logger>) -> NixInterface {
-        NixInterface
-    }
-}
-
 impl LibinputInterface for NixInterface {
     fn open_restricted(&mut self, path: &Path, flags: i32) -> Result<OwnedFd, i32> {
         fcntl::open(path, OFlag::from_bits_truncate(flags), stat::Mode::empty())
