@@ -31,7 +31,7 @@ struct MountPoint {
   std::string mode;
 };
 
-struct Device{
+struct Device {
   std::string path_on_host;
   std::string path_in_container;
   std::string cgroup_permission;
@@ -84,8 +84,10 @@ std::optional<Container> get_by_id(std::string_view id);
  *
  *  @param force_recreate_if_present: if a container with the same name is already present it will be removed
  */
-std::optional<Container>
-create(const Container &container, std::string_view registry_auth = {}, bool force_recreate_if_present = true);
+std::optional<Container> create(const Container &container,
+                                std::string_view custom_params = "{}",
+                                std::string_view registry_auth = {},
+                                bool force_recreate_if_present = true);
 
 /**
  * Starts the container

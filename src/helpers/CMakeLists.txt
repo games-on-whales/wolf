@@ -5,8 +5,7 @@ add_library(wolf::helpers ALIAS wolf_helpers)
 # We need this directory, and users of our library will need it too
 target_include_directories(wolf_helpers INTERFACE .)
 set_target_properties(wolf_helpers PROPERTIES PUBLIC_HEADER .)
-target_sources(wolf_helpers
-        PUBLIC helpers/utils.hpp helpers/logger.hpp)
+target_sources(wolf_helpers INTERFACE helpers/utils.hpp helpers/logger.hpp)
 
 # Additional algorithms for dealing with containers
 FetchContent_Declare(

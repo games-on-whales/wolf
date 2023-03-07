@@ -18,7 +18,6 @@ using namespace utils;
 class RunDocker : public state::Runner {
 public:
   static RunDocker from_toml(std::shared_ptr<dp::event_bus> ev_bus, const toml::value &runner_obj) {
-
     std::vector<std::string> rec_mounts = toml::find_or<std::vector<std::string>>(runner_obj, "mounts", {});
     std::vector<MountPoint> mounts = rec_mounts                                  //
                                      | transform([](const std::string &mount) {  //
@@ -50,14 +49,20 @@ public:
                                   | ranges::to_vector;                                          //
 
     return RunDocker(std::move(ev_bus),
-                     docker::Container{.id = "",
-                                       .name = toml::find<std::string>(runner_obj, "name"),
-                                       .image = toml::find<std::string>(runner_obj, "image"),
-                                       .status = docker::CREATED,
-                                       .ports = ports,
-                                       .mounts = mounts,
-                                       .devices = devices,
-                                       .env = toml::find_or<std::vector<std::string>>(runner_obj, "env", {})});
+                     toml::find_or<std::string>(runner_obj, "base_create_json", R"({
+                        "HostConfig": {
+                          "IpcMode": "host",
+                          "DeviceRequests": [{"Driver":"","Count":-1,"Capabilities":[["gpu"]]}]
+                        }
+                      })"),
+                     Container{.id = "",
+                               .name = toml::find<std::string>(runner_obj, "name"),
+                               .image = toml::find<std::string>(runner_obj, "image"),
+                               .status = docker::CREATED,
+                               .ports = ports,
+                               .mounts = mounts,
+                               .devices = devices,
+                               .env = toml::find_or<std::vector<std::string>>(runner_obj, "env", {})});
   }
 
   void run(std::size_t session_id,
@@ -78,11 +83,15 @@ public:
   }
 
 protected:
-  RunDocker(std::shared_ptr<dp::event_bus> ev_bus, docker::Container base_container)
-      : ev_bus(std::move(ev_bus)), container(std::move(base_container)) {}
+  RunDocker(std::shared_ptr<dp::event_bus> ev_bus,
+            const std::string &base_create_json,
+            docker::Container base_container)
+      : ev_bus(std::move(ev_bus)), container(std::move(base_container)), base_create_json(std::move(base_create_json)) {
+  }
 
   std::shared_ptr<dp::event_bus> ev_bus;
   docker::Container container;
+  std::string base_create_json;
 };
 
 void RunDocker::run(std::size_t session_id,
@@ -112,7 +121,7 @@ void RunDocker::run(std::size_t session_id,
                              .devices = devices,
                              .env = full_env};
 
-  if (auto docker_container = docker::create(new_container)) {
+  if (auto docker_container = docker::create(new_container, this->base_create_json)) {
     auto container_id = docker_container->id;
     docker::start_by_id(container_id);
 

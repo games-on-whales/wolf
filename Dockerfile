@@ -96,26 +96,6 @@ RUN if [ -n "$NV_VERSION" ]; then \
     && rm -rf /var/lib/apt/lists/* \
     ; fi
 
-    # Configure default user and set env
-# The users UID and GID will be set on container startup
-ENV \
-    PUID=1000 \
-    PGID=1000 \
-    UMASK=000 \
-    UNAME="retro" \
-    HOME="/home/retro" \
-    TZ="Europe/London"
-
-RUN <<_CONF_USER
-set -e
-echo "**** Configure default user '${UNAME}' ****"
-useradd -m -d ${HOME} -s /bin/bash ${UNAME}
-mkdir /wolf/
-chown ${PUID}:${PGID} /wolf/
-_CONF_USER
-
-USER ${UNAME}
-
 ENV GST_PLUGIN_PATH=/usr/local/lib/x86_64-linux-gnu/gstreamer-1.0/
 COPY --from=wolf-builder /wolf/wolf /wolf/wolf
 COPY --from=gst-plugin-wayland /target/release/libgstwaylanddisplaysrc.so /usr/local/lib/x86_64-linux-gnu/gstreamer-1.0/libgstwaylanddisplaysrc.so

@@ -143,8 +143,20 @@ std::vector<Container> get_containers(bool all) {
   return {};
 }
 
-std::optional<Container>
-create(const Container &container, std::string_view registry_auth, bool force_recreate_if_present) {
+void merge_array(json::object *root, const std::string &key, const json::array &vec) {
+  if (auto current_obj = root->if_contains(key)) {
+    auto current = current_obj->if_array();
+    std::copy(vec.begin(), vec.end(), std::back_inserter(*current));
+    (*root)[key] = *current;
+  } else {
+    (*root)[key] = vec;
+  }
+}
+
+std::optional<Container> create(const Container &container,
+                                std::string_view custom_params,
+                                std::string_view registry_auth,
+                                bool force_recreate_if_present) {
   if (auto conn = docker_connect()) {
     auto url = fmt::format("http://localhost/{}/containers/create?name={}", DOCKER_API_VERSION, container.name);
     // See: https://stackoverflow.com/a/39149767 and https://github.com/moby/moby/issues/3039
@@ -152,19 +164,23 @@ create(const Container &container, std::string_view registry_auth, bool force_re
     for (const auto &port : container.ports) {
       exposed_ports[fmt::format("{}/{}", port.public_port, port.type == docker::TCP ? "tcp" : "udp")] = json::object();
     }
-    json::value post_params = {
-        {"Image", container.image},
-        {"Env", container.env},
-        {"ExposedPorts", exposed_ports},
-        {"HostConfig",
-         json::object{
-             {"Binds", container.mounts},
-             {"PortBindings", container.ports},
-             {"Devices", container.devices},
-             {"IpcMode", "host"},
-             {"DeviceRequests",
-              json::array{{{"Driver", ""}, {"Count", -1}, {"Capabilities", json::array{json::array{"gpu"}}}}}}}}};
-    auto raw_msg = req(conn.value().get(), POST, url, json::serialize(post_params));
+
+    auto post_params = boost::json::parse(custom_params.data()).as_object();
+    post_params["Image"] = container.image;
+    merge_array(&post_params, "Env", json::value_from(container.env).as_array());
+
+    if (auto host_cfg = post_params.if_contains("HostConfig")) {
+      auto cfg = host_cfg->if_object();
+      merge_array(cfg, "Binds", json::value_from(container.mounts).as_array());
+      merge_array(cfg, "Devices", json::value_from(container.devices).as_array());
+      (*cfg)["PortBindings"] = json::value_from(container.ports);
+    } else {
+      post_params["HostConfig"] =
+          json::object{{"Binds", container.mounts}, {"PortBindings", container.ports}, {"Devices", container.devices}};
+    }
+
+    auto json_payload = json::serialize(post_params);
+    auto raw_msg = req(conn.value().get(), POST, url, json_payload);
     if (raw_msg && raw_msg->first == 201) {
       auto json = parse(raw_msg->second);
       auto created_id = json.at("Id").as_string();
@@ -172,14 +188,15 @@ create(const Container &container, std::string_view registry_auth, bool force_re
     } else if (raw_msg && raw_msg->first == 404) { // 404 returned when the image is not present
       logs::log(logs::warning, "[DOCKER] Image {} not present, downloading...", container.image);
       if (pull_image(container.image, registry_auth)) { // Download the image
-        return create(container);                       // Then retry creating
+        return create(container, custom_params, registry_auth,
+                      force_recreate_if_present); // Then retry creating
       } else if (raw_msg) {
         logs::log(logs::warning, "[DOCKER] error {} - {}", raw_msg->first, raw_msg->second);
       }
     } else if (raw_msg && force_recreate_if_present && raw_msg->first == 409) { // 409 returned when there's a conflict
       logs::log(logs::warning, "[DOCKER] Container {} already present, removing first", container.name);
       if (remove_by_name(container.name, true, true, false)) {
-        return create(container);
+        return create(container, custom_params, registry_auth, force_recreate_if_present);
       }
     } else if (raw_msg) {
       logs::log(logs::warning, "[DOCKER] error {} - {}", raw_msg->first, raw_msg->second);
