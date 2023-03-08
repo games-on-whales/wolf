@@ -1,6 +1,6 @@
 use std::{
     collections::{HashMap, HashSet},
-    ffi::OsString,
+    ffi::{CString, OsString},
     os::unix::prelude::AsRawFd,
     sync::{mpsc::Sender, Arc, Mutex, Weak},
     time::{Duration, Instant},
@@ -133,8 +133,8 @@ pub fn get_egl_device_for_node(drm_node: &DrmNode) -> EGLDevice {
 pub(crate) fn init(
     command_src: Channel<Command>,
     render: impl Into<RenderTarget>,
-    devices_tx: Sender<Vec<String>>,
-    envs_tx: Sender<Vec<String>>,
+    devices_tx: Sender<Vec<CString>>,
+    envs_tx: Sender<Vec<CString>>,
 ) {
     let mut display = Display::<State>::new().unwrap();
     let dh = display.handle();
@@ -428,8 +428,8 @@ pub(crate) fn init(
                     tracing::info!(display = ?dpy, "Started Xwayland.");
 
                     let env_vars = vec![
-                        format!("WAYLAND_DISPLAY={}", socket_name),
-                        format!("DISPLAY={}", dpy),
+                        CString::new(format!("WAYLAND_DISPLAY={}", socket_name)).unwrap(),
+                        CString::new(format!("DISPLAY={}", dpy)).unwrap(),
                     ];
                     if let Err(err) = envs_tx.send(env_vars) {
                         tracing::warn!(?err, "Failed to post environment to application.");

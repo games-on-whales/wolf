@@ -1,4 +1,4 @@
-use std::{os::unix::fs::MetadataExt, str::FromStr};
+use std::{ffi::CString, os::unix::fs::MetadataExt, str::FromStr};
 
 use smithay::{
     backend::{
@@ -45,7 +45,7 @@ const NVIDIA_MAJOR: u64 = 195;
 // no clue how this number is on BSDs, feel free to contribute
 
 impl RenderTarget {
-    pub fn as_devices(&self) -> Vec<String> {
+    pub fn as_devices(&self) -> Vec<CString> {
         match self {
             RenderTarget::Hardware(node) => {
                 let mut devices = Vec::new();
@@ -75,7 +75,11 @@ impl RenderTarget {
 
                 devices
                     .into_iter()
-                    .flat_map(|path| path.to_str().map(String::from))
+                    .flat_map(|path| {
+                        path.to_str()
+                            .map(String::from)
+                            .and_then(|string| CString::new(string).ok())
+                    })
                     .collect()
             }
             RenderTarget::Software => Vec::new(),

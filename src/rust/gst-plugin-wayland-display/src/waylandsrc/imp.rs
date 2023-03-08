@@ -237,11 +237,7 @@ impl BaseSrcImpl for WaylandDisplaySrc {
         };
 
         let mut structure = Structure::builder("wayland.src");
-        for (key, var) in display
-            .env_vars()
-            .iter()
-            .flat_map(|var| var.split_once("="))
-        {
+        for (key, var) in display.env_vars().flat_map(|var| var.split_once("=")) {
             structure = structure.field(key, var);
         }
         let structure = structure.build();

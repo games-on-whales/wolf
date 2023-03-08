@@ -7,7 +7,7 @@ use smithay::backend::drm::CreateDrmNodeError;
 use smithay::backend::SwapBuffersError;
 use smithay::reexports::calloop::channel::Sender;
 
-use std::ffi::{c_char, CStr};
+use std::ffi::{c_char, CStr, CString};
 use std::ptr;
 use std::str::FromStr;
 use std::sync::mpsc::{self, Receiver, SyncSender};
@@ -30,8 +30,8 @@ pub struct WaylandDisplay {
     thread_handle: Option<JoinHandle<()>>,
     command_tx: Sender<Command>,
 
-    devices: MaybeRecv<Vec<String>>,
-    envs: MaybeRecv<Vec<String>>,
+    devices: MaybeRecv<Vec<CString>>,
+    envs: MaybeRecv<Vec<CString>>,
 }
 
 enum MaybeRecv<T: Clone> {
@@ -81,12 +81,18 @@ impl WaylandDisplay {
         })
     }
 
-    pub fn devices(&mut self) -> &[String] {
-        self.devices.get()
+    pub fn devices(&mut self) -> impl Iterator<Item = &str> {
+        self.devices
+            .get()
+            .iter()
+            .map(|string| string.to_str().unwrap())
     }
 
-    pub fn env_vars(&mut self) -> &[String] {
-        self.envs.get()
+    pub fn env_vars(&mut self) -> impl Iterator<Item = &str> {
+        self.envs
+            .get()
+            .iter()
+            .map(|string| string.to_str().unwrap())
     }
 
     pub fn add_input_device(&self, path: impl Into<String>) {
@@ -162,7 +168,7 @@ pub extern "C" fn display_finish(dpy: *mut WaylandDisplay) {
 #[no_mangle]
 pub extern "C" fn display_get_devices_len(dpy: *mut WaylandDisplay) -> usize {
     let display = unsafe { &mut *dpy };
-    display.devices().len()
+    display.devices.get().len()
 }
 
 #[no_mangle]
@@ -173,7 +179,7 @@ pub extern "C" fn display_get_devices(
 ) -> usize {
     let display = unsafe { &mut *dpy };
     let client_devices = unsafe { std::slice::from_raw_parts_mut(devices, max_len) };
-    let devices = display.devices();
+    let devices = display.devices.get();
 
     for (i, string) in devices.iter().take(max_len).enumerate() {
         client_devices[i] = string.as_ptr() as *const _;
@@ -185,7 +191,7 @@ pub extern "C" fn display_get_devices(
 #[no_mangle]
 pub extern "C" fn display_get_envvars_len(dpy: *mut WaylandDisplay) -> usize {
     let display = unsafe { &mut *dpy };
-    display.env_vars().len()
+    display.envs.get().len()
 }
 
 #[no_mangle]
@@ -196,7 +202,7 @@ pub extern "C" fn display_get_envvars(
 ) -> usize {
     let display = unsafe { &mut *dpy };
     let client_env_vars = unsafe { std::slice::from_raw_parts_mut(env_vars, max_len) };
-    let env_vars = display.env_vars();
+    let env_vars = display.envs.get();
 
     for (i, string) in env_vars.iter().take(max_len).enumerate() {
         client_env_vars[i] = string.as_ptr() as *const _;
