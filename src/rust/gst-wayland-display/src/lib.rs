@@ -133,6 +133,7 @@ impl Drop for WaylandDisplay {
 
 // C API
 
+#[no_mangle]
 pub extern "C" fn display_init(render_node: *const c_char) -> *mut WaylandDisplay {
     let render_node = if !render_node.is_null() {
         Some(
@@ -153,15 +154,18 @@ pub extern "C" fn display_init(render_node: *const c_char) -> *mut WaylandDispla
     }
 }
 
+#[no_mangle]
 pub extern "C" fn display_finish(dpy: *mut WaylandDisplay) {
     std::mem::drop(unsafe { Box::from_raw(dpy) })
 }
 
+#[no_mangle]
 pub extern "C" fn display_get_devices_len(dpy: *mut WaylandDisplay) -> usize {
     let display = unsafe { &mut *dpy };
     display.devices().len()
 }
 
+#[no_mangle]
 pub extern "C" fn display_get_devices(
     dpy: *mut WaylandDisplay,
     devices: *mut *const c_char,
@@ -178,11 +182,13 @@ pub extern "C" fn display_get_devices(
     std::cmp::max(max_len, devices.len())
 }
 
+#[no_mangle]
 pub extern "C" fn display_get_envvars_len(dpy: *mut WaylandDisplay) -> usize {
     let display = unsafe { &mut *dpy };
     display.env_vars().len()
 }
 
+#[no_mangle]
 pub extern "C" fn display_get_envvars(
     dpy: *mut WaylandDisplay,
     env_vars: *mut *const c_char,
@@ -199,6 +205,7 @@ pub extern "C" fn display_get_envvars(
     std::cmp::max(max_len, env_vars.len())
 }
 
+#[no_mangle]
 pub extern "C" fn display_add_input_device(dpy: *mut WaylandDisplay, path: *const c_char) {
     let display = unsafe { &mut *dpy };
     let path = unsafe { CStr::from_ptr(path) }
@@ -208,6 +215,7 @@ pub extern "C" fn display_add_input_device(dpy: *mut WaylandDisplay, path: *cons
     display.add_input_device(path);
 }
 
+#[no_mangle]
 pub extern "C" fn display_set_video_info(dpy: *mut WaylandDisplay, info: *const GstVideoInfo) {
     let display = unsafe { &mut *dpy };
     if info.is_null() {
@@ -218,6 +226,7 @@ pub extern "C" fn display_set_video_info(dpy: *mut WaylandDisplay, info: *const 
     display.set_video_info(video_info);
 }
 
+#[no_mangle]
 pub extern "C" fn display_get_frame(dpy: *mut WaylandDisplay) -> *mut GstBuffer {
     let display = unsafe { &mut *dpy };
     match display.frame() {
