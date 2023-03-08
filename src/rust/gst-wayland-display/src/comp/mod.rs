@@ -461,9 +461,12 @@ pub(crate) fn init(
     if let Err(err) = event_loop.run(None, &mut data, |data| {
         if let Some(output) = data.state.output.as_ref() {
             for window in data.state.space.elements() {
-                window.send_frame(output, data.state.start_time.elapsed(), None, |_, _| {
-                    Some(output.clone())
-                })
+                window.send_frame(
+                    output,
+                    data.state.start_time.elapsed(),
+                    Some(Duration::ZERO),
+                    |_, _| Some(output.clone()),
+                )
             }
             if let CursorImageStatus::Surface(wl_surface) = &data.state.cursor_state {
                 send_frames_surface_tree(
