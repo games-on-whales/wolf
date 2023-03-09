@@ -236,7 +236,11 @@ pub extern "C" fn display_set_video_info(dpy: *mut WaylandDisplay, info: *const 
 pub extern "C" fn display_get_frame(dpy: *mut WaylandDisplay) -> *mut GstBuffer {
     let display = unsafe { &mut *dpy };
     match display.frame() {
-        Ok(mut frame) => frame.make_mut().as_mut_ptr(),
+        Ok(mut frame) => {
+            let ptr = frame.make_mut().as_mut_ptr();
+            std::mem::forget(frame);
+            ptr
+        }
         Err(err) => {
             tracing::error!("Rendering error: {}", err);
             ptr::null_mut()
