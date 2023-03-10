@@ -6,6 +6,7 @@ ENV DEBIAN_FRONTEND=noninteractive
 
 RUN apt-get update -y && \
     apt-get install -y --no-install-recommends \
+    curl \
     ca-certificates \
     ninja-build \
     cmake \
@@ -14,6 +15,7 @@ RUN apt-get update -y && \
     git \
     clang \
     libboost-thread-dev libboost-locale-dev libboost-filesystem-dev libboost-log-dev libboost-stacktrace-dev \
+    libwayland-dev libwayland-server0 libinput-dev libxkbcommon-dev libgbm-dev \
     libcurl4-openssl-dev \
     libssl-dev \
     libevdev-dev \
@@ -22,9 +24,11 @@ RUN apt-get update -y && \
     libudev-dev \
     && rm -rf /var/lib/apt/lists/*
 
-COPY src /wolf/src
-COPY cmake /wolf/cmake
-COPY CMakeLists.txt /wolf/CMakeLists.txt
+## Install Rust in order to build our custom compositor (the build will be done inside Cmake)
+RUN curl https://sh.rustup.rs -sSf | sh -s -- -y
+ENV PATH="/root/.cargo/bin:${PATH}"
+
+COPY . /wolf/
 WORKDIR /wolf
 
 ENV CCACHE_DIR=/cache/ccache
@@ -41,24 +45,6 @@ RUN --mount=type=cache,target=/cache/ccache \
     ninja -C $CMAKE_BUILD_DIR && \
     # We have to copy out the built executable because this will only be available inside the buildkit cache
     cp $CMAKE_BUILD_DIR/src/wolf/wolf /wolf/wolf
-
-########################################################
-FROM rust:1.67-slim AS gst-plugin-wayland
-
-ENV DEBIAN_FRONTEND=noninteractive
-RUN apt-get update -y && \
-    apt-get install -y --no-install-recommends \
-    git ca-certificates libssl-dev pkg-config \
-    libwayland-dev libwayland-server0 libudev-dev libinput-dev libxkbcommon-dev libgbm-dev \
-    libgstreamer1.0-dev libgstreamer-plugins-base1.0-dev \
-    && rm -rf /var/lib/apt/lists/*
-
-COPY src /src
-COPY Cargo.toml /
-
-WORKDIR /
-
-RUN --mount=type=cache,target=/usr/local/cargo/registry cargo build --release -p gst-plugin-wayland-display
 
 ########################################################
 FROM gameonwhales/gstreamer:$GSTREAMER_VERSION AS runner
@@ -85,20 +71,21 @@ RUN apt-get update -y && \
 
 ARG NV_VERSION
 # nvidia files
-RUN if [ -n "$NV_VERSION" ]; then \
-    apt-get update -y && \
-    apt-get install -y --no-install-recommends curl kmod pkg-config libglvnd-dev && \
-    curl -LO https://download.nvidia.com/XFree86/Linux-x86_64/$NV_VERSION/NVIDIA-Linux-x86_64-$NV_VERSION.run && \
-    chmod +x NVIDIA-Linux-x86_64-$NV_VERSION.run && \
-    ./NVIDIA-Linux-x86_64-$NV_VERSION.run --silent -z --skip-depmod --skip-module-unload --no-nvidia-modprobe --no-kernel-modules --no-kernel-module-source && \
-    rm ./NVIDIA-Linux-x86_64-$NV_VERSION.run && \
-    apt-get remove -y curl kmod pkg-config libglvnd-dev \
-    && rm -rf /var/lib/apt/lists/* \
-    ; fi
+RUN <<_NVIDIA
+if [ -n "$NV_VERSION" ]; then
+    apt-get update -y
+    apt-get install -y --no-install-recommends curl kmod pkg-config libglvnd-dev
+    curl -LO https://download.nvidia.com/XFree86/Linux-x86_64/$NV_VERSION/NVIDIA-Linux-x86_64-$NV_VERSION.run
+    chmod +x NVIDIA-Linux-x86_64-$NV_VERSION.run
+    ./NVIDIA-Linux-x86_64-$NV_VERSION.run --silent -z --skip-depmod --skip-module-unload --no-nvidia-modprobe --no-kernel-modules --no-kernel-module-source
+    rm ./NVIDIA-Linux-x86_64-$NV_VERSION.run
+    apt-get remove -y curl kmod pkg-config libglvnd-dev
+    rm -rf /var/lib/apt/lists/*
+fi
+_NVIDIA
 
 ENV GST_PLUGIN_PATH=/usr/local/lib/x86_64-linux-gnu/gstreamer-1.0/
 COPY --from=wolf-builder /wolf/wolf /wolf/wolf
-COPY --from=gst-plugin-wayland /target/release/libgstwaylanddisplaysrc.so /usr/local/lib/x86_64-linux-gnu/gstreamer-1.0/libgstwaylanddisplaysrc.so
 
 # Here is where the dynamically created wayland sockets will be stored
 ENV XDG_RUNTIME_DIR=/wolf/run/
@@ -115,6 +102,7 @@ ENV WOLF_CFG_FILE=$WOLF_CFG_FOLDER/config.toml
 ENV WOLF_PRIVATE_KEY_FILE=$WOLF_CFG_FOLDER/key.pem
 ENV WOLF_PRIVATE_CERT_FILE=$WOLF_CFG_FOLDER/cert.pem
 ENV WOLF_THREAD_POOL_SIZE=30
+ENV WOLF_PULSE_IMAGE=ghcr.io/games-on-whales/pulseaudio:master
 VOLUME $WOLF_CFG_FOLDER
 
 # HTTPS

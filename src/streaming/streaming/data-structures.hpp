@@ -2,12 +2,18 @@
 
 #include <chrono>
 #include <eventbus/event_bus.hpp>
+#include <gst/gst.h>
 #include <immer/array.hpp>
 #include <immer/box.hpp>
 #include <input/input.hpp>
 #include <memory>
 #include <moonlight/data-structures.hpp>
 #include <optional>
+
+namespace streaming {
+using gst_element_ptr = std::shared_ptr<GstElement>;
+using gst_main_loop_ptr = std::shared_ptr<GMainLoop>;
+} // namespace streaming
 
 namespace state {
 
@@ -28,8 +34,6 @@ enum ColorSpace : int {
 struct VideoSession {
   moonlight::DisplayMode display_mode;
   std::string gst_pipeline;
-
-  immer::box<input::InputReady> virtual_inputs;
 
   // A unique ID that identifies this session
   std::size_t session_id;

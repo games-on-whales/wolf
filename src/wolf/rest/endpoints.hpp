@@ -250,6 +250,7 @@ void launch(const std::shared_ptr<typename SimpleWeb::Server<SimpleWeb::HTTPS>::
   SimpleWeb::CaseInsensitiveMultimap headers = request->parse_query_string();
   auto app = state::get_app_by_id(state->config, get_header(headers, "appid").value());
   auto new_session = create_run_session(virtual_inputs, request, current_client, app);
+  state->event_bus->fire_event(immer::box<state::StreamSession>(new_session));
   state->running_sessions->update(
       [&new_session](const immer::vector<state::StreamSession> &ses_v) { return ses_v.push_back(new_session); });
 

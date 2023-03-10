@@ -116,7 +116,6 @@ announce(const RTSP_PACKET &req, const state::StreamSession &session, dp::event_
   state::VideoSession video = {
       .display_mode = display,
       .gst_pipeline = video_format_h264 ? session.app->h264_gst_pipeline : session.app->hevc_gst_pipeline,
-      .virtual_inputs = session.virtual_inputs,
 
       .session_id = session.session_id,
 

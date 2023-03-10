@@ -39,8 +39,15 @@ endif (CCACHE_FOUND)
 
 # FetchContent added in CMake 3.11, downloads during the configure step
 include(FetchContent)
-set(CMAKE_MODULE_PATH ${CMAKE_CURRENT_SOURCE_DIR}/cmake/)
-list(APPEND CMAKE_MODULE_PATH ${CMAKE_CURRENT_SOURCE_DIR}/cmake)
+set(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} ${CMAKE_CURRENT_SOURCE_DIR}/cmake/)
+
+option(LINK_RUST_WAYLAND "Link to our custom Rust wayland compositor" ON)
+if (LINK_RUST_WAYLAND AND UNIX AND NOT APPLE)
+    # Adapted from: https://github.com/Devolutions/CMakeRust/
+    enable_language(Rust)
+    include(CMakeCargo)
+    add_subdirectory(src/rust/gst-wayland-display)
+endif ()
 
 
 add_subdirectory(src/helpers)

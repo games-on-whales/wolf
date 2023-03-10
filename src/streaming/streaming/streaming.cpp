@@ -1,4 +1,5 @@
 #include <functional>
+#include <gstreamer-1.0/gst/app/gstappsrc.h>
 #include <helpers/logger.hpp>
 #include <helpers/utils.hpp>
 #include <immer/array.hpp>
@@ -10,11 +11,9 @@
 #include <streaming/gst-plugin/gstrtpmoonlightpay_audio.hpp>
 #include <streaming/gst-plugin/gstrtpmoonlightpay_video.hpp>
 #include <streaming/streaming.hpp>
+#include <streaming/wayland-display.hpp>
 
 namespace streaming {
-
-using gst_element_ptr = std::shared_ptr<GstElement>;
-using gst_main_loop_ptr = std::shared_ptr<GMainLoop>;
 
 /**
  * GStreamer needs to be initialised once per run
@@ -150,30 +149,6 @@ bool run_pipeline(
 }
 
 /**
- * Here we receive all message::application that are sent in the pipeline,
- * we want to fire an event on our side when the Wayland plugin has finished setting up the sockets
- */
-void application_msg_handler(GstBus *bus, GstMessage *message, gpointer /* state::LaunchAPPEvent */ data) {
-  auto structure = gst_message_get_structure(message);
-  auto name = std::string(gst_structure_get_name(structure));
-  if (name == "wayland.src") { // No gstreamer plugin should send application messages, but better be safe here
-
-    auto wayland_display = gst_structure_get_string(structure, "WAYLAND_DISPLAY");
-    auto x_display = gst_structure_get_string(structure, "DISPLAY");
-    logs::log(logs::debug, "[GSTREAMER] Received WAYLAND_DISPLAY={} DISPLAY={}", wayland_display, x_display);
-
-    auto launch_ev = (std::pair<std::size_t, std::shared_ptr<dp::event_bus>> *)data;
-    launch_ev->second->fire_event(immer::box<state::SocketReadyEV>(state::SocketReadyEV{
-        .session_id = launch_ev->first,
-        .wayland_socket = wayland_display,
-        .xorg_socket = x_display,
-    }));
-  } else {
-    logs::log(logs::debug, "[GSTREAMER] Received message::application named: {} ignoring..", name);
-  }
-}
-
-/**
  * Sends a custom message in the pipeline
  */
 void send_message(GstElement *recipient, GstStructure *message) {
@@ -181,11 +156,18 @@ void send_message(GstElement *recipient, GstStructure *message) {
   gst_element_send_event(recipient, gst_ev);
 }
 
+struct GstAppDataState {
+  gst_element_ptr app_src;
+  std::shared_ptr<WaylandState> wayland_state;
+  guint source_id{};
+};
+
 /**
  * Start VIDEO pipeline
  */
 void start_streaming_video(const immer::box<state::VideoSession> &video_session,
                            const std::shared_ptr<dp::event_bus> &event_bus,
+                           const WaylandState &wl_state,
                            unsigned short client_port) {
   std::string color_range = (static_cast<int>(video_session->color_range) == static_cast<int>(state::JPEG)) ? "jpeg"
                                                                                                             : "mpeg2";
@@ -216,56 +198,84 @@ void start_streaming_video(const immer::box<state::VideoSession> &video_session,
                               fmt::arg("color_space", color_space),
                               fmt::arg("color_range", color_range));
   logs::log(logs::debug, "Starting video pipeline: {}", pipeline);
+  auto wl_ptr = std::make_shared<WaylandState>(wl_state);
+  auto app_src_state = std::make_shared<GstAppDataState>();
 
-  auto launch_data = std::make_pair(video_session->session_id, event_bus);
-  run_pipeline(pipeline,
-               video_session->session_id,
-               event_bus,
-               [video_session, event_bus, &launch_data](auto pipeline, auto loop) {
-                 auto bus = gst_pipeline_get_bus(GST_PIPELINE(pipeline.get()));
-                 /**
-                  * Trigger an event when our custom wayland plugin sends a signal that the sockets are ready
-                  */
-                 g_signal_connect(bus, "message::application", G_CALLBACK(application_msg_handler), &launch_data);
-                 gst_object_unref(bus);
+  run_pipeline(
+      pipeline,
+      video_session->session_id,
+      event_bus,
+      [video_session, event_bus, wl_ptr, app_src_state](auto pipeline, auto loop) {
+        if (auto app_src_el = gst_bin_get_by_name(GST_BIN(pipeline.get()), "wolf_wayland_source")) {
+          g_assert(GST_IS_APP_SRC(app_src_el));
 
-                 /* Sending created virtual inputs to our custom wayland plugin */
-                 {
-                   /* Copying to GArray */
-                   auto size = video_session->virtual_inputs->devices_paths.size();
-                   GValueArray *devices = g_value_array_new(size);
-                   for (const auto &path : video_session->virtual_inputs->devices_paths) {
-                     GValue value = G_VALUE_INIT;
-                     g_value_init(&value, G_TYPE_STRING);
-                     g_value_set_string(&value, path.c_str());
-                     g_value_array_append(devices, &value);
-                   }
+          auto app_src_ptr = gst_element_ptr(app_src_el, ::gst_object_unref);
+          set_resolution(*wl_ptr, video_session->display_mode, app_src_ptr);
+          app_src_state->source_id = 0;
+          app_src_state->app_src = std::move(app_src_ptr);
+          app_src_state->wayland_state = wl_ptr;
 
-                   send_message(pipeline.get(),
-                                gst_structure_new("VirtualDevicesReady", "paths", G_TYPE_VALUE_ARRAY, devices, NULL));
-                   g_value_array_free(devices);
-                 }
+          /* Adapted from the tutorial at:
+           * https://gstreamer.freedesktop.org/documentation/tutorials/basic/short-cutting-the-pipeline.html?gi-language=c*/
+          g_signal_connect(app_src_el,
+                           "need-data",
+                           G_CALLBACK(+[](GstElement *pipeline, guint size, GstAppDataState *data) {
+                             if (data->source_id == 0) {
+                               logs::log(logs::trace, "[WAYLAND] Start feeding app-src");
+                               data->source_id = g_idle_add(
+                                   (GSourceFunc) +
+                                       [](GstAppDataState *data) {
+                                         GstFlowReturn ret;
 
-                 /*
-                  * The force IDR event will be triggered by the control stream.
-                  * We have to pass this back into the gstreamer pipeline
-                  * in order to force the encoder to produce a new IDR packet
-                  */
-                 auto idr_handler = event_bus->register_handler<immer::box<ControlEvent>>(
-                     [sess_id = video_session->session_id, pipeline](const immer::box<ControlEvent> &ctrl_ev) {
-                       if (ctrl_ev->session_id == sess_id) {
-                         if (ctrl_ev->type == IDR_FRAME) {
-                           logs::log(logs::debug, "[GSTREAMER] Forcing IDR");
-                           // Force IDR event, see: https://github.com/centricular/gstwebrtc-demos/issues/186
-                           send_message(
-                               pipeline.get(),
+                                         auto buffer = display_get_frame(*data->wayland_state->display);
+                                         if (GST_IS_BUFFER(buffer) && GST_IS_APP_SRC(data->app_src.get())) {
+                                           g_signal_emit_by_name(data->app_src.get(), "push-buffer", buffer, &ret);
+                                           gst_buffer_unref(buffer);
+
+                                           if (ret == GST_FLOW_OK) {
+                                             return true;
+                                           }
+                                         }
+
+                                         logs::log(logs::debug, "[WAYLAND] Error during app-src push data");
+                                         return false;
+                                       },
+                                   data);
+                             }
+                           }),
+                           app_src_state.get());
+
+          g_signal_connect(app_src_el,
+                           "enough-data",
+                           G_CALLBACK(+[](GstElement *pipeline, guint size, GstAppDataState *data) {
+                             if (data->source_id != 0) {
+                               logs::log(logs::trace, "[WAYLAND] Stop feeding app-src");
+                               g_source_remove(data->source_id);
+                               data->source_id = 0;
+                             }
+                           }),
+                           app_src_state.get());
+        }
+
+        /*
+         * The force IDR event will be triggered by the control stream.
+         * We have to pass this back into the gstreamer pipeline
+         * in order to force the encoder to produce a new IDR packet
+         */
+        auto idr_handler = event_bus->register_handler<immer::box<ControlEvent>>(
+            [sess_id = video_session->session_id, pipeline](const immer::box<ControlEvent> &ctrl_ev) {
+              if (ctrl_ev->session_id == sess_id) {
+                if (ctrl_ev->type == IDR_FRAME) {
+                  logs::log(logs::debug, "[GSTREAMER] Forcing IDR");
+                  // Force IDR event, see: https://github.com/centricular/gstwebrtc-demos/issues/186
+                  send_message(pipeline.get(),
                                gst_structure_new("GstForceKeyUnit", "all-headers", G_TYPE_BOOLEAN, TRUE, NULL));
-                         }
-                       }
-                     });
+                }
+              }
+            });
 
-                 return immer::array<immer::box<dp::handler_registration>>{std::move(idr_handler)};
-               });
+        return immer::array<immer::box<dp::handler_registration>>{std::move(idr_handler)};
+      });
 }
 
 /**

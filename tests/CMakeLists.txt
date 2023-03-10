@@ -17,6 +17,11 @@ if (TEST_UINPUT AND UNIX AND NOT APPLE)
     list(APPEND SRC_LIST "platforms/linux/input.cpp")
 endif ()
 
+option(LINK_RUST_WAYLAND "Enable custom wayland test" ON)
+if (LINK_RUST_WAYLAND AND UNIX AND NOT APPLE)
+    list(APPEND SRC_LIST "platforms/linux/wayland-display.cpp")
+endif ()
+
 option(TEST_DOCKER "Enable docker tests" ON)
 if (TEST_DOCKER)
     list(APPEND SRC_LIST "docker/testDocker.cpp")

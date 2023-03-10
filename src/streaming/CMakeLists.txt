@@ -1,21 +1,10 @@
 # Make an automatic library - will be static or dynamic based on user setting
 
-file(GLOB HEADER_LIST CONFIGURE_DEPENDS
-        "streaming/*.hpp"
-        "streaming/gst-plugin/*.hpp")
-file(GLOB SRC_LIST SRCS
-        "streaming/*.cpp"
-        "streaming/gst-plugin/*.cpp")
+file(GLOB HEADER_LIST CONFIGURE_DEPENDS "streaming/gst-plugin/*.hpp")
+file(GLOB SRC_LIST SRCS "streaming/gst-plugin/*.cpp")
 
 add_library(streaming)
 add_library(wolf::streaming ALIAS streaming)
-
-target_sources(streaming
-        PRIVATE
-        ${SRC_LIST}
-
-        PUBLIC
-        ${HEADER_LIST})
 
 # We need this directory, and users of our library will need it too
 target_include_directories(streaming PUBLIC .)
@@ -38,13 +27,28 @@ set(EVENTBUS_BUILD_TESTS OFF)
 FetchContent_MakeAvailable(eventbus)
 
 find_package(PkgConfig)
-pkg_check_modules(GSTREAMER REQUIRED gstreamer-1.0 gstreamer-base-1.0)
+pkg_check_modules(GSTREAMER REQUIRED gstreamer-1.0 gstreamer-base-1.0 gstreamer-app-1.0)
 pkg_check_modules(GLIB2 REQUIRED glib-2.0)
-pkg_check_modules(GOBJECT REQUIRED gobject-2.0)
 
 if (NOT (GSTREAMER_FOUND))
     message(FATAL_ERROR "Please Install Gstreamer Dev: CMake will Exit")
 endif ()
+
+if (LINK_RUST_WAYLAND AND UNIX AND NOT APPLE)
+    target_link_libraries(streaming PUBLIC gstwaylanddisplay)
+    list(APPEND HEADER_LIST streaming/wayland-display.hpp)
+    list(APPEND SRC_LIST streaming/wayland-display.cpp)
+endif ()
+
+list(APPEND HEADER_LIST streaming/streaming.hpp streaming/data-structures.hpp)
+list(APPEND SRC_LIST streaming/streaming.cpp)
+
+target_sources(streaming
+        PRIVATE
+        ${SRC_LIST}
+
+        PUBLIC
+        ${HEADER_LIST})
 
 target_link_libraries(streaming PUBLIC
         wolf::moonlight

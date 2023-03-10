@@ -67,7 +67,7 @@ public:
 
   void run(std::size_t session_id,
            const immer::array<std::string> &virtual_inputs,
-           const immer::map<std::string_view, std::string_view> &env_variables) override;
+           const immer::map<std::string, std::string> &env_variables) override;
 
   toml::value serialise() override {
     return {{"type", "docker"},
@@ -96,7 +96,7 @@ protected:
 
 void RunDocker::run(std::size_t session_id,
                     const immer::array<std::string> &virtual_inputs,
-                    const immer::map<std::string_view, std::string_view> &env_variables) {
+                    const immer::map<std::string, std::string> &env_variables) {
 
   std::vector<std::string> full_env;
   full_env.insert(full_env.end(), this->container.env.begin(), this->container.env.end());
@@ -127,6 +127,14 @@ void RunDocker::run(std::size_t session_id,
 
     logs::log(logs::info, "Starting container: {}", docker_container->name);
     logs::log(logs::debug, "Starting container: {}", *docker_container);
+
+    auto terminate_handler = this->ev_bus->register_handler<immer::box<moonlight::StopStreamEvent>>(
+        [session_id, container_id](const immer::box<moonlight::StopStreamEvent> &terminate_ev) {
+          if (terminate_ev->session_id == session_id) {
+            docker::stop_by_id(container_id);
+          }
+        });
+
     do {
       std::this_thread::sleep_for(100ms);
     } while (docker::get_by_id(container_id)->status == RUNNING);

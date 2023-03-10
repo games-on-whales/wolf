@@ -62,6 +62,7 @@ jobs:
                 -DCATCH_DEVELOPMENT_BUILD=ON \
                 -DTEST_UINPUT=OFF \
                 -DTEST_DOCKER=OFF \
+                -DLINK_RUST_WAYLAND=OFF \
                 -G Ninja
 
       - name: Build tests + lib

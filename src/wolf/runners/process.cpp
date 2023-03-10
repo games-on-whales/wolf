@@ -11,7 +11,7 @@ using namespace moonlight::control;
 
 void RunProcess::run(std::size_t session_id,
                      const immer::array<std::string> &virtual_inputs,
-                     const immer::map<std::string_view, std::string_view> &env_variables) {
+                     const immer::map<std::string, std::string> &env_variables) {
   logs::log(logs::debug, "[PROCESS] Starting process: {}", this->run_cmd);
 
   std::future<std::string> std_out, err_out;
@@ -22,7 +22,7 @@ void RunProcess::run(std::size_t session_id,
   try {
     auto env = boost::this_process::environment();
     for (const auto &env_var : env_variables) {
-      env[env_var.first.data()] = env_var.second.data();
+      env[env_var.first] = env_var.second;
     };
 
     child_proc = bp::child(this->run_cmd,
@@ -40,13 +40,6 @@ void RunProcess::run(std::size_t session_id,
 
   auto terminate_handler = this->ev_bus->register_handler<immer::box<moonlight::StopStreamEvent>>(
       [&group_proc, session_id](const immer::box<moonlight::StopStreamEvent> &terminate_ev) {
-        if (terminate_ev->session_id == session_id) {
-          group_proc.terminate(); // Manually terminate the process
-        }
-      });
-
-  auto pause_handler = this->ev_bus->register_handler<immer::box<moonlight::PauseStreamEvent>>(
-      [&group_proc, session_id](const immer::box<moonlight::PauseStreamEvent> &terminate_ev) {
         if (terminate_ev->session_id == session_id) {
           group_proc.terminate(); // Manually terminate the process
         }
