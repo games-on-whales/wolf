@@ -184,7 +184,8 @@ auto setup_sessions_handlers(const immer::box<state::AppState> &app_state, std::
           /* Create video virtual wayland compositor */
           logs::log(logs::debug, "[STREAM_SESSION] Create wayland compositor");
           std::this_thread::sleep_for(500ms); // TODO: removing this will fail the RTSP setup, why?
-          auto wl_state = streaming::create_wayland_display(session->virtual_inputs.devices_paths);
+          auto wl_state = streaming::create_wayland_display(session->virtual_inputs.devices_paths,
+                                                            get_env("WOLF_RENDER_NODE", "/dev/dri/renderD128"));
           streaming::set_resolution(wl_state, session->display_mode);
           wl_promise->set_value(wl_state);
 

@@ -140,8 +140,10 @@ void RunDocker::run(std::size_t session_id,
     } while (docker::get_by_id(container_id)->status == RUNNING);
 
     logs::log(logs::debug, "Stopping container: {}", docker_container->name);
-    docker::stop_by_id(container_id);
-    docker::remove_by_id(container_id);
+    if (std::string(std::getenv("WOLF_STOP_CONTAINER_ON_EXIT")) != "FALSE") {
+      docker::stop_by_id(container_id);
+      docker::remove_by_id(container_id);
+    }
     logs::log(logs::info, "Stopped container: {}", docker_container->name);
   }
 }
