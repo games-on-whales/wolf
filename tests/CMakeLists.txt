@@ -17,8 +17,8 @@ if (TEST_UINPUT AND UNIX AND NOT APPLE)
     list(APPEND SRC_LIST "platforms/linux/input.cpp")
 endif ()
 
-option(LINK_RUST_WAYLAND "Enable custom wayland test" ON)
-if (LINK_RUST_WAYLAND AND UNIX AND NOT APPLE)
+option(TEST_RUST_WAYLAND "Enable custom wayland test" ON)
+if (TEST_RUST_WAYLAND AND UNIX AND NOT APPLE)
     list(APPEND SRC_LIST "platforms/linux/wayland-display.cpp")
 endif ()
 

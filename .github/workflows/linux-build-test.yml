@@ -40,12 +40,18 @@ jobs:
               ninja-build \
               libboost-locale-dev libboost-thread-dev libboost-filesystem-dev libboost-log-dev libboost-stacktrace-dev \
               libssl-dev \
-              libgstreamer1.0-dev \
+              libgstreamer1.0-dev libgstreamer-plugins-base1.0-dev \
+              libwayland-dev libwayland-server0 libinput-dev libxkbcommon-dev libgbm-dev \
               libcurl4-openssl-dev \
               libpulse-dev \
               libevdev-dev \
               libudev-dev \
               ${{ join(matrix.other_pkgs, ' ') }}
+
+      - name: Setup Rust
+        uses: ATiltedTree/setup-rust@v1
+        with:
+          rust-version: stable
 
       - name: Configure build
         working-directory: ${{runner.workspace}}
@@ -62,7 +68,8 @@ jobs:
                 -DCATCH_DEVELOPMENT_BUILD=ON \
                 -DTEST_UINPUT=OFF \
                 -DTEST_DOCKER=OFF \
-                -DLINK_RUST_WAYLAND=OFF \
+                -DLINK_RUST_WAYLAND=ON \
+                -DTEST_RUST_WAYLAND=OFF \
                 -G Ninja
 
       - name: Build tests + lib
