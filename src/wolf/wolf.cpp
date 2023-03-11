@@ -158,14 +158,15 @@ auto setup_sessions_handlers(const immer::box<state::AppState> &app_state, std::
   immer::vector_transient<immer::box<dp::handler_registration>> handlers;
   auto t_pool = app_state->t_pool;
 
-  auto wayland_sessions =
-      std::make_shared<immer::atom<immer::map<std::size_t, boost::shared_future<streaming::WaylandState>>>>();
+  auto wayland_sessions = std::make_shared<
+      immer::atom<immer::map<std::size_t, boost::shared_future<std::shared_ptr<streaming::WaylandState>>>>>();
   // Run process and our custom wayland as soon as a new StreamSession is created
   handlers.push_back(app_state->event_bus->register_handler<immer::box<state::StreamSession>>(
       [=](const immer::box<state::StreamSession> &session) {
-        auto wl_promise = std::make_shared<boost::promise<streaming::WaylandState>>();
+        auto wl_promise = std::make_shared<boost::promise<std::shared_ptr<streaming::WaylandState>>>();
         wayland_sessions->update([=](const auto map) {
-          return map.set(session->session_id, boost::shared_future<streaming::WaylandState>(wl_promise->get_future()));
+          return map.set(session->session_id,
+                         boost::shared_future<std::shared_ptr<streaming::WaylandState>>(wl_promise->get_future()));
         });
 
         // Start selected app on a separate thread
@@ -191,14 +192,16 @@ auto setup_sessions_handlers(const immer::box<state::AppState> &app_state, std::
 
           /* Setup devices paths */
           auto full_devices = session->virtual_inputs.devices_paths.transient();
-          std::copy(wl_state.graphic_devices.begin(), wl_state.graphic_devices.end(), std::back_inserter(full_devices));
+          std::copy(wl_state->graphic_devices.begin(),
+                    wl_state->graphic_devices.end(),
+                    std::back_inserter(full_devices));
 
           /* Setup environment paths */
           immer::map_transient<std::string, std::string> full_env;
           full_env.set("PULSE_SINK", pulse_sink_name);
           full_env.set("PULSE_SOURCE", pulse_sink_name + ".monitor");
           full_env.set("PULSE_SERVER", audio_server ? audio::get_server_name(audio_server->server) : "");
-          for (const auto &env : wl_state.env) {
+          for (const auto &env : wl_state->env) {
             auto split = utils::split(env, '=');
             full_env.set(utils::to_string(split[0]), utils::to_string(split[1]));
           }
@@ -211,9 +214,6 @@ auto setup_sessions_handlers(const immer::box<state::AppState> &app_state, std::
           if (audio_server && audio_server->server) {
             audio::delete_virtual_sink(audio_server->server, v_device);
           }
-
-          logs::log(logs::debug, "[STREAM_SESSION] Stop wayland compositor");
-          streaming::stop_wayland_display(wl_state);
         });
       }));
 

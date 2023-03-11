@@ -5,7 +5,8 @@
 
 namespace streaming {
 
-WaylandState create_wayland_display(const immer::array<std::string> &input_devices, const std::string &render_node) {
+std::shared_ptr<WaylandState> create_wayland_display(const immer::array<std::string> &input_devices,
+                                                     const std::string &render_node) {
   logs::log(logs::debug, "[WAYLAND] Creating wayland display");
   auto w_display = display_init(render_node.c_str());
   immer::vector_transient<std::string> final_devices;
@@ -17,7 +18,7 @@ WaylandState create_wayland_display(const immer::array<std::string> &input_devic
 
   { // c-style get devices list
     auto n_devices = display_get_devices_len(w_display);
-    const char * strs[n_devices];
+    const char *strs[n_devices];
     display_get_devices(w_display, strs, n_devices);
     for (int i = 0; i < n_devices; ++i) {
       final_devices.push_back(strs[i]);
@@ -33,12 +34,17 @@ WaylandState create_wayland_display(const immer::array<std::string> &input_devic
     }
   }
 
-  return {.display = std::make_shared<WaylandDisplay>(w_display),
-          .env = final_env.persistent(),
-          .graphic_devices = final_devices.persistent()};
+  auto wl_state = new WaylandState{.display = std::make_shared<WaylandDisplay>(w_display),
+                                   .env = final_env.persistent(),
+                                   .graphic_devices = final_devices.persistent()};
+  return {wl_state, [](const auto &el) {
+            logs::log(logs::trace, "display_finish(WaylandState)");
+            display_finish(*el->display);
+            delete el;
+          }};
 }
 
-void set_resolution(const WaylandState &w_state,
+void set_resolution(const std::shared_ptr<WaylandState> &w_state,
                     const moonlight::DisplayMode &display_mode,
                     const std::optional<gst_element_ptr> &app_src) {
   /* clang-format off */
@@ -55,22 +61,13 @@ void set_resolution(const WaylandState &w_state,
 
   auto video_info = gst_video_info_new();
   if (gst_video_info_from_caps(video_info, caps)) {
-    display_set_video_info(*w_state.display, video_info);
+    display_set_video_info(*w_state->display, video_info);
   } else {
     logs::log(logs::warning, "[WAYLAND] Unable to set video_info from caps");
   }
 
   gst_video_info_free(video_info);
   gst_caps_unref(caps);
-}
-
-/**
- * See the tutorial at:
- * https://gstreamer.freedesktop.org/documentation/tutorials/basic/short-cutting-the-pipeline.html?gi-language=c
- */
-
-void stop_wayland_display(const WaylandState &w_state) {
-  display_finish(*w_state.display);
 }
 
 } // namespace streaming

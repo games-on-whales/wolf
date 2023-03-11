@@ -162,12 +162,44 @@ struct GstAppDataState {
   guint source_id{};
 };
 
+bool push_data(GstAppDataState *data) {
+  GstFlowReturn ret;
+
+  auto buffer = display_get_frame(*data->wayland_state->display);
+  if (GST_IS_BUFFER(buffer) && GST_IS_APP_SRC(data->app_src.get())) {
+    g_signal_emit_by_name(data->app_src.get(), "push-buffer", buffer, &ret);
+    gst_buffer_unref(buffer);
+
+    if (ret == GST_FLOW_OK) {
+      return true;
+    }
+  }
+
+  logs::log(logs::debug, "[WAYLAND] Error during app-src push data");
+  return false;
+}
+
+static void app_src_need_data(GstElement *pipeline, guint size, GstAppDataState *data) {
+  if (data->source_id == 0) {
+    logs::log(logs::trace, "[WAYLAND] Start feeding app-src");
+    data->source_id = g_idle_add((GSourceFunc)push_data, data);
+  }
+}
+
+static void app_src_enough_data(GstElement *pipeline, guint size, GstAppDataState *data) {
+  if (data->source_id != 0) {
+    logs::log(logs::trace, "[WAYLAND] Stop feeding app-src");
+    g_source_remove(data->source_id);
+    data->source_id = 0;
+  }
+}
+
 /**
  * Start VIDEO pipeline
  */
 void start_streaming_video(const immer::box<state::VideoSession> &video_session,
                            const std::shared_ptr<dp::event_bus> &event_bus,
-                           const WaylandState &wl_state,
+                           const std::shared_ptr<WaylandState> &wl_ptr,
                            unsigned short client_port) {
   std::string color_range = (static_cast<int>(video_session->color_range) == static_cast<int>(state::JPEG)) ? "jpeg"
                                                                                                             : "mpeg2";
@@ -198,84 +230,53 @@ void start_streaming_video(const immer::box<state::VideoSession> &video_session,
                               fmt::arg("color_space", color_space),
                               fmt::arg("color_range", color_range));
   logs::log(logs::debug, "Starting video pipeline: {}", pipeline);
-  auto wl_ptr = std::make_shared<WaylandState>(wl_state);
-  auto app_src_state = std::make_shared<GstAppDataState>();
+  auto app_src_state = std::shared_ptr<GstAppDataState>(new GstAppDataState{.wayland_state = wl_ptr, .source_id = 0},
+                                                        [](const auto &app_data_state) {
+                                                          logs::log(logs::trace, "free(app_data_state)");
+                                                          g_source_remove(app_data_state->source_id);
+                                                          delete app_data_state;
+                                                        });
 
-  run_pipeline(
-      pipeline,
-      video_session->session_id,
-      event_bus,
-      [video_session, event_bus, wl_ptr, app_src_state](auto pipeline, auto loop) {
-        if (auto app_src_el = gst_bin_get_by_name(GST_BIN(pipeline.get()), "wolf_wayland_source")) {
-          g_assert(GST_IS_APP_SRC(app_src_el));
+  run_pipeline(pipeline,
+               video_session->session_id,
+               event_bus,
+               [video_session, event_bus, wl_ptr, app_src_state](auto pipeline, auto loop) {
+                 if (auto app_src_el = gst_bin_get_by_name(GST_BIN(pipeline.get()), "wolf_wayland_source")) {
+                   g_assert(GST_IS_APP_SRC(app_src_el));
 
-          auto app_src_ptr = gst_element_ptr(app_src_el, ::gst_object_unref);
-          set_resolution(*wl_ptr, video_session->display_mode, app_src_ptr);
-          app_src_state->source_id = 0;
-          app_src_state->app_src = std::move(app_src_ptr);
-          app_src_state->wayland_state = wl_ptr;
+                   auto app_src_ptr = gst_element_ptr(app_src_el, [](const auto &app_src) {
+                     logs::log(logs::trace, "gst_object_unref(app_src)");
+                     gst_object_unref(app_src);
+                   });
+                   set_resolution(wl_ptr, video_session->display_mode, app_src_ptr);
+                   app_src_state->app_src = std::move(app_src_ptr);
 
-          /* Adapted from the tutorial at:
-           * https://gstreamer.freedesktop.org/documentation/tutorials/basic/short-cutting-the-pipeline.html?gi-language=c*/
-          g_signal_connect(app_src_el,
-                           "need-data",
-                           G_CALLBACK(+[](GstElement *pipeline, guint size, GstAppDataState *data) {
-                             if (data->source_id == 0) {
-                               logs::log(logs::trace, "[WAYLAND] Start feeding app-src");
-                               data->source_id = g_idle_add(
-                                   (GSourceFunc) +
-                                       [](GstAppDataState *data) {
-                                         GstFlowReturn ret;
+                   /* Adapted from the tutorial at:
+                    * https://gstreamer.freedesktop.org/documentation/tutorials/basic/short-cutting-the-pipeline.html?gi-language=c*/
+                   g_signal_connect(app_src_el, "need-data", G_CALLBACK(app_src_need_data), app_src_state.get());
+                   g_signal_connect(app_src_el, "enough-data", G_CALLBACK(app_src_enough_data), app_src_state.get());
+                 }
 
-                                         auto buffer = display_get_frame(*data->wayland_state->display);
-                                         if (GST_IS_BUFFER(buffer) && GST_IS_APP_SRC(data->app_src.get())) {
-                                           g_signal_emit_by_name(data->app_src.get(), "push-buffer", buffer, &ret);
-                                           gst_buffer_unref(buffer);
-
-                                           if (ret == GST_FLOW_OK) {
-                                             return true;
-                                           }
-                                         }
-
-                                         logs::log(logs::debug, "[WAYLAND] Error during app-src push data");
-                                         return false;
-                                       },
-                                   data);
-                             }
-                           }),
-                           app_src_state.get());
-
-          g_signal_connect(app_src_el,
-                           "enough-data",
-                           G_CALLBACK(+[](GstElement *pipeline, guint size, GstAppDataState *data) {
-                             if (data->source_id != 0) {
-                               logs::log(logs::trace, "[WAYLAND] Stop feeding app-src");
-                               g_source_remove(data->source_id);
-                               data->source_id = 0;
-                             }
-                           }),
-                           app_src_state.get());
-        }
-
-        /*
-         * The force IDR event will be triggered by the control stream.
-         * We have to pass this back into the gstreamer pipeline
-         * in order to force the encoder to produce a new IDR packet
-         */
-        auto idr_handler = event_bus->register_handler<immer::box<ControlEvent>>(
-            [sess_id = video_session->session_id, pipeline](const immer::box<ControlEvent> &ctrl_ev) {
-              if (ctrl_ev->session_id == sess_id) {
-                if (ctrl_ev->type == IDR_FRAME) {
-                  logs::log(logs::debug, "[GSTREAMER] Forcing IDR");
-                  // Force IDR event, see: https://github.com/centricular/gstwebrtc-demos/issues/186
-                  send_message(pipeline.get(),
+                 /*
+                  * The force IDR event will be triggered by the control stream.
+                  * We have to pass this back into the gstreamer pipeline
+                  * in order to force the encoder to produce a new IDR packet
+                  */
+                 auto idr_handler = event_bus->register_handler<immer::box<ControlEvent>>(
+                     [sess_id = video_session->session_id, pipeline](const immer::box<ControlEvent> &ctrl_ev) {
+                       if (ctrl_ev->session_id == sess_id) {
+                         if (ctrl_ev->type == IDR_FRAME) {
+                           logs::log(logs::debug, "[GSTREAMER] Forcing IDR");
+                           // Force IDR event, see: https://github.com/centricular/gstwebrtc-demos/issues/186
+                           send_message(
+                               pipeline.get(),
                                gst_structure_new("GstForceKeyUnit", "all-headers", G_TYPE_BOOLEAN, TRUE, NULL));
-                }
-              }
-            });
+                         }
+                       }
+                     });
 
-        return immer::array<immer::box<dp::handler_registration>>{std::move(idr_handler)};
-      });
+                 return immer::array<immer::box<dp::handler_registration>>{std::move(idr_handler)};
+               });
 }
 
 /**

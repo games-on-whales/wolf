@@ -16,13 +16,11 @@ struct WaylandState {
   immer::vector<std::string> graphic_devices;
 };
 
-WaylandState create_wayland_display(const immer::array<std::string> &input_devices,
-                                    const std::string &render_node = "/dev/dri/renderD128");
+std::shared_ptr<WaylandState> create_wayland_display(const immer::array<std::string> &input_devices,
+                                                     const std::string &render_node = "/dev/dri/renderD128");
 
-void set_resolution(const WaylandState &w_state,
+void set_resolution(const std::shared_ptr<WaylandState> &w_state,
                     const moonlight::DisplayMode &display_mode,
                     const std::optional<gst_element_ptr> &app_src = {});
-
-void stop_wayland_display(const WaylandState &w_state);
 
 } // namespace streaming
