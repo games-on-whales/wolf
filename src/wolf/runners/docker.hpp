@@ -1,4 +1,5 @@
 #pragma once
+#include <boost/thread/thread.hpp>
 #include <chrono>
 #include <docker/docker.hpp>
 #include <docker/formatters.hpp>
@@ -136,15 +137,18 @@ void RunDocker::run(std::size_t session_id,
         });
 
     do {
-      std::this_thread::sleep_for(100ms);
+      boost::this_thread::sleep_for(boost::chrono::milliseconds(300));
     } while (docker::get_by_id(container_id)->status == RUNNING);
 
     logs::log(logs::debug, "Stopping container: {}", docker_container->name);
-    if (std::string(std::getenv("WOLF_STOP_CONTAINER_ON_EXIT")) != "FALSE") {
-      docker::stop_by_id(container_id);
-      docker::remove_by_id(container_id);
+    if (const auto env = std::getenv("WOLF_STOP_CONTAINER_ON_EXIT")) {
+      if (std::string(env) == "TRUE") {
+        docker::stop_by_id(container_id);
+        docker::remove_by_id(container_id);
+      }
     }
     logs::log(logs::info, "Stopped container: {}", docker_container->name);
+    terminate_handler.unregister();
   }
 }
 

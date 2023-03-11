@@ -9,6 +9,7 @@
 #include <state/sessions.hpp>
 #include <string_view>
 #include <thread>
+#include <utility>
 
 namespace rtsp {
 
@@ -28,8 +29,8 @@ public:
   typedef boost::shared_ptr<tcp_connection> pointer;
 
   static pointer create(boost::asio::io_context &io_context,
-                        const state::SessionsAtoms stream_sessions,
-                        const std::shared_ptr<dp::event_bus> event_bus) {
+                        const state::SessionsAtoms &stream_sessions,
+                        const std::shared_ptr<dp::event_bus> &event_bus) {
     return pointer(new tcp_connection(io_context, stream_sessions, event_bus));
   }
 
@@ -146,14 +147,14 @@ public:
 
 protected:
   explicit tcp_connection(boost::asio::io_context &io_context,
-                          const state::SessionsAtoms stream_sessions,
-                          const std::shared_ptr<dp::event_bus> event_bus)
-      : socket_(io_context), streambuf_(max_msg_size), deadline_(io_context), stream_sessions(stream_sessions),
-        prev_read_bytes_(0), event_bus(event_bus) {}
+                          state::SessionsAtoms stream_sessions,
+                          const std::shared_ptr<dp::event_bus> &event_bus)
+      : socket_(io_context), streambuf_(max_msg_size), deadline_(io_context),
+        stream_sessions(std::move(stream_sessions)), prev_read_bytes_(0), event_bus(event_bus) {}
   tcp::socket socket_;
 
   static constexpr auto max_msg_size = 2048;
-  static constexpr auto timeout_millis = 1500;
+  static constexpr auto timeout_millis = 2500;
 
   boost::asio::streambuf streambuf_;
   asio::steady_timer deadline_;
@@ -172,10 +173,10 @@ class tcp_server {
 public:
   tcp_server(boost::asio::io_context &io_context,
              int port,
-             const state::SessionsAtoms state,
-             const std::shared_ptr<dp::event_bus> event_bus)
-      : io_context_(io_context), acceptor_(io_context, tcp::endpoint(tcp::v4(), port)), stream_sessions(state),
-        event_bus(event_bus) {
+             state::SessionsAtoms state,
+             const std::shared_ptr<dp::event_bus> &event_bus)
+      : io_context_(io_context), acceptor_(io_context, tcp::endpoint(tcp::v4(), port)),
+        stream_sessions(std::move(state)), event_bus(event_bus) {
     acceptor_.set_option(boost::asio::socket_base::reuse_address{true});
     acceptor_.listen(4096);
     start_accept();
@@ -215,7 +216,9 @@ private:
 /**
  * Starts a new RTSP server, calling this method will block execution.
  */
-void run_server(int port, const state::SessionsAtoms running_sessions, const std::shared_ptr<dp::event_bus> event_bus) {
+void run_server(int port,
+                const state::SessionsAtoms &running_sessions,
+                const std::shared_ptr<dp::event_bus> &event_bus) {
   try {
     boost::asio::io_context io_context;
     tcp_server server(io_context, port, running_sessions, event_bus);
