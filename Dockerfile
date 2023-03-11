@@ -71,18 +71,16 @@ RUN apt-get update -y && \
 
 ARG NV_VERSION
 # nvidia files
-RUN <<_NVIDIA
-if [ -n "$NV_VERSION" ]; then
-    apt-get update -y
-    apt-get install -y --no-install-recommends curl kmod pkg-config libglvnd-dev
-    curl -LO https://download.nvidia.com/XFree86/Linux-x86_64/$NV_VERSION/NVIDIA-Linux-x86_64-$NV_VERSION.run
-    chmod +x NVIDIA-Linux-x86_64-$NV_VERSION.run
-    ./NVIDIA-Linux-x86_64-$NV_VERSION.run --silent -z --skip-depmod --skip-module-unload --no-nvidia-modprobe --no-kernel-modules --no-kernel-module-source
-    rm ./NVIDIA-Linux-x86_64-$NV_VERSION.run
-    apt-get remove -y curl kmod pkg-config libglvnd-dev
-    rm -rf /var/lib/apt/lists/*
-fi
-_NVIDIA
+RUN if [ -n "$NV_VERSION" ]; then \
+    apt-get update -y && \
+    apt-get install -y --no-install-recommends curl kmod pkg-config libglvnd-dev && \
+    curl -LO https://download.nvidia.com/XFree86/Linux-x86_64/$NV_VERSION/NVIDIA-Linux-x86_64-$NV_VERSION.run && \
+    chmod +x NVIDIA-Linux-x86_64-$NV_VERSION.run && \
+    ./NVIDIA-Linux-x86_64-$NV_VERSION.run --silent -z --skip-depmod --skip-module-unload --no-nvidia-modprobe --no-kernel-modules --no-kernel-module-source && \
+    rm ./NVIDIA-Linux-x86_64-$NV_VERSION.run && \
+    apt-get remove -y curl kmod pkg-config libglvnd-dev \
+    && rm -rf /var/lib/apt/lists/* \
+    ; fi
 
 ENV GST_PLUGIN_PATH=/usr/local/lib/x86_64-linux-gnu/gstreamer-1.0/
 COPY --from=wolf-builder /wolf/wolf /wolf/wolf
