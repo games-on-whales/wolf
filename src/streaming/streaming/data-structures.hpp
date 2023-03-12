@@ -82,7 +82,7 @@ struct SocketReadyEV {
   std::string xorg_socket;
 };
 
-#pragma pack(1)
+#pragma pack(push, 1)
 struct VideoShortHeader {
   uint8_t header_type; // Always 0x01 for short headers
   uint8_t unknown[2];
@@ -95,6 +95,7 @@ struct VideoShortHeader {
 
   uint8_t unknown2[4];
 };
+#pragma pack(pop)
 
 struct VideoRTPHeaders {
   // headers

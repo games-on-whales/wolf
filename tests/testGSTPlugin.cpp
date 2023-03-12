@@ -111,30 +111,32 @@ TEST_CASE_METHOD(GStreamerTestsFixture, "RTP VIDEO Splits", "[GSTPlugin]") {
   auto payload_buf = gst_buffer_new_and_fill(payload_str.size(), payload_str.c_str());
   auto rtp_packets = gst_moonlight_video::split_into_rtp(rtpmoonlightpay, payload_buf);
 
-  auto payload_expected_packets = std::ceil((payload_str.size() + rtp_payload_header_size) /
+  auto payload_expected_packets = std::ceil((float)(payload_str.size() + rtp_payload_header_size) /
                                             ((float)rtpmoonlightpay->payload_size - MAX_RTP_HEADER_SIZE));
   auto fec_expected_packets = std::ceil(payload_expected_packets * ((double)rtpmoonlightpay->fec_percentage / 100));
 
   REQUIRE(gst_buffer_list_length(rtp_packets) == payload_expected_packets + fec_expected_packets);
 
   std::string returned_payload = ""s;
-  for (int i = 0; i < payload_expected_packets; i++) {
+  for (auto i = 0; i < payload_expected_packets; i++) {
     auto buf = gst_buffer_copy_content(gst_buffer_list_get(rtp_packets, i), rtp_header_size);
-    returned_payload += std::string(buf.begin(), buf.end());
+    returned_payload += std::string(buf.begin() + (long)(i == 0 ? sizeof(state::VideoShortHeader) : 0), buf.end());
   }
-  REQUIRE_THAT(returned_payload, Equals("\0017charss"s + payload_str));
+  REQUIRE_THAT(returned_payload, Equals(payload_str));
 
   SECTION("Multi block FEC") {
     auto payload_buf_blocks = gst_buffer_new_and_fill(payload_str.size(), payload_str.c_str());
     auto rtp_packets_blocks = gst_moonlight_video::generate_rtp_packets(*rtpmoonlightpay, payload_buf_blocks);
-    auto final_packets =
-        gst_moonlight_video::generate_fec_multi_blocks(rtpmoonlightpay, rtp_packets_blocks, payload_expected_packets);
+    auto final_packets = gst_moonlight_video::generate_fec_multi_blocks(rtpmoonlightpay,
+                                                                        rtp_packets_blocks,
+                                                                        (int)payload_expected_packets);
 
     REQUIRE(gst_buffer_list_length(final_packets) ==
             payload_expected_packets + fec_expected_packets - 1); // TODO: why one less?
 
     auto first_payload = gst_buffer_copy_content(gst_buffer_list_get(rtp_packets, 0), rtp_header_size);
-    REQUIRE_THAT(std::string(first_payload.begin(), first_payload.end()), Equals("\0017charssNever go"));
+    REQUIRE_THAT(std::string(first_payload.begin() + sizeof(state::VideoShortHeader), first_payload.end()),
+                 Equals("Never go"));
     // TODO: proper check content and FEC
   }
 
@@ -172,8 +174,13 @@ TEST_CASE_METHOD(GStreamerTestsFixture, "Create RTP VIDEO packets", "[GSTPlugin]
     REQUIRE(rtp_packet->packet.streamPacketIndex == 0);
     REQUIRE(rtp_packet->rtp.sequenceNumber == boost::endian::native_to_big((uint16_t)0));
 
-    auto rtp_payload = std::string(first_packet.begin() + rtp_header_size, first_packet.end());
-    REQUIRE_THAT("\0017charss$A"s, Equals(rtp_payload));
+    auto short_header = reinterpret_cast<state::VideoShortHeader *>(first_packet.data() + rtp_header_size);
+    REQUIRE(short_header->frame_type == 1);
+    REQUIRE(short_header->header_type == 1);
+
+    auto rtp_payload =
+        std::string(first_packet.begin() + rtp_header_size + sizeof(state::VideoShortHeader), first_packet.end());
+    REQUIRE_THAT("$A"s, Equals(rtp_payload));
   }
 
   SECTION("Second packet") {
@@ -209,8 +216,13 @@ TEST_CASE_METHOD(GStreamerTestsFixture, "Create RTP VIDEO packets", "[GSTPlugin]
       REQUIRE(rtp_packet->packet.multiFecBlocks == 0);
       REQUIRE(rtp_packet->packet.multiFecFlags == 0x10);
 
-      auto rtp_payload = std::string(first_packet.begin() + rtp_header_size, first_packet.end());
-      REQUIRE_THAT("\0017charss$A"s, Equals(rtp_payload));
+      auto short_header = reinterpret_cast<state::VideoShortHeader *>(first_packet.data() + rtp_header_size);
+      REQUIRE(short_header->frame_type == 1);
+      REQUIRE(short_header->header_type == 1);
+
+      auto rtp_payload =
+          std::string(first_packet.begin() + rtp_header_size + sizeof(state::VideoShortHeader), first_packet.end());
+      REQUIRE_THAT("$A"s, Equals(rtp_payload));
     }
 
     SECTION("Second packet (payload)") {
