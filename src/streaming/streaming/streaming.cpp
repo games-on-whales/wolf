@@ -1,4 +1,5 @@
 #include <functional>
+#include <gst/base/gstbasetransform.h>
 #include <gstreamer-1.0/gst/app/gstappsrc.h>
 #include <helpers/logger.hpp>
 #include <helpers/utils.hpp>
@@ -11,7 +12,6 @@
 #include <streaming/gst-plugin/gstrtpmoonlightpay_audio.hpp>
 #include <streaming/gst-plugin/gstrtpmoonlightpay_video.hpp>
 #include <streaming/streaming.hpp>
-#include <streaming/wayland-display.hpp>
 
 namespace streaming {
 
@@ -237,46 +237,73 @@ void start_streaming_video(const immer::box<state::VideoSession> &video_session,
                                                           delete app_data_state;
                                                         });
 
-  run_pipeline(pipeline,
-               video_session->session_id,
-               event_bus,
-               [video_session, event_bus, wl_ptr, app_src_state](auto pipeline, auto loop) {
-                 if (auto app_src_el = gst_bin_get_by_name(GST_BIN(pipeline.get()), "wolf_wayland_source")) {
-                   g_assert(GST_IS_APP_SRC(app_src_el));
+  run_pipeline(
+      pipeline,
+      video_session->session_id,
+      event_bus,
+      [video_session, event_bus, wl_ptr, app_src_state](auto pipeline, auto loop) {
+        if (auto app_src_el = gst_bin_get_by_name(GST_BIN(pipeline.get()), "wolf_wayland_source")) {
+          g_assert(GST_IS_APP_SRC(app_src_el));
 
-                   auto app_src_ptr = gst_element_ptr(app_src_el, [](const auto &app_src) {
-                     logs::log(logs::trace, "gst_object_unref(app_src)");
-                     gst_object_unref(app_src);
-                   });
-                   set_resolution(wl_ptr, video_session->display_mode, app_src_ptr);
-                   app_src_state->app_src = std::move(app_src_ptr);
+          auto app_src_ptr = gst_element_ptr(app_src_el, ::gst_object_unref);
+          set_resolution(wl_ptr, video_session->display_mode, app_src_ptr);
+          app_src_state->app_src = std::move(app_src_ptr);
 
-                   /* Adapted from the tutorial at:
-                    * https://gstreamer.freedesktop.org/documentation/tutorials/basic/short-cutting-the-pipeline.html?gi-language=c*/
-                   g_signal_connect(app_src_el, "need-data", G_CALLBACK(app_src_need_data), app_src_state.get());
-                   g_signal_connect(app_src_el, "enough-data", G_CALLBACK(app_src_enough_data), app_src_state.get());
-                 }
+          /* Adapted from the tutorial at:
+           * https://gstreamer.freedesktop.org/documentation/tutorials/basic/short-cutting-the-pipeline.html?gi-language=c*/
+          g_signal_connect(app_src_el, "need-data", G_CALLBACK(app_src_need_data), app_src_state.get());
+          g_signal_connect(app_src_el, "enough-data", G_CALLBACK(app_src_enough_data), app_src_state.get());
+        }
 
-                 /*
-                  * The force IDR event will be triggered by the control stream.
-                  * We have to pass this back into the gstreamer pipeline
-                  * in order to force the encoder to produce a new IDR packet
-                  */
-                 auto idr_handler = event_bus->register_handler<immer::box<ControlEvent>>(
-                     [sess_id = video_session->session_id, pipeline](const immer::box<ControlEvent> &ctrl_ev) {
-                       if (ctrl_ev->session_id == sess_id) {
-                         if (ctrl_ev->type == IDR_FRAME) {
-                           logs::log(logs::debug, "[GSTREAMER] Forcing IDR");
-                           // Force IDR event, see: https://github.com/centricular/gstwebrtc-demos/issues/186
-                           send_message(
-                               pipeline.get(),
-                               gst_structure_new("GstForceKeyUnit", "all-headers", G_TYPE_BOOLEAN, TRUE, NULL));
-                         }
-                       }
-                     });
+        std::shared_ptr<bool> waiting_for_idr = std::make_shared<bool>(false);
 
-                 return immer::array<immer::box<dp::handler_registration>>{std::move(idr_handler)};
-               });
+        /*
+         * The force IDR event will be triggered by the control stream.
+         * We have to pass this back into the gstreamer pipeline
+         * in order to force the encoder to produce a new IDR packet
+         */
+        auto idr_handler = event_bus->register_handler<immer::box<ControlEvent>>(
+            [sess_id = video_session->session_id, pipeline, waiting_for_idr](const immer::box<ControlEvent> &ctrl_ev) {
+              if (ctrl_ev->session_id == sess_id) {
+                if (ctrl_ev->type == IDR_FRAME) {
+                  logs::log(logs::debug, "[GSTREAMER] Forcing IDR");
+                  if (!*waiting_for_idr) {
+                    *waiting_for_idr = true;
+                    // Force IDR event, see: https://github.com/centricular/gstwebrtc-demos/issues/186
+                    // https://gstreamer.freedesktop.org/documentation/additional/design/keyframe-force.html?gi-language=c
+                    send_message(pipeline.get(),
+                                 gst_structure_new("GstForceKeyUnit", "all-headers", G_TYPE_BOOLEAN, TRUE, NULL));
+                  } else {
+                    logs::log(logs::debug,
+                              "[GSTREAMER] Received IDR request while still waiting for a frame, ignoring");
+                  }
+                }
+              }
+            });
+
+        /*
+         * When our plugin receives a downstream GstForceKeyUnit it means that the encoder
+         * has finally produced an IDR frame. We can reset the waiting_for_idr boolean
+         */
+        if (auto wolf_plugin = gst_bin_get_by_name(GST_BIN(pipeline.get()), "moonlight_pay")) {
+          auto wolf_ptr = gst_element_ptr(wolf_plugin, ::gst_object_unref);
+          gst_rtp_moonlight_pay_video(wolf_plugin)->waiting_for_idr = waiting_for_idr;
+          gst_pad_set_event_function(
+              GST_BASE_TRANSFORM(wolf_plugin)->sinkpad,
+              +[](GstPad *pad, GstObject *parent, GstEvent *event) {
+                if (GST_EVENT_TYPE(event) == GST_EVENT_CUSTOM_DOWNSTREAM) {
+                  auto s = gst_event_get_structure(event);
+                  if (gst_structure_has_name(s, "GstForceKeyUnit")) {
+                    *gst_rtp_moonlight_pay_video(parent)->waiting_for_idr = false;
+                    logs::log(logs::debug, "Received downstream GstForceKeyUnit");
+                  }
+                }
+                return gst_pad_event_default(pad, parent, event);
+              });
+        }
+
+        return immer::array<immer::box<dp::handler_registration>>{std::move(idr_handler)};
+      });
 }
 
 /**

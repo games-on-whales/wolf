@@ -41,7 +41,7 @@ docker::MountPoint tag_invoke(value_to_tag<docker::MountPoint>, value const &jv)
   return docker::MountPoint{
       .source = utils::to_string(bind[0]),
       .destination = utils::to_string(bind[1]),
-      .mode = utils::to_string(bind[2]),
+      .mode = utils::to_string(bind.size() == 3 ? bind[2] : "rw"),
   };
 }
 
