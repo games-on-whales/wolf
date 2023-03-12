@@ -53,7 +53,20 @@ create_rtp_header(const gst_rtp_moonlight_pay_video &rtpmoonlightpay, int packet
 
 static GstBuffer *prepend_video_header(GstBuffer *inbuf) {
   constexpr auto video_payload_header_size = 8;
-  GstBuffer *video_header = gst_buffer_new_and_fill(video_payload_header_size, "\0017charss");
+  GstBuffer *video_header = gst_buffer_new_and_fill(video_payload_header_size, 0x00);
+  bool is_key = !GST_BUFFER_FLAG_SET(inbuf, GST_BUFFER_FLAG_DELTA_UNIT);
+
+  /* get WRITE access to the memory */
+  GstMapInfo info;
+  gst_buffer_map(video_header, &info, GST_MAP_WRITE);
+
+  /* set headers */
+  auto packet = (state::VideoShortHeader *)info.data;
+  packet->header_type = 0x01;
+  packet->frame_type = is_key ? 0x02 : 0x01;
+
+  gst_buffer_unmap(video_header, &info);
+
   auto full_payload_buf = gst_buffer_append(video_header, gst_buffer_ref(inbuf));
   return full_payload_buf;
 }

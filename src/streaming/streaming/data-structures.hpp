@@ -82,6 +82,20 @@ struct SocketReadyEV {
   std::string xorg_socket;
 };
 
+#pragma pack(1)
+struct VideoShortHeader {
+  uint8_t header_type; // Always 0x01 for short headers
+  uint8_t unknown[2];
+  // Currently known values:
+  // 1 = Normal P-frame
+  // 2 = IDR-frame
+  // 4 = P-frame with intra-refresh blocks
+  // 5 = P-frame after reference frame invalidation
+  uint8_t frame_type;
+
+  uint8_t unknown2[4];
+};
+
 struct VideoRTPHeaders {
   // headers
   moonlight::RTP_PACKET rtp;
