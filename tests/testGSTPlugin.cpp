@@ -129,6 +129,7 @@ TEST_CASE_METHOD(GStreamerTestsFixture, "RTP VIDEO Splits", "[GSTPlugin]") {
     auto rtp_packets_blocks = gst_moonlight_video::generate_rtp_packets(*rtpmoonlightpay, payload_buf_blocks);
     auto final_packets = gst_moonlight_video::generate_fec_multi_blocks(rtpmoonlightpay,
                                                                         rtp_packets_blocks,
+                                                                        payload_buf_blocks,
                                                                         (int)payload_expected_packets);
 
     REQUIRE(gst_buffer_list_length(final_packets) ==
@@ -197,7 +198,7 @@ TEST_CASE_METHOD(GStreamerTestsFixture, "Create RTP VIDEO packets", "[GSTPlugin]
   }
 
   SECTION("FEC") {
-    gst_moonlight_video::generate_fec_packets(*rtpmoonlightpay, rtp_packets);
+    gst_moonlight_video::generate_fec_packets(*rtpmoonlightpay, rtp_packets, payload);
     // Will append min_required_fec_packets to the original payload packets
     REQUIRE(gst_buffer_list_length(rtp_packets) == 4);
 
