@@ -129,8 +129,8 @@ TEST_CASE_METHOD(GStreamerTestsFixture, "RTP VIDEO Splits", "[GSTPlugin]") {
     auto rtp_packets_blocks = gst_moonlight_video::generate_rtp_packets(*rtpmoonlightpay, payload_buf_blocks);
     auto final_packets = gst_moonlight_video::generate_fec_multi_blocks(rtpmoonlightpay,
                                                                         rtp_packets_blocks,
-                                                                        payload_buf_blocks,
-                                                                        (int)payload_expected_packets);
+                                                                        (int)payload_expected_packets,
+                                                                        payload_buf_blocks);
 
     REQUIRE(gst_buffer_list_length(final_packets) ==
             payload_expected_packets + fec_expected_packets - 1); // TODO: why one less?
