@@ -38,13 +38,13 @@ use smithay::{
             Display, DisplayHandle,
         },
     },
-    utils::{Logical, Physical, Point, Size, Transform},
+    utils::{Logical, Physical, Point, Rectangle, Size, Transform},
     wayland::{
-        compositor::CompositorState,
+        compositor::{with_states, CompositorState},
         data_device::DataDeviceState,
         dmabuf::{DmabufGlobal, DmabufState},
         output::OutputManagerState,
-        shell::xdg::XdgShellState,
+        shell::xdg::{XdgShellState, XdgToplevelSurfaceData},
         shm::ShmState,
         socket::ListeningSocketSource,
         viewporter::ViewporterState,
@@ -277,16 +277,19 @@ pub(crate) fn init(
                     );
 
                     // init wayland objects
-                    let output = Output::new(
-                        "HEADLESS-1".into(),
-                        PhysicalProperties {
-                            make: "Virtual".into(),
-                            model: "Wolf".into(),
-                            size: (0, 0).into(),
-                            subpixel: Subpixel::Unknown,
-                        },
-                    );
-                    output.create_global::<State>(&data.display.handle());
+                    let output = data.state.output.get_or_insert_with(|| {
+                        let output = Output::new(
+                            "HEADLESS-1".into(),
+                            PhysicalProperties {
+                                make: "Virtual".into(),
+                                model: "Wolf".into(),
+                                size: (0, 0).into(),
+                                subpixel: Subpixel::Unknown,
+                            },
+                        );
+                        output.create_global::<State>(&data.display.handle());
+                        output
+                    });
                     let mode = OutputMode {
                         size: size.into(),
                         refresh: (duration.as_secs_f64() * 1000.0).round() as i32,
@@ -296,7 +299,6 @@ pub(crate) fn init(
                     let dtr = DamageTrackedRenderer::from_output(&output);
 
                     data.state.space.map_output(&output, (0, 0));
-                    data.state.output = Some(output);
                     data.state.dtr = Some(dtr);
                     data.state.pointer_location = (size.w as f64 / 2.0, size.h as f64 / 2.0).into();
                     data.state.renderbuffer = Some(
@@ -306,6 +308,30 @@ pub(crate) fn init(
                             .expect("Failed to create renderbuffer"),
                     );
                     data.state.video_info = Some(info);
+
+                    let new_size = size
+                        .to_f64()
+                        .to_logical(output.current_scale().fractional_scale())
+                        .to_i32_round();
+                    for window in data.state.space.elements() {
+                        let toplevel = window.toplevel();
+                        let max_size = Rectangle::from_loc_and_size(
+                            (0, 0),
+                            with_states(toplevel.wl_surface(), |states| {
+                                states
+                                    .data_map
+                                    .get::<XdgToplevelSurfaceData>()
+                                    .map(|attrs| attrs.lock().unwrap().max_size)
+                            })
+                            .unwrap_or(new_size),
+                        );
+
+                        let new_size = max_size
+                            .intersection(Rectangle::from_loc_and_size((0, 0), new_size))
+                            .map(|rect| rect.size);
+                        toplevel.with_pending_state(|state| state.size = new_size);
+                        toplevel.send_configure();
+                    }
                 }
                 Event::Msg(Command::InputDevice(path)) => {
                     tracing::info!(path, "Adding input device.");
