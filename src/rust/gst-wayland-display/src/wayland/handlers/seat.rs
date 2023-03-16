@@ -20,7 +20,6 @@ impl SeatHandler for State {
             let client = match surface {
                 FocusTarget::Wayland(w) => w.toplevel().wl_surface().client(),
                 FocusTarget::Popup(p) => p.wl_surface().client(),
-                FocusTarget::X11(s) => s.wl_surface().and_then(|s| s.client()),
             };
             set_data_device_focus(&self.dh, seat, client);
         } else {

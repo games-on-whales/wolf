@@ -2,7 +2,7 @@ use smithay::{
     delegate_xdg_shell,
     desktop::{
         find_popup_root_surface, PopupKeyboardGrab, PopupKind, PopupPointerGrab,
-        PopupUngrabStrategy,
+        PopupUngrabStrategy, Window,
     },
     input::{pointer::Focus, Seat},
     reexports::wayland_server::protocol::wl_seat::WlSeat,
@@ -15,7 +15,7 @@ use smithay::{
     },
 };
 
-use crate::comp::{FocusTarget, State, Window};
+use crate::comp::{FocusTarget, State};
 
 impl XdgShellHandler for State {
     fn xdg_shell_state(&mut self) -> &mut XdgShellState {
@@ -23,7 +23,7 @@ impl XdgShellHandler for State {
     }
 
     fn new_toplevel(&mut self, surface: ToplevelSurface) {
-        let window = Window::from(surface);
+        let window = Window::new(surface);
         self.pending_windows.push(window);
     }
 

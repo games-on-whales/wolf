@@ -1,6 +1,6 @@
 use std::{
     collections::{HashMap, HashSet},
-    ffi::{CString, OsString},
+    ffi::CString,
     os::unix::prelude::AsRawFd,
     sync::{mpsc::Sender, Arc, Mutex, Weak},
     time::{Duration, Instant},
@@ -22,7 +22,7 @@ use smithay::{
             Bind, ImportMemWl, Offscreen,
         },
     },
-    desktop::{utils::send_frames_surface_tree, PopupManager, Space},
+    desktop::{utils::send_frames_surface_tree, PopupManager, Space, Window},
     input::{keyboard::XkbConfig, pointer::CursorImageStatus, Seat, SeatState},
     output::{Mode as OutputMode, Output, PhysicalProperties, Subpixel},
     reexports::{
@@ -49,19 +49,16 @@ use smithay::{
         socket::ListeningSocketSource,
         viewporter::ViewporterState,
     },
-    xwayland::{X11Wm, XWayland, XWaylandEvent},
 };
 use wayland_backend::server::GlobalId;
 
 mod focus;
 mod input;
 mod rendering;
-mod window;
 
 pub use self::focus::*;
 pub use self::input::*;
 pub use self::rendering::*;
-pub use self::window::*;
 use crate::{utils::RenderTarget, wayland::protocols::wl_drm::create_drm_global};
 
 static EGL_DISPLAYS: Lazy<Mutex<HashMap<Option<DrmNode>, Weak<EGLDisplay>>>> =
@@ -116,7 +113,6 @@ pub(crate) struct State {
     pub shell_state: XdgShellState,
     pub shm_state: ShmState,
     viewporter_state: ViewporterState,
-    pub xwm: Option<X11Wm>,
 }
 
 pub fn get_egl_device_for_node(drm_node: &DrmNode) -> EGLDevice {
@@ -258,7 +254,6 @@ pub(crate) fn init(
         shell_state,
         shm_state,
         viewporter_state,
-        xwm: None,
     };
 
     // init event loop
@@ -404,57 +399,10 @@ pub(crate) fn init(
         )
         .expect("Failed to init wayland server source");
 
-    // startup xwayland
-    let _xwayland = {
-        let (xwayland, channel) = XWayland::new(&dh);
-        let ret = event_loop
-            .handle()
-            .insert_source(channel, move |event, _, data| match event {
-                XWaylandEvent::Ready {
-                    connection,
-                    client,
-                    client_fd: _,
-                    display,
-                } => {
-                    let mut wm =
-                        X11Wm::start_wm(data.state.handle.clone(), dh.clone(), connection, client)
-                            .expect("Failed to attach X11 Window Manager");
-
-                    wm.set_cursor(CURSOR_DATA_BYTES, Size::from((64, 64)), Point::from((0, 0)))
-                        .expect("Failed to set xwayland default cursor");
-                    data.state.xwm = Some(wm);
-
-                    let dpy = format!(":{}", display);
-                    tracing::info!(display = ?dpy, "Started Xwayland.");
-
-                    let env_vars = vec![
-                        CString::new(format!("WAYLAND_DISPLAY={}", socket_name)).unwrap(),
-                        CString::new(format!("DISPLAY={}", dpy)).unwrap(),
-                    ];
-                    if let Err(err) = envs_tx.send(env_vars) {
-                        tracing::warn!(?err, "Failed to post environment to application.");
-                    }
-                }
-                XWaylandEvent::Exited => {
-                    let _ = data.state.xwm.take();
-                }
-            });
-        if let Err(err) = ret {
-            tracing::error!(
-                ?err,
-                "Failed to insert the XWaylandSource into the event loop.",
-            );
-        }
-        xwayland
-            .start(
-                event_loop.handle(),
-                None,
-                std::iter::empty::<(OsString, OsString)>(),
-                |_| {},
-            )
-            .expect("Failed to start Xwayland");
-        xwayland
-    };
+    let env_vars = vec![CString::new(format!("WAYLAND_DISPLAY={}", socket_name)).unwrap()];
+    if let Err(err) = envs_tx.send(env_vars) {
+        tracing::warn!(?err, "Failed to post environment to application.");
+    }
 
     let mut data = Data { display, state };
     let signal = event_loop.get_signal();

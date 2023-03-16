@@ -13,10 +13,9 @@ use smithay::{
         seat::WaylandFocus,
         shell::xdg::{XdgPopupSurfaceData, XdgToplevelSurfaceData},
     },
-    xwayland::X11Wm,
 };
 
-use crate::comp::{Data, FocusTarget, State, Window};
+use crate::comp::{FocusTarget, State};
 
 impl BufferHandler for State {
     fn buffer_destroyed(&mut self, _buffer: &WlBuffer) {}
@@ -28,7 +27,6 @@ impl CompositorHandler for State {
     }
 
     fn commit(&mut self, surface: &WlSurface) {
-        X11Wm::commit_hook::<Data>(surface);
         on_commit_buffer_handler(surface);
 
         if let Err(err) = import_surface_tree(&mut self.renderer, surface) {
@@ -50,9 +48,7 @@ impl CompositorHandler for State {
             .iter_mut()
             .position(|w| w.wl_surface().as_ref() == Some(surface))
         {
-            let Window::Wayland(window) = self.pending_windows.swap_remove(idx) else {
-                return;
-            };
+            let window = self.pending_windows.swap_remove(idx);
 
             let toplevel = window.toplevel();
             let (initial_configure_sent, max_size) = with_states(surface, |states| {
@@ -96,7 +92,7 @@ impl CompositorHandler for State {
                     state.states.set(XdgState::Activated);
                 });
                 toplevel.send_configure();
-                self.pending_windows.push(Window::Wayland(window));
+                self.pending_windows.push(window);
             } else {
                 let window_size = toplevel.current_state().size.unwrap_or((0, 0).into());
                 let output_size: Size<i32, _> = self
@@ -119,7 +115,6 @@ impl CompositorHandler for State {
                     (output_size.w / 2) - (window_size.w / 2),
                     (output_size.h / 2) - (window_size.h / 2),
                 );
-                let window = Window::Wayland(window);
                 self.space.map_element(window.clone(), loc, true);
                 self.seat.get_keyboard().unwrap().set_focus(
                     self,

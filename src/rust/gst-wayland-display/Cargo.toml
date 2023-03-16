@@ -23,4 +23,4 @@ wayland-scanner = "0.30.0"
 git = "https://github.com/smithay/Smithay"
 rev = "b1c682742a"
 default-features = false
-features = [ "backend_drm", "backend_egl", "backend_libinput", "backend_udev", "renderer_gl", "use_system_lib", "desktop", "wayland_frontend", "xwayland" ]
+features = [ "backend_drm", "backend_egl", "backend_libinput", "backend_udev", "renderer_gl", "use_system_lib", "desktop", "wayland_frontend" ]
