@@ -23,7 +23,7 @@ target_include_directories(wolf_crypto PUBLIC .)
 find_package(OpenSSL REQUIRED)
 
 # This depends on OpenSSL
-target_link_libraries(
+target_link_libraries_system(
         wolf_crypto PUBLIC
         OpenSSL::SSL
         OpenSSL::Crypto)

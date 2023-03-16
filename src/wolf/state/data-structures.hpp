@@ -43,8 +43,9 @@ enum STANDARD_PORTS_MAPPING {
 };
 
 struct PairedClient {
-  std::string client_id;
   std::string client_cert;
+  uint run_uid = 1000;
+  uint run_gid = 1000;
 };
 
 struct PairSignal {
@@ -54,54 +55,13 @@ struct PairSignal {
 
 using PairedClientList = immer::vector<immer::box<PairedClient>>;
 
-namespace gstreamer {
-namespace video {
-constexpr std::string_view DEFAULT_SOURCE =
-    "videotestsrc pattern=ball flip=true is-live=true ! video/x-raw, framerate={fps}/1";
-constexpr std::string_view DEFAULT_PARAMS = "videoscale ! videoconvert ! "
-                                            "video/x-raw, width={width}, height={height}, "
-                                            "chroma-site={color_range}, colorimetry={color_space}, format=NV12";
-
-constexpr std::string_view DEFAULT_H264_ENCODER =
-    "encodebin "
-    " profile=\"video/x-h264, "
-    " profile=main, tune=zerolatency, bframes=0, aud=false, stream-format=byte-stream, bitrate={bitrate}, "
-    " insert-vui=false \"";
-
-constexpr std::string_view DEFAULT_H265_ENCODER =
-    "encodebin "
-    " profile=\"video/x-h265, "
-    " profile=main, tune=zerolatency, bframes=0, aud=false, stream-format=byte-stream, bitrate={bitrate}, "
-    " insert-vui=false\"";
-
-constexpr std::string_view DEFAULT_SINK =
-    "rtpmoonlightpay_video name=moonlight_pay payload_size={payload_size} fec_percentage={fec_percentage} "
-    "min_required_fec_packets={min_required_fec_packets}"
-    " ! "
-    "udpsink host={client_ip} port={client_port} sync=false";
-} // namespace video
-
-namespace audio {
-constexpr std::string_view DEFAULT_SOURCE = "audiotestsrc wave=ticks is-live=true";
-constexpr std::string_view DEFAULT_PARAMS = "audio/x-raw, channels={channels}";
-constexpr std::string_view DEFAULT_OPUS_ENCODER =
-    "opusenc bitrate={bitrate} bitrate-type=cbr frame-size={packet_duration} "
-    "bandwidth=fullband audio-type=generic max-payload-size=1400";
-constexpr std::string_view DEFAULT_SINK = "rtpmoonlightpay_audio name=moonlight_pay "
-                                          "packet_duration={packet_duration} "
-                                          "encrypt={encrypt} aes_key=\"{aes_key}\" aes_iv=\"{aes_iv}\" "
-                                          " ! "
-                                          "udpsink host={client_ip} port={client_port} sync=false";
-} // namespace audio
-
-} // namespace gstreamer
-
 struct App {
   moonlight::App base;
 
   std::string h264_gst_pipeline;
   std::string hevc_gst_pipeline;
   std::string opus_gst_pipeline;
+  bool start_virtual_compositor;
   std::shared_ptr<Runner> runner;
 };
 
@@ -164,7 +124,8 @@ struct Host {
 /**
  * Holds temporary results in order to achieve the multistep pairing process
  */
-struct PairCache : PairedClient {
+struct PairCache {
+  std::string client_cert;
   std::string aes_key;
 
   // Followings will be filled later on during the pair process

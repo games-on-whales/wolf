@@ -33,12 +33,12 @@ target_sources(wolftests PRIVATE ${SRC_LIST})
 target_compile_features(wolftests PRIVATE cxx_std_17)
 
 # Should be linked to the main library, as well as the Catch2 testing library
-target_link_libraries(wolftests PRIVATE
+target_link_libraries_system(wolftests PRIVATE
         wolf::runner
         Catch2::Catch2WithMain)
 
 ## Test assets
-configure_file(assets/config.toml ${CMAKE_CURRENT_BINARY_DIR}/config.toml COPYONLY)
+configure_file(assets/config.v2.toml ${CMAKE_CURRENT_BINARY_DIR}/config.v2.toml COPYONLY)
 configure_file(assets/server_info_response.xml ${CMAKE_CURRENT_BINARY_DIR}/server_info_response.xml COPYONLY)
 
 # See: https://github.com/catchorg/Catch2/blob/devel/docs/cmake-integration.md

@@ -1,0 +1,273 @@
+# The name that will be displayed in Moonlight
+hostname = "Wolf"
+# Set to false if this host doesn't support HEVC
+support_hevc = true
+# The version of this config file
+config_version = 2
+
+
+# A list of paired clients that will be allowed to stream
+paired_clients = []
+
+
+[[apps]]
+title = "Firefox"
+start_virtual_compositor = true
+
+[apps.runner]
+type = "docker"
+name = "WolfFirefox"
+image = "ghcr.io/games-on-whales/firefox:master"
+mounts = [
+  "/tmp/sockets:/tmp/.X11-unix/:ro",
+  "/tmp/sockets:/run/user/1000/pulse/:ro",
+  "/run/udev:/run/udev:ro",
+  "/var/local/retro:/home/retro:rw",
+]
+devices = []
+ports = []
+env = [
+  "LOG_LEVEL=info"
+]
+base_create_json = """
+{
+  "HostConfig": {
+    "IpcMode": "host",
+    "CapAdd": ["SYS_ADMIN"],
+    "DeviceRequests": [{"Driver":"","Count":-1,"Capabilities":[["gpu"]]}]
+  }
+}
+\
+"""
+
+[[apps]]
+title = "RetroArch"
+start_virtual_compositor = true
+
+[apps.runner]
+type = "docker"
+name = "WolfRetroarch"
+image = "ghcr.io/games-on-whales/retroarch:master"
+mounts = [
+  "/tmp/sockets:/tmp/.X11-unix/:ro",
+  "/tmp/sockets:/run/user/1000/pulse/:ro",
+  "/run/udev:/run/udev:ro",
+  "/var/local/retro:/home/retro:rw",
+]
+devices = []
+ports = []
+base_create_json = """
+{
+  "HostConfig": {
+    "IpcMode": "host",
+    "CapAdd": ["SYS_ADMIN"],
+    "DeviceRequests": [{"Driver":"","Count":-1,"Capabilities":[["gpu"]]}]
+  }
+}
+\
+"""
+
+[[apps]]
+title = "Steam"
+start_virtual_compositor = true
+
+[apps.runner]
+type = "docker"
+name = "WolfSteam"
+image = "ghcr.io/games-on-whales/steam:master"
+mounts = [
+  "/tmp/sockets:/tmp/.X11-unix/:ro",
+  "/tmp/sockets:/run/user/1000/pulse/:ro",
+  "/run/udev:/run/udev:ro",
+  "/var/local/retro:/home/retro:rw",
+]
+env = [
+  "PROTON_LOG=1"
+]
+devices = []
+ports = []
+base_create_json = """
+{
+  "HostConfig": {
+    "IpcMode": "host",
+    "CapAdd": ["SYS_ADMIN"],
+    "DeviceRequests": [{"Driver":"","Count":-1,"Capabilities":[["gpu"]]}]
+  }
+}
+\
+"""
+
+[[apps]]
+title = "Host Desktop (X11)"
+start_virtual_compositor = false
+[apps.runner]
+type = "process"
+run_cmd = "sh -c \"while :; do echo 'running...'; sleep 10; done\""
+
+[apps.video]
+source = """
+ximagesrc show-pointer=true use-damage=false remote=true display-name=:0 do-timestamp=1 !
+video/x-raw, framerate={fps}/1
+\
+"""
+
+[[apps]]
+title = "Test ball"
+start_virtual_compositor = false
+
+[apps.runner]
+type = "process"
+run_cmd = "sh -c \"while :; do echo 'running...'; sleep 10; done\""
+
+[apps.video]
+source = """
+videotestsrc pattern=ball flip=true is-live=true !
+video/x-raw, framerate={fps}/1
+\
+"""
+
+[apps.audio]
+source = "audiotestsrc wave=ticks is-live=true"
+
+
+[gstreamer]
+
+[gstreamer.video]
+
+default_source = "appsrc name=wolf_wayland_source"
+default_sink = """
+rtpmoonlightpay_video name=moonlight_pay
+payload_size={payload_size} fec_percentage={fec_percentage} min_required_fec_packets={min_required_fec_packets} !
+udpsink host={client_ip} port={client_port} sync=true
+\
+"""
+
+######################
+# HEVC encoders
+# Order here matters: Wolf will try them in order and pick the first one that's not failing
+###
+[[gstreamer.video.hevc_encoders]]
+plugin_name = "nvcodec" # Nvidia
+video_params = """
+queue ! cudaupload ! cudaconvertscale !
+video/x-raw(memory:CUDAMemory), width={width}, height={height},
+chroma-site={color_range}, format=NV12, colorimetry={color_space}, pixel-aspect-ratio=1/1
+\
+"""
+encoder_pipeline = """
+nvh265enc preset=low-latency-hq zerolatency=true gop-size=-1 rc-mode=cbr-ld-hq bitrate={bitrate} aud=false !
+h265parse !
+video/x-h265, profile=main, stream-format=byte-stream
+\
+"""
+
+[[gstreamer.video.hevc_encoders]]
+plugin_name = "vaapi" # VAAPI: Intel/AMD
+video_params = """
+vaapipostproc !
+video/x-raw(memory:VASurface), chroma-site={color_range}, width={width},
+height={height}, format=NV12, colorimetry={color_space}
+\
+"""
+encoder_pipeline = """
+vaapih265enc max-bframes=0 refs=1 num-slices={slices_per_frame} bitrate={bitrate} !
+h265parse !
+video/x-h265, profile=main, stream-format=byte-stream
+\
+"""
+
+[[gstreamer.video.hevc_encoders]]
+plugin_name = "x265" # SW Encoding
+video_params = """
+videoscale !
+videoconvert !
+videorate !
+video/x-raw, width={width}, height={height}, framerate={fps}/1, format=I420,
+chroma-site={color_range}, colorimetry={color_space}
+\
+"""
+encoder_pipeline = """
+x265enc tune=zerolatency speed-preset=superfast bitrate={bitrate}
+option-string="info=0:keyint=-1:qp=28:repeat-headers=1:slices={slices_per_frame}:aud=0:annexb=1:log-level=3:open-gop=0:bframes=0:intra-refresh=0" !
+video/x-h265, profile=main, stream-format=byte-stream
+\
+"""
+
+
+######################
+# H264 encoders
+# Order here matters: Wolf will try them in order and pick the first one that's not failing
+###
+[[gstreamer.video.h264_encoders]]
+plugin_name = "nvcodec" # Nvidia
+video_params = """
+queue ! cudaupload ! cudaconvertscale !
+video/x-raw(memory:CUDAMemory), width={width}, height={height},
+chroma-site={color_range}, format=NV12, colorimetry={color_space}, pixel-aspect-ratio=1/1
+\
+"""
+encoder_pipeline = """
+nvh264enc preset=low-latency-hq zerolatency=true gop-size=0 rc-mode=cbr-ld-hq bitrate={bitrate} aud=false !
+h264parse !
+video/x-h264, profile=main, stream-format=byte-stream
+\
+"""
+
+[[gstreamer.video.h264_encoders]]
+plugin_name = "vaapi" # VAAPI: Intel/AMD
+video_params = """
+vaapipostproc !
+video/x-raw(memory:VASurface), chroma-site={color_range}, width={width},
+height={height}, format=NV12, colorimetry={color_space}
+\
+"""
+encoder_pipeline = """
+vaapih264enc max-bframes=0 refs=1 num-slices={slices_per_frame} bitrate={bitrate} !
+h264parse !
+video/x-h264, profile=main, stream-format=byte-stream
+\
+"""
+
+[[gstreamer.video.h264_encoders]]
+plugin_name = "x264" # SW Encoding
+video_params = """
+videoscale !
+videoconvert !
+videorate !
+video/x-raw, width={width}, height={height}, framerate={fps}/1, format=I420,
+chroma-site={color_range}, colorimetry={color_space}
+\
+"""
+encoder_pipeline = """
+x264enc pass=qual tune=zerolatency speed-preset=superfast b-adapt=false bframes=0 ref=1
+sliced-threads=true threads={slices_per_frame} option-string="slices={slices_per_frame}:keyint=infinite:open-gop=0"
+b-adapt=false bitrate={bitrate} aud=false !
+video/x-h264, profile=high, stream-format=byte-stream
+\
+"""
+
+
+###########
+# Audio
+###
+[gstreamer.audio]
+default_source = """
+pulsesrc device="{sink_name}" server="{server_name}"
+\
+"""
+
+default_audio_params = "audio/x-raw, channels={channels}"
+
+default_opus_encoder = """
+opusenc bitrate={bitrate} bitrate-type=cbr frame-size={packet_duration} bandwidth=fullband audio-type=generic
+max-payload-size=1400
+\
+"""
+
+default_sink = """
+rtpmoonlightpay_audio name=moonlight_pay packet_duration={packet_duration} encrypt={encrypt}
+aes_key="{aes_key}" aes_iv="{aes_iv}"  !
+udpsink host={client_ip} port={client_port} sync=true
+\
+"""
+

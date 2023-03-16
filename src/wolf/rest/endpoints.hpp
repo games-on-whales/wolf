@@ -96,8 +96,7 @@ void pair(const std::shared_ptr<typename SimpleWeb::Server<T>::Response> &respon
       auto client_cert_parsed = crypto::hex_to_str(client_cert_str.value(), true);
 
       state->pairing_cache->update([&](const immer::map<std::string, state::PairCache> &pairing_cache) {
-        return pairing_cache.set(cache_key,
-                                 {client_id.value(), client_cert_parsed, result.second, std::nullopt, std::nullopt});
+        return pairing_cache.set(cache_key, {.client_cert = client_cert_parsed, .aes_key = result.second});
       });
 
       send_xml<T>(response, SimpleWeb::StatusCode::success_ok, result.first);
@@ -168,7 +167,7 @@ void pair(const std::shared_ptr<typename SimpleWeb::Server<T>::Response> &respon
 
     auto is_paired = xml.template get<int>("root.paired");
     if (is_paired == 1) {
-      state::pair(state->config, {client_id.value(), client_cache.client_cert});
+      state::pair(state->config, state::PairedClient{.client_cert = client_cache.client_cert});
       logs::log(logs::info, "Succesfully paired {}", client_ip);
     } else {
       logs::log(logs::warning, "Failed pairing with {}", client_ip);

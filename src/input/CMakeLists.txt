@@ -29,7 +29,7 @@ if (UNIX AND NOT APPLE)
             "platforms/linux/uinput.hpp")
 
     find_package(ICU 61.0 COMPONENTS uc REQUIRED)
-    target_link_libraries(wolf_input PRIVATE ICU::uc)
+    target_link_libraries_system(wolf_input PRIVATE ICU::uc)
 else () # TODO: other platforms??
     message(WARNING "Missing virtual input implementation for the current platform")
     list(APPEND PRIVATE_LIST "platforms/unknown/input.cpp")
@@ -44,6 +44,7 @@ FetchContent_Declare(
 )
 set(EVENTBUS_BUILD_TESTS OFF)
 FetchContent_MakeAvailable(eventbus)
+target_link_libraries_system(wolf_input PUBLIC dp::eventbus)
 
 # We need this directory, and users of our library will need it too
 target_include_directories(wolf_input PUBLIC .)
@@ -57,8 +58,7 @@ include_directories(${Boost_INCLUDE_DIRS})
 target_link_libraries(wolf_input PUBLIC
         ${Boost_LIBRARIES}
         wolf::helpers
-        wolf::moonlight
-        dp::eventbus)
+        wolf::moonlight)
 
 # All users of this library will need at least C++17
 target_compile_features(wolf_input PUBLIC cxx_std_17)

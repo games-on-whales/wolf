@@ -15,8 +15,8 @@ FetchContent_Declare(
         fmtlib
         GIT_REPOSITORY https://github.com/fmtlib/fmt.git
         GIT_TAG 9.1.0)
-
 FetchContent_MakeAvailable(fmtlib)
+target_link_libraries_system(streaming PUBLIC fmt::fmt-header-only)
 
 FetchContent_Declare(
         eventbus
@@ -25,6 +25,7 @@ FetchContent_Declare(
 )
 set(EVENTBUS_BUILD_TESTS OFF)
 FetchContent_MakeAvailable(eventbus)
+target_link_libraries_system(streaming PUBLIC dp::eventbus)
 
 find_package(PkgConfig)
 pkg_check_modules(GSTREAMER REQUIRED gstreamer-1.0 gstreamer-base-1.0 gstreamer-app-1.0)
@@ -35,7 +36,7 @@ if (NOT (GSTREAMER_FOUND))
 endif ()
 
 if (LINK_RUST_WAYLAND AND UNIX AND NOT APPLE)
-    target_link_libraries(streaming PUBLIC gstwaylanddisplay)
+    target_link_libraries_system(streaming PUBLIC gstwaylanddisplay)
     list(APPEND HEADER_LIST streaming/wayland-display.hpp)
     list(APPEND SRC_LIST streaming/wayland-display.cpp)
 endif ()
@@ -50,12 +51,7 @@ target_sources(streaming
         PUBLIC
         ${HEADER_LIST})
 
-target_link_libraries(streaming PUBLIC
-        wolf::moonlight
-        wolf::helpers
-        wolf::input
-        fmt::fmt-header-only
-        dp::eventbus
+target_link_libraries(streaming INTERFACE
         ${GOBJECT_LIBRARIES}
         ${GLIB2_LIBRARIES}
         ${GSTREAMER_LIBRARIES}
@@ -66,6 +62,11 @@ target_include_directories(streaming PUBLIC
         ${GLIB2_INCLUDE_DIR}
         ${GSTREAMER_INCLUDE_DIRS}
         ${GSTREAMER_BASE_INCLUDE_DIRS})
+
+target_link_libraries(streaming PUBLIC
+        wolf::moonlight
+        wolf::helpers
+        wolf::input)
 
 
 # All users of this library will need at least C++17

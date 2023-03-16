@@ -164,11 +164,12 @@ auto setup_sessions_handlers(const immer::box<state::AppState> &app_state, std::
   handlers.push_back(app_state->event_bus->register_handler<immer::box<state::StreamSession>>(
       [=](const immer::box<state::StreamSession> &session) {
         auto wl_promise = std::make_shared<boost::promise<std::shared_ptr<streaming::WaylandState>>>();
-        wayland_sessions->update([=](const auto map) {
-          return map.set(session->session_id,
-                         boost::shared_future<std::shared_ptr<streaming::WaylandState>>(wl_promise->get_future()));
-        });
-
+        if (session->app->start_virtual_compositor) {
+          wayland_sessions->update([=](const auto map) {
+            return map.set(session->session_id,
+                           boost::shared_future<std::shared_ptr<streaming::WaylandState>>(wl_promise->get_future()));
+          });
+        }
         // Start selected app on a separate thread
         ba::post(*t_pool, [=]() {
           /* Create audio virtual sink */
@@ -182,28 +183,34 @@ auto setup_sessions_handlers(const immer::box<state::AppState> &app_state, std::
                                                                      .bitrate = 48000}); // TODO:
           }
 
-          /* Create video virtual wayland compositor */
-          logs::log(logs::debug, "[STREAM_SESSION] Create wayland compositor");
-          std::this_thread::sleep_for(500ms); // TODO: removing this will fail the RTSP setup, why?
-          auto wl_state = streaming::create_wayland_display(session->virtual_inputs.devices_paths,
-                                                            get_env("WOLF_RENDER_NODE", "/dev/dri/renderD128"));
-          streaming::set_resolution(wl_state, session->display_mode);
-          wl_promise->set_value(wl_state);
-
           /* Setup devices paths */
           auto full_devices = session->virtual_inputs.devices_paths.transient();
-          std::copy(wl_state->graphic_devices.begin(),
-                    wl_state->graphic_devices.end(),
-                    std::back_inserter(full_devices));
 
           /* Setup environment paths */
           immer::map_transient<std::string, std::string> full_env;
           full_env.set("PULSE_SINK", pulse_sink_name);
           full_env.set("PULSE_SOURCE", pulse_sink_name + ".monitor");
           full_env.set("PULSE_SERVER", audio_server ? audio::get_server_name(audio_server->server) : "");
-          for (const auto &env : wl_state->env) {
-            auto split = utils::split(env, '=');
-            full_env.set(utils::to_string(split[0]), utils::to_string(split[1]));
+
+          /* Create video virtual wayland compositor */
+          if (session->app->start_virtual_compositor) {
+            logs::log(logs::debug, "[STREAM_SESSION] Create wayland compositor");
+            std::this_thread::sleep_for(500ms); // TODO: removing this will fail the RTSP setup, why?
+            auto wl_state = streaming::create_wayland_display(session->virtual_inputs.devices_paths,
+                                                              get_env("WOLF_RENDER_NODE", "/dev/dri/renderD128"));
+            streaming::set_resolution(wl_state, session->display_mode);
+            wl_promise->set_value(wl_state);
+
+            /* Setup additional devices paths */
+            std::copy(wl_state->graphic_devices.begin(),
+                      wl_state->graphic_devices.end(),
+                      std::back_inserter(full_devices));
+
+            /* Setup additional env paths */
+            for (const auto &env : wl_state->env) {
+              auto split = utils::split(env, '=');
+              full_env.set(utils::to_string(split[0]), utils::to_string(split[1]));
+            }
           }
 
           /* Finally run the app, this will stop here until over */
@@ -243,8 +250,10 @@ auto setup_sessions_handlers(const immer::box<state::AppState> &app_state, std::
       auto video_sess = video_sessions->load()->find(client_ip);
       if (video_sess != nullptr) {
         ba::post(*t_pool, [=, sess = *video_sess]() {
-          auto wayland_promise = wayland_sessions->load()->find(sess->session_id);
-          auto wl_state = wayland_promise->get(); // Stops here until the wayland socket is ready
+          std::shared_ptr<streaming::WaylandState> wl_state;
+          if (auto wayland_promise = wayland_sessions->load()->find(sess->session_id)) {
+            wl_state = wayland_promise->get(); // Stops here until the wayland socket is ready
+          }
           streaming::start_streaming_video(sess, app_state->event_bus, wl_state, client_port);
         });
         video_sessions->update([&client_ip](const auto &map) { return map.erase(client_ip); });

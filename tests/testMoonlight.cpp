@@ -6,59 +6,45 @@ using Catch::Matchers::Equals;
 #include <range/v3/view.hpp>
 #include <rest/helpers.hpp>
 #include <state/config.hpp>
+#include <streaming/streaming.hpp>
 
 using namespace moonlight;
 using namespace state;
 using namespace ranges;
-using namespace gstreamer;
 
 TEST_CASE("LocalState load TOML", "[LocalState]") {
+  streaming::init(); // So that we can load encoders
   auto event_bus = std::make_shared<dp::event_bus>();
-  auto state = state::load_or_default("config.toml", event_bus);
+  auto state = state::load_or_default("config.v2.toml", event_bus);
   REQUIRE(state.hostname == "Wolf");
-  REQUIRE(state.uuid == "16510e3e-61fd-4a85-97fa-0db82058b27a");
+  REQUIRE(state.uuid == "0000-1111-2222-3333");
   REQUIRE(state.support_hevc);
 
   SECTION("Apps") {
-    REQUIRE_THAT(state.apps, Catch::Matchers::SizeIs(3));
+    REQUIRE_THAT(state.apps, Catch::Matchers::SizeIs(2));
 
-    auto app = state.apps[0];
-    REQUIRE_THAT(app.base.title, Equals("Ball"));
-    REQUIRE_THAT(app.base.id, Equals("1"));
-    REQUIRE_THAT(
-        app.h264_gst_pipeline,
-        Equals("videotestsrc pattern=ball is-live=true ! "
-               "videoscale ! "
-               "videoconvert ! "
-               "videorate ! "
-               "video/x-raw, width={width}, height={height}, framerate={fps}/1,format=I420, chroma-site={color_range}, "
-               "colorimetry={color_space} ! "
-               "x264enc pass=qual tune=zerolatency speed-preset=superfast b-adapt=false "
-               "bframes=0 ref=1 bitrate={bitrate} aud=false sliced-threads=true threads={slices_per_frame} "
-               "option-string=\"slices={slices_per_frame}:keyint=infinite:open-gop=0\" ! "
-               "video/x-h264, profile=high, stream-format=byte-stream ! "
-               "rtpmoonlightpay_video name=moonlight_pay payload_size={payload_size} fec_percentage={fec_percentage} "
-               "min_required_fec_packets={min_required_fec_packets} ! "
-               "udpsink host={client_ip} port={client_port}"));
-    REQUIRE_THAT(
-        app.hevc_gst_pipeline,
-        Equals("videotestsrc pattern=ball is-live=true ! "
-               "videoscale ! "
-               "videoconvert ! "
-               "videorate ! "
-               "video/x-raw, width={width}, height={height}, framerate={fps}/1,format=I420, chroma-site={color_range}, "
-               "colorimetry={color_space} ! "
-               "x265enc tune=zerolatency speed-preset=superfast bitrate={bitrate} "
-               "option-string=\"info=0:keyint=-1:qp=28:repeat-headers=1:slices={slices_per_frame}:frame-threads={"
-               "slices_per_frame}:aud=0:annexb=1:log-level=3:open-gop=0:bframes=0:intra-refresh=0\" ! "
-               "video/x-h265, profile=main, stream-format=byte-stream ! "
-               "rtpmoonlightpay_video name=moonlight_pay payload_size={payload_size} fec_percentage={fec_percentage} "
-               "min_required_fec_packets={min_required_fec_packets} ! "
-               "udpsink host={client_ip} port={client_port}"));
+    auto first_app = state.apps[0];
+    REQUIRE_THAT(first_app.base.title, Equals("Firefox"));
+    REQUIRE_THAT(first_app.base.id, Equals("1"));
+    REQUIRE_THAT(first_app.h264_gst_pipeline, Equals("video_source ! params ! h264_pipeline ! video_sink"));
+    REQUIRE_THAT(first_app.hevc_gst_pipeline, Equals("video_source ! params ! hevc_pipeline ! video_sink"));
+    REQUIRE(first_app.start_virtual_compositor);
+    REQUIRE_THAT(toml::find(first_app.runner->serialise(), "type").as_string(), Equals("docker"));
+
+    auto second_app = state.apps[1];
+    REQUIRE_THAT(second_app.base.title, Equals("Test ball"));
+    REQUIRE_THAT(second_app.base.id, Equals("2"));
+    REQUIRE_THAT(second_app.h264_gst_pipeline, Equals("override DEFAULT SOURCE ! params ! h264_pipeline ! video_sink"));
+    REQUIRE_THAT(second_app.hevc_gst_pipeline, Equals("override DEFAULT SOURCE ! params ! hevc_pipeline ! video_sink"));
+    REQUIRE(!second_app.start_virtual_compositor);
+    REQUIRE_THAT(toml::find(second_app.runner->serialise(), "type").as_string(), Equals("process"));
   }
 
   SECTION("Paired Clients") {
-    REQUIRE_THAT(state.paired_clients.load().get(), Catch::Matchers::SizeIs(2));
+    REQUIRE_THAT(state.paired_clients.load().get(), Catch::Matchers::SizeIs(1));
+    REQUIRE_THAT(state.paired_clients.load().get()[0]->client_cert, Equals("A VERY VALID CERTIFICATE"));
+    REQUIRE(state.paired_clients.load().get()[0]->run_uid == 1234);
+    REQUIRE(state.paired_clients.load().get()[0]->run_gid == 5678);
   }
 }
 
@@ -87,7 +73,7 @@ TEST_CASE("LocalState pairing information", "[LocalState]") {
 
   SECTION("Checking pairing mechanism") {
     REQUIRE(state::get_client_via_ssl(cfg, a_client_cert).has_value() == false);
-    state::pair(cfg, {"A client", a_client_cert});
+    state::pair(cfg, {a_client_cert});
     REQUIRE(state::get_client_via_ssl(cfg, a_client_cert).has_value() == true);
 
     auto another_cert = "-----BEGIN CERTIFICATE-----\n"
@@ -110,23 +96,23 @@ TEST_CASE("LocalState pairing information", "[LocalState]") {
                         "-----END CERTIFICATE-----";
 
     REQUIRE(state::get_client_via_ssl(cfg, another_cert).has_value() == false);
-    state::pair(cfg, {"Another client", another_cert});
+    state::pair(cfg, {another_cert});
     REQUIRE(state::get_client_via_ssl(cfg, another_cert).has_value() == true);
     REQUIRE_THAT(cfg.paired_clients.load().get(), Catch::Matchers::SizeIs(2));
 
-    state::unpair(cfg, {"", a_client_cert});
+    state::unpair(cfg, {a_client_cert});
     REQUIRE(state::get_client_via_ssl(cfg, a_client_cert).has_value() == false);
     REQUIRE(state::get_client_via_ssl(cfg, another_cert).has_value() == true);
     REQUIRE_THAT(cfg.paired_clients.load().get(), Catch::Matchers::SizeIs(1));
 
-    state::unpair(cfg, {"", another_cert});
+    state::unpair(cfg, {another_cert});
     REQUIRE_THAT(cfg.paired_clients.load().get(), Catch::Matchers::SizeIs(0));
   }
 }
 
 TEST_CASE("Mocked serverinfo", "[MoonlightProtocol]") {
   auto event_bus = std::make_shared<dp::event_bus>();
-  auto cfg = state::load_or_default("config.toml", event_bus);
+  auto cfg = state::load_or_default("config.v2.toml", event_bus);
   immer::array<DisplayMode> displayModes = {{1920, 1080, 60}, {1024, 768, 30}};
 
   SECTION("server_info conforms with the expected server_info_response.xml") {
@@ -149,7 +135,7 @@ TEST_CASE("Mocked serverinfo", "[MoonlightProtocol]") {
             "<hostname>Wolf</hostname>"
             "<appversion>7.1.431.-1</appversion>"
             "<GfeVersion>3.23.0.74</GfeVersion>"
-            "<uniqueid>16510e3e-61fd-4a85-97fa-0db82058b27a</uniqueid>"
+            "<uniqueid>0000-1111-2222-3333</uniqueid>"
             "<MaxLumaPixelsHEVC>1869449984</MaxLumaPixelsHEVC>"
             "<ServerCodecModeSupport>259</ServerCodecModeSupport>"
             "<HttpsPort>0</HttpsPort>"
@@ -293,20 +279,19 @@ TEST_CASE("Pairing moonlight", "[MoonlightProtocol]") {
 
 TEST_CASE("applist", "[MoonlightProtocol]") {
   auto event_bus = std::make_shared<dp::event_bus>();
-  auto cfg = state::load_or_default("config.toml", event_bus);
+  auto cfg = state::load_or_default("config.v2.toml", event_bus);
   auto base_apps = cfg.apps | views::transform([](auto app) { return app.base; }) | to<immer::vector<moonlight::App>>();
   auto result = applist(base_apps);
   REQUIRE(xml_to_str(result) == "<?xml version=\"1.0\" encoding=\"utf-8\"?>\n"
                                 "<root status_code=\"200\">"
-                                "<App><IsHdrSupported>1</IsHdrSupported><AppTitle>Ball</AppTitle><ID>1</ID></App>"
-                                "<App><IsHdrSupported>1</IsHdrSupported><AppTitle>SMPTE</AppTitle><ID>2</ID></App>"
-                                "<App><IsHdrSupported>1</IsHdrSupported><AppTitle>Desktop</AppTitle><ID>3</ID></App>"
+                                "<App><IsHdrSupported>0</IsHdrSupported><AppTitle>Firefox</AppTitle><ID>1</ID></App>"
+                                "<App><IsHdrSupported>0</IsHdrSupported><AppTitle>Test ball</AppTitle><ID>2</ID></App>"
                                 "</root>");
 }
 
 TEST_CASE("launch", "[MoonlightProtocol]") {
   auto event_bus = std::make_shared<dp::event_bus>();
-  auto cfg = state::load_or_default("config.toml", event_bus);
+  auto cfg = state::load_or_default("config.v2.toml", event_bus);
   auto result = launch_success("192.168.1.1", "3021");
   REQUIRE(xml_to_str(result) == "<?xml version=\"1.0\" encoding=\"utf-8\"?>\n"
                                 "<root status_code=\"200\">"

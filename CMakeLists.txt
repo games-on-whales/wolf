@@ -49,7 +49,7 @@ if (LINK_RUST_WAYLAND AND UNIX AND NOT APPLE)
     add_subdirectory(src/rust/gst-wayland-display)
 endif ()
 
-
+include(TargetLinkLibrariesSystem)
 add_subdirectory(src/helpers)
 add_subdirectory(src/crypto)
 add_subdirectory(src/moonlight)

@@ -60,7 +60,8 @@ void startServer(HttpServer *server, const immer::box<state::AppState> state, in
     auto cache_key = client_id.value() + "@" + client_ip;
 
     logs::log(logs::info, "Unpairing: {}", cache_key);
-    state::unpair(state->config, state->pairing_cache->load()->at(cache_key));
+    auto client = state->pairing_cache->load()->at(cache_key);
+    state::unpair(state->config, state::PairedClient{.client_cert = client.client_cert});
 
     XML xml;
     xml.put("root.<xmlattr>.status_code", 200);
