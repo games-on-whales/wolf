@@ -357,7 +357,31 @@ pub(crate) fn init(
                         if let Err(_) = match data.state.create_frame() {
                             Ok(buf) => {
                                 data.state.last_render = Some(now);
-                                buffer_sender.send(Ok(buf))
+                                let res = buffer_sender.send(Ok(buf));
+
+                                if let Some(output) = data.state.output.as_ref() {
+                                    for window in data.state.space.elements() {
+                                        window.send_frame(
+                                            output,
+                                            data.state.start_time.elapsed(),
+                                            Some(Duration::ZERO),
+                                            |_, _| Some(output.clone()),
+                                        )
+                                    }
+                                    if let CursorImageStatus::Surface(wl_surface) =
+                                        &data.state.cursor_state
+                                    {
+                                        send_frames_surface_tree(
+                                            wl_surface,
+                                            output,
+                                            data.state.start_time.elapsed(),
+                                            None,
+                                            |_, _| Some(output.clone()),
+                                        )
+                                    }
+                                }
+
+                                res
                             }
                             Err(err) => {
                                 tracing::error!(?err, "Rendering failed.");
@@ -433,26 +457,6 @@ pub(crate) fn init(
     let mut data = Data { display, state };
     let signal = event_loop.get_signal();
     if let Err(err) = event_loop.run(None, &mut data, |data| {
-        if let Some(output) = data.state.output.as_ref() {
-            for window in data.state.space.elements() {
-                window.send_frame(
-                    output,
-                    data.state.start_time.elapsed(),
-                    Some(Duration::ZERO),
-                    |_, _| Some(output.clone()),
-                )
-            }
-            if let CursorImageStatus::Surface(wl_surface) = &data.state.cursor_state {
-                send_frames_surface_tree(
-                    wl_surface,
-                    output,
-                    data.state.start_time.elapsed(),
-                    None,
-                    |_, _| Some(output.clone()),
-                )
-            }
-        }
-
         data.display
             .flush_clients()
             .expect("Failed to flush clients");
