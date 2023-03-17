@@ -49,10 +49,9 @@ TEST_CASE("LocalState load TOML", "[LocalState]") {
 }
 
 TEST_CASE("LocalState pairing information", "[LocalState]") {
-
-  std::remove("defaults.toml");
   auto event_bus = std::make_shared<dp::event_bus>();
-  auto cfg = state::load_or_default("defaults.toml", event_bus);
+  auto clients_atom = new immer::atom<state::PairedClientList>();
+  auto cfg = state::Config{.config_source = "config.v2.toml", .paired_clients = *clients_atom};
   auto a_client_cert = "-----BEGIN CERTIFICATE-----\n"
                        "MIICvzCCAaegAwIBAgIBADANBgkqhkiG9w0BAQsFADAjMSEwHwYDVQQDDBhOVklE\n"
                        "SUEgR2FtZVN0cmVhbSBDbGllbnQwHhcNMjEwNzEwMDgzNjE3WhcNNDEwNzA1MDgz\n"
@@ -111,6 +110,7 @@ TEST_CASE("LocalState pairing information", "[LocalState]") {
 }
 
 TEST_CASE("Mocked serverinfo", "[MoonlightProtocol]") {
+  streaming::init(); // So that we can load encoders
   auto event_bus = std::make_shared<dp::event_bus>();
   auto cfg = state::load_or_default("config.v2.toml", event_bus);
   immer::array<DisplayMode> displayModes = {{1920, 1080, 60}, {1024, 768, 30}};
@@ -278,6 +278,7 @@ TEST_CASE("Pairing moonlight", "[MoonlightProtocol]") {
 }
 
 TEST_CASE("applist", "[MoonlightProtocol]") {
+  streaming::init(); // So that we can load encoders
   auto event_bus = std::make_shared<dp::event_bus>();
   auto cfg = state::load_or_default("config.v2.toml", event_bus);
   auto base_apps = cfg.apps | views::transform([](auto app) { return app.base; }) | to<immer::vector<moonlight::App>>();
@@ -290,6 +291,7 @@ TEST_CASE("applist", "[MoonlightProtocol]") {
 }
 
 TEST_CASE("launch", "[MoonlightProtocol]") {
+  streaming::init(); // So that we can load encoders
   auto event_bus = std::make_shared<dp::event_bus>();
   auto cfg = state::load_or_default("config.v2.toml", event_bus);
   auto result = launch_success("192.168.1.1", "3021");
