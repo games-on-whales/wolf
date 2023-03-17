@@ -9,9 +9,8 @@ using Catch::Matchers::SizeIs;
 TEST_CASE("Wayland C APIs", "[WAYLAND]") {
   auto w_state = streaming::create_wayland_display({"/dev/input/event0"});
 
-  REQUIRE_THAT(w_state->env, SizeIs(2));
+  REQUIRE_THAT(w_state->env, SizeIs(1));
   REQUIRE_THAT(w_state->env, Contains("WAYLAND_DISPLAY=wayland-1"));
-  REQUIRE_THAT(w_state->env, Contains("DISPLAY=:1"));
 
   REQUIRE_THAT(w_state->graphic_devices, SizeIs(2));
   REQUIRE_THAT(w_state->graphic_devices, Contains("/dev/dri/renderD128"));
@@ -35,5 +34,4 @@ TEST_CASE("Wayland C APIs", "[WAYLAND]") {
     gst_buffer_unref(gst_buffer);
   }
 
-  signal(SIGPIPE, SIG_IGN); // Ignore SIGPIPE (thrown by race condition between XWayland and Wayland on close)
 }

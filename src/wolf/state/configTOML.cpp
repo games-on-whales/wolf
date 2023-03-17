@@ -125,8 +125,9 @@ Config load_or_default(const std::string &source, const std::shared_ptr<dp::even
                                    default_gst_video_settings.h264_encoders.end(),
                                    [](const auto &encoder) { return is_plugin_available(encoder.plugin_name); });
   if (h264_encoder == std::end(default_gst_video_settings.h264_encoders)) {
-    throw std::runtime_error("Unable to find a compatible H264 encoder, please check [[gstreamer.video.h264_encoders]] "
-                             "in your config.toml or your Gstreamer installation");
+    logs::log(logs::warning,
+              "Unable to find a compatible H264 encoder, please check [[gstreamer.video.h264_encoders]] "
+              "in your config.toml or your Gstreamer installation");
   }
   logs::log(logs::info, "Selected H264 encoder: {}", h264_encoder->plugin_name);
 
@@ -135,8 +136,9 @@ Config load_or_default(const std::string &source, const std::shared_ptr<dp::even
                                    default_gst_video_settings.hevc_encoders.end(),
                                    [](const auto &encoder) { return is_plugin_available(encoder.plugin_name); });
   if (hevc_encoder == std::end(default_gst_video_settings.hevc_encoders)) {
-    throw std::runtime_error("Unable to find a compatible HEVC encoder, please check [[gstreamer.video.hevc_encoders]] "
-                             "in your config.toml or your Gstreamer installation");
+    logs::log(logs::warning,
+              "Unable to find a compatible HEVC encoder, please check [[gstreamer.video.hevc_encoders]] "
+              "in your config.toml or your Gstreamer installation");
   }
   logs::log(logs::info, "Selected HEVC encoder: {}", hevc_encoder->plugin_name);
 
