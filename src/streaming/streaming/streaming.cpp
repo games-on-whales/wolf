@@ -233,7 +233,9 @@ void start_streaming_video(const immer::box<state::VideoSession> &video_session,
   auto app_src_state = std::shared_ptr<GstAppDataState>(new GstAppDataState{.wayland_state = wl_ptr, .source_id = 0},
                                                         [](const auto &app_data_state) {
                                                           logs::log(logs::trace, "free(app_data_state)");
-                                                          g_source_remove(app_data_state->source_id);
+                                                          if (app_data_state->source_id != 0) {
+                                                            g_source_remove(app_data_state->source_id);
+                                                          }
                                                           delete app_data_state;
                                                         });
 

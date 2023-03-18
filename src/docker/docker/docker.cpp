@@ -104,7 +104,13 @@ req(CURL *handle,
 
 json::value parse(std::string_view json) {
   json::error_code ec;
-  return json::parse({json.data(), json.size()}, ec);
+  auto parsed = json::parse({json.data(), json.size()}, ec);
+  if (!ec) {
+    return parsed;
+  } else {
+    logs::log(logs::error, "Error while parsing JSON: {} \n {}", ec.message(), json);
+    return json::object(); // Returning an empty object should allow us to continue most of the times
+  }
 }
 
 std::optional<Container> get_by_id(std::string_view id) {
@@ -165,7 +171,7 @@ std::optional<Container> create(const Container &container,
       exposed_ports[fmt::format("{}/{}", port.public_port, port.type == docker::TCP ? "tcp" : "udp")] = json::object();
     }
 
-    auto post_params = boost::json::parse(custom_params.data()).as_object();
+    auto post_params = parse(custom_params).as_object();
     post_params["Image"] = container.image;
     merge_array(&post_params, "Env", json::value_from(container.env).as_array());
 
