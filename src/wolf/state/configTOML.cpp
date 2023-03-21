@@ -10,6 +10,7 @@ namespace state {
 
 struct GstEncoder {
   std::string plugin_name;
+  std::vector<std::string> check_elements;
   std::string video_params;
   std::string encoder_pipeline;
 };
@@ -30,7 +31,7 @@ struct GstAudioCfg {
 } // namespace state
 
 TOML11_DEFINE_CONVERSION_NON_INTRUSIVE(state::PairedClient, client_cert, run_uid, run_gid)
-TOML11_DEFINE_CONVERSION_NON_INTRUSIVE(state::GstEncoder, plugin_name, video_params, encoder_pipeline)
+TOML11_DEFINE_CONVERSION_NON_INTRUSIVE(state::GstEncoder, plugin_name, check_elements, video_params, encoder_pipeline)
 TOML11_DEFINE_CONVERSION_NON_INTRUSIVE(state::GstVideoCfg, default_source, default_sink, hevc_encoders, h264_encoders)
 TOML11_DEFINE_CONVERSION_NON_INTRUSIVE(
     state::GstAudioCfg, default_source, default_audio_params, default_opus_encoder, default_sink)
@@ -76,12 +77,17 @@ std::shared_ptr<state::Runner> get_runner(const toml::value &item, const std::sh
   }
 }
 
-bool is_plugin_available(const std::string &plugin_name) {
-  auto plugin = gst_registry_find_plugin(gst_registry_get(), plugin_name.c_str());
-  if (plugin != nullptr) {
+static bool is_available(const GstEncoder &settings) {
+  if (auto plugin = gst_registry_find_plugin(gst_registry_get(), settings.plugin_name.c_str())) {
     gst_object_unref(plugin);
-    // TODO: should we check more stuff about this encoder?
-    return true;
+    return std::all_of(settings.check_elements.begin(), settings.check_elements.end(), [](const auto &el_name) {
+      if (auto el = gst_element_factory_make(el_name.c_str(), nullptr)) {
+        gst_object_unref(el);
+        return true;
+      } else {
+        return false;
+      }
+    });
   }
   return false;
 }
@@ -123,7 +129,7 @@ Config load_or_default(const std::string &source, const std::shared_ptr<dp::even
   /* Automatic pick best H264 encoder */
   auto h264_encoder = std::find_if(default_gst_video_settings.h264_encoders.begin(),
                                    default_gst_video_settings.h264_encoders.end(),
-                                   [](const auto &encoder) { return is_plugin_available(encoder.plugin_name); });
+                                   is_available);
   if (h264_encoder == std::end(default_gst_video_settings.h264_encoders)) {
     throw std::runtime_error("Unable to find a compatible H264 encoder, please check [[gstreamer.video.h264_encoders]] "
                              "in your config.toml or your Gstreamer installation");
@@ -133,7 +139,7 @@ Config load_or_default(const std::string &source, const std::shared_ptr<dp::even
   /* Automatic pick best HEVC encoder */
   auto hevc_encoder = std::find_if(default_gst_video_settings.hevc_encoders.begin(),
                                    default_gst_video_settings.hevc_encoders.end(),
-                                   [](const auto &encoder) { return is_plugin_available(encoder.plugin_name); });
+                                   is_available);
   if (hevc_encoder == std::end(default_gst_video_settings.hevc_encoders)) {
     throw std::runtime_error("Unable to find a compatible HEVC encoder, please check [[gstreamer.video.hevc_encoders]] "
                              "in your config.toml or your Gstreamer installation");

@@ -149,6 +149,7 @@ udpsink host={client_ip} port={client_port} sync=true
 ###
 [[gstreamer.video.hevc_encoders]]
 plugin_name = "nvcodec" # Nvidia
+check_elements = ["nvh265enc", "cudaconvertscale", "cudaupload"]
 video_params = """
 queue ! cudaupload ! cudaconvertscale !
 video/x-raw(memory:CUDAMemory), width={width}, height={height},
@@ -164,6 +165,7 @@ video/x-h265, profile=main, stream-format=byte-stream
 
 [[gstreamer.video.hevc_encoders]]
 plugin_name = "vaapi" # VAAPI: Intel/AMD
+check_elements = ["vaapih265enc", "vaapipostproc"]
 video_params = """
 vaapipostproc !
 video/x-raw(memory:VASurface), chroma-site={color_range}, width={width},
@@ -179,6 +181,7 @@ video/x-h265, profile=main, stream-format=byte-stream
 
 [[gstreamer.video.hevc_encoders]]
 plugin_name = "x265" # SW Encoding
+check_elements = ["x265enc"]
 video_params = """
 videoscale !
 videoconvert !
@@ -201,6 +204,7 @@ video/x-h265, profile=main, stream-format=byte-stream
 ###
 [[gstreamer.video.h264_encoders]]
 plugin_name = "nvcodec" # Nvidia
+check_elements = ["nvh264enc", "cudaconvertscale", "cudaupload"]
 video_params = """
 queue ! cudaupload ! cudaconvertscale !
 video/x-raw(memory:CUDAMemory), width={width}, height={height},
@@ -216,6 +220,7 @@ video/x-h264, profile=main, stream-format=byte-stream
 
 [[gstreamer.video.h264_encoders]]
 plugin_name = "vaapi" # VAAPI: Intel/AMD
+check_elements = ["vaapih264enc", "vaapipostproc"]
 video_params = """
 vaapipostproc !
 video/x-raw(memory:VASurface), chroma-site={color_range}, width={width},
@@ -231,6 +236,7 @@ video/x-h264, profile=main, stream-format=byte-stream
 
 [[gstreamer.video.h264_encoders]]
 plugin_name = "x264" # SW Encoding
+check_elements = ["x264enc"]
 video_params = """
 videoscale !
 videoconvert !

@@ -70,11 +70,13 @@ default_sink = "video_sink"
 ###
 [[gstreamer.video.hevc_encoders]]
 plugin_name = "a-non-existing-plugin"
+check_elements = []
 video_params = ""
 encoder_pipeline = ""
 
 [[gstreamer.video.hevc_encoders]]
 plugin_name = "coreelements"
+check_elements = ["identity"]
 video_params = "params"
 encoder_pipeline = "hevc_pipeline"
 
@@ -85,11 +87,13 @@ encoder_pipeline = "hevc_pipeline"
 ###
 [[gstreamer.video.h264_encoders]]
 plugin_name = "a-non-existing-plugin"
+check_elements = []
 video_params = ""
 encoder_pipeline = ""
 
 [[gstreamer.video.h264_encoders]]
 plugin_name = "coreelements"
+check_elements = ["identity"]
 video_params = "params"
 encoder_pipeline = "h264_pipeline"
 
