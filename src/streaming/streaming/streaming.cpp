@@ -248,7 +248,10 @@ void start_streaming_video(const immer::box<state::VideoSession> &video_session,
           g_assert(GST_IS_APP_SRC(app_src_el));
 
           auto app_src_ptr = gst_element_ptr(app_src_el, ::gst_object_unref);
-          set_resolution(wl_ptr, video_session->display_mode, app_src_ptr);
+
+          auto caps = set_resolution(wl_ptr, video_session->display_mode, app_src_ptr);
+          g_object_set(app_src_ptr.get(), "caps", caps.get(), "format", GST_FORMAT_TIME, NULL);
+
           app_src_state->app_src = std::move(app_src_ptr);
 
           /* Adapted from the tutorial at:

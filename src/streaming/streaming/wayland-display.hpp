@@ -19,8 +19,8 @@ struct WaylandState {
 std::shared_ptr<WaylandState> create_wayland_display(const immer::array<std::string> &input_devices,
                                                      const std::string &render_node = "/dev/dri/renderD128");
 
-void set_resolution(const std::shared_ptr<WaylandState> &w_state,
-                    const moonlight::DisplayMode &display_mode,
-                    const std::optional<gst_element_ptr> &app_src = {});
+std::shared_ptr<GstCaps> set_resolution(const std::shared_ptr<WaylandState> &w_state,
+                                        const moonlight::DisplayMode &display_mode,
+                                        const std::optional<gst_element_ptr> &app_src = {});
 
 } // namespace streaming

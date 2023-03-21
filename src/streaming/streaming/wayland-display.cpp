@@ -44,16 +44,16 @@ std::shared_ptr<WaylandState> create_wayland_display(const immer::array<std::str
           }};
 }
 
-void set_resolution(const std::shared_ptr<WaylandState> &w_state,
-                    const moonlight::DisplayMode &display_mode,
-                    const std::optional<gst_element_ptr> &app_src) {
+std::shared_ptr<GstCaps> set_resolution(const std::shared_ptr<WaylandState> &w_state,
+                                        const moonlight::DisplayMode &display_mode,
+                                        const std::optional<gst_element_ptr> &app_src) {
   /* clang-format off */
-    auto caps = gst_caps_new_simple("video/x-raw",
-                                    "width", G_TYPE_INT, display_mode.width,
-                                    "height", G_TYPE_INT, display_mode.height,
-                                    "framerate", GST_TYPE_FRACTION, display_mode.refreshRate, 1,
-                                    "format", G_TYPE_STRING, "RGBx",
-                                    NULL);/* clang-format on */
+  auto caps = gst_caps_new_simple("video/x-raw",
+                                  "width", G_TYPE_INT, display_mode.width,
+                                  "height", G_TYPE_INT, display_mode.height,
+                                  "framerate", GST_TYPE_FRACTION, display_mode.refreshRate, 1,
+                                  "format", G_TYPE_STRING, "RGBx",
+                                  NULL);/* clang-format on */
 
   if (app_src) {
     gst_app_src_set_caps(GST_APP_SRC((app_src.value()).get()), caps);
@@ -67,7 +67,7 @@ void set_resolution(const std::shared_ptr<WaylandState> &w_state,
   }
 
   gst_video_info_free(video_info);
-  gst_caps_unref(caps);
+  return {caps, gst_caps_unref};
 }
 
 } // namespace streaming
