@@ -201,12 +201,11 @@ auto setup_sessions_handlers(const immer::box<state::AppState> &app_state, std::
             wl_promise->set_value(wl_state);
 
             /* Setup additional devices paths */
-            std::copy(wl_state->graphic_devices.begin(),
-                      wl_state->graphic_devices.end(),
-                      std::back_inserter(full_devices));
+            auto graphic_devices = streaming::get_devices(wl_state);
+            std::copy(graphic_devices.begin(), graphic_devices.end(), std::back_inserter(full_devices));
 
             /* Setup additional env paths */
-            for (const auto &env : wl_state->env) {
+            for (const auto &env : streaming::get_env(wl_state)) {
               auto split = utils::split(env, '=');
               full_env.set(utils::to_string(split[0]), utils::to_string(split[1]));
             }

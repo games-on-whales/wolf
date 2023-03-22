@@ -1,5 +1,4 @@
 #include <functional>
-#include <gst/base/gstbasetransform.h>
 #include <gstreamer-1.0/gst/app/gstappsrc.h>
 #include <helpers/logger.hpp>
 #include <helpers/utils.hpp>
@@ -156,18 +155,10 @@ void send_message(GstElement *recipient, GstStructure *message) {
   gst_element_send_event(recipient, gst_ev);
 }
 
-struct GstAppDataState {
-  gst_element_ptr app_src;
-  std::shared_ptr<WaylandState> wayland_state;
-  guint source_id{};
-  int framerate;
-  GstClockTime timestamp = 0;
-};
-
 static bool push_data(GstAppDataState *data) {
   GstFlowReturn ret;
 
-  auto buffer = display_get_frame(*data->wayland_state->display);
+  auto buffer = get_frame(data->wayland_state);
   if (GST_IS_BUFFER(buffer) && GST_IS_APP_SRC(data->app_src.get())) {
 
     GST_BUFFER_PTS(buffer) = data->timestamp;

@@ -1,9 +1,19 @@
 #include <gstreamer-1.0/gst/app/gstappsrc.h>
 #include <helpers/logger.hpp>
 #include <immer/vector_transient.hpp>
-#include <streaming/wayland-display.hpp>
+#include <streaming/virtual-display.hpp>
+
+extern "C" {
+#include <waylanddisplay.h>
+}
 
 namespace streaming {
+
+struct WaylandState {
+  std::shared_ptr<WaylandDisplay> display{};
+  immer::vector<std::string> env{};
+  immer::vector<std::string> graphic_devices{};
+};
 
 std::shared_ptr<WaylandState> create_wayland_display(const immer::array<std::string> &input_devices,
                                                      const std::string &render_node) {
@@ -68,6 +78,18 @@ std::shared_ptr<GstCaps> set_resolution(const std::shared_ptr<WaylandState> &w_s
 
   gst_video_info_free(video_info);
   return {caps, gst_caps_unref};
+}
+
+immer::vector<std::string> get_devices(const std::shared_ptr<WaylandState> &w_state) {
+  return w_state->graphic_devices;
+}
+
+immer::vector<std::string> get_env(const std::shared_ptr<WaylandState> &w_state) {
+  return w_state->env;
+}
+
+GstBuffer *get_frame(const std::shared_ptr<WaylandState> &w_state) {
+  return display_get_frame(*w_state->display);
 }
 
 } // namespace streaming

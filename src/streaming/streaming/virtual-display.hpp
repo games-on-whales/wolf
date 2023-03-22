@@ -4,16 +4,16 @@
 #include <memory>
 #include <streaming/data-structures.hpp>
 
-extern "C" {
-#include <waylanddisplay.h>
-}
-
 namespace streaming {
 
-struct WaylandState {
-  std::shared_ptr<WaylandDisplay> display;
-  immer::vector<std::string> env;
-  immer::vector<std::string> graphic_devices;
+typedef struct WaylandState WaylandState;
+
+struct GstAppDataState {
+  gst_element_ptr app_src;
+  std::shared_ptr<WaylandState> wayland_state;
+  guint source_id{};
+  int framerate;
+  GstClockTime timestamp = 0;
 };
 
 std::shared_ptr<WaylandState> create_wayland_display(const immer::array<std::string> &input_devices,
@@ -22,5 +22,10 @@ std::shared_ptr<WaylandState> create_wayland_display(const immer::array<std::str
 std::shared_ptr<GstCaps> set_resolution(const std::shared_ptr<WaylandState> &w_state,
                                         const moonlight::DisplayMode &display_mode,
                                         const std::optional<gst_element_ptr> &app_src = {});
+
+immer::vector<std::string> get_devices(const std::shared_ptr<WaylandState> &w_state);
+immer::vector<std::string> get_env(const std::shared_ptr<WaylandState> &w_state);
+
+GstBuffer *get_frame(const std::shared_ptr<WaylandState> &w_state);
 
 } // namespace streaming

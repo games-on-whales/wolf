@@ -7,7 +7,7 @@
 #include <memory>
 #include <moonlight/data-structures.hpp>
 #include <streaming/data-structures.hpp>
-#include <streaming/wayland-display.hpp>
+#include <streaming/virtual-display.hpp>
 
 namespace streaming {
 
