@@ -160,16 +160,23 @@ struct GstAppDataState {
   gst_element_ptr app_src;
   std::shared_ptr<WaylandState> wayland_state;
   guint source_id{};
+  int framerate;
+  GstClockTime timestamp = 0;
 };
 
-bool push_data(GstAppDataState *data) {
+static bool push_data(GstAppDataState *data) {
   GstFlowReturn ret;
 
   auto buffer = display_get_frame(*data->wayland_state->display);
   if (GST_IS_BUFFER(buffer) && GST_IS_APP_SRC(data->app_src.get())) {
-    g_signal_emit_by_name(data->app_src.get(), "push-buffer", buffer, &ret);
-    gst_buffer_unref(buffer);
 
+    GST_BUFFER_PTS(buffer) = data->timestamp;
+    GST_BUFFER_DTS(buffer) = data->timestamp;
+    GST_BUFFER_DURATION(buffer) = gst_util_uint64_scale_int(1, GST_SECOND, data->framerate);
+    data->timestamp += GST_BUFFER_DURATION(buffer);
+
+    // gst_app_src_push_buffer takes ownership of the buffer
+    ret = gst_app_src_push_buffer(GST_APP_SRC(data->app_src.get()), buffer);
     if (ret == GST_FLOW_OK) {
       return true;
     }
@@ -181,14 +188,14 @@ bool push_data(GstAppDataState *data) {
 
 static void app_src_need_data(GstElement *pipeline, guint size, GstAppDataState *data) {
   if (data->source_id == 0) {
-    logs::log(logs::trace, "[WAYLAND] Start feeding app-src");
+    logs::log(logs::debug, "[WAYLAND] Start feeding app-src");
     data->source_id = g_idle_add((GSourceFunc)push_data, data);
   }
 }
 
 static void app_src_enough_data(GstElement *pipeline, guint size, GstAppDataState *data) {
   if (data->source_id != 0) {
-    logs::log(logs::trace, "[WAYLAND] Stop feeding app-src");
+    logs::log(logs::debug, "[WAYLAND] Stop feeding app-src");
     g_source_remove(data->source_id);
     data->source_id = 0;
   }
@@ -230,14 +237,17 @@ void start_streaming_video(const immer::box<state::VideoSession> &video_session,
                               fmt::arg("color_space", color_space),
                               fmt::arg("color_range", color_range));
   logs::log(logs::debug, "Starting video pipeline: {}", pipeline);
-  auto app_src_state = std::shared_ptr<GstAppDataState>(new GstAppDataState{.wayland_state = wl_ptr, .source_id = 0},
-                                                        [](const auto &app_data_state) {
-                                                          logs::log(logs::trace, "free(app_data_state)");
-                                                          if (app_data_state->source_id != 0) {
-                                                            g_source_remove(app_data_state->source_id);
-                                                          }
-                                                          delete app_data_state;
-                                                        });
+  auto app_src_state = std::shared_ptr<GstAppDataState>(
+      new GstAppDataState{.wayland_state = wl_ptr,
+                          .source_id = 0,
+                          .framerate = video_session->display_mode.refreshRate},
+      [](const auto &app_data_state) {
+        logs::log(logs::trace, "free(app_data_state)");
+        if (app_data_state->source_id != 0) {
+          g_source_remove(app_data_state->source_id);
+        }
+        delete app_data_state;
+      });
 
   run_pipeline(
       pipeline,
@@ -245,19 +255,19 @@ void start_streaming_video(const immer::box<state::VideoSession> &video_session,
       event_bus,
       [video_session, event_bus, wl_ptr, app_src_state](auto pipeline, auto loop) {
         if (auto app_src_el = gst_bin_get_by_name(GST_BIN(pipeline.get()), "wolf_wayland_source")) {
+          logs::log(logs::debug, "Setting up wolf_wayland_source");
           g_assert(GST_IS_APP_SRC(app_src_el));
 
           auto app_src_ptr = gst_element_ptr(app_src_el, ::gst_object_unref);
 
           auto caps = set_resolution(wl_ptr, video_session->display_mode, app_src_ptr);
-          g_object_set(app_src_ptr.get(), "caps", caps.get(), "format", GST_FORMAT_TIME, NULL);
-
-          app_src_state->app_src = std::move(app_src_ptr);
+          g_object_set(app_src_ptr.get(), "caps", caps.get(), NULL);
 
           /* Adapted from the tutorial at:
            * https://gstreamer.freedesktop.org/documentation/tutorials/basic/short-cutting-the-pipeline.html?gi-language=c*/
-          g_signal_connect(app_src_el, "need-data", G_CALLBACK(app_src_need_data), app_src_state.get());
-          g_signal_connect(app_src_el, "enough-data", G_CALLBACK(app_src_enough_data), app_src_state.get());
+          g_signal_connect(app_src_ptr.get(), "need-data", G_CALLBACK(app_src_need_data), app_src_state.get());
+          g_signal_connect(app_src_ptr.get(), "enough-data", G_CALLBACK(app_src_enough_data), app_src_state.get());
+          app_src_state->app_src = std::move(app_src_ptr);
         }
 
         std::shared_ptr<bool> waiting_for_idr = std::make_shared<bool>(false);
