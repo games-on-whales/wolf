@@ -20,21 +20,23 @@ type = "docker"
 name = "WolfFirefox"
 image = "ghcr.io/games-on-whales/firefox:master"
 mounts = [
-  "/tmp/sockets:/tmp/.X11-unix/:ro",
-  "/tmp/sockets:/run/user/1000/pulse/:ro",
+  "/tmp/sockets:/run/user/1000/:rw",
   "/run/udev:/run/udev:ro",
-  "/var/local/retro:/home/retro:rw",
+  "/home/ale/retro:/home/retro:rw"
 ]
 devices = []
 ports = []
 env = [
-  "LOG_LEVEL=info"
+  "LOG_LEVEL=info",
+  "MOZ_ENABLE_WAYLAND=1",
+  "XDG_RUNTIME_DIR=/run/user/1000/",
+  "GOW_REQUIRED_DEVICES=/dev/uinput /dev/input/* /dev/dri/* /run/user/1000/wayland-*"
 ]
 base_create_json = """
 {
   "HostConfig": {
     "IpcMode": "host",
-    "CapAdd": ["SYS_ADMIN"],
+    "Privileged": false,
     "DeviceRequests": [{"Driver":"","Count":-1,"Capabilities":[["gpu"]]}]
   }
 }
@@ -136,12 +138,7 @@ source = "audiotestsrc wave=ticks is-live=true"
 [gstreamer.video]
 
 default_source = "appsrc name=wolf_wayland_source is-live=true block=false format=3 stream-type=0"
-default_sink = """
-rtpmoonlightpay_video name=moonlight_pay
-payload_size={payload_size} fec_percentage={fec_percentage} min_required_fec_packets={min_required_fec_packets} !
-udpsink host={client_ip} port={client_port} sync=true
-\
-"""
+default_sink = "appsink name=wolf_moonlight_sink"
 
 ######################
 # HEVC encoders

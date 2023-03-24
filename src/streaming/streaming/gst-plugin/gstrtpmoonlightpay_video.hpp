@@ -27,7 +27,6 @@ struct _gst_rtp_moonlight_pay_video {
 
   u_int32_t cur_seq_number;
   u_int32_t frame_num;
-  std::shared_ptr<bool> waiting_for_idr;
 };
 
 struct _gst_rtp_moonlight_pay_videoClass {
