@@ -3,14 +3,17 @@ use std::time::{Duration, Instant};
 use smithay::{
     backend::renderer::{
         damage::DamageTrackedRendererError as DTRError,
-        element::{memory::MemoryRenderBufferRenderElement, surface::WaylandSurfaceRenderElement},
+        element::{
+            memory::MemoryRenderBufferRenderElement, surface::WaylandSurfaceRenderElement,
+            RenderElementStates,
+        },
         gles2::Gles2Renderer,
         Bind, ExportMem, ImportAll, ImportMem, Renderer, Unbind,
     },
     desktop::space::render_output,
     input::pointer::CursorImageStatus,
     render_elements,
-    utils::Rectangle,
+    utils::{Physical, Rectangle},
 };
 
 use super::State;
@@ -24,7 +27,16 @@ render_elements! {
 }
 
 impl State {
-    pub fn create_frame(&mut self) -> Result<gst::Buffer, DTRError<Gles2Renderer>> {
+    pub fn create_frame(
+        &mut self,
+    ) -> Result<
+        (
+            gst::Buffer,
+            Option<Vec<Rectangle<i32, Physical>>>,
+            RenderElementStates,
+        ),
+        DTRError<Gles2Renderer>,
+    > {
         assert!(self.output.is_some());
         assert!(self.dtr.is_some());
         assert!(self.video_info.is_some());
@@ -61,7 +73,7 @@ impl State {
         self.renderer
             .bind(self.renderbuffer.clone().unwrap())
             .map_err(DTRError::Rendering)?;
-        render_output(
+        let (damage, render_element_states) = render_output(
             self.output.as_ref().unwrap(),
             &mut self.renderer,
             1,
@@ -104,6 +116,6 @@ impl State {
         };
         self.renderer.unbind().map_err(DTRError::Rendering)?;
 
-        Ok(buffer)
+        Ok((buffer, damage, render_element_states))
     }
 }

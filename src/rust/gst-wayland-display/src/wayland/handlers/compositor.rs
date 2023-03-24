@@ -29,10 +29,6 @@ impl CompositorHandler for State {
     fn commit(&mut self, surface: &WlSurface) {
         on_commit_buffer_handler(surface);
 
-        if let Err(err) = import_surface_tree(&mut self.renderer, surface) {
-            tracing::warn!(?err, "Failed to load client buffer.");
-        }
-
         if let Some(window) = self
             .space
             .elements()

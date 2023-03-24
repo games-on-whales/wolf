@@ -2,6 +2,7 @@ pub mod compositor;
 pub mod data_device;
 pub mod dmabuf;
 pub mod output;
+pub mod presentation;
 pub mod seat;
 pub mod shm;
 pub mod viewporter;

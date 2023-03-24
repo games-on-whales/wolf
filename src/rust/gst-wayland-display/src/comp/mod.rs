@@ -22,7 +22,14 @@ use smithay::{
             Bind, ImportMemWl, Offscreen,
         },
     },
-    desktop::{utils::send_frames_surface_tree, PopupManager, Space, Window},
+    desktop::{
+        utils::{
+            send_frames_surface_tree, surface_presentation_feedback_flags_from_states,
+            surface_primary_scanout_output, update_surface_primary_scanout_output,
+            OutputPresentationFeedback,
+        },
+        PopupManager, Space, Window,
+    },
     input::{keyboard::XkbConfig, pointer::CursorImageStatus, Seat, SeatState},
     output::{Mode as OutputMode, Output, PhysicalProperties, Subpixel},
     reexports::{
@@ -33,17 +40,19 @@ use smithay::{
             EventLoop, Interest, LoopHandle, Mode, PostAction,
         },
         input::Libinput,
+        wayland_protocols::wp::presentation_time::server::wp_presentation_feedback,
         wayland_server::{
             backend::{ClientData, ClientId, DisconnectReason},
             Display, DisplayHandle,
         },
     },
-    utils::{Logical, Physical, Point, Rectangle, Size, Transform},
+    utils::{Clock, Logical, Monotonic, Physical, Point, Rectangle, Size, Transform},
     wayland::{
         compositor::{with_states, CompositorState},
         data_device::DataDeviceState,
         dmabuf::{DmabufGlobal, DmabufState},
         output::OutputManagerState,
+        presentation::PresentationState,
         shell::xdg::{XdgShellState, XdgToplevelSurfaceData},
         shm::ShmState,
         socket::ListeningSocketSource,
@@ -79,7 +88,7 @@ pub(crate) struct Data {
 pub(crate) struct State {
     handle: LoopHandle<'static, Data>,
     should_quit: bool,
-    start_time: std::time::Instant,
+    clock: Clock<Monotonic>,
 
     // render
     dtr: Option<DamageTrackedRenderer>,
@@ -109,6 +118,7 @@ pub(crate) struct State {
     pub data_device_state: DataDeviceState,
     pub dmabuf_state: DmabufState,
     output_state: OutputManagerState,
+    presentation_state: PresentationState,
     pub seat_state: SeatState<Self>,
     pub shell_state: XdgShellState,
     pub shm_state: ShmState,
@@ -132,6 +142,7 @@ pub(crate) fn init(
     devices_tx: Sender<Vec<CString>>,
     envs_tx: Sender<Vec<CString>>,
 ) {
+    let clock = Clock::new().expect("Failed to initialize clock");
     let mut display = Display::<State>::new().unwrap();
     let dh = display.handle();
 
@@ -140,6 +151,7 @@ pub(crate) fn init(
     let data_device_state = DataDeviceState::new::<State>(&dh);
     let mut dmabuf_state = DmabufState::new();
     let output_state = OutputManagerState::new_with_xdg_output::<State>(&dh);
+    let presentation_state = PresentationState::new::<State>(&dh, clock.id() as _);
     let mut seat_state = SeatState::new();
     let shell_state = XdgShellState::new::<State>(&dh);
     let viewporter_state = ViewporterState::new::<State>(&dh);
@@ -181,7 +193,7 @@ pub(crate) fn init(
     let renderer = unsafe { Gles2Renderer::new(context) }.expect("Failed to initialize renderer");
     let _ = devices_tx.send(render_target.as_devices());
 
-    let shm_state = ShmState::new::<State>(&dh, Vec::from(renderer.shm_formats()));
+    let shm_state = ShmState::new::<State>(&dh, vec![]);
     let dmabuf_global = if let RenderTarget::Hardware(node) = render_target {
         let formats = Bind::<Dmabuf>::supported_formats(&renderer)
             .expect("Failed to query formats")
@@ -223,7 +235,7 @@ pub(crate) fn init(
     let state = State {
         handle: event_loop.handle(),
         should_quit: false,
-        start_time: std::time::Instant::now(),
+        clock,
 
         renderer,
         egl_display_ref,
@@ -250,6 +262,7 @@ pub(crate) fn init(
         data_device_state,
         dmabuf_state,
         output_state,
+        presentation_state,
         seat_state,
         shell_state,
         shm_state,
@@ -355,18 +368,50 @@ pub(crate) fn init(
 
                     let render = move |data: &mut Data, now: Instant| {
                         if let Err(_) = match data.state.create_frame() {
-                            Ok(buf) => {
+                            Ok((buf, damage, render_element_states)) => {
                                 data.state.last_render = Some(now);
                                 let res = buffer_sender.send(Ok(buf));
 
                                 if let Some(output) = data.state.output.as_ref() {
+                                    let mut output_presentation_feedback =
+                                        OutputPresentationFeedback::new(output);
                                     for window in data.state.space.elements() {
+                                        window.with_surfaces(|surface, states| {
+                                            update_surface_primary_scanout_output(
+                                                surface,
+                                                output,
+                                                states,
+                                                &render_element_states,
+                                                |next_output, _, _, _| next_output,
+                                            );
+                                        });
                                         window.send_frame(
                                             output,
-                                            data.state.start_time.elapsed(),
+                                            data.state.clock.now(),
                                             Some(Duration::ZERO),
                                             |_, _| Some(output.clone()),
-                                        )
+                                        );
+                                        window.take_presentation_feedback(
+                                            &mut output_presentation_feedback,
+                                            surface_primary_scanout_output,
+                                            |surface, _| {
+                                                surface_presentation_feedback_flags_from_states(
+                                                    surface,
+                                                    &render_element_states,
+                                                )
+                                            },
+                                        );
+                                    }
+                                    if damage.is_some() {
+                                        output_presentation_feedback.presented(
+                                            data.state.clock.now(),
+                                            output
+                                                .current_mode()
+                                                .map(|mode| mode.refresh as u32)
+                                                .unwrap_or_default(),
+                                            0,
+                                            wp_presentation_feedback::Kind::Vsync,
+                                        );
                                     }
                                     if let CursorImageStatus::Surface(wl_surface) =
                                         &data.state.cursor_state
@@ -374,7 +419,7 @@ pub(crate) fn init(
                                         send_frames_surface_tree(
                                             wl_surface,
                                             output,
-                                            data.state.start_time.elapsed(),
+                                            data.state.clock.now(),
                                             None,
                                             |_, _| Some(output.clone()),
                                         )
