@@ -355,6 +355,9 @@ std::optional<libevdev_uinput *> create_controller(libevdev *dev) {
   libevdev_enable_event_code(dev, EV_ABS, ABS_Y, &stick);
   libevdev_enable_event_code(dev, EV_ABS, ABS_RY, &stick);
 
+  // NOTE: Don't comment this in, without actually supporting rumble.
+  // Otherwise this will cause frozen processes.
+  /*
   libevdev_enable_event_type(dev, EV_FF);
   libevdev_enable_event_code(dev, EV_FF, FF_RUMBLE, nullptr);
   libevdev_enable_event_code(dev, EV_FF, FF_CONSTANT, nullptr);
@@ -362,6 +365,7 @@ std::optional<libevdev_uinput *> create_controller(libevdev *dev) {
   libevdev_enable_event_code(dev, EV_FF, FF_SINE, nullptr);
   libevdev_enable_event_code(dev, EV_FF, FF_RAMP, nullptr);
   libevdev_enable_event_code(dev, EV_FF, FF_GAIN, nullptr);
+  */
 
   auto err = libevdev_uinput_create_from_device(dev, LIBEVDEV_UINPUT_OPEN_MANAGED, &uidev);
   if (err != 0) {
