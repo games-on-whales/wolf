@@ -520,11 +520,15 @@ InputReady setup_handlers(std::size_t session_id,
     devices_paths.push_back(libevdev_uinput_get_devnode(*keyboard_el));
   }
 
-  auto controllers = immer::array<libevdev_uinput_ptr>().transient();
+  auto controllers = immer::array<controller::Controller>().transient();
   for (int i = 0; i < 4; i++) { // TODO: Make max controller configurable
     libevdev_ptr controller_dev(libevdev_new(), ::libevdev_free);
     if (auto controller_el = controller::create_controller(controller_dev.get())) {
-      controllers.push_back({*controller_el, ::libevdev_uinput_destroy});
+      auto controller = controller::Controller {
+        .uinput={*controller_el, ::libevdev_uinput_destroy},
+        .prev_pkt=std::make_shared<immer::atom<immer::box<data::CONTROLLER_MULTI_PACKET>>>(),
+      };
+      controllers.push_back(controller);
       auto child_nodes = get_child_dev_nodes(*controller_el);
       for (auto const &node : child_nodes) {
         devices_paths.push_back(node);
@@ -533,11 +537,10 @@ InputReady setup_handlers(std::size_t session_id,
   }
   v_devices->controllers = controllers.persistent();
 
-  auto controller_state = std::make_shared<immer::atom<immer::box<data::CONTROLLER_MULTI_PACKET> /* prev packet */>>();
   auto keyboard_state = std::make_shared<immer::atom<immer::array<int> /* key codes */>>();
 
   auto ctrl_handler = event_bus->register_handler<immer::box<ControlEvent>>(
-      [sess_id = session_id, v_devices, controller_state, keyboard_state](const immer::box<ControlEvent> &ctrl_ev) {
+      [sess_id = session_id, v_devices, keyboard_state](const immer::box<ControlEvent> &ctrl_ev) {
         if (ctrl_ev->session_id == sess_id && ctrl_ev->type == INPUT_DATA) {
           auto input = (const data::INPUT_PKT *)(ctrl_ev->raw_packet.data());
 
@@ -607,9 +610,10 @@ InputReady setup_handlers(std::size_t session_id,
              */
             logs::log(logs::trace, "[INPUT] Received input of type: CONTROLLER_MULTI");
             auto new_controller_pkt = (data::CONTROLLER_MULTI_PACKET *)input;
-            auto prev_pkt = controller_state->exchange(immer::box<data::CONTROLLER_MULTI_PACKET>{*new_controller_pkt});
             if (new_controller_pkt->controller_number < v_devices->controllers.size()) {
-              controller::controller_handle(v_devices->controllers[new_controller_pkt->controller_number].get(),
+              auto controller = v_devices->controllers[new_controller_pkt->controller_number];
+              auto prev_pkt = controller.prev_pkt->exchange(immer::box<data::CONTROLLER_MULTI_PACKET>{*new_controller_pkt});
+              controller::controller_handle(controller.uinput.get(),
                                             *new_controller_pkt,
                                             prev_pkt->get());
             } else {

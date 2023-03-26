@@ -1,4 +1,5 @@
 #include "input/input.hpp"
+#include <immer/atom.hpp>
 #include <immer/array.hpp>
 #include <libevdev/libevdev-uinput.h>
 #include <libevdev/libevdev.h>
@@ -10,14 +11,6 @@ namespace input {
 
 using libevdev_ptr = std::shared_ptr<libevdev>;
 using libevdev_uinput_ptr = std::shared_ptr<libevdev_uinput>;
-
-struct VirtualDevices {
-  std::optional<libevdev_uinput_ptr> mouse;
-  std::optional<libevdev_uinput_ptr> mouse_abs;
-  std::optional<libevdev_uinput_ptr> keyboard;
-
-  immer::array<libevdev_uinput_ptr> controllers{};
-};
 
 namespace mouse {
 
@@ -53,12 +46,25 @@ std::string to_hex(const std::basic_string<char32_t> &str);
 
 namespace controller {
 
+struct Controller {
+  libevdev_uinput_ptr uinput;
+  std::shared_ptr<immer::atom<immer::box<data::CONTROLLER_MULTI_PACKET>>> prev_pkt;
+};
+
 std::optional<libevdev_uinput *> create_controller(libevdev *dev);
 
-void controller_handle(libevdev_uinput *controller,
+void controller_handle(Controller *controller,
                        const data::CONTROLLER_MULTI_PACKET &ctrl_pkt,
                        const data::CONTROLLER_MULTI_PACKET &prev_ctrl_pkt);
 
 } // namespace controller
+
+struct VirtualDevices {
+  std::optional<libevdev_uinput_ptr> mouse;
+  std::optional<libevdev_uinput_ptr> mouse_abs;
+  std::optional<libevdev_uinput_ptr> keyboard;
+
+  immer::array<controller::Controller> controllers{};
+};
 
 } // namespace input
