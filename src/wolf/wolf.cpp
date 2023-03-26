@@ -200,6 +200,9 @@ auto setup_sessions_handlers(const immer::box<state::AppState> &app_state, std::
             auto wl_state = streaming::create_wayland_display(session->virtual_inputs.devices_paths,
                                                               get_env("WOLF_RENDER_NODE", "/dev/dri/renderD128"));
             streaming::set_resolution(wl_state, session->display_mode);
+            full_env.set("GAMESCOPE_WIDTH", std::to_string(session->display_mode.width));
+            full_env.set("GAMESCOPE_HEIGHT", std::to_string(session->display_mode.height));
+            full_env.set("GAMESCOPE_REFRESH", std::to_string(session->display_mode.refreshRate));
             wl_promise->set_value(wl_state);
 
             /* Setup additional devices paths */
