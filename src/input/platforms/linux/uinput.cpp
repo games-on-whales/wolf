@@ -520,16 +520,18 @@ InputReady setup_handlers(std::size_t session_id,
     devices_paths.push_back(libevdev_uinput_get_devnode(*keyboard_el));
   }
 
-  // TODO: multiple controllers?
-  libevdev_ptr controller_dev(libevdev_new(), ::libevdev_free);
-  if (auto controller_el = controller::create_controller(controller_dev.get())) {
-    v_devices->controllers = {{*controller_el, ::libevdev_uinput_destroy}};
-    auto child_nodes = get_child_dev_nodes(*controller_el);
-    for (auto const &node : child_nodes) {
-      devices_paths.push_back(node);
+  auto controllers = immer::array<libevdev_uinput_ptr>().transient();
+  for (int i = 0; i < 4; i++) { // TODO: Make max controller configurable
+    libevdev_ptr controller_dev(libevdev_new(), ::libevdev_free);
+    if (auto controller_el = controller::create_controller(controller_dev.get())) {
+      controllers.push_back({*controller_el, ::libevdev_uinput_destroy});
+      auto child_nodes = get_child_dev_nodes(*controller_el);
+      for (auto const &node : child_nodes) {
+        devices_paths.push_back(node);
+      }
     }
-    //    devices_paths.push_back(libevdev_uinput_get_devnode(*controller_el));
   }
+  v_devices->controllers = controllers.persistent();
 
   auto controller_state = std::make_shared<immer::atom<immer::box<data::CONTROLLER_MULTI_PACKET> /* prev packet */>>();
   auto keyboard_state = std::make_shared<immer::atom<immer::array<int> /* key codes */>>();
