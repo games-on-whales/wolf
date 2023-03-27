@@ -524,9 +524,9 @@ InputReady setup_handlers(std::size_t session_id,
   for (int i = 0; i < 4; i++) { // TODO: Make max controller configurable
     libevdev_ptr controller_dev(libevdev_new(), ::libevdev_free);
     if (auto controller_el = controller::create_controller(controller_dev.get())) {
-      auto controller = controller::Controller {
-        .uinput={*controller_el, ::libevdev_uinput_destroy},
-        .prev_pkt=std::make_shared<immer::atom<immer::box<data::CONTROLLER_MULTI_PACKET>>>(),
+      auto controller = controller::Controller{
+          .uinput = {*controller_el, ::libevdev_uinput_destroy},
+          .prev_pkt = std::make_shared<immer::atom<immer::box<data::CONTROLLER_MULTI_PACKET>>>(),
       };
       controllers.push_back(controller);
       auto child_nodes = get_child_dev_nodes(*controller_el);
@@ -612,10 +612,9 @@ InputReady setup_handlers(std::size_t session_id,
             auto new_controller_pkt = (data::CONTROLLER_MULTI_PACKET *)input;
             if (new_controller_pkt->controller_number < v_devices->controllers.size()) {
               auto controller = v_devices->controllers[new_controller_pkt->controller_number];
-              auto prev_pkt = controller.prev_pkt->exchange(immer::box<data::CONTROLLER_MULTI_PACKET>{*new_controller_pkt});
-              controller::controller_handle(controller.uinput.get(),
-                                            *new_controller_pkt,
-                                            prev_pkt->get());
+              auto prev_pkt =
+                  controller.prev_pkt->exchange(immer::box<data::CONTROLLER_MULTI_PACKET>{*new_controller_pkt});
+              controller::controller_handle(controller.uinput.get(), *new_controller_pkt, prev_pkt->get());
             } else {
               logs::log(logs::warning, "[INPUT] Unable to find controller {}", new_controller_pkt->controller_number);
             }

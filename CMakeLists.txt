@@ -22,6 +22,16 @@ if (CMAKE_PROJECT_NAME STREQUAL PROJECT_NAME)
     set_property(GLOBAL PROPERTY USE_FOLDERS ON)
 
     option(BUILD_SHARED_LIBS "Build libs as shared" ON)
+
+    option(ADD_STACKTRACE_INFO "Adds options in order to get proper stacktrace info on exceptions" ON)
+    if (ADD_STACKTRACE_INFO)
+        # make sure to -DCMAKE_BUILD_TYPE=RelWithDebInfo)
+        set_property(GLOBAL PROPERTY ENABLE_EXPORTS ON)
+        set_property(GLOBAL PROPERTY VISIBILITY_INLINES_HIDDEN NO)
+        add_link_options("-no-pie;-fno-pie")
+        add_compile_options("-fno-inline")
+    endif ()
+
     # set(Boost_USE_STATIC_LIBS ON)
 
     # Testing only available if this is the main app

@@ -94,30 +94,37 @@ auto initialize(std::string_view config_file,
   return immer::box<state::AppState>(state);
 }
 
-/**
- * Taken from: https://stackoverflow.com/questions/11468414/using-auto-and-lambda-to-handle-signal
- * in order to have pass a lambda with variable capturing
- */
-namespace {
-std::function<void(int)> shutdown_handler;
-void signal_handler(int signal) {
-  shutdown_handler(signal);
+static std::string backtrace_file_src() {
+  return fmt::format("{}/backtrace.dump", get_env("WOLF_CFG_FOLDER", "."));
 }
-} // namespace
+
+static void shutdown_handler(int signum) {
+  logs::log(logs::info, "Received interrupt signal {}, clean exit", signum);
+  if (signum == SIGABRT || signum == SIGSEGV) {
+    logs::log(logs::error, "Runtime error, dumping stacktrace to {}", backtrace_file_src());
+    boost::stacktrace::safe_dump_to(backtrace_file_src().c_str());
+  }
+
+  logs::log(logs::info, "See ya!");
+  exit(signum);
+}
 
 /**
  * @brief: if an exception was raised we should have created a dump file, here we can pretty print it
  */
 void check_exceptions() {
-  if (boost::filesystem::exists("./backtrace.dump")) {
-    std::ifstream ifs("./backtrace.dump");
+  if (boost::filesystem::exists(backtrace_file_src())) {
+    std::ifstream ifs(backtrace_file_src());
 
     auto st = boost::stacktrace::stacktrace::from_dump(ifs);
     logs::log(logs::error, "Previous run crashed: \n{}", to_string(st));
 
     // cleaning up
     ifs.close();
-    boost::filesystem::remove("./backtrace.dump");
+    auto now = std::chrono::system_clock::now();
+    boost::filesystem::rename(
+        backtrace_file_src(),
+        fmt::format("{}/backtrace.{:%Y-%m-%d-%H-%M-%S}.dump", get_env("WOLF_CFG_FOLDER", "."), now));
   }
 }
 
@@ -286,7 +293,13 @@ auto setup_sessions_handlers(const immer::box<state::AppState> &app_state, std::
  */
 int main(int argc, char *argv[]) {
   logs::init(logs::parse_level(get_env("WOLF_LOG_LEVEL", "INFO")));
+  // Exception and termination handling
   check_exceptions();
+  std::signal(SIGINT, shutdown_handler);
+  std::signal(SIGTERM, shutdown_handler);
+  std::signal(SIGQUIT, shutdown_handler);
+  std::signal(SIGSEGV, shutdown_handler);
+  std::signal(SIGABRT, shutdown_handler);
 
   streaming::init(); // Need to initialise gstreamer once
   control::init();   // Need to initialise enet once
@@ -297,27 +310,6 @@ int main(int argc, char *argv[]) {
   auto p_cert_file = get_env("WOLF_PRIVATE_CERT_FILE", "cert.pem");
   auto local_state =
       initialize(config_file, std::stoi(get_env("WOLF_THREAD_POOL_SIZE", "30")), p_key_file, p_cert_file);
-
-  // Exception and termination handling
-  shutdown_handler = [local_state](int signum) {
-    logs::log(logs::info, "Received interrupt signal {}, clean exit", signum);
-    if (signum == SIGABRT || signum == SIGSEGV) {
-      auto trace_file = "./backtrace.dump";
-      logs::log(logs::error, "Runtime error, dumping stacktrace to {}", trace_file);
-      boost::stacktrace::safe_dump_to(trace_file);
-    }
-
-    // Stop the thread pool
-    local_state->t_pool->stop();
-
-    logs::log(logs::info, "See ya!");
-    exit(signum);
-  };
-  std::signal(SIGINT, signal_handler);
-  std::signal(SIGTERM, signal_handler);
-  std::signal(SIGQUIT, signal_handler);
-  std::signal(SIGSEGV, signal_handler);
-  std::signal(SIGABRT, signal_handler);
 
   // HTTP APIs
   ba::post(*local_state->t_pool, [local_state]() {
