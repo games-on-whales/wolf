@@ -1,11 +1,11 @@
 #include "input/input.hpp"
-#include <immer/atom.hpp>
 #include <immer/array.hpp>
+#include <immer/atom.hpp>
 #include <libevdev/libevdev-uinput.h>
 #include <libevdev/libevdev.h>
+#include <libudev.h>
 #include <memory>
 #include <optional>
-#include <libudev.h>
 
 namespace input {
 
@@ -53,7 +53,7 @@ struct Controller {
 
 std::optional<libevdev_uinput *> create_controller(libevdev *dev);
 
-void controller_handle(Controller *controller,
+void controller_handle(libevdev_uinput *controller,
                        const data::CONTROLLER_MULTI_PACKET &ctrl_pkt,
                        const data::CONTROLLER_MULTI_PACKET &prev_ctrl_pkt);
 
