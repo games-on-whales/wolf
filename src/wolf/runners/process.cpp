@@ -11,6 +11,7 @@ using namespace moonlight::control;
 
 void RunProcess::run(std::size_t session_id,
                      const immer::array<std::string> &virtual_inputs,
+                     const immer::array<std::pair<std::string, std::string>> &paths,
                      const immer::map<std::string, std::string> &env_variables) {
   logs::log(logs::debug, "[PROCESS] Starting process: {}", this->run_cmd);
 

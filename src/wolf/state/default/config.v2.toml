@@ -17,26 +17,26 @@ start_virtual_compositor = true
 [apps.runner]
 type = "docker"
 name = "WolfFirefox"
-image = "ghcr.io/games-on-whales/firefox:master"
+image = "ghcr.io/games-on-whales/firefox:wolf-changes"
 mounts = [
-  "/tmp/sockets:/run/user/1000/:rw",
-  "/run/udev:/run/udev:ro",
-  "/home/ale/retro:/home/retro:rw"
+  "/run/udev:/run/udev:ro"
 ]
-devices = []
-ports = []
 env = [
+  "MOZ_LOG=1",
   "LOG_LEVEL=info",
-  "MOZ_ENABLE_WAYLAND=1",
-  "XDG_RUNTIME_DIR=/run/user/1000/",
-  "GOW_REQUIRED_DEVICES=/dev/uinput /dev/input/* /dev/dri/* /run/user/1000/wayland-*"
+  "RUN_GAMESCOPE=true",
+  "ENABLE_VKBASALT=1",
+  "GOW_REQUIRED_DEVICES=/dev/uinput /dev/input/event* /dev/dri/*",
 ]
+devices = [
+]
+ports = []
 base_create_json = """
 {
   "HostConfig": {
     "IpcMode": "host",
-    "Privileged": false,
-    "DeviceRequests": [{"Driver":"","Count":-1,"Capabilities":[["gpu"]]}]
+    "CapAdd": ["SYS_ADMIN", "SYS_NICE"],
+    "Privileged": false
   }
 }
 \
@@ -49,21 +49,24 @@ start_virtual_compositor = true
 [apps.runner]
 type = "docker"
 name = "WolfRetroarch"
-image = "ghcr.io/games-on-whales/retroarch:master"
+image = "ghcr.io/games-on-whales/retroarch:wolf-changes"
 mounts = [
-  "/tmp/sockets:/tmp/.X11-unix/:ro",
-  "/tmp/sockets:/run/user/1000/pulse/:ro",
-  "/run/udev:/run/udev:ro",
-  "/var/local/retro:/home/retro:rw",
+  "/run/udev:/run/udev:ro"
 ]
-devices = []
+env = [
+  "RUN_GAMESCOPE=true",
+  "ENABLE_VKBASALT=1",
+  "GOW_REQUIRED_DEVICES=/dev/uinput /dev/input/event* /dev/dri/* /dev/nvidia*",
+]
+devices = [
+]
 ports = []
 base_create_json = """
 {
   "HostConfig": {
     "IpcMode": "host",
-    "CapAdd": ["SYS_ADMIN"],
-    "DeviceRequests": [{"Driver":"","Count":-1,"Capabilities":[["gpu"]]}]
+    "CapAdd": ["SYS_ADMIN", "SYS_NICE"],
+    "Privileged": false
   }
 }
 \
@@ -76,24 +79,25 @@ start_virtual_compositor = true
 [apps.runner]
 type = "docker"
 name = "WolfSteam"
-image = "ghcr.io/games-on-whales/steam:master"
+image = "ghcr.io/games-on-whales/steam:wolf-changes"
 mounts = [
-  "/tmp/sockets:/tmp/.X11-unix/:ro",
-  "/tmp/sockets:/run/user/1000/pulse/:ro",
-  "/run/udev:/run/udev:ro",
-  "/var/local/retro:/home/retro:rw",
+  "/run/udev:/run/udev:ro"
 ]
 env = [
-  "PROTON_LOG=1"
+  "PROTON_LOG=1",
+  "RUN_GAMESCOPE=true",
+  "ENABLE_VKBASALT=1",
+  "GOW_REQUIRED_DEVICES=/dev/uinput /dev/input/event* /dev/dri/* /dev/nvidia*",
 ]
-devices = []
+devices = [
+]
 ports = []
 base_create_json = """
 {
   "HostConfig": {
     "IpcMode": "host",
-    "CapAdd": ["SYS_ADMIN"],
-    "DeviceRequests": [{"Driver":"","Count":-1,"Capabilities":[["gpu"]]}]
+    "CapAdd": ["SYS_ADMIN", "SYS_NICE"],
+    "Privileged": false
   }
 }
 \

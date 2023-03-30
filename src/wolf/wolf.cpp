@@ -138,14 +138,12 @@ struct AudioServer {
  * if that fails, we run our own PulseAudio container and connect to it
  * if that fails, we can't return an AudioServer, hence the optional!
  */
-std::optional<AudioServer> setup_audio_server(boost::asio::thread_pool &t_pool) {
+std::optional<AudioServer> setup_audio_server(const std::string &runtime_dir, boost::asio::thread_pool &t_pool) {
   auto audio_server = audio::connect(t_pool);
   if (audio::connected(audio_server)) {
     return {{.server = audio_server}};
   } else {
     logs::log(logs::info, "Starting PulseAudio docker container");
-    auto runtime_dir = get_env("XDG_RUNTIME_DIR", "/tmp/pulse");
-    logs::log(logs::debug, "XDG_RUNTIME_DIR={}", runtime_dir);
     auto container = docker::create(docker::Container{
         .id = "",
         .name = "WolfPulseAudio",
@@ -153,7 +151,7 @@ std::optional<AudioServer> setup_audio_server(boost::asio::thread_pool &t_pool) 
         .status = docker::CREATED,
         .ports = {},
         .mounts = {docker::MountPoint{.source = runtime_dir, .destination = "/tmp/pulse/", .mode = "rw"}},
-        .env = {}});
+        .env = {{"XDG_RUNTIME_DIR", runtime_dir}}});
     if (container && docker::start_by_id(container.value().id)) {
       std::this_thread::sleep_for(1000ms); // TODO: configurable? Better way of knowing when ready?
       return {{.server = audio::connect(t_pool, fmt::format("{}/pulse-socket", runtime_dir)), .container = container}};
@@ -163,7 +161,9 @@ std::optional<AudioServer> setup_audio_server(boost::asio::thread_pool &t_pool) 
   return {};
 }
 
-auto setup_sessions_handlers(const immer::box<state::AppState> &app_state, std::optional<AudioServer> audio_server) {
+auto setup_sessions_handlers(const immer::box<state::AppState> &app_state,
+                             const std::string &runtime_dir,
+                             std::optional<AudioServer> audio_server) {
   immer::vector_transient<immer::box<dp::handler_registration>> handlers;
   auto t_pool = app_state->t_pool;
 
@@ -195,11 +195,18 @@ auto setup_sessions_handlers(const immer::box<state::AppState> &app_state, std::
           /* Setup devices paths */
           auto full_devices = session->virtual_inputs.devices_paths.transient();
 
+          /* Setup mounted paths */
+          immer::array_transient<std::pair<std::string, std::string>> mounted_paths;
+
           /* Setup environment paths */
           immer::map_transient<std::string, std::string> full_env;
+          full_env.set("XDG_RUNTIME_DIR", runtime_dir);
+
+          auto audio_server_name = audio_server ? audio::get_server_name(audio_server->server) : "";
           full_env.set("PULSE_SINK", pulse_sink_name);
           full_env.set("PULSE_SOURCE", pulse_sink_name + ".monitor");
-          full_env.set("PULSE_SERVER", audio_server ? audio::get_server_name(audio_server->server) : "");
+          full_env.set("PULSE_SERVER", audio_server_name);
+          mounted_paths.push_back({audio_server_name, audio_server_name});
 
           /* Create video virtual wayland compositor */
           if (session->app->start_virtual_compositor) {
@@ -219,18 +226,32 @@ auto setup_sessions_handlers(const immer::box<state::AppState> &app_state, std::
             /* Setup additional env paths */
             for (const auto &env : streaming::get_env(wl_state)) {
               auto split = utils::split(env, '=');
+
+              if (split[0] == "WAYLAND_DISPLAY") {
+                auto socket_path = fmt::format("{}/{}", runtime_dir, split[1]);
+                logs::log(logs::debug, "WAYLAND_DISPLAY={}", socket_path);
+                mounted_paths.push_back({socket_path, socket_path});
+              }
+
               full_env.set(utils::to_string(split[0]), utils::to_string(split[1]));
             }
           }
 
           /* Finally run the app, this will stop here until over */
-          session->app->runner->run(session->session_id, full_devices.persistent(), full_env.persistent());
+          session->app->runner->run(session->session_id,
+                                    full_devices.persistent(),
+                                    mounted_paths.persistent(),
+                                    full_env.persistent());
 
           /* App exited, cleanup */
           logs::log(logs::debug, "[STREAM_SESSION] Remove virtual audio sink");
           if (audio_server && audio_server->server) {
             audio::delete_virtual_sink(audio_server->server, v_device);
           }
+
+          /* When the app closes there's no point in keeping the stream running */
+          app_state->event_bus->fire_event(
+              immer::box<moonlight::StopStreamEvent>(moonlight::StopStreamEvent{.session_id = session->session_id}));
         });
       }));
 
@@ -305,6 +326,9 @@ int main(int argc, char *argv[]) {
   control::init();   // Need to initialise enet once
   docker::init();    // Need to initialise libcurl once
 
+  auto runtime_dir = get_env("XDG_RUNTIME_DIR", "/tmp/sockets");
+  logs::log(logs::debug, "XDG_RUNTIME_DIR={}", runtime_dir);
+
   auto config_file = get_env("WOLF_CFG_FILE", "config.toml");
   auto p_key_file = get_env("WOLF_PRIVATE_KEY_FILE", "key.pem");
   auto p_cert_file = get_env("WOLF_PRIVATE_CERT_FILE", "cert.pem");
@@ -333,8 +357,8 @@ int main(int argc, char *argv[]) {
     control::run_control(state::CONTROL_PORT, sessions, ev_bus);
   });
 
-  auto audio_server = setup_audio_server(*local_state->t_pool);
-  auto sess_handlers = setup_sessions_handlers(local_state, audio_server);
+  auto audio_server = setup_audio_server(runtime_dir, *local_state->t_pool);
+  auto sess_handlers = setup_sessions_handlers(local_state, runtime_dir, audio_server);
 
   // Let's park the main thread over here
   local_state->t_pool->wait();

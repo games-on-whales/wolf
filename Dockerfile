@@ -85,16 +85,13 @@ RUN if [ -n "$NV_VERSION" ]; then \
 ENV GST_PLUGIN_PATH=/usr/local/lib/x86_64-linux-gnu/gstreamer-1.0/
 COPY --from=wolf-builder /wolf/wolf /wolf/wolf
 
-# Here is where the dynamically created wayland sockets will be stored
-ENV XDG_RUNTIME_DIR=/wolf/run/
-RUN mkdir $XDG_RUNTIME_DIR
-
 WORKDIR /wolf
 
 ARG WOLF_CFG_FOLDER=/wolf/cfg
 ENV WOLF_CFG_FOLDER=$WOLF_CFG_FOLDER
 RUN mkdir $WOLF_CFG_FOLDER
 
+ENV XDG_RUNTIME_DIR=/tmp/sockets
 ENV WOLF_LOG_LEVEL=INFO
 ENV WOLF_CFG_FILE=$WOLF_CFG_FOLDER/config.toml
 ENV WOLF_PRIVATE_KEY_FILE=$WOLF_CFG_FOLDER/key.pem
@@ -103,6 +100,7 @@ ENV WOLF_THREAD_POOL_SIZE=30
 ENV WOLF_PULSE_IMAGE=ghcr.io/games-on-whales/pulseaudio:master
 ENV WOLF_RENDER_NODE=/dev/dri/renderD128
 ENV WOLF_STOP_CONTAINER_ON_EXIT=TRUE
+ENV RUST_BACKTRACE=full
 VOLUME $WOLF_CFG_FOLDER
 
 # HTTPS

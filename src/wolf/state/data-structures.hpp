@@ -25,6 +25,7 @@ struct Runner {
 
   virtual void run(std::size_t session_id,
                    const immer::array<std::string> &virtual_inputs,
+                   const immer::array<std::pair<std::string, std::string>> &paths,
                    const immer::map<std::string, std::string> &env_variables) = 0;
 
   virtual toml::value serialise() = 0;

@@ -68,6 +68,7 @@ public:
 
   void run(std::size_t session_id,
            const immer::array<std::string> &virtual_inputs,
+           const immer::array<std::pair<std::string, std::string>> &paths,
            const immer::map<std::string, std::string> &env_variables) override;
 
   toml::value serialise() override {
@@ -97,6 +98,7 @@ protected:
 
 void RunDocker::run(std::size_t session_id,
                     const immer::array<std::string> &virtual_inputs,
+                    const immer::array<std::pair<std::string, std::string>> &paths,
                     const immer::map<std::string, std::string> &env_variables) {
 
   std::vector<std::string> full_env;
@@ -113,12 +115,18 @@ void RunDocker::run(std::size_t session_id,
                              .cgroup_permission = "mrw"});
   }
 
+  std::vector<MountPoint> mounts;
+  mounts.insert(mounts.end(), this->container.mounts.begin(), this->container.mounts.end());
+  for (const auto &path : paths) {
+    mounts.insert(mounts.end(), MountPoint{.source = path.first, .destination = path.second, .mode = "rw"});
+  }
+
   Container new_container = {.id = "",
                              .name = fmt::format("{}_{}", this->container.name, session_id),
                              .image = this->container.image,
                              .status = CREATED,
                              .ports = this->container.ports,
-                             .mounts = this->container.mounts,
+                             .mounts = mounts,
                              .devices = devices,
                              .env = full_env};
 
