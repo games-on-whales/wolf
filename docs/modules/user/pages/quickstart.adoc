@@ -5,9 +5,118 @@
 Wolf is under *heavy development*; it's *not user-friendly* nor easy to use (we are working on it)
 ====
 
-== Installation
+== Docker
 
-The only way to run Wolf right now is to manually compile it.
+Wolf runs as a single container, it'll spin up and down additional containers on-demand.
+
+[tabs]
+======
+Intel/AMD::
++
+--
+
+[source,bash]
+....
+docker run \
+    --name wolf \
+    --network=host \
+    -e GST_DEBUG=2 \
+    -e RUST_BACKTRACE=full \
+    -e WOLF_LOG_LEVEL=DEBUG \
+    -e XDG_RUNTIME_DIR=/tmp/sockets \
+    -v /tmp/sockets:/tmp/sockets:rw \
+    -v /var/run/docker.sock:/var/run/docker.sock:rw \
+    -v ~/wolf:/wolf/cfg \
+    --device /dev/dri/renderD128 \
+    --device /dev/dri/card0 \
+    --device /dev/uinput \
+    --device-cgroup-rule "c 13:* rmw" \
+    -v /dev/shm:/dev/shm:rw \
+    -v /dev/input:/dev/input:rw \
+    -v /run/udev:/run/udev:rw \
+    ghcr.io/games-on-whales/wolf:dev-wayland
+....
+--
+Nvidia::
++
+--
+
+Unfortunately on Nvidia things are a little bit more complex:
+
+* You have to build the images yourself (we are working on this)
+* Your driver version must be `>= 530.30.02`
+* `--gpus` and the Nvidia Docker Toolkit seems to not work (to be investigated)
+
+
+[source,bash]
+....
+docker run --rm \
+    --name wolf \
+    --network=host \
+    -e GST_DEBUG=2 \
+    -e RUST_BACKTRACE=full \
+    -e WOLF_LOG_LEVEL=DEBUG \
+    -e XDG_RUNTIME_DIR=/tmp/sockets \
+    -v /tmp/sockets:/tmp/sockets:rw \
+    -v /var/run/docker.sock:/var/run/docker.sock:rw \
+    -v ~/wolf:/wolf/cfg \
+    --device-cgroup-rule "c 13:* rmw" \
+    --device /dev/nvidia-uvm \
+    --device /dev/nvidia-uvm-tools \
+    --device /dev/dri/renderD128 \
+    --device /dev/dri/card0 \
+    --device /dev/nvidia-caps/nvidia-cap1 \
+    --device /dev/nvidia-caps/nvidia-cap2 \
+    --device /dev/nvidiactl \
+    --device /dev/nvidia0 \
+    --device /dev/nvidia-modeset \
+    --device /dev/nvidiactl \
+    --device /dev/uinput \
+    -v /dev/shm:/dev/shm:rw \
+    -v /dev/input:/dev/input:rw \
+    -v /run/udev:/run/udev:rw \
+    ghcr.io/games-on-whales/wolf:dev-wayland
+....
+
+Depending on your system you might also need to initialise the `nvidia-uvm` devices:
+
+[source,bash]
+....
+#!/bin/bash
+## Script to initialize nvidia device nodes.
+## https://docs.nvidia.com/cuda/cuda-installation-guide-linux/index.html#runfile-verifications
+
+/sbin/modprobe nvidia
+if [ "$?" -eq 0 ]; then
+  # Count the number of NVIDIA controllers found.
+  NVDEVS=`lspci | grep -i NVIDIA`
+  N3D=`echo "$NVDEVS" | grep "3D controller" | wc -l`
+  NVGA=`echo "$NVDEVS" | grep "VGA compatible controller" | wc -l`
+  N=`expr $N3D + $NVGA - 1`
+  for i in `seq 0 $N`; do
+    mknod -m 666 /dev/nvidia$i c 195 $i
+  done
+  mknod -m 666 /dev/nvidiactl c 195 255
+else
+  exit 1
+fi
+
+/sbin/modprobe nvidia-uvm
+if [ "$?" -eq 0 ]; then
+  # Find out the major device number used by the nvidia-uvm driver
+  D=`grep nvidia-uvm /proc/devices | awk '{print $1}'`
+  mknod -m 666 /dev/nvidia-uvm c $D 0
+  mknod -m 666 /dev/nvidia-uvm-tools c $D 0
+else
+  exit 1
+fi
+....
+
+--
+
+======
+
+== Manual build
 
 .Build dependencies
 [source,bash]
@@ -19,7 +128,6 @@ apt install -y ninja-build cmake clang libboost-locale-dev libboost-thread-dev l
 [source,bash]
 ....
 cmake -Bbuild -DCMAKE_BUILD_TYPE=Release -DCMAKE_CXX_STANDARD=17 -DCMAKE_CXX_EXTENSIONS=OFF -G Ninja
-
 ninja -C build
 ....
 
@@ -50,23 +158,24 @@ TIP: Make sure to follow the next steps on how to configure Wolf!
 
 We use uinput to create virtual devices (Mouse, Keyboard and Joypad), make sure that `/dev/uinput` is present in the host:
 
-[source, bash]
+[source,bash]
 ....
 ls -la /dev/uinput
 crw------- 1 root root 10, 223 Jan 17 09:08 /dev/uinput
 ....
 
 .Add your user to group `input`
-[source, bash]
+[source,bash]
 ....
 sudo usermod -a -G input $USER
 ....
 
-.Create `udev` rules
-[source, bash]
+.Create `udev` rules under `/etc/udev/rules.d/85-wolf-virtual-inputs.rules`
+[source,bash]
 ....
-echo 'KERNEL=="uinput", GROUP="input", MODE="0660", OPTIONS+="static_node=uinput"' | \
-sudo tee /etc/udev/rules.d/85-wolf-virtual-inputs.rules
+KERNEL=="uinput", SUBSYSTEM=="misc", MODE="0660", GROUP="input", OPTIONS+="static_node=uinput"
+SUBSYSTEMS=="input", ATTRS{id/vendor}=="ab00", MODE="0660", GROUP="input", ENV{ID_SEAT}="seat9"
+SUBSYSTEMS=="input", ATTRS{id/vendor}=="045e", ATTRS{id/product}=="02d1", ATTRS{id/version}=="ab00", MODE="0660", GROUP="input"
 ....
 
 Reboot.
