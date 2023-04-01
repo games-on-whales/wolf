@@ -165,15 +165,16 @@ video/x-h265, profile=main, stream-format=byte-stream
 
 [[gstreamer.video.hevc_encoders]]
 plugin_name = "vaapi" # VAAPI: Intel/AMD
-check_elements = ["vaapih265enc", "vaapipostproc"]
+check_elements = ["vah265enc", "vapostproc"]
 video_params = """
-vaapipostproc !
-video/x-raw(memory:VASurface), chroma-site={color_range}, width={width},
+queue !
+vapostproc !
+video/x-raw(memory:VAMemory), chroma-site={color_range}, width={width},
 height={height}, format=NV12, colorimetry={color_space}
 \
 """
 encoder_pipeline = """
-vaapih265enc max-bframes=0 refs=1 num-slices={slices_per_frame} bitrate={bitrate} !
+vah265enc aud=false b-frames=0 ref-frames=1 num-slices=0 bitrate={bitrate} !
 h265parse !
 video/x-h265, profile=main, stream-format=byte-stream
 \
@@ -220,15 +221,16 @@ video/x-h264, profile=main, stream-format=byte-stream
 
 [[gstreamer.video.h264_encoders]]
 plugin_name = "vaapi" # VAAPI: Intel/AMD
-check_elements = ["vaapih264enc", "vaapipostproc"]
+check_elements = ["vah264enc", "vapostproc"]
 video_params = """
-vaapipostproc !
-video/x-raw(memory:VASurface), chroma-site={color_range}, width={width},
+queue !
+vapostproc !
+video/x-raw(memory:VAMemory), chroma-site={color_range}, width={width},
 height={height}, format=NV12, colorimetry={color_space}
 \
 """
 encoder_pipeline = """
-vaapih264enc max-bframes=0 refs=1 num-slices={slices_per_frame} bitrate={bitrate} !
+vah264enc aud=false b-frames=0 ref-frames=1 num-slices=0 bitrate={bitrate} !
 h264parse !
 video/x-h264, profile=main, stream-format=byte-stream
 \
