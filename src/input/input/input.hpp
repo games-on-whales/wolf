@@ -23,7 +23,7 @@ struct InputReady {
  */
 InputReady setup_handlers(std::size_t session_id,
                           const std::shared_ptr<dp::event_bus> &event_bus,
-                          const std::shared_ptr<boost::asio::thread_pool>& t_pool);
+                          const std::shared_ptr<boost::asio::thread_pool> &t_pool);
 
 /**
  * A packet of type INPUT_DATA will have different shapes based on the type
@@ -31,16 +31,16 @@ InputReady setup_handlers(std::size_t session_id,
 namespace data {
 
 enum INPUT_TYPE : int {
-    MOUSE_MOVE_REL       = boost::endian::native_to_little(0x00000007),
-    MOUSE_MOVE_ABS       = boost::endian::native_to_little(0x00000005),
-    MOUSE_BUTTON_PRESS   = boost::endian::native_to_little(0x00000008),
-    MOUSE_BUTTON_RELEASE = boost::endian::native_to_little(0x00000009),
-    KEY_PRESS            = boost::endian::native_to_little(0x00000003),
-    KEY_RELEASE          = boost::endian::native_to_little(0x00000004),
-    MOUSE_SCROLL         = boost::endian::native_to_little(0x0000000A),
-    MOUSE_HSCROLL        = boost::endian::native_to_little(0x55000001),
-    CONTROLLER_MULTI     = boost::endian::native_to_little(0x0000000C),
-    UTF8_TEXT            = boost::endian::native_to_little(0x00000017),
+  MOUSE_MOVE_REL = boost::endian::native_to_little(0x00000007),
+  MOUSE_MOVE_ABS = boost::endian::native_to_little(0x00000005),
+  MOUSE_BUTTON_PRESS = boost::endian::native_to_little(0x00000008),
+  MOUSE_BUTTON_RELEASE = boost::endian::native_to_little(0x00000009),
+  KEY_PRESS = boost::endian::native_to_little(0x00000003),
+  KEY_RELEASE = boost::endian::native_to_little(0x00000004),
+  MOUSE_SCROLL = boost::endian::native_to_little(0x0000000A),
+  MOUSE_HSCROLL = boost::endian::native_to_little(0x55000001),
+  CONTROLLER_MULTI = boost::endian::native_to_little(0x0000000C),
+  UTF8_TEXT = boost::endian::native_to_little(0x00000017),
 };
 
 enum CONTROLLER_BTN : unsigned short {
@@ -70,7 +70,7 @@ enum CONTROLLER_BTN : unsigned short {
 
 struct INPUT_PKT {
   unsigned short packet_type; // This should always be 0x0206 little endian (INPUT_DATA)
-  unsigned short packet_len; // the total size of the packet
+  unsigned short packet_len;  // the total size of the packet
 
   unsigned int data_size; // the size of the input data
 
@@ -101,20 +101,20 @@ struct MOUSE_SCROLL_PACKET : INPUT_PKT {
 };
 
 struct MOUSE_HSCROLL_PACKET : INPUT_PKT {
-    short scroll_amount;
+  short scroll_amount;
 };
 
 struct KEYBOARD_PACKET : INPUT_PKT {
-    unsigned char flags;
-    short key_code;
-    unsigned char modifiers;
-    short zero1;
+  unsigned char flags;
+  short key_code;
+  unsigned char modifiers;
+  short zero1;
 };
 
 // this is the same size moonlight uses
 constexpr int UTF8_TEXT_MAX_LEN = 32;
 struct UTF8_TEXT_PACKET : INPUT_PKT {
-    char text[UTF8_TEXT_MAX_LEN];
+  char text[UTF8_TEXT_MAX_LEN];
 };
 
 struct CONTROLLER_MULTI_PACKET : INPUT_PKT {

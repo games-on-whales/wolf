@@ -1,11 +1,11 @@
 #pragma once
 
 #include <boost/asio/ssl.hpp>
+#include <helpers/logger.hpp>
 #include <moonlight/protocol.hpp>
 #include <server_http.hpp>
 #include <state/data-structures.hpp>
 #include <thread>
-#include <helpers/logger.hpp>
 
 namespace SimpleWeb {
 

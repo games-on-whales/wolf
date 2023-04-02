@@ -1,7 +1,7 @@
 #pragma once
 #include "data-structures.hpp"
-#include <crypto/crypto.hpp>
 #include <boost/property_tree/ptree.hpp>
+#include <crypto/crypto.hpp>
 #include <immer/array.hpp>
 #include <immer/box.hpp>
 #include <immer/vector.hpp>
