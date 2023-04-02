@@ -4,79 +4,79 @@ Wolf is configured via a TOML config file and some additional optional ENV varia
 
 == ENV variables
 
-* *LOG_LEVEL*: controls the log level, defaults to `INFO`
-* *CFG_FILE*: path to the TOML config file, defaults to `config.toml`
-* *GST_DEBUG*: Gstreamer debug print, see https://gstreamer.freedesktop.org/documentation/tutorials/basic/debugging-tools.html?gi-language=c[debugging-tools].
+|===
+|Variable |Default |Description
+
+|WOLF_LOG_LEVEL
+|INFO
+|The log level to show, one of ERROR, WARNING, INFO, DEBUG, TRACE
+
+|WOLF_CFG_FILE
+|/wolf/cfg/config.toml
+|Full path to the config file
+
+|WOLF_PRIVATE_KEY_FILE
+|/wolf/cfg/key.pem
+|Full path to the key.pem file
+
+|WOLF_PRIVATE_CERT_FILE
+|/wolf/cfg/cert.pem
+|Full path to the cert.pem file
+
+|XDG_RUNTIME_DIR
+|/tmp/sockets
+|The full path where PulseAudio and video sockets will reside, this path is expected to be present in the host and mounted in the Wolf container
+
+|WOLF_PULSE_IMAGE
+|ghcr.io/games-on-whales/pulseaudio:master
+|The name of the PulseAudio image to be started (when no connection is available)
+
+|WOLF_STOP_CONTAINER_ON_EXIT
+|TRUE
+|Set to False in order to avoid force stop and removal of containers when the connection is closed
+|===
+
+Additional env variables useful when debugging:
+
+|===
+|Variable |Default |Description
+
+|RUST_BACKTRACE
+|full
+|In case an exception is thrown in the Rust code, this sets the backtrace level
+
+|GST_DEBUG
+|2
+|Gstreamer debug print, see https://gstreamer.freedesktop.org/documentation/tutorials/basic/debugging-tools.html?gi-language=c[debugging-tools]
+|===
 
 == TOML file
 
-The TOML configuration file is read only once at startup (or created if not present) and it'll be modified by Wolf when a new user is successfully paired.
+The TOML configuration file is read only once at startup (or created if not present) and it'll be modified by Wolf only when a new user is successfully paired.
 
 .Default TOML configuration file
 [source,toml]
 ....
-paired_clients = [] #<1>
-hostname = "wolf"   #<2>
-support_hevc = false #<3>
+hostname = "wolf"   #<1>
+support_hevc = true #<2>
+config_version = 2 #<3>
 uuid = "0f75f4d1-e28e-410a-b318-c0579f18f8d1" #<4>
 
-
-[[apps]] #<5>
-title = "Test ball"
-support_hdr = false
-
-[gstreamer] #<6>
-
-[gstreamer.audio]
-default_source = "audiotestsrc wave=ticks is-live=true"
-default_audio_params = """
-audioconvert ! audiorate ! audioresample ! audio/x-raw, \
-channels={channels}\
-"""
-default_opus_encoder = """
-opusenc bitrate={bitrate} bitrate-type=cbr frame-size={p\
-acket_duration} bandwidth=fullband audio-type=generic ma\
-x-payload-size=1400\
-"""
-default_sink = """
-rtpmoonlightpay_audio name=moonlight_pay packet_duration={packet_duration} encrypt={encrypt} aes_key="{aes_key}" aes_iv="{aes_iv}"  ! udpsink host={client_ip} port={client_port}\
-"""
-
-[gstreamer.video]
-default_source = "videotestsrc pattern=ball is-live=true"
-default_video_params = """
-videoscale ! videoconvert ! videorate ! video/x-raw, wid\
-th={width}, height={height}, framerate={fps}/1,format=I4\
-20, chroma-site={color_range}, colorimetry={color_space}\
-"""
-default_hevc_encoder = """
-x265enc tune=zerolatency speed-preset=superfast bitrate={bitrate} option-string="info=0:keyint=-1:qp=28:repeat-headers=1:slices={slices_per_frame}:frame-threads={slices_per_frame}:aud=0:annexb=1:log-level=3:open-gop=0:bframes=0:intra-refresh=0" ! video/x-h265, profile=main, stream-format=byte-stream\
-"""
-default_h264_encoder = """
-x264enc pass=qual tune=zerolatency speed-preset=superfast b-adapt=false bframes=0 ref=1 bitrate={bitrate} aud=false sliced-threads=true threads={slices_per_frame} option-string="slices={slices_per_frame}:keyint=infinite:open-gop=0" ! video/x-h264, profile=high, stream-format=byte-stream\
-"""
-default_sink = """
-rtpmoonlightpay_video name=moonlight_pay payload_size={payload_s\
-ize} fec_percentage={fec_percentage} min_required_fec_packets={m\
-in_required_fec_packets} ! udpsink host={client_ip} port={client\
-_port}\
-"""
-
+paired_clients = [] #<5>
+apps = [] #<6>
+gstreamer = {} #<7>
 ....
 
-<1> *paired_clients*: a list of all the Moonlight clients that have succesfully completed the pairing process; it'll be populated by Wolf and saved to this file.
-
-<2> *hostname*: this is the name that will be displayed in the list of hosts in the Moonlight UI
-
-<3> *support_hevc*: when set to `true` will enable support for HEVC in Moonlight
-
+<1> *hostname*: this is the name that will be displayed in the list of hosts in the Moonlight UI
+<2> *support_hevc*: when set to `false` will disable support for HEVC in Moonlight
+<3> *config_version*: The version of this config file
 <4> *uuid*: a randomly generated UUID, it's used by Moonlight to know if the current host has already been paired
+<5> *paired_clients*: a list of all the Moonlight clients that have succesfully completed the pairing process; it'll be populated by Wolf and saved to this file.
+<6> *apps*: a list of apps, see: xref:_defining_apps[]
+<7> *gstreamer* audio/video pipeline definitions, see xref:_gstreamer[]
 
-<5> *apps*: the list of apps that will be seen in Moonlight
-
-<6> *gstreamer*: here are all the default parts that compose the two video and audio pipelines.
-
-== Defining apps
+[#_defining_apps]
+=== Defining apps
 
 Apps defined here will be shown in Moonlight after successfully pairing with Wolf. +
 You can re-define parts of the Gstreamer pipeline easily, ex:
@@ -84,10 +84,85 @@ You can re-define parts of the Gstreamer pipeline easily, ex:
 [source,toml]
 ....
 [[apps]]
-title = "SMPTE"
+title = "Test ball" #<1>
+start_virtual_compositor = false #<2>
 
-[apps.video]
-source = "videotestsrc pattern=smpte is-live=true"
+[apps.runner] #<3>
+type = "process"
+run_cmd = "sh -c \"while :; do echo 'running...'; sleep 10; done\""
+
+[apps.video] #<4>
+source = """
+videotestsrc pattern=ball flip=true is-live=true !
+video/x-raw, framerate={fps}/1
+\
+"""
+
+[apps.audio] #<5>
+source = "audiotestsrc wave=ticks is-live=true"
 ....
 
+<1> *title*: this is the name that will be displayed in Moonlight
+<2> *start_virtual_compositor*: set to True if this app needs our custom virtual compositor (TODO: document this better)
+<3> *runner*: the type of process to run in order to start this app, see: xref:_app_runner[]
+<4> *video*: here it's possible to override the default video pipeline variables defined in: xref:_gstreamer[]
+<5> *audio*: here it's possible to override the default audio pipeline variables defined in: xref:_gstreamer[]
+
 See more examples in the xref:gstreamer.adoc[] page.
+
+[#_app_runner]
+==== App Runner
+
+There are currently two types of runner supported: `docker` and `process`
+
+==== Process
+
+Example:
+
+[source,toml]
+....
+[apps.runner]
+type = "process"
+run_cmd = "sh -c \"while :; do echo 'running...'; sleep 10; done\""
+....
+
+==== Docker
+
+Example:
+
+[source,toml]
+....
+type = "docker"
+name = "WolfSteam"
+image = "ghcr.io/games-on-whales/steam:wolf-changes"
+mounts = [
+  "/run/udev:/run/udev:ro"
+]
+env = [
+  "PROTON_LOG=1",
+  "RUN_GAMESCOPE=true",
+  "ENABLE_VKBASALT=1"
+]
+devices = []
+ports = []
+base_create_json = """ #<1>
+{
+  "HostConfig": {
+    "IpcMode": "host",
+    "CapAdd": ["SYS_ADMIN", "SYS_NICE"],
+    "Privileged": false
+  }
+}
+\
+"""
+....
+
+<1> *base_create_json*: here you can re-define any property that's defined in the docker API JSON format, see: https://docs.docker.com/engine/api/v1.40/#tag/Container/operation/ContainerCreate[docs.docker.com/engine/api/v1.40]
+
+[#_gstreamer]
+=== Gstreamer
+
+In here we define the default pipeline for both video and audio streaming to Moonlight. +
+In order to automatically pick up the right encoder at runtime based on the user HW we run in order the list of encoders at `gstreamer.video.hevc_encoders` (and `gstreamer.video.h264_encoders`); the first set of plugins that can be correctly initialised by Gstreamer will be the selected encoder for all the pipelines.
+
+You can read more about gstreamer and custom pipelines in the xref:gstreamer.adoc[] page.
