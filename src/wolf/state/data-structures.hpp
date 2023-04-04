@@ -186,11 +186,6 @@ struct AppState {
    * A list of all currently running (and paused) streaming sessions
    */
   SessionsAtoms running_sessions;
-
-  /**
-   * A thread pool, used to start all kind of concurrent operations
-   */
-  std::shared_ptr<ba::thread_pool> t_pool;
 };
 
 } // namespace state

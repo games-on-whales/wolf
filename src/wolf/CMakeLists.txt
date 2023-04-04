@@ -57,7 +57,6 @@ find_package(OpenSSL REQUIRED)
 
 find_package(Boost
         REQUIRED COMPONENTS
-        log_setup
         log
         stacktrace_basic)
 include_directories(${Boost_INCLUDE_DIRS})

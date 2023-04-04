@@ -5,7 +5,7 @@ namespace audio {
 
 struct Server {};
 
-std::shared_ptr<Server> connect(boost::asio::thread_pool &t_pool, std::string_view server) {
+std::shared_ptr<Server> connect(std::string_view server) {
   logs::log(logs::warning, "Virtual audio unsupported for the current platform.");
   return std::make_shared<Server>();
 }

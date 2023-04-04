@@ -12,7 +12,7 @@ struct Server {
   boost::future<bool> on_ready_fut;
 };
 
-std::shared_ptr<Server> connect(boost::asio::thread_pool &t_pool, std::string_view server) {
+std::shared_ptr<Server> connect(std::string_view server) {
   {
     auto loop = pa_mainloop_new();
     auto ctx = pa_context_new(pa_mainloop_get_api(loop), "wolf");
@@ -52,13 +52,13 @@ std::shared_ptr<Server> connect(boost::asio::thread_pool &t_pool, std::string_vi
       logs::log(logs::warning, "[PULSE] Unable to connect, {}", pa_strerror(err));
     }
 
-    boost::asio::post(t_pool, [state]() {
+    std::thread([state]() {
       int retval;
       auto status = pa_mainloop_run(state->loop, &retval);
       if (status < 0) {
         logs::log(logs::warning, "[PULSE] Can't run PA mainloop");
       }
-    });
+    }).detach();
 
     return state;
   }

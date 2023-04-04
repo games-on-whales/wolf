@@ -245,7 +245,7 @@ void launch(const std::shared_ptr<typename SimpleWeb::Server<SimpleWeb::HTTPS>::
   log_req<SimpleWeb::HTTPS>(request);
 
   auto client_id = std::hash<std::string>{}(current_client.client_cert);
-  auto virtual_inputs = input::setup_handlers(client_id, state->event_bus, state->t_pool);
+  auto virtual_inputs = input::setup_handlers(client_id, state->event_bus);
   SimpleWeb::CaseInsensitiveMultimap headers = request->parse_query_string();
   auto app = state::get_app_by_id(state->config, get_header(headers, "appid").value());
   auto new_session = create_run_session(virtual_inputs, request, current_client, app);

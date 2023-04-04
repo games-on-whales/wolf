@@ -494,9 +494,7 @@ std::vector<std::string> get_child_dev_nodes(libevdev_uinput *device) {
   return result;
 }
 
-InputReady setup_handlers(std::size_t session_id,
-                          const std::shared_ptr<dp::event_bus> &event_bus,
-                          const std::shared_ptr<boost::asio::thread_pool> &t_pool) {
+InputReady setup_handlers(std::size_t session_id, const std::shared_ptr<dp::event_bus> &event_bus) {
   logs::log(logs::debug, "Setting up input handlers for session: {}", session_id);
 
   auto v_devices = std::make_shared<VirtualDevices>();
@@ -591,9 +589,9 @@ InputReady setup_handlers(std::size_t session_id,
                   keyboard_state->update([&kb_action](const immer::array<int> &key_codes) {
                     return key_codes.push_back(kb_action->linux_code);
                   });
-                } else { // Released key, remove it from the key_codes
+                } else {             // Released key, remove it from the key_codes
                   keyboard_state->update([&kb_action](const immer::array<int> &key_codes) {
-                    return key_codes                                        //
+                    return key_codes //
                            | ranges::views::filter([&kb_action](int code) { //
                                return code != kb_action->linux_code;        //
                              })                                             //
@@ -638,12 +636,12 @@ InputReady setup_handlers(std::size_t session_id,
    * Unfortunately, this event is not being sent by Moonlight.
    */
   auto kb_thread_over = std::make_shared<immer::atom<bool>>(false);
-  boost::asio::post(*t_pool, ([v_devices, keyboard_state, kb_thread_over]() {
+  std::thread(([v_devices, keyboard_state, kb_thread_over]() {
     while (!kb_thread_over->load()) {
       std::this_thread::sleep_for(50ms); // TODO: should this be configurable?
       keyboard::keyboard_repeat_press(v_devices->keyboard->get(), keyboard_state->load());
     }
-  }));
+  })).detach();
 
   auto end_handler = event_bus->register_handler<immer::box<moonlight::StopStreamEvent>>(
       [sess_id = session_id, kb_thread_over](const immer::box<moonlight::StopStreamEvent> &event) {

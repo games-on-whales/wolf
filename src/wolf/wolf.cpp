@@ -75,10 +75,7 @@ state::Host get_host_config(std::string_view pkey_filename, std::string_view cer
 /**
  * @brief Local state initialization
  */
-auto initialize(std::string_view config_file,
-                int t_pool_size,
-                std::string_view pkey_filename,
-                std::string_view cert_filename) {
+auto initialize(std::string_view config_file, std::string_view pkey_filename, std::string_view cert_filename) {
   auto event_bus = std::make_shared<dp::event_bus>();
   auto config = load_config(config_file, event_bus);
   auto display_modes = getDisplayModes();
@@ -89,8 +86,7 @@ auto initialize(std::string_view config_file,
       .host = host,
       .pairing_cache = std::make_shared<immer::atom<immer::map<std::string, state::PairCache>>>(),
       .event_bus = event_bus,
-      .running_sessions = std::make_shared<immer::atom<immer::vector<state::StreamSession>>>(),
-      .t_pool = std::make_shared<boost::asio::thread_pool>(t_pool_size)};
+      .running_sessions = std::make_shared<immer::atom<immer::vector<state::StreamSession>>>()};
   return immer::box<state::AppState>(state);
 }
 
@@ -138,8 +134,8 @@ struct AudioServer {
  * if that fails, we run our own PulseAudio container and connect to it
  * if that fails, we can't return an AudioServer, hence the optional!
  */
-std::optional<AudioServer> setup_audio_server(const std::string &runtime_dir, boost::asio::thread_pool &t_pool) {
-  auto audio_server = audio::connect(t_pool);
+std::optional<AudioServer> setup_audio_server(const std::string &runtime_dir) {
+  auto audio_server = audio::connect();
   if (audio::connected(audio_server)) {
     return {{.server = audio_server}};
   } else {
@@ -154,7 +150,7 @@ std::optional<AudioServer> setup_audio_server(const std::string &runtime_dir, bo
         .env = {{"XDG_RUNTIME_DIR", runtime_dir}}});
     if (container && docker::start_by_id(container.value().id)) {
       std::this_thread::sleep_for(1000ms); // TODO: configurable? Better way of knowing when ready?
-      return {{.server = audio::connect(t_pool, fmt::format("{}/pulse-socket", runtime_dir)), .container = container}};
+      return {{.server = audio::connect(fmt::format("{}/pulse-socket", runtime_dir)), .container = container}};
     }
   }
 
@@ -165,7 +161,6 @@ auto setup_sessions_handlers(const immer::box<state::AppState> &app_state,
                              const std::string &runtime_dir,
                              std::optional<AudioServer> audio_server) {
   immer::vector_transient<immer::box<dp::handler_registration>> handlers;
-  auto t_pool = app_state->t_pool;
 
   auto wayland_sessions = std::make_shared<
       immer::atom<immer::map<std::size_t, boost::shared_future<std::shared_ptr<streaming::WaylandState>>>>>();
@@ -180,7 +175,7 @@ auto setup_sessions_handlers(const immer::box<state::AppState> &app_state,
           });
         }
         // Start selected app on a separate thread
-        ba::post(*t_pool, [=]() {
+        std::thread([=]() {
           /* Create audio virtual sink */
           logs::log(logs::debug, "[STREAM_SESSION] Create virtual audio sink");
           auto pulse_sink_name = fmt::format("virtual_sink_{}", session->session_id);
@@ -252,7 +247,7 @@ auto setup_sessions_handlers(const immer::box<state::AppState> &app_state,
           /* When the app closes there's no point in keeping the stream running */
           app_state->event_bus->fire_event(
               immer::box<moonlight::StopStreamEvent>(moonlight::StopStreamEvent{.session_id = session->session_id}));
-        });
+        }).detach();
       }));
 
   handlers.push_back(app_state->event_bus->register_handler<immer::box<moonlight::StopStreamEvent>>(
@@ -276,35 +271,37 @@ auto setup_sessions_handlers(const immer::box<state::AppState> &app_state,
         audio_sessions->update([=](const auto map) { return map.set(sess->client_ip, sess); });
       }));
 
-  ba::post(*t_pool, [=]() {
+  std::thread([=]() {
     rtp::wait_for_ping(state::VIDEO_PING_PORT, [=](unsigned short client_port, const std::string &client_ip) {
       auto video_sess = video_sessions->load()->find(client_ip);
       if (video_sess != nullptr) {
-        ba::post(*t_pool, [=, sess = *video_sess]() {
+        logs::log(logs::debug, "RTP ping from {} - starting video", client_ip);
+        std::thread([=, sess = *video_sess]() {
           std::shared_ptr<streaming::WaylandState> wl_state;
           if (auto wayland_promise = wayland_sessions->load()->find(sess->session_id)) {
             wl_state = wayland_promise->get(); // Stops here until the wayland socket is ready
           }
           streaming::start_streaming_video(sess, app_state->event_bus, wl_state, client_port);
-        });
+        }).detach();
         video_sessions->update([&client_ip](const auto &map) { return map.erase(client_ip); });
       }
     });
-  });
+  }).detach();
 
-  ba::post(*t_pool, [=]() {
+  std::thread([=]() {
     rtp::wait_for_ping(state::AUDIO_PING_PORT, [=](unsigned short client_port, const std::string &client_ip) {
       auto audio_sess = audio_sessions->load()->find(client_ip);
       if (audio_sess != nullptr) {
-        ba::post(*t_pool, [=, sess = *audio_sess]() {
+        logs::log(logs::debug, "RTP ping from {} - starting audio", client_ip);
+        std::thread([=, sess = *audio_sess]() {
           auto sink_name = fmt::format("virtual_sink_{}.monitor", sess->session_id);
           auto server_name = audio_server_name ? audio_server_name.value() : "";
           streaming::start_streaming_audio(sess, app_state->event_bus, client_port, sink_name, server_name);
-        });
+        }).detach();
         audio_sessions->update([&client_ip](const auto &map) { return map.erase(client_ip); });
       }
     });
-  });
+  }).detach();
 
   return handlers.persistent();
 }
@@ -332,38 +329,32 @@ int main(int argc, char *argv[]) {
   auto config_file = get_env("WOLF_CFG_FILE", "config.toml");
   auto p_key_file = get_env("WOLF_PRIVATE_KEY_FILE", "key.pem");
   auto p_cert_file = get_env("WOLF_PRIVATE_CERT_FILE", "cert.pem");
-  auto local_state =
-      initialize(config_file, std::stoi(get_env("WOLF_THREAD_POOL_SIZE", "30")), p_key_file, p_cert_file);
+  auto local_state = initialize(config_file, p_key_file, p_cert_file);
 
   // HTTP APIs
-  ba::post(*local_state->t_pool, [local_state]() {
+  auto http_thread = std::thread([local_state]() {
     HttpServer server = HttpServer();
     HTTPServers::startServer(&server, local_state, state::HTTP_PORT);
   });
 
   // HTTPS APIs
-  ba::post(*local_state->t_pool, [local_state, p_key_file, p_cert_file]() {
+  std::thread([local_state, p_key_file, p_cert_file]() {
     HttpsServer server = HttpsServer(p_cert_file, p_key_file);
     HTTPServers::startServer(&server, local_state, state::HTTPS_PORT);
-  });
+  }).detach();
 
   // RTSP
-  ba::post(*local_state->t_pool, [sessions = local_state->running_sessions, ev_bus = local_state->event_bus]() {
+  std::thread([sessions = local_state->running_sessions, ev_bus = local_state->event_bus]() {
     rtsp::run_server(state::RTSP_SETUP_PORT, sessions, ev_bus);
-  });
+  }).detach();
 
   // Control
-  ba::post(*local_state->t_pool, [sessions = local_state->running_sessions, ev_bus = local_state->event_bus]() {
+  std::thread([sessions = local_state->running_sessions, ev_bus = local_state->event_bus]() {
     control::run_control(state::CONTROL_PORT, sessions, ev_bus);
-  });
+  }).detach();
 
-  auto audio_server = setup_audio_server(runtime_dir, *local_state->t_pool);
+  auto audio_server = setup_audio_server(runtime_dir);
   auto sess_handlers = setup_sessions_handlers(local_state, runtime_dir, audio_server);
 
-  // Let's park the main thread over here
-  local_state->t_pool->wait();
-
-  for (const auto &handler : sess_handlers) {
-    handler->unregister();
-  }
+  http_thread.join(); // Let's park the main thread over here
 }

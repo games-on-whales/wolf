@@ -60,10 +60,12 @@ bool run_pipeline(
     const std::string &pipeline_desc,
     std::size_t session_id,
     const std::shared_ptr<dp::event_bus> &event_bus,
-    const std::function<immer::array<immer::box<dp::handler_registration>>(gst_element_ptr, gst_main_loop_ptr)>
-        &on_pipeline_ready) {
+    const std::function<immer::array<immer::box<dp::handler_registration>>(GstElement *)> &on_pipeline_ready) {
   GError *error = nullptr;
-  gst_element_ptr pipeline(gst_parse_launch(pipeline_desc.c_str(), &error), ::gst_object_unref);
+  gst_element_ptr pipeline(gst_parse_launch(pipeline_desc.c_str(), &error), [session_id](const auto &pipeline) {
+    logs::log(logs::debug, "~pipeline {}", session_id);
+    gst_object_unref(pipeline);
+  });
 
   if (!pipeline) {
     logs::log(logs::error, "[GSTREAMER] Pipeline parse error: {}", error->message);
@@ -102,7 +104,7 @@ bool run_pipeline(
                                     "pipeline-start");
 
   /* Let the calling thread set extra things */
-  auto handlers = on_pipeline_ready(pipeline, loop);
+  auto handlers = on_pipeline_ready(pipeline.get());
 
   auto pause_handler = event_bus->register_handler<immer::box<moonlight::PauseStreamEvent>>(
       [session_id, loop](const immer::box<moonlight::PauseStreamEvent> &ev) {
@@ -166,7 +168,7 @@ std::shared_ptr<GstAppDataState> setup_app_src(const immer::box<state::VideoSess
                                                               .source_id = 0,
                                                               .framerate = video_session->display_mode.refreshRate},
                                           [](const auto &app_data_state) {
-                                            logs::log(logs::trace, "~GstAppDataState");
+                                            logs::log(logs::debug, "~GstAppDataState");
                                             if (app_data_state->source_id != 0) {
                                               g_source_remove(app_data_state->source_id);
                                             }
@@ -237,7 +239,7 @@ std::shared_ptr<AppSinkState> setup_app_sink(const immer::box<state::VideoSessio
   return std::shared_ptr<AppSinkState>(
       new AppSinkState{.rtpmoonlightpay = rtpmoonlightpay, .socket = std::move(socket_ptr)},
       [](const auto &state) {
-        logs::log(logs::trace, "~AppSinkState");
+        logs::log(logs::debug, "~AppSinkState");
         gst_object_unref(state->rtpmoonlightpay);
         state->socket->shutdown(udp::socket::shutdown_send);
       });
@@ -316,8 +318,8 @@ void start_streaming_video(const immer::box<state::VideoSession> &video_session,
       pipeline,
       video_session->session_id,
       event_bus,
-      [video_session, event_bus, wl_ptr, appsrc_state, appsink_state](auto pipeline, auto loop) {
-        if (auto app_src_el = gst_bin_get_by_name(GST_BIN(pipeline.get()), "wolf_wayland_source")) {
+      [video_session, event_bus, wl_ptr, appsrc_state, appsink_state](auto pipeline) {
+        if (auto app_src_el = gst_bin_get_by_name(GST_BIN(pipeline), "wolf_wayland_source")) {
           logs::log(logs::debug, "Setting up wolf_wayland_source");
           g_assert(GST_IS_APP_SRC(app_src_el));
 
@@ -333,7 +335,7 @@ void start_streaming_video(const immer::box<state::VideoSession> &video_session,
           appsrc_state->app_src = std::move(app_src_ptr);
         }
 
-        if (auto app_sink_el = gst_bin_get_by_name(GST_BIN(pipeline.get()), "wolf_moonlight_sink")) {
+        if (auto app_sink_el = gst_bin_get_by_name(GST_BIN(pipeline), "wolf_moonlight_sink")) {
           logs::log(logs::debug, "Setting up wolf_moonlight_sink");
           g_assert(GST_IS_APP_SINK(app_sink_el));
 
@@ -357,7 +359,7 @@ void start_streaming_video(const immer::box<state::VideoSession> &video_session,
                   logs::log(logs::debug, "[GSTREAMER] Forcing IDR");
                   // Force IDR event, see: https://github.com/centricular/gstwebrtc-demos/issues/186
                   // https://gstreamer.freedesktop.org/documentation/additional/design/keyframe-force.html?gi-language=c
-                  send_message(pipeline.get(),
+                  send_message(pipeline,
                                gst_structure_new("GstForceKeyUnit", "all-headers", G_TYPE_BOOLEAN, TRUE, NULL));
                 }
               }
@@ -388,7 +390,7 @@ void start_streaming_audio(const immer::box<state::AudioSession> &audio_session,
                               fmt::arg("client_ip", audio_session->client_ip));
   logs::log(logs::debug, "Starting audio pipeline: {}", pipeline);
 
-  run_pipeline(pipeline, audio_session->session_id, event_bus, [audio_session](auto pipeline, auto loop) {
+  run_pipeline(pipeline, audio_session->session_id, event_bus, [audio_session](auto pipeline) {
     return immer::array<immer::box<dp::handler_registration>>{};
   });
 }

@@ -13,7 +13,7 @@ namespace audio {
 
 typedef struct Server Server;
 
-std::shared_ptr<Server> connect(boost::asio::thread_pool &t_pool, std::string_view server = {});
+std::shared_ptr<Server> connect(std::string_view server = {});
 
 struct AudioDevice {
   std::string_view sink_name;
