@@ -141,7 +141,12 @@ source = "audiotestsrc wave=ticks is-live=true"
 [gstreamer.video]
 
 default_source = "appsrc name=wolf_wayland_source is-live=true block=false format=3 stream-type=0"
-default_sink = "appsink name=wolf_moonlight_sink"
+default_sink = """
+rtpmoonlightpay_video name=moonlight_pay
+payload_size={payload_size} fec_percentage={fec_percentage} min_required_fec_packets={min_required_fec_packets} !
+udpsink host={client_ip} port={client_port} sync=true
+\
+"""
 
 ######################
 # HEVC encoders
