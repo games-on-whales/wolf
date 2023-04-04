@@ -60,6 +60,7 @@ RUN --mount=type=cache,target=/cache/ccache \
         -Dgst-plugins-good:pulse=enabled \
         -Dgst-plugins-bad:x265=enabled  \
         -Dgst-plugin-bad:nvcodec=enabled  \
+        -Dgst-plugin-bad:amfcodec=enabled \
         -Dvaapi=enabled \
         build && \
     meson compile -C build && \
