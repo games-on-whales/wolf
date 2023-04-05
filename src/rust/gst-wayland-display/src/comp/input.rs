@@ -1,3 +1,5 @@
+use crate::wayland::protocols::pointer_constraints::{with_pointer_constraint, PointerConstraint};
+
 use super::{focus::FocusTarget, State};
 use smithay::{
     backend::{
@@ -16,7 +18,7 @@ use smithay::{
         nix::{fcntl, fcntl::OFlag, sys::stat},
         wayland_server::protocol::wl_pointer,
     },
-    utils::{Logical, Point, Serial, SERIAL_COUNTER},
+    utils::{Logical, Point, Serial, SERIAL_COUNTER, Rectangle},
 };
 use std::{
     os::{fd::FromRawFd, unix::io::OwnedFd},
@@ -107,32 +109,99 @@ impl State {
                 self.last_pointer_movement = Instant::now();
                 let serial = SERIAL_COUNTER.next_serial();
                 let delta = event.delta();
-                self.pointer_location += delta;
-                self.pointer_location = self.clamp_coords(self.pointer_location);
-
                 let pointer = self.seat.get_pointer().unwrap();
-                let under = self
+
+                if let Some((window, pos)) = self
                     .space
                     .element_under(self.pointer_location)
-                    .map(|(w, pos)| (w.clone().into(), pos));
-                pointer.motion(
-                    self,
-                    under.clone(),
-                    &MotionEvent {
-                        location: self.pointer_location,
-                        serial,
-                        time: event.time_msec(),
-                    },
-                );
-                pointer.relative_motion(
-                    self,
-                    under,
-                    &RelativeMotionEvent {
-                        delta,
-                        delta_unaccel: event.delta_unaccel(),
-                        utime: event.time(),
-                    },
-                )
+                {
+                    let window = window.clone();
+                    let surface = window.toplevel().wl_surface().clone();
+                    with_pointer_constraint(&surface, |mut constraint| match constraint.as_deref_mut() {
+                        Some(PointerConstraint::Locked(locked)) => {
+                            if !locked.is_active() {
+                                let pending_pointer_location = self.pointer_location + delta;
+                                let window_location = self.space.element_location(&window).unwrap();
+                            
+                                if locked.region.as_ref().map(|region| region.contains(pending_pointer_location.to_i32_round() - window_location)).unwrap_or(true) {
+                                    locked.activate();
+                                }
+                            }
+                            if !locked.is_active() {
+                                self.pointer_location += delta;
+                                let under = self
+                                    .space
+                                    .element_under(self.pointer_location)
+                                    .map(|(w, pos)| (w.clone().into(), pos));
+                                pointer.motion(
+                                    self,
+                                    under.clone(),
+                                    &MotionEvent {
+                                        location: self.pointer_location,
+                                        serial,
+                                        time: event.time_msec(),
+                                    },
+                                );
+                            }
+                        },
+                        Some(PointerConstraint::Confined(confined)) => {
+                            let pending_pointer_location = self.pointer_location + delta;
+                            let window_location = self.space.element_location(&window).unwrap();
+                            let is_in_confined_region = confined.region.as_ref().map(|region| region.contains(pending_pointer_location.to_i32_round() - window_location)).unwrap_or(true);
+                            if !confined.is_active() && is_in_confined_region {
+                                confined.activate();
+                            }
+                            if is_in_confined_region {
+                                self.pointer_location = pending_pointer_location;
+                                pointer.motion(
+                                    self,
+                                    Some((window.clone().into(), pos)),
+                                    &MotionEvent {
+                                        location: self.pointer_location,
+                                        serial,
+                                        time: event.time_msec(),
+                                    },
+                                );
+                            }
+                        },
+                        None => {
+                            self.pointer_location += delta;
+                            if let Some(output) = self.output.as_ref() {
+                                if let Some(mode) = output.current_mode() {
+                                    self.pointer_location = self.clamp_coords(self.pointer_location, Rectangle::from_loc_and_size((0.0, 0.0), mode.size.to_f64().to_logical(1.0)));
+                                }
+                            }
+                            let under = self
+                                .space
+                                .element_under(self.pointer_location)
+                                .map(|(w, pos)| (w.clone().into(), pos));
+                            pointer.motion(
+                                self,
+                                under.clone(),
+                                &MotionEvent {
+                                    location: self.pointer_location,
+                                    serial,
+                                    time: event.time_msec(),
+                                },
+                            );
+                        }
+                    });
+
+                    let under = self
+                        .space
+                        .element_under(self.pointer_location)
+                        .map(|(w, pos)| (w.clone().into(), pos));
+                             
+                    pointer.relative_motion(
+                        self,
+                        under.map(|(w, pos)| (FocusTarget::Wayland(w), pos)),
+                        &RelativeMotionEvent {
+                            delta,
+                            delta_unaccel: event.delta_unaccel(),
+                            utime: event.time(),
+                        },
+                    );
+                }
             }
             InputEvent::PointerMotionAbsolute { event } => {
                 self.last_pointer_movement = Instant::now();
@@ -224,17 +293,11 @@ impl State {
         }
     }
 
-    fn clamp_coords(&self, pos: Point<f64, Logical>) -> Point<f64, Logical> {
-        if let Some(output) = self.output.as_ref() {
-            if let Some(mode) = output.current_mode() {
-                return (
-                    pos.x.max(0.0).min(mode.size.w as f64),
-                    pos.y.max(0.0).min(mode.size.h as f64),
-                )
-                    .into();
-            }
-        }
-        pos
+    fn clamp_coords(&self, pos: Point<f64, Logical>, region: Rectangle<f64, Logical>) -> Point<f64, Logical> {
+        (
+            pos.x.max(region.loc.x).min(region.size.w as f64),
+            pos.y.max(region.loc.y).min(region.size.h as f64),
+        ).into()
     }
 
     fn update_keyboard_focus(&mut self, serial: Serial) {

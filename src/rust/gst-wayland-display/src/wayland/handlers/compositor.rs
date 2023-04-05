@@ -1,5 +1,5 @@
 use smithay::{
-    backend::renderer::utils::{import_surface_tree, on_commit_buffer_handler},
+    backend::renderer::utils::on_commit_buffer_handler,
     delegate_compositor,
     desktop::PopupKind,
     reexports::{
