@@ -49,6 +49,10 @@ public:
                                     })                                                          //
                                   | ranges::to_vector;                                          //
 
+    auto default_socket = std::getenv("WOLF_DOCKER_SOCKET") ? std::getenv("WOLF_DOCKER_SOCKET")
+                                                            : "/var/run/docker.sock";
+    auto docker_socket = toml::find_or<std::string>(runner_obj, "docker_socket", default_socket);
+
     return RunDocker(std::move(ev_bus),
                      toml::find_or<std::string>(runner_obj, "base_create_json", R"({
                         "HostConfig": {
@@ -63,7 +67,8 @@ public:
                                .ports = ports,
                                .mounts = mounts,
                                .devices = devices,
-                               .env = toml::find_or<std::vector<std::string>>(runner_obj, "env", {})});
+                               .env = toml::find_or<std::vector<std::string>>(runner_obj, "env", {})},
+                     docker_socket);
   }
 
   void run(std::size_t session_id,
@@ -86,14 +91,16 @@ public:
 
 protected:
   RunDocker(std::shared_ptr<dp::event_bus> ev_bus,
-            const std::string &base_create_json,
-            docker::Container base_container)
-      : ev_bus(std::move(ev_bus)), container(std::move(base_container)), base_create_json(std::move(base_create_json)) {
-  }
+            std::string base_create_json,
+            docker::Container base_container,
+            std::string docker_socket)
+      : ev_bus(std::move(ev_bus)), container(std::move(base_container)), base_create_json(std::move(base_create_json)),
+        docker_api(std::move(docker_socket)) {}
 
   std::shared_ptr<dp::event_bus> ev_bus;
   docker::Container container;
   std::string base_create_json;
+  docker::DockerAPI docker_api;
 };
 
 void RunDocker::run(std::size_t session_id,
@@ -130,29 +137,29 @@ void RunDocker::run(std::size_t session_id,
                              .devices = devices,
                              .env = full_env};
 
-  if (auto docker_container = docker::create(new_container, this->base_create_json)) {
+  if (auto docker_container = docker_api.create(new_container, this->base_create_json)) {
     auto container_id = docker_container->id;
-    docker::start_by_id(container_id);
+    docker_api.start_by_id(container_id);
 
     logs::log(logs::info, "Starting container: {}", docker_container->name);
     logs::log(logs::debug, "Starting container: {}", *docker_container);
 
     auto terminate_handler = this->ev_bus->register_handler<immer::box<moonlight::StopStreamEvent>>(
-        [session_id, container_id](const immer::box<moonlight::StopStreamEvent> &terminate_ev) {
+        [session_id, container_id, this](const immer::box<moonlight::StopStreamEvent> &terminate_ev) {
           if (terminate_ev->session_id == session_id) {
-            docker::stop_by_id(container_id);
+            docker_api.stop_by_id(container_id);
           }
         });
 
     do {
       boost::this_thread::sleep_for(boost::chrono::milliseconds(300));
-    } while (docker::get_by_id(container_id)->status == RUNNING);
+    } while (docker_api.get_by_id(container_id)->status == RUNNING);
 
     logs::log(logs::debug, "Stopping container: {}", docker_container->name);
     if (const auto env = std::getenv("WOLF_STOP_CONTAINER_ON_EXIT")) {
       if (std::string(env) == "TRUE") {
-        docker::stop_by_id(container_id);
-        docker::remove_by_id(container_id);
+        docker_api.stop_by_id(container_id);
+        docker_api.remove_by_id(container_id);
       }
     }
     logs::log(logs::info, "Stopped container: {}", docker_container->name);

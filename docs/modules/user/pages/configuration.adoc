@@ -34,6 +34,10 @@ Wolf is configured via a TOML config file and some additional optional ENV varia
 |WOLF_STOP_CONTAINER_ON_EXIT
 |TRUE
 |Set to False in order to avoid force stop and removal of containers when the connection is closed
+
+|WOLF_DOCKER_SOCKET
+|/var/run/docker.sock
+|The full path to the docker socket, doesn't support tcp (yet)
 |===
 
 Additional env variables useful when debugging:

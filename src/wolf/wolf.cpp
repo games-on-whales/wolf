@@ -140,7 +140,8 @@ std::optional<AudioServer> setup_audio_server(const std::string &runtime_dir) {
     return {{.server = audio_server}};
   } else {
     logs::log(logs::info, "Starting PulseAudio docker container");
-    auto container = docker::create(docker::Container{
+    docker::DockerAPI docker_api(get_env("WOLF_DOCKER_SOCKET", "/var/run/docker.sock"));
+    auto container = docker_api.create(docker::Container{
         .id = "",
         .name = "WolfPulseAudio",
         .image = get_env("WOLF_PULSE_IMAGE", "ghcr.io/games-on-whales/pulseaudio:master"),
@@ -148,7 +149,7 @@ std::optional<AudioServer> setup_audio_server(const std::string &runtime_dir) {
         .ports = {},
         .mounts = {docker::MountPoint{.source = runtime_dir, .destination = "/tmp/pulse/", .mode = "rw"}},
         .env = {{"XDG_RUNTIME_DIR", runtime_dir}}});
-    if (container && docker::start_by_id(container.value().id)) {
+    if (container && docker_api.start_by_id(container.value().id)) {
       std::this_thread::sleep_for(1000ms); // TODO: configurable? Better way of knowing when ready?
       return {{.server = audio::connect(fmt::format("{}/pulse-socket", runtime_dir)), .container = container}};
     }

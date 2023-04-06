@@ -1,11 +1,9 @@
-#include <boost/asio.hpp>
 #include <boost/json/src.hpp>
 #include <curl/curl.h>
 #include <docker/docker.hpp>
 #include <docker/formatters.hpp>
 #include <docker/json_formatters.hpp>
 #include <helpers/logger.hpp>
-#include <memory>
 #include <range/v3/view.hpp>
 #include <string_view>
 
@@ -19,14 +17,18 @@ enum METHOD {
   DELETE
 };
 
+void init() {
+  curl_global_init(CURL_GLOBAL_ALL);
+}
+
 using curl_ptr = std::unique_ptr<CURL, decltype(&curl_easy_cleanup)>;
 
 /**
  * Initialise the curl handle and connects it to the docker socket
  */
-std::optional<curl_ptr> docker_connect(bool debug = false) {
+std::optional<curl_ptr> docker_connect(const std::string &socket_path, bool debug = false) {
   if (auto curl = curl_easy_init()) {
-    curl_easy_setopt(curl, CURLOPT_UNIX_SOCKET_PATH, "/var/run/docker.sock");
+    curl_easy_setopt(curl, CURLOPT_UNIX_SOCKET_PATH, socket_path.c_str()); // TODO: support also tcp://
     if (debug)
       curl_easy_setopt(curl, CURLOPT_VERBOSE, 1L);
     return curl_ptr(curl, ::curl_easy_cleanup);
@@ -43,7 +45,7 @@ req(CURL *handle,
     METHOD method,
     std::string_view target,
     std::string_view post_body = {},
-    std::vector<std::string> header_params = {}) {
+    const std::vector<std::string> &header_params = {}) {
   logs::log(logs::trace, "[CURL] Sending [{}] -> {}", method, target);
   curl_easy_setopt(handle, CURLOPT_URL, target.data());
 
@@ -113,8 +115,8 @@ json::value parse(std::string_view json) {
   }
 }
 
-std::optional<Container> get_by_id(std::string_view id) {
-  if (auto conn = docker_connect()) {
+std::optional<Container> DockerAPI::get_by_id(std::string_view id) const {
+  if (auto conn = docker_connect(socket_path)) {
     auto url = fmt::format("http://localhost/{}/containers/{}/json", DOCKER_API_VERSION, id);
     auto raw_msg = req(conn.value().get(), GET, url);
     if (raw_msg && raw_msg->first == 200) {
@@ -128,15 +130,15 @@ std::optional<Container> get_by_id(std::string_view id) {
   return {};
 }
 
-std::vector<Container> get_containers(bool all) {
-  if (auto conn = docker_connect()) {
+std::vector<Container> DockerAPI::get_containers(bool all) const {
+  if (auto conn = docker_connect(socket_path)) {
     auto url = fmt::format("http://localhost/{}/containers/json{}", DOCKER_API_VERSION, all ? "?all=true" : "");
     auto raw_msg = req(conn.value().get(), GET, url);
     if (raw_msg && raw_msg->first == 200) {
       auto json = parse(raw_msg->second);
       auto containers = json::value_to<std::vector<json::value>>(json);
       return containers                                                            //
-             | ranges::views::transform([](const json::value &container) {         //
+             | ranges::views::transform([this](const json::value &container) {     //
                  auto id = container.at("Id").as_string();                         //
                  return get_by_id(std::string_view{id.data(), id.size()}).value(); //
                })                                                                  //
@@ -159,11 +161,11 @@ void merge_array(json::object *root, const std::string &key, const json::array &
   }
 }
 
-std::optional<Container> create(const Container &container,
-                                std::string_view custom_params,
-                                std::string_view registry_auth,
-                                bool force_recreate_if_present) {
-  if (auto conn = docker_connect()) {
+std::optional<Container> DockerAPI::create(const Container &container,
+                                           std::string_view custom_params,
+                                           std::string_view registry_auth,
+                                           bool force_recreate_if_present) const {
+  if (auto conn = docker_connect(socket_path)) {
     auto url = fmt::format("http://localhost/{}/containers/create?name={}", DOCKER_API_VERSION, container.name);
     // See: https://stackoverflow.com/a/39149767 and https://github.com/moby/moby/issues/3039
     auto exposed_ports = json::object();
@@ -191,11 +193,11 @@ std::optional<Container> create(const Container &container,
       auto json = parse(raw_msg->second);
       auto created_id = json.at("Id").as_string();
       return get_by_id(std::string_view{created_id.data(), created_id.size()});
-    } else if (raw_msg && raw_msg->first == 404) { // 404 returned when the image is not present
+    } else if (raw_msg && raw_msg->first == 404) {      // 404 returned when the image is not present
       logs::log(logs::warning, "[DOCKER] Image {} not present, downloading...", container.image);
       if (pull_image(container.image, registry_auth)) { // Download the image
         return create(container, custom_params, registry_auth,
-                      force_recreate_if_present); // Then retry creating
+                      force_recreate_if_present);       // Then retry creating
       } else if (raw_msg) {
         logs::log(logs::warning, "[DOCKER] error {} - {}", raw_msg->first, raw_msg->second);
       }
@@ -212,8 +214,8 @@ std::optional<Container> create(const Container &container,
   return {};
 }
 
-bool start_by_id(std::string_view id) {
-  if (auto conn = docker_connect()) {
+bool DockerAPI::start_by_id(std::string_view id) const {
+  if (auto conn = docker_connect(socket_path)) {
     auto raw_msg =
         req(conn.value().get(), POST, fmt::format("http://localhost/{}/containers/{}/start", DOCKER_API_VERSION, id));
     if (raw_msg && (raw_msg->first == 204 || raw_msg->first == 304)) {
@@ -226,8 +228,8 @@ bool start_by_id(std::string_view id) {
   return false;
 }
 
-bool stop_by_id(std::string_view id, int timeout_seconds) {
-  if (auto conn = docker_connect()) {
+bool DockerAPI::stop_by_id(std::string_view id, int timeout_seconds) const {
+  if (auto conn = docker_connect(socket_path)) {
     auto raw_msg = req(
         conn.value().get(),
         POST,
@@ -242,8 +244,8 @@ bool stop_by_id(std::string_view id, int timeout_seconds) {
   return false;
 }
 
-bool remove_by_id(std::string_view id, bool remove_volumes, bool force, bool link) {
-  if (auto conn = docker_connect()) {
+bool DockerAPI::remove_by_id(std::string_view id, bool remove_volumes, bool force, bool link) const {
+  if (auto conn = docker_connect(socket_path)) {
     auto api_url = fmt::format("http://localhost/{}/containers/{}?v={}&force={}&link={}",
                                DOCKER_API_VERSION,
                                id,
@@ -261,24 +263,22 @@ bool remove_by_id(std::string_view id, bool remove_volumes, bool force, bool lin
   return false;
 }
 
-bool remove_by_name(std::string_view name, bool remove_volumes, bool force, bool link) {
-  if (auto conn = docker_connect()) {
-    auto containers = get_containers(true);
-    auto container = std::find_if(containers.begin(), containers.end(), [name](Container &container) {
-      return container.name == name || container.name == fmt::format("/{}", name);
-    });
-    if (container != containers.end()) {
-      return remove_by_id(container->id, remove_volumes, force, link);
-    } else {
-      logs::log(logs::warning, "Unable to find container named: {}", name);
-    }
+bool DockerAPI::remove_by_name(std::string_view name, bool remove_volumes, bool force, bool link) const {
+  auto containers = get_containers(true);
+  auto container = std::find_if(containers.begin(), containers.end(), [name](Container &container) {
+    return container.name == name || container.name == fmt::format("/{}", name);
+  });
+  if (container != containers.end()) {
+    return remove_by_id(container->id, remove_volumes, force, link);
+  } else {
+    logs::log(logs::warning, "Unable to find container named: {}", name);
   }
 
   return false;
 }
 
-bool pull_image(std::string_view image_name, std::string_view registry_auth) {
-  if (auto conn = docker_connect()) {
+bool DockerAPI::pull_image(std::string_view image_name, std::string_view registry_auth) const {
+  if (auto conn = docker_connect(socket_path)) {
     auto api_url = fmt::format("http://localhost/{}/images/create?fromImage={}", DOCKER_API_VERSION, image_name);
     std::vector<std::string> headers = {};
     if (!registry_auth.empty()) {
@@ -296,10 +296,6 @@ bool pull_image(std::string_view image_name, std::string_view registry_auth) {
   }
 
   return false;
-}
-
-void init() {
-  curl_global_init(CURL_GLOBAL_ALL);
 }
 
 } // namespace docker

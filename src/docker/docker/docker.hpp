@@ -1,5 +1,9 @@
 #pragma once
+#include <cstdlib>
 #include <optional>
+#include <stdexcept>
+#include <string>
+#include <vector>
 
 namespace docker {
 constexpr auto DOCKER_API_VERSION = "v1.40";
@@ -52,77 +56,85 @@ struct Container {
 };
 
 /**
- *
+ * CURL needs to be initialised once
  */
 void init();
 
-/**
- * Get a list of all containers
- *
- * https://docs.docker.com/engine/api/v1.30/#tag/Container/operation/ContainerList
- * @param all: Return all containers. If false, only running containers are shown
- */
-std::vector<Container> get_containers(bool all = true);
+class DockerAPI {
+private:
+  std::string socket_path; // TODO: add B64 registry_auth
 
-/**
- * Get a container
- *
- * https://docs.docker.com/engine/api/v1.30/#tag/Container/operation/ContainerInspect
- */
-std::optional<Container> get_by_id(std::string_view id);
+public:
+  inline explicit DockerAPI(std::string socket_path = "/var/run/docker.sock") : socket_path(std::move(socket_path)) {}
 
-/**
- * On success, returns the newly created docker container
- * this will differ from the input container, for example:
- *  - `id` will be added based on the returned ID
- *  - `env` will be the merged with the original container ENV variables
- *
- *  https://docs.docker.com/engine/api/v1.30/#tag/Container/operation/ContainerCreate
- *
- *  @param registry_auth: optional, base64 encoded registry auth in case the image is missing
- *  @see https://docs.docker.com/engine/api/v1.30/#section/Authentication
- *
- *  @param force_recreate_if_present: if a container with the same name is already present it will be removed
- */
-std::optional<Container> create(const Container &container,
-                                std::string_view custom_params = "{}",
-                                std::string_view registry_auth = {},
-                                bool force_recreate_if_present = true);
+  /**
+   * Get a list of all containers
+   *
+   * https://docs.docker.com/engine/api/v1.30/#tag/Container/operation/ContainerList
+   * @param all: Return all containers. If false, only running containers are shown
+   */
+  [[nodiscard]] std::vector<Container> get_containers(bool all = true) const;
 
-/**
- * Starts the container
- *
- * https://docs.docker.com/engine/api/v1.30/#tag/Container/operation/ContainerStart
- */
-bool start_by_id(std::string_view id);
+  /**
+   * Get a container
+   *
+   * https://docs.docker.com/engine/api/v1.30/#tag/Container/operation/ContainerInspect
+   */
+  [[nodiscard]] std::optional<Container> get_by_id(std::string_view id) const;
 
-/**
- * Stops the container
- *
- * https://docs.docker.com/engine/api/v1.30/#tag/Container/operation/ContainerStop
- * @param timeout_seconds: Number of seconds to wait before killing the container
- */
-bool stop_by_id(std::string_view id, int timeout_seconds = 2);
+  /**
+   * On success, returns the newly created docker container
+   * this will differ from the input container, for example:
+   *  - `id` will be added based on the returned ID
+   *  - `env` will be the merged with the original container ENV variables
+   *
+   *  https://docs.docker.com/engine/api/v1.30/#tag/Container/operation/ContainerCreate
+   *
+   *  @param registry_auth: optional, base64 encoded registry auth in case the image is missing
+   *  @see https://docs.docker.com/engine/api/v1.30/#section/Authentication
+   *
+   *  @param force_recreate_if_present: if a container with the same name is already present it will be removed
+   */
+  std::optional<Container> create(const Container &container,
+                                  std::string_view custom_params = "{}",
+                                  std::string_view registry_auth = {},
+                                  bool force_recreate_if_present = true) const;
 
-/**
- * Removes the container
- *
- * https://docs.docker.com/engine/api/v1.30/#tag/Container/operation/ContainerDelete
- *
- * @param remove_volumes: Remove anonymous volumes associated with the container.
- * @param force: If the container is running, kill it before removing it.
- * @param link: Remove the specified link associated with the container.
- */
-bool remove_by_id(std::string_view id, bool remove_volumes = false, bool force = false, bool link = false);
+  /**
+   * Starts the container
+   *
+   * https://docs.docker.com/engine/api/v1.30/#tag/Container/operation/ContainerStart
+   */
+  bool start_by_id(std::string_view id) const;
 
-/**
- * Searches for a container with the given name and then removes it if present.
- */
-bool remove_by_name(std::string_view name, bool remove_volumes = false, bool force = false, bool link = false);
+  /**
+   * Stops the container
+   *
+   * https://docs.docker.com/engine/api/v1.30/#tag/Container/operation/ContainerStop
+   * @param timeout_seconds: Number of seconds to wait before killing the container
+   */
+  bool stop_by_id(std::string_view id, int timeout_seconds = 2) const;
 
-/**
- * Downloads a Docker image
- */
-bool pull_image(std::string_view image_name, std::string_view registry_auth = {});
+  /**
+   * Removes the container
+   *
+   * https://docs.docker.com/engine/api/v1.30/#tag/Container/operation/ContainerDelete
+   *
+   * @param remove_volumes: Remove anonymous volumes associated with the container.
+   * @param force: If the container is running, kill it before removing it.
+   * @param link: Remove the specified link associated with the container.
+   */
+  bool remove_by_id(std::string_view id, bool remove_volumes = false, bool force = false, bool link = false) const;
+
+  /**
+   * Searches for a container with the given name and then removes it if present.
+   */
+  bool remove_by_name(std::string_view name, bool remove_volumes = false, bool force = false, bool link = false) const;
+
+  /**
+   * Downloads a Docker image
+   */
+  bool pull_image(std::string_view image_name, std::string_view registry_auth = {}) const;
+};
 
 } // namespace docker

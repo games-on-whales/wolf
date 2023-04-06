@@ -7,6 +7,7 @@ using Catch::Matchers::Equals;
 
 TEST_CASE("Docker API", "DOCKER") {
   docker::init();
+  docker::DockerAPI docker_api;
 
   docker::Container container = {
       .id = "",
@@ -20,13 +21,13 @@ TEST_CASE("Docker API", "DOCKER") {
                                  .cgroup_permission = "mrw"}},
       .env = {"ASD=true"}};
 
-  auto first_container = docker::create(container);
+  auto first_container = docker_api.create(container);
   REQUIRE(first_container.has_value());
-  REQUIRE(docker::start_by_id(first_container.value().id));
-  REQUIRE(docker::stop_by_id(first_container.value().id));
+  REQUIRE(docker_api.start_by_id(first_container.value().id));
+  REQUIRE(docker_api.stop_by_id(first_container.value().id));
 
   // This should remove the first container and create a new one with the same name
-  auto second_container = docker::create(first_container.value(), R"({
+  auto second_container = docker_api.create(first_container.value(), R"({
     "Env": ["AN_ENV_VAR=true"],
     "HostConfig": {
       "IpcMode": "host"
@@ -43,6 +44,6 @@ TEST_CASE("Docker API", "DOCKER") {
   REQUIRE(second_container->devices.size() == first_container->devices.size());
   REQUIRE(second_container->mounts.size() == first_container->mounts.size());
 
-  REQUIRE(!docker::remove_by_id(first_container->id)); // This container doesn't exist anymore
-  REQUIRE(docker::remove_by_id(second_container->id));
+  REQUIRE(!docker_api.remove_by_id(first_container->id)); // This container doesn't exist anymore
+  REQUIRE(docker_api.remove_by_id(second_container->id));
 }

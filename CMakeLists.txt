@@ -28,7 +28,7 @@ if (CMAKE_PROJECT_NAME STREQUAL PROJECT_NAME)
         # make sure to -DCMAKE_BUILD_TYPE=RelWithDebInfo)
         set_property(GLOBAL PROPERTY ENABLE_EXPORTS ON)
         set_property(GLOBAL PROPERTY VISIBILITY_INLINES_HIDDEN NO)
-        add_link_options("-no-pie;-fno-pie")
+        add_link_options("-fno-pie")
         add_compile_options("-fno-inline")
     endif ()
 

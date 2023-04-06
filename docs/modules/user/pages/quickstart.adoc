@@ -17,7 +17,7 @@ Intel/AMD::
 
 [source,bash]
 ....
-docker run \
+docker_api run \
     --name wolf \
     --network=host \
     -e GST_DEBUG=2 \
@@ -25,7 +25,7 @@ docker run \
     -e WOLF_LOG_LEVEL=DEBUG \
     -e XDG_RUNTIME_DIR=/tmp/sockets \
     -v /tmp/sockets:/tmp/sockets:rw \
-    -v /var/run/docker.sock:/var/run/docker.sock:rw \
+    -v /var/run/docker_api.sock:/var/run/docker_api.sock:rw \
     -v ~/wolf:/wolf/cfg \
     --device /dev/dri/renderD128 \
     --device /dev/dri/card0 \
@@ -50,7 +50,7 @@ Unfortunately on Nvidia things are a little bit more complex:
 
 [source,bash]
 ....
-docker run --rm \
+docker_api run --rm \
     --name wolf \
     --network=host \
     -e GST_DEBUG=2 \
@@ -58,7 +58,7 @@ docker run --rm \
     -e WOLF_LOG_LEVEL=DEBUG \
     -e XDG_RUNTIME_DIR=/tmp/sockets \
     -v /tmp/sockets:/tmp/sockets:rw \
-    -v /var/run/docker.sock:/var/run/docker.sock:rw \
+    -v /var/run/docker_api.sock:/var/run/docker_api.sock:rw \
     -v ~/wolf:/wolf/cfg \
     --device-cgroup-rule "c 13:* rmw" \
     --device /dev/nvidia-uvm \
