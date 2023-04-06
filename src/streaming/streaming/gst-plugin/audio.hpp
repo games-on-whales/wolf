@@ -26,7 +26,7 @@ static GstBuffer *create_rtp_header(const gst_rtp_moonlight_pay_audio &rtpmoonli
   packet->rtp.packetType = 97;
   packet->rtp.ssrc = 0;
 
-  auto timestamp = rtpmoonlightpay.cur_seq_number * rtpmoonlightpay.packet_duration;
+  u_int32_t timestamp = rtpmoonlightpay.cur_seq_number * rtpmoonlightpay.packet_duration;
   packet->rtp.sequenceNumber = boost::endian::native_to_big((uint16_t)rtpmoonlightpay.cur_seq_number);
   packet->rtp.timestamp = boost::endian::native_to_big((uint32_t)timestamp);
 

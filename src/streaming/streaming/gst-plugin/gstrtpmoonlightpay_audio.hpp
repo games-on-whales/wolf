@@ -33,7 +33,7 @@ typedef struct _gst_rtp_moonlight_pay_audioClass gst_rtp_moonlight_pay_audioClas
 struct _gst_rtp_moonlight_pay_audio {
   GstBaseTransform base_rtpmoonlightpay_audio;
 
-  uint16_t cur_seq_number;
+  u_int32_t cur_seq_number;
 
   bool encrypt;
   std::string aes_key;
