@@ -382,7 +382,7 @@ int main(int argc, char *argv[]) {
 
   http_thread.join(); // Let's park the main thread over here
 
-  for (const auto& handler : sess_handlers) {
+  for (const auto &handler : sess_handlers) {
     handler->unregister();
   }
 }
