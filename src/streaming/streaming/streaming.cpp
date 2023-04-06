@@ -63,7 +63,7 @@ bool run_pipeline(
     const std::function<immer::array<immer::box<dp::handler_registration>>(GstElement *)> &on_pipeline_ready) {
   GError *error = nullptr;
   gst_element_ptr pipeline(gst_parse_launch(pipeline_desc.c_str(), &error), [session_id](const auto &pipeline) {
-    logs::log(logs::debug, "~pipeline {}", session_id);
+    logs::log(logs::trace, "~pipeline {}", session_id);
     gst_object_unref(pipeline);
   });
 
@@ -163,12 +163,12 @@ void send_message(GstElement *recipient, GstStructure *message) {
 namespace custom_src {
 
 std::shared_ptr<GstAppDataState> setup_app_src(const immer::box<state::VideoSession> &video_session,
-                                               const std::shared_ptr<WaylandState> &wl_ptr) {
-  return std::shared_ptr<GstAppDataState>(new GstAppDataState{.wayland_state = wl_ptr,
+                                               wl_state_ptr wl_ptr) {
+  return std::shared_ptr<GstAppDataState>(new GstAppDataState{.wayland_state = std::move(wl_ptr),
                                                               .source_id = 0,
                                                               .framerate = video_session->display_mode.refreshRate},
                                           [](const auto &app_data_state) {
-                                            logs::log(logs::debug, "~GstAppDataState");
+                                            logs::log(logs::trace, "~GstAppDataState");
                                             if (app_data_state->source_id != 0) {
                                               g_source_remove(app_data_state->source_id);
                                             }
@@ -179,7 +179,7 @@ std::shared_ptr<GstAppDataState> setup_app_src(const immer::box<state::VideoSess
 static bool push_data(GstAppDataState *data) {
   GstFlowReturn ret;
 
-  auto buffer = get_frame(data->wayland_state);
+  auto buffer = get_frame(*data->wayland_state);
   if (GST_IS_BUFFER(buffer) && GST_IS_APP_SRC(data->app_src.get())) {
 
     GST_BUFFER_PTS(buffer) = data->timestamp;
@@ -239,7 +239,7 @@ std::shared_ptr<AppSinkState> setup_app_sink(const immer::box<state::VideoSessio
   return std::shared_ptr<AppSinkState>(
       new AppSinkState{.rtpmoonlightpay = rtpmoonlightpay, .socket = std::move(socket_ptr)},
       [](const auto &state) {
-        logs::log(logs::debug, "~AppSinkState");
+        logs::log(logs::trace, "~AppSinkState");
         gst_object_unref(state->rtpmoonlightpay);
         state->socket->shutdown(udp::socket::shutdown_send);
       });
@@ -279,7 +279,7 @@ static GstFlowReturn sink_got_data(GstElement *sink, AppSinkState *state) {
  */
 void start_streaming_video(const immer::box<state::VideoSession> &video_session,
                            const std::shared_ptr<dp::event_bus> &event_bus,
-                           const std::shared_ptr<WaylandState> &wl_ptr,
+                           wl_state_ptr wl_ptr,
                            unsigned short client_port) {
   std::string color_range = (static_cast<int>(video_session->color_range) == static_cast<int>(state::JPEG)) ? "jpeg"
                                                                                                             : "mpeg2";
@@ -311,21 +311,21 @@ void start_streaming_video(const immer::box<state::VideoSession> &video_session,
                               fmt::arg("color_range", color_range));
   logs::log(logs::debug, "Starting video pipeline: {}", pipeline);
 
-  auto appsrc_state = custom_src::setup_app_src(video_session, wl_ptr);
+  auto appsrc_state = custom_src::setup_app_src(video_session, std::move(wl_ptr));
   auto appsink_state = custom_sink::setup_app_sink(video_session, client_port);
 
   run_pipeline(
       pipeline,
       video_session->session_id,
       event_bus,
-      [video_session, event_bus, wl_ptr, appsrc_state, appsink_state](auto pipeline) {
+      [video_session, event_bus, appsrc_state, appsink_state](auto pipeline) {
         if (auto app_src_el = gst_bin_get_by_name(GST_BIN(pipeline), "wolf_wayland_source")) {
           logs::log(logs::debug, "Setting up wolf_wayland_source");
           g_assert(GST_IS_APP_SRC(app_src_el));
 
           auto app_src_ptr = gst_element_ptr(app_src_el, ::gst_object_unref);
 
-          auto caps = set_resolution(wl_ptr, video_session->display_mode, app_src_ptr);
+          auto caps = set_resolution(*appsrc_state->wayland_state, video_session->display_mode, app_src_ptr);
           g_object_set(app_src_ptr.get(), "caps", caps.get(), NULL);
 
           /* Adapted from the tutorial at:

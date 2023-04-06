@@ -10,13 +10,12 @@ extern "C" {
 namespace streaming {
 
 struct WaylandState {
-  std::shared_ptr<WaylandDisplay> display{};
+  WaylandDisplay display{};
   immer::vector<std::string> env{};
   immer::vector<std::string> graphic_devices{};
 };
 
-std::shared_ptr<WaylandState> create_wayland_display(const immer::array<std::string> &input_devices,
-                                                     const std::string &render_node) {
+wl_state_ptr create_wayland_display(const immer::array<std::string> &input_devices, const std::string &render_node) {
   logs::log(logs::debug, "[WAYLAND] Creating wayland display");
   auto w_display = display_init(render_node.c_str());
   immer::vector_transient<std::string> final_devices;
@@ -44,19 +43,15 @@ std::shared_ptr<WaylandState> create_wayland_display(const immer::array<std::str
     }
   }
 
-  auto wl_state = new WaylandState{.display = std::make_shared<WaylandDisplay>(w_display),
+  auto wl_state = new WaylandState{.display = w_display,
                                    .env = final_env.persistent(),
                                    .graphic_devices = final_devices.persistent()};
-  return {wl_state, [](const auto &el) {
-            logs::log(logs::trace, "display_finish(WaylandState)");
-            display_finish(*el->display);
-            delete el;
-          }};
+  return {wl_state, &destroy};
 }
 
-std::shared_ptr<GstCaps> set_resolution(const std::shared_ptr<WaylandState> &w_state,
-                                        const moonlight::DisplayMode &display_mode,
-                                        const std::optional<gst_element_ptr> &app_src) {
+std::unique_ptr<GstCaps, decltype(&gst_caps_unref)> set_resolution(WaylandState &w_state,
+                                                                   const moonlight::DisplayMode &display_mode,
+                                                                   const std::optional<gst_element_ptr> &app_src) {
   /* clang-format off */
   auto caps = gst_caps_new_simple("video/x-raw",
                                   "width", G_TYPE_INT, display_mode.width,
@@ -71,7 +66,7 @@ std::shared_ptr<GstCaps> set_resolution(const std::shared_ptr<WaylandState> &w_s
 
   auto video_info = gst_video_info_new();
   if (gst_video_info_from_caps(video_info, caps)) {
-    display_set_video_info(*w_state->display, video_info);
+    display_set_video_info(w_state.display, video_info);
   } else {
     logs::log(logs::warning, "[WAYLAND] Unable to set video_info from caps");
   }
@@ -80,16 +75,21 @@ std::shared_ptr<GstCaps> set_resolution(const std::shared_ptr<WaylandState> &w_s
   return {caps, gst_caps_unref};
 }
 
-immer::vector<std::string> get_devices(const std::shared_ptr<WaylandState> &w_state) {
-  return w_state->graphic_devices;
+immer::vector<std::string> get_devices(const WaylandState &w_state) {
+  return w_state.graphic_devices;
 }
 
-immer::vector<std::string> get_env(const std::shared_ptr<WaylandState> &w_state) {
-  return w_state->env;
+immer::vector<std::string> get_env(const WaylandState &w_state) {
+  return w_state.env;
 }
 
-GstBuffer *get_frame(const std::shared_ptr<WaylandState> &w_state) {
-  return display_get_frame(*w_state->display);
+GstBuffer *get_frame(WaylandState &w_state) {
+  return display_get_frame(w_state.display);
+}
+
+static void destroy(WaylandState *w_state) {
+  logs::log(logs::trace, "~WaylandState");
+  display_finish(w_state->display);
 }
 
 } // namespace streaming

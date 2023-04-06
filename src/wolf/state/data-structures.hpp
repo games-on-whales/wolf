@@ -54,6 +54,16 @@ struct PairSignal {
   std::shared_ptr<boost::promise<std::string>> user_pin;
 };
 
+struct RTPVideoPingEvent {
+  std::string client_ip;
+  unsigned short client_port;
+};
+
+struct RTPAudioPingEvent {
+  std::string client_ip;
+  unsigned short client_port;
+};
+
 using PairedClientList = immer::vector<immer::box<PairedClient>>;
 
 struct App {
