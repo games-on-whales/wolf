@@ -210,8 +210,11 @@ auto setup_sessions_handlers(const immer::box<state::AppState> &app_state,
           auto audio_server_name = audio_server ? audio::get_server_name(audio_server->server) : "";
           full_env.set("PULSE_SINK", pulse_sink_name);
           full_env.set("PULSE_SOURCE", pulse_sink_name + ".monitor");
-          full_env.set("PULSE_SERVER", audio_server_name);
-          mounted_paths.push_back({audio_server_name, audio_server_name});
+
+          if (audio_server->container) {
+            full_env.set("PULSE_SERVER", audio_server_name);
+            mounted_paths.push_back({audio_server_name, audio_server_name});
+          }
 
           /* Create video virtual wayland compositor */
           if (session->app->start_virtual_compositor) {
