@@ -19,7 +19,7 @@ use smithay::{
             damage::{DamageTrackedRenderer, DamageTrackedRendererError as DTRError},
             element::memory::MemoryRenderBuffer,
             gles2::{Gles2Renderbuffer, Gles2Renderer},
-            Bind, Offscreen,
+            Bind, ImportMemWl, Offscreen,
         },
     },
     desktop::{
@@ -69,7 +69,7 @@ mod rendering;
 pub use self::focus::*;
 pub use self::input::*;
 pub use self::rendering::*;
-use crate::{utils::RenderTarget, wayland::protocols::{wl_drm::create_drm_global, pointer_constraints::PointerConstraintsState}};
+use crate::{utils::RenderTarget, wayland::protocols::wl_drm::create_drm_global};
 
 static EGL_DISPLAYS: Lazy<Mutex<HashMap<Option<DrmNode>, Weak<EGLDisplay>>>> =
     Lazy::new(|| Mutex::new(HashMap::new()));
@@ -119,7 +119,6 @@ pub(crate) struct State {
     pub data_device_state: DataDeviceState,
     pub dmabuf_state: DmabufState,
     output_state: OutputManagerState,
-    pointer_constraints_state: PointerConstraintsState,
     presentation_state: PresentationState,
     relative_ptr_state: RelativePointerManagerState,
     pub seat_state: SeatState<Self>,
@@ -153,7 +152,6 @@ pub(crate) fn init(
     let compositor_state = CompositorState::new::<State>(&dh);
     let data_device_state = DataDeviceState::new::<State>(&dh);
     let mut dmabuf_state = DmabufState::new();
-    let pointer_constraints_state = PointerConstraintsState::new::<State>(&dh);
     let output_state = OutputManagerState::new_with_xdg_output::<State>(&dh);
     let presentation_state = PresentationState::new::<State>(&dh, clock.id() as _);
     let relative_ptr_state = RelativePointerManagerState::new::<State>(&dh);
@@ -267,7 +265,6 @@ pub(crate) fn init(
         data_device_state,
         dmabuf_state,
         output_state,
-        pointer_constraints_state,
         presentation_state,
         relative_ptr_state,
         seat_state,

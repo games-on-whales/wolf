@@ -2,7 +2,6 @@ pub mod compositor;
 pub mod data_device;
 pub mod dmabuf;
 pub mod output;
-pub mod pointer_constraints;
 pub mod presentation;
 pub mod relative_pointer;
 pub mod seat;
