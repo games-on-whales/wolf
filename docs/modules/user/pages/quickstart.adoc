@@ -1,10 +1,5 @@
 = Quickstart
 
-[WARNING]
-====
-Wolf is under *heavy development*; it's *not user-friendly* nor easy to use (we are working on it)
-====
-
 == Docker
 
 Wolf runs as a single container, it'll spin up and down additional containers on-demand.
@@ -15,9 +10,10 @@ Intel/AMD::
 +
 --
 
+Docker CLI:
 [source,bash]
 ....
-docker_api run \
+docker run \
     --name wolf \
     --network=host \
     -e GST_DEBUG=2 \
@@ -25,7 +21,7 @@ docker_api run \
     -e WOLF_LOG_LEVEL=DEBUG \
     -e XDG_RUNTIME_DIR=/tmp/sockets \
     -v /tmp/sockets:/tmp/sockets:rw \
-    -v /var/run/docker_api.sock:/var/run/docker_api.sock:rw \
+    -v /var/run/docker.sock:/var/run/docker.sock:rw \
     -v ~/wolf:/wolf/cfg \
     --device /dev/dri/renderD128 \
     --device /dev/dri/card0 \
@@ -36,6 +32,35 @@ docker_api run \
     -v /run/udev:/run/udev:rw \
     ghcr.io/games-on-whales/wolf:dev-wayland
 ....
+
+Docker compose:
+[source,yaml]
+....
+version: "3.8"
+services:
+  wolf:
+    image: ghcr.io/games-on-whales/wolf:dev-wayland
+    environment:
+      - GST_DEBUG=2
+      - RUST_BACKTRACE=full
+      - WOLF_LOG_LEVEL=DEBUG
+      - XDG_RUNTIME_DIR=/tmp/sockets
+    volumes:
+      - ~/wolf:/wolf/cfg
+      - /tmp/sockets:/tmp/sockets:rw
+      - /var/run/docker.sock:/var/run/docker.sock:rw
+      - /dev/shm:/dev/shm:rw
+      - /dev/input:/dev/input:rw
+      - /run/udev:/run/udev:rw
+    devices:
+      - /dev/dri
+      - /dev/uinput
+    device_cgroup_rules:
+      - 'c 13:* rmw'
+    network_mode: host
+    restart: unless-stopped
+....
+
 --
 Nvidia::
 +
@@ -47,10 +72,10 @@ Unfortunately on Nvidia things are a little bit more complex:
 * Your driver version must be `>= 530.30.02`
 * `--gpus` and the Nvidia Docker Toolkit seems to not work (to be investigated)
 
-
+Docker CLI:
 [source,bash]
 ....
-docker_api run --rm \
+docker run --rm \
     --name wolf \
     --network=host \
     -e GST_DEBUG=2 \
@@ -58,7 +83,7 @@ docker_api run --rm \
     -e WOLF_LOG_LEVEL=DEBUG \
     -e XDG_RUNTIME_DIR=/tmp/sockets \
     -v /tmp/sockets:/tmp/sockets:rw \
-    -v /var/run/docker_api.sock:/var/run/docker_api.sock:rw \
+    -v /var/run/docker.sock:/var/run/docker.sock:rw \
     -v ~/wolf:/wolf/cfg \
     --device-cgroup-rule "c 13:* rmw" \
     --device /dev/nvidia-uvm \
@@ -76,6 +101,43 @@ docker_api run --rm \
     -v /dev/input:/dev/input:rw \
     -v /run/udev:/run/udev:rw \
     ghcr.io/games-on-whales/wolf:dev-wayland
+....
+
+Docker compose:
+[source,yaml]
+....
+version: "3.8"
+services:
+  wolf:
+    image: ghcr.io/games-on-whales/wolf:dev-wayland
+    environment:
+      - GST_DEBUG=2
+      - RUST_BACKTRACE=full
+      - WOLF_LOG_LEVEL=DEBUG
+      - XDG_RUNTIME_DIR=/tmp/sockets
+    volumes:
+      - ~/wolf:/wolf/cfg
+      - /tmp/sockets:/tmp/sockets:rw
+      - /var/run/docker.sock:/var/run/docker.sock:rw
+      - /dev/shm:/dev/shm:rw
+      - /dev/input:/dev/input:rw
+      - /run/udev:/run/udev:rw
+    devices:
+      - /dev/dri
+      - /dev/uinput
+      - /dev/nvidia-uvm
+      - /dev/nvidia-uvm-tools
+      - /dev/nvidia-caps/nvidia-cap1
+      - /dev/nvidia-caps/nvidia-cap2
+      - /dev/nvidiactl
+      - /dev/nvidia0
+      - /dev/nvidia-modeset
+      - /dev/nvidiactl
+      - /dev/uinput
+    device_cgroup_rules:
+      - 'c 13:* rmw'
+    network_mode: host
+    restart: unless-stopped
 ....
 
 Depending on your system you might also need to initialise the `nvidia-uvm` devices:
@@ -116,6 +178,18 @@ fi
 
 ======
 
+To keep things simple the scripts above defaulted to `network:host`; that's not really required, the minimum set of ports that needs to be exposed are:
+
+[source,dockerfile]
+....
+EXPOSE 47984/tcp # HTTPS
+EXPOSE 47989/tcp # HTTP
+EXPOSE 47998/udp # Video
+EXPOSE 47999/udp # Control
+EXPOSE 48000/udp # Audio
+EXPOSE 48010/tcp # RTSP
+....
+
 == Manual build
 
 .Build dependencies
@@ -138,6 +212,13 @@ If compilations completes correctly you can already start Wolf; in order to succ
 ....
 apt install -y gstreamer1.0-plugins-base gstreamer1.0-plugins-good gstreamer1.0-plugins-ugly gstreamer1.0-plugins-bad
 ....
+
+[WARNING]
+====
+Based on your system you'll also need some specific plugins in order to enable HW acceleration. For Intel/AMD you'll need https://gstreamer.freedesktop.org/documentation/vaapi/index.html?gi-language=c[`vaapi`]; Nvidia instead will need https://gstreamer.freedesktop.org/documentation/nvcodec/index.html?gi-language=c[`nvcodec`].
+
+If your package manager doesn't include them you can build them from scratch by following the instructions used in our https://github.com/games-on-whales/wolf/blob/stable/gstreamer.Dockerfile[gstreamer.Dockerfile]
+====
 
 .Run!
 [source,bash]
@@ -178,4 +259,32 @@ SUBSYSTEMS=="input", ATTRS{id/vendor}=="ab00", MODE="0660", GROUP="input", ENV{I
 SUBSYSTEMS=="input", ATTRS{id/vendor}=="045e", ATTRS{id/product}=="02d1", ATTRS{id/version}=="ab00", MODE="0660", GROUP="input"
 ....
 
-Reboot.
+.What does that mean?
+[%collapsible]
+====
+
+    KERNEL=="uinput", SUBSYSTEM=="misc", MODE="0660", GROUP="input", OPTIONS+="static_node=uinput"
+
+
+Allows Wolf to access `/dev/uinput` on your system. It needs that node to create the virtual devices. This is usually not the default on servers, but if that is already working for you on your desktop system, you can skip this line.
+
+    SUBSYSTEMS=="input", ATTRS{id/vendor}=="ab00", MODE="0660", GROUP="input", ENV{ID_SEAT}="seat9"
+
+
+This line checks for the custom vendor-id that Wolf gives to newly created virtual devices and assigns them to `seat9`, which will cause any session with a lower seat (usually you only have `seat1` for your main session) to ignore the devices.
+
+    SUBSYSTEMS=="input", ATTRS{id/vendor}=="045e", ATTRS{id/product}=="02d1", ATTRS{id/version}=="ab00", MODE="0660", GROUP="input"
+
+
+Now the virtual controllers are different, because we need to emulate an existing brand for them to be picked up correctly, so our virtual controllers have a vendor/product id resembling an Xbox controller. But the version is again specific to Wolf.
+
+You can't assign controllers a seat however (well - you can - but it won't have the same effect), so we just give it permissions where only user+group can pick it up.
+====
+
+Reload the udev rules either by rebooting or run:
+
+[source,bash]
+....
+udevadm control --reload-rules && udevadm trigger
+....
+
