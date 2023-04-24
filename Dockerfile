@@ -1,6 +1,6 @@
-ARG GSTREAMER_VERSION=1.22.0
+ARG BASE_IMAGE=ghcr.io/games-on-whales/gstreamer:1.22.0
 ########################################################
-FROM gameonwhales/gstreamer:$GSTREAMER_VERSION AS wolf-builder
+FROM $BASE_IMAGE AS wolf-builder
 
 ENV DEBIAN_FRONTEND=noninteractive
 
@@ -47,7 +47,7 @@ RUN --mount=type=cache,target=/cache/ccache \
     cp $CMAKE_BUILD_DIR/src/wolf/wolf /wolf/wolf
 
 ########################################################
-FROM gameonwhales/gstreamer:$GSTREAMER_VERSION AS runner
+FROM $BASE_IMAGE AS runner
 ENV DEBIAN_FRONTEND=noninteractive
 
 # Wolf runtime dependencies
@@ -59,7 +59,7 @@ RUN apt-get update -y && \
     libevdev2 \
     libudev1 \
     libcurl4 \
-    va-driver-all intel-media-va-driver-non-free  \
+    libsoup-3.0-0 \
     && rm -rf /var/lib/apt/lists/*
 
 # gst-plugin-wayland runtime dependencies
