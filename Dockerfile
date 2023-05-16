@@ -59,7 +59,6 @@ RUN apt-get update -y && \
     libevdev2 \
     libudev1 \
     libcurl4 \
-    libsoup-3.0-0 \
     && rm -rf /var/lib/apt/lists/*
 
 # gst-plugin-wayland runtime dependencies

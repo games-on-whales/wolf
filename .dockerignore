@@ -6,3 +6,4 @@
 !cmake
 !CMakeLists.txt
 !.clang-format
+!gstreamer.control
