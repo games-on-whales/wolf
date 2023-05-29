@@ -54,7 +54,6 @@ ENV DEBIAN_FRONTEND=noninteractive
 RUN apt-get update -y && \
     apt-get install -y --no-install-recommends \
     ca-certificates \
-    tini \
     libssl3 \
     libevdev2 \
     libudev1 \
@@ -68,19 +67,6 @@ RUN apt-get update -y && \
     libglvnd0 libgl1 libglx0 libegl1 libgles2 xwayland \
     && rm -rf /var/lib/apt/lists/*
 
-ARG NV_VERSION
-# nvidia files
-RUN if [ -n "$NV_VERSION" ]; then \
-    apt-get update -y && \
-    apt-get install -y --no-install-recommends curl kmod pkg-config libglvnd-dev && \
-    curl -LO https://download.nvidia.com/XFree86/Linux-x86_64/$NV_VERSION/NVIDIA-Linux-x86_64-$NV_VERSION.run && \
-    chmod +x NVIDIA-Linux-x86_64-$NV_VERSION.run && \
-    ./NVIDIA-Linux-x86_64-$NV_VERSION.run --silent -z --skip-depmod --skip-module-unload --no-nvidia-modprobe --no-kernel-modules --no-kernel-module-source && \
-    rm ./NVIDIA-Linux-x86_64-$NV_VERSION.run && \
-    apt-get remove -y curl kmod pkg-config libglvnd-dev \
-    && rm -rf /var/lib/apt/lists/* \
-    ; fi
-
 ENV GST_PLUGIN_PATH=/usr/local/lib/x86_64-linux-gnu/gstreamer-1.0/
 COPY --from=wolf-builder /wolf/wolf /wolf/wolf
 
@@ -90,18 +76,21 @@ ARG WOLF_CFG_FOLDER=/wolf/cfg
 ENV WOLF_CFG_FOLDER=$WOLF_CFG_FOLDER
 RUN mkdir $WOLF_CFG_FOLDER
 
-ENV XDG_RUNTIME_DIR=/tmp/sockets
-ENV WOLF_LOG_LEVEL=INFO
-ENV WOLF_CFG_FILE=$WOLF_CFG_FOLDER/config.toml
-ENV WOLF_PRIVATE_KEY_FILE=$WOLF_CFG_FOLDER/key.pem
-ENV WOLF_PRIVATE_CERT_FILE=$WOLF_CFG_FOLDER/cert.pem
-ENV WOLF_THREAD_POOL_SIZE=30
-ENV WOLF_PULSE_IMAGE=ghcr.io/games-on-whales/pulseaudio:master
-ENV WOLF_RENDER_NODE=/dev/dri/renderD128
-ENV WOLF_STOP_CONTAINER_ON_EXIT=TRUE
-ENV WOLF_DOCKER_SOCKET=/var/run/docker.sock
-ENV RUST_BACKTRACE=full
-ENV GST_DEBUG=2
+ENV XDG_RUNTIME_DIR=/tmp/sockets \
+    WOLF_LOG_LEVEL=INFO \
+    WOLF_CFG_FILE=$WOLF_CFG_FOLDER/config.toml \
+    WOLF_PRIVATE_KEY_FILE=$WOLF_CFG_FOLDER/key.pem \
+    WOLF_PRIVATE_CERT_FILE=$WOLF_CFG_FOLDER/cert.pem \
+    WOLF_PULSE_IMAGE=ghcr.io/games-on-whales/pulseaudio:master \
+    WOLF_RENDER_NODE=/dev/dri/renderD128 \
+    WOLF_STOP_CONTAINER_ON_EXIT=TRUE \
+    WOLF_DOCKER_SOCKET=/var/run/docker.sock \
+    RUST_BACKTRACE=full \
+    GST_DEBUG=2 \
+    PUID=0 \
+    PGID=0 \
+    UNAME="root"
+
 VOLUME $WOLF_CFG_FOLDER
 
 # HTTPS
@@ -117,5 +106,6 @@ EXPOSE 48000/udp
 # RTSP
 EXPOSE 48010/tcp
 
-ENTRYPOINT ["/usr/bin/tini", "--"]
-CMD ["/wolf/wolf"]
+# See GOW/base-app
+COPY --chmod=777 docker/startup.sh /opt/gow/startup-app.sh
+ENTRYPOINT ["/entrypoint.sh"]

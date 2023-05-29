@@ -9,7 +9,7 @@ ENV GSTREAMER_VERSION=$GSTREAMER_VERSION
 
 ENV SOURCE_PATH=/sources/
 WORKDIR $SOURCE_PATH
-COPY --chmod=777 gstreamer.control $SOURCE_PATH/gstreamer.control
+COPY --chmod=777 docker/gstreamer.control $SOURCE_PATH/gstreamer.control
 
 RUN <<_GSTREAMER_INSTALL
     #!/bin/bash

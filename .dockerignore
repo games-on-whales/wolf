@@ -6,4 +6,5 @@
 !cmake
 !CMakeLists.txt
 !.clang-format
-!gstreamer.control
+!docker/gstreamer.control
+!docker/startup.sh
