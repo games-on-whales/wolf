@@ -11,14 +11,12 @@ Intel/AMD::
 --
 
 Docker CLI:
+
 [source,bash]
 ....
 docker run \
     --name wolf \
     --network=host \
-    -e GST_DEBUG=2 \
-    -e RUST_BACKTRACE=full \
-    -e WOLF_LOG_LEVEL=DEBUG \
     -e XDG_RUNTIME_DIR=/tmp/sockets \
     -v /tmp/sockets:/tmp/sockets:rw \
     -v /var/run/docker.sock:/var/run/docker.sock:rw \
@@ -34,6 +32,7 @@ docker run \
 ....
 
 Docker compose:
+
 [source,yaml]
 ....
 version: "3.8"
@@ -41,9 +40,6 @@ services:
   wolf:
     image: ghcr.io/games-on-whales/wolf:dev-wayland
     environment:
-      - GST_DEBUG=2
-      - RUST_BACKTRACE=full
-      - WOLF_LOG_LEVEL=DEBUG
       - XDG_RUNTIME_DIR=/tmp/sockets
     volumes:
       - ~/wolf:/wolf/cfg
@@ -68,21 +64,47 @@ Nvidia::
 
 Unfortunately on Nvidia things are a little bit more complex:
 
-* You have to build the images yourself (we are working on this)
 * Your driver version must be `>= 530.30.02`
 * `--gpus` and the Nvidia Docker Toolkit seems to not work (to be investigated)
 
+First, let's build an additional docker image that will contain the Nvidia driver files:
+
+[source,bash]
+....
+curl https://raw.githubusercontent.com/games-on-whales/gow/wolf-changes/images/nvidia-driver/Dockerfile | docker build -t gow/nvidia-driver:latest -f - --build-arg NV_VERSION=$(cat /sys/module/nvidia/version) .
+....
+
+This will create `gow/nvidia-driver:latest` locally.
+
+Unfortunately docker doesn't seem to support directly mounting images, but you can https://docs.docker.com/storage/volumes/#populate-a-volume-using-a-container[pre-polulate volumes]!
+
+[source,bash]
+....
+docker run --name nvidia-driver-container --rm --mount source=nvidia-driver-vol,destination=/usr/nvidia gow/nvidia-driver:latest sh
+
+docker: Error response from daemon: failed to create shim task: OCI runtime create failed: runc create failed: unable to start container process: exec: "sh": executable file not found in $PATH: unknown.
+ERRO[0003] error waiting for container:
+....
+
+As you can see, the command will fail because the image contains no binary, but it'll create a new volume nevertheless.
+
+[source,bash]
+....
+docker volume ls | grep nvidia-driver
+
+local     nvidia-driver-vol
+....
+
 Docker CLI:
+
 [source,bash]
 ....
 docker run --rm \
     --name wolf \
     --network=host \
-    -e GST_DEBUG=2 \
-    -e RUST_BACKTRACE=full \
-    -e WOLF_LOG_LEVEL=DEBUG \
     -e XDG_RUNTIME_DIR=/tmp/sockets \
     -v /tmp/sockets:/tmp/sockets:rw \
+    -v nvidia-driver-vol:/usr/nvidia:rw \
     -v /var/run/docker.sock:/var/run/docker.sock:rw \
     -v ~/wolf:/wolf/cfg \
     --device-cgroup-rule "c 13:* rmw" \
@@ -104,6 +126,7 @@ docker run --rm \
 ....
 
 Docker compose:
+
 [source,yaml]
 ....
 version: "3.8"
@@ -111,9 +134,6 @@ services:
   wolf:
     image: ghcr.io/games-on-whales/wolf:dev-wayland
     environment:
-      - GST_DEBUG=2
-      - RUST_BACKTRACE=full
-      - WOLF_LOG_LEVEL=DEBUG
       - XDG_RUNTIME_DIR=/tmp/sockets
     volumes:
       - ~/wolf:/wolf/cfg
@@ -215,7 +235,8 @@ apt install -y gstreamer1.0-plugins-base gstreamer1.0-plugins-good gstreamer1.0-
 
 [WARNING]
 ====
-Based on your system you'll also need some specific plugins in order to enable HW acceleration. For Intel/AMD you'll need https://gstreamer.freedesktop.org/documentation/vaapi/index.html?gi-language=c[`vaapi`]; Nvidia instead will need https://gstreamer.freedesktop.org/documentation/nvcodec/index.html?gi-language=c[`nvcodec`].
+Based on your system you'll also need some specific plugins in order to enable HW acceleration.
+For Intel/AMD you'll need https://gstreamer.freedesktop.org/documentation/vaapi/index.html?gi-language=c[`vaapi`]; Nvidia instead will need https://gstreamer.freedesktop.org/documentation/nvcodec/index.html?gi-language=c[`nvcodec`].
 
 If your package manager doesn't include them you can build them from scratch by following the instructions used in our https://github.com/games-on-whales/wolf/blob/stable/gstreamer.Dockerfile[gstreamer.Dockerfile]
 ====
@@ -265,18 +286,18 @@ SUBSYSTEMS=="input", ATTRS{id/vendor}=="045e", ATTRS{id/product}=="02d1", ATTRS{
 
     KERNEL=="uinput", SUBSYSTEM=="misc", MODE="0660", GROUP="input", OPTIONS+="static_node=uinput"
 
-
-Allows Wolf to access `/dev/uinput` on your system. It needs that node to create the virtual devices. This is usually not the default on servers, but if that is already working for you on your desktop system, you can skip this line.
+Allows Wolf to access `/dev/uinput` on your system.
+It needs that node to create the virtual devices.
+This is usually not the default on servers, but if that is already working for you on your desktop system, you can skip this line.
 
     SUBSYSTEMS=="input", ATTRS{id/vendor}=="ab00", MODE="0660", GROUP="input", ENV{ID_SEAT}="seat9"
-
 
 This line checks for the custom vendor-id that Wolf gives to newly created virtual devices and assigns them to `seat9`, which will cause any session with a lower seat (usually you only have `seat1` for your main session) to ignore the devices.
 
     SUBSYSTEMS=="input", ATTRS{id/vendor}=="045e", ATTRS{id/product}=="02d1", ATTRS{id/version}=="ab00", MODE="0660", GROUP="input"
 
-
-Now the virtual controllers are different, because we need to emulate an existing brand for them to be picked up correctly, so our virtual controllers have a vendor/product id resembling an Xbox controller. But the version is again specific to Wolf.
+Now the virtual controllers are different, because we need to emulate an existing brand for them to be picked up correctly, so our virtual controllers have a vendor/product id resembling an Xbox controller.
+But the version is again specific to Wolf.
 
 You can't assign controllers a seat however (well - you can - but it won't have the same effect), so we just give it permissions where only user+group can pick it up.
 ====
