@@ -125,6 +125,32 @@ docker run --rm \
     ghcr.io/games-on-whales/wolf:dev-wayland
 ....
 
+[WARNING]
+====
+After starting the container you should also tweak the `~/wolf/config.toml` file with additional `devices` and `mounts` for each specified app; here's an example for Steam
+
+[source,toml]
+....
+[apps.runner]
+type = "docker"
+name = "WolfSteam"
+mounts = [
+  "/run/udev:/run/udev:ro",
+  "/home/YOUR_USER/retro:/home/retro:rw",
+  "nvidia-driver-vol:/usr/nvidia:rw"
+]
+devices = [
+  "/dev/nvidia0:/dev/nvidia0:mrw",
+  "/dev/nvidia-modeset:/dev/nvidia-modeset:mrw",
+  "/dev/nvidia-uvm:/dev/nvidia-uvm:mrw",
+  "/dev/nvidia-uvm-tools:/dev/nvidia-uvm-tools:mrw",
+  "/dev/nvidiactl:/dev/nvidiactl:mrw"
+]
+....
+
+You can leave everything else as is.
+====
+
 Docker compose:
 
 [source,yaml]
@@ -197,6 +223,11 @@ fi
 --
 
 ======
+
+[WARNING]
+====
+If you can only see a black screen in Moonlight when trying an app it's because the first time that you start an app Wolf will download the corresponding docker image.
+====
 
 To keep things simple the scripts above defaulted to `network:host`; that's not really required, the minimum set of ports that needs to be exposed are:
 
