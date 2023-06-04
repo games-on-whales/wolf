@@ -168,6 +168,7 @@ services:
       - /dev/shm:/dev/shm:rw
       - /dev/input:/dev/input:rw
       - /run/udev:/run/udev:rw
+      - nvidia-driver-vol:/usr/nvidia:rw
     devices:
       - /dev/dri
       - /dev/uinput
@@ -178,12 +179,14 @@ services:
       - /dev/nvidiactl
       - /dev/nvidia0
       - /dev/nvidia-modeset
-      - /dev/nvidiactl
-      - /dev/uinput
     device_cgroup_rules:
       - 'c 13:* rmw'
     network_mode: host
     restart: unless-stopped
+
+volumes:
+  nvidia-driver-vol:
+    external: true
 ....
 
 Depending on your system you might also need to initialise the `nvidia-uvm` devices:
