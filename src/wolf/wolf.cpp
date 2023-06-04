@@ -246,6 +246,16 @@ auto setup_sessions_handlers(const immer::box<state::AppState> &app_state,
             wl_promise->set_value(std::move(wl_state));
           }
 
+          /* nvidia needs some extra paths */
+          if (session->app->h264_encoder == state::NVIDIA || session->app->hevc_encoder == state::NVIDIA) {
+            mounted_paths.push_back({get_env("NVIDIA_DRIVER_VOLUME_NAME", "nvidia-driver-vol"), "/usr/nvidia"});
+            full_devices.push_back("/dev/nvidia0");
+            full_devices.push_back("/dev/nvidia-modeset");
+            full_devices.push_back("/dev/nvidia-uvm");
+            full_devices.push_back("/dev/nvidia-uvm-tools");
+            full_devices.push_back("/dev/nvidiactl");
+          }
+
           /* Finally run the app, this will stop here until over */
           session->app->runner->run(session->session_id,
                                     full_devices.persistent(),

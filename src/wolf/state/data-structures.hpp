@@ -66,11 +66,22 @@ struct RTPAudioPingEvent {
 
 using PairedClientList = immer::vector<immer::box<PairedClient>>;
 
+enum Encoder {
+  NVIDIA,
+  VAAPI,
+  QUICKSYNC,
+  SOFTWARE,
+  UNKNOWN
+};
+
 struct App {
   moonlight::App base;
 
   std::string h264_gst_pipeline;
+  Encoder h264_encoder;
   std::string hevc_gst_pipeline;
+  Encoder hevc_encoder;
+
   std::string opus_gst_pipeline;
   bool start_virtual_compositor;
   std::shared_ptr<Runner> runner;

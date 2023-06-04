@@ -38,6 +38,10 @@ Wolf is configured via a TOML config file and some additional optional ENV varia
 |WOLF_DOCKER_SOCKET
 |/var/run/docker.sock
 |The full path to the docker socket, doesn't support tcp (yet)
+
+|NVIDIA_DRIVER_VOLUME_NAME
+|nvidia-driver-vol
+|The name of the externally created Docker Volume that holds the Nvidia drivers
 |===
 
 Additional env variables useful when debugging:

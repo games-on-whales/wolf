@@ -92,6 +92,23 @@ static bool is_available(const GstEncoder &settings) {
   return false;
 }
 
+static state::Encoder encoder_type(const std::string &gstreamer_plugin_name) {
+  switch (utils::hash(gstreamer_plugin_name)) {
+  case (utils::hash("nvcodec")):
+    return NVIDIA;
+  case (utils::hash("vaapi")):
+  case (utils::hash("va")):
+    return VAAPI;
+  case (utils::hash("qsv")):
+    return QUICKSYNC;
+  case (utils::hash("x264")):
+  case (utils::hash("x265")):
+    return SOFTWARE;
+  }
+  logs::log(logs::warning, "Unrecognised Gstreamer plugin name: {}", gstreamer_plugin_name);
+  return UNKNOWN;
+}
+
 toml::value v1_to_v2(const toml::value &v1, const std::string &source) {
   create_default(source);
   auto v2 = toml::parse<toml::preserve_comments>(source);
@@ -182,7 +199,9 @@ Config load_or_default(const std::string &source, const std::shared_ptr<dp::even
                                    .id = std::to_string(idx + 1),
                                    .support_hdr = toml::find_or<bool>(item, "support_hdr", false)},
                           .h264_gst_pipeline = h264_gst_pipeline,
+                          .h264_encoder = encoder_type(h264_encoder->plugin_name),
                           .hevc_gst_pipeline = hevc_gst_pipeline,
+                          .hevc_encoder = encoder_type(hevc_encoder->plugin_name),
                           .opus_gst_pipeline = opus_gst_pipeline,
                           .start_virtual_compositor = toml::find_or<bool>(item, "start_virtual_compositor", true),
                           .runner = get_runner(item, ev_bus)};

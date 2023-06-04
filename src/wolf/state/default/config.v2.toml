@@ -25,7 +25,6 @@ env = [
   "MOZ_LOG=1",
   "LOG_LEVEL=info",
   "RUN_GAMESCOPE=true",
-  "ENABLE_VKBASALT=1",
   "GOW_REQUIRED_DEVICES=/dev/uinput /dev/input/event* /dev/dri/*",
 ]
 devices = [
@@ -55,7 +54,6 @@ mounts = [
 ]
 env = [
   "RUN_GAMESCOPE=true",
-  "ENABLE_VKBASALT=1",
   "GOW_REQUIRED_DEVICES=/dev/uinput /dev/input/event* /dev/dri/* /dev/nvidia*",
 ]
 devices = [
@@ -86,7 +84,6 @@ mounts = [
 env = [
   "PROTON_LOG=1",
   "RUN_GAMESCOPE=true",
-  "ENABLE_VKBASALT=1",
   "GOW_REQUIRED_DEVICES=/dev/uinput /dev/input/event* /dev/dri/* /dev/nvidia*",
 ]
 devices = [
