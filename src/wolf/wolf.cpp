@@ -246,6 +246,9 @@ auto setup_sessions_handlers(const immer::box<state::AppState> &app_state,
             wl_promise->set_value(std::move(wl_state));
           }
 
+          /* Adding custom state folder */
+          mounted_paths.push_back({session->app_state_folder, "/home/retro"});
+
           /* nvidia needs some extra paths */
           if (session->app->h264_encoder == state::NVIDIA || session->app->hevc_encoder == state::NVIDIA) {
             mounted_paths.push_back({get_env("NVIDIA_DRIVER_VOLUME_NAME", "nvidia-driver-vol"), "/usr/nvidia"});

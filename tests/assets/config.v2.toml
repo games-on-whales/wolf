@@ -13,6 +13,7 @@ config_version = 2
 client_cert = "A VERY VALID CERTIFICATE"
 run_uid = 1234
 run_gid = 5678
+app_state_folder = "some/folder"
 
 
 [[apps]]

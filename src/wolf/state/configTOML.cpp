@@ -30,11 +30,44 @@ struct GstAudioCfg {
 };
 } // namespace state
 
-TOML11_DEFINE_CONVERSION_NON_INTRUSIVE(state::PairedClient, client_cert, run_uid, run_gid)
 TOML11_DEFINE_CONVERSION_NON_INTRUSIVE(state::GstEncoder, plugin_name, check_elements, video_params, encoder_pipeline)
 TOML11_DEFINE_CONVERSION_NON_INTRUSIVE(state::GstVideoCfg, default_source, default_sink, hevc_encoders, h264_encoders)
 TOML11_DEFINE_CONVERSION_NON_INTRUSIVE(
     state::GstAudioCfg, default_source, default_audio_params, default_opus_encoder, default_sink)
+
+namespace toml {
+
+template <> struct into<state::App> {
+
+  static toml::value into_toml(const state::App &f) {
+    return toml::value{{"title", f.base.title}, {"support_hdr", f.base.support_hdr}, {"runner", f.runner->serialise()}};
+  }
+};
+
+template <> struct into<state::PairedClient> {
+  static toml::value into_toml(const state::PairedClient &c) {
+    return toml::value{{"client_cert", c.client_cert},
+                       {"app_state_folder", c.app_state_folder},
+                       {"run_uid", c.run_uid},
+                       {"run_gid", c.run_gid}};
+  }
+};
+
+template <> struct from<state::PairedClient> {
+  template <typename C, template <typename...> class M, template <typename...> class A>
+  static state::PairedClient from_toml(const basic_value<C, M, A> &v) {
+    state::PairedClient client;
+
+    client.client_cert = find<std::string>(v, "client_cert");
+    client.app_state_folder =
+        find_or<std::string>(v, "app_state_folder", std::to_string(std::hash<std::string>{}(client.client_cert)));
+    client.run_uid = find_or<uint>(v, "run_uid", 1000);
+    client.run_gid = find_or<uint>(v, "run_gid", 1000);
+
+    return client;
+  }
+};
+} // namespace toml
 
 namespace state {
 
@@ -255,13 +288,3 @@ void unpair(const Config &cfg, const PairedClient &client) {
 }
 
 } // namespace state
-
-namespace toml {
-
-template <> struct into<state::App> {
-
-  static toml::value into_toml(const state::App &f) {
-    return toml::value{{"title", f.base.title}, {"support_hdr", f.base.support_hdr}, {"runner", f.runner->serialise()}};
-  }
-};
-} // namespace toml

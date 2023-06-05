@@ -1,6 +1,7 @@
 #pragma once
 
 #include <crypto/crypto.hpp>
+#include <filesystem>
 #include <functional>
 #include <helpers/utils.hpp>
 #include <immer/vector_transient.hpp>
@@ -13,6 +14,10 @@
 #include <utility>
 
 namespace endpoints {
+
+static std::size_t get_client_id(const state::PairedClient &current_client) {
+  return std::hash<std::string>{}(current_client.client_cert);
+}
 
 template <class T> void server_error(const std::shared_ptr<typename SimpleWeb::Server<T>::Response> &response) {
   XML xml;
@@ -226,15 +231,22 @@ create_run_session(const immer::box<input::InputReady> &inputs,
 
   //  auto joypad_map = get_header(headers, "remoteControllersBitmap").value(); // TODO: decipher this (might be empty)
 
+  std::string host_state_folder = std::getenv("HOST_APPS_STATE_FOLDER");
+  host_state_folder = host_state_folder.empty() ? "/etc/wolf" : host_state_folder;
+  auto full_path = std::filesystem::path(host_state_folder) / current_client.app_state_folder / run_app.base.title;
+  logs::log(logs::debug, "Host app state folder: {}, creating paths", full_path.string());
+  std::filesystem::create_directories(full_path);
+
   return state::StreamSession{.display_mode = display_mode,
                               .audio_mode = audio_mode,
                               .virtual_inputs = inputs,
                               .app = std::make_shared<state::App>(run_app),
+                              .app_state_folder = full_path.string(),
                               // gcm encryption keys
                               .aes_key = get_header(headers, "rikey").value(),
                               .aes_iv = get_header(headers, "rikeyid").value(),
                               // client info
-                              .session_id = std::hash<std::string>{}(current_client.client_cert),
+                              .session_id = get_client_id(current_client),
                               .ip = get_client_ip<SimpleWeb::HTTPS>(request)};
 }
 
@@ -244,7 +256,7 @@ void launch(const std::shared_ptr<typename SimpleWeb::Server<SimpleWeb::HTTPS>::
             const immer::box<state::AppState> &state) {
   log_req<SimpleWeb::HTTPS>(request);
 
-  auto client_id = std::hash<std::string>{}(current_client.client_cert);
+  auto client_id = get_client_id(current_client);
   auto virtual_inputs = input::setup_handlers(client_id, state->event_bus);
   SimpleWeb::CaseInsensitiveMultimap headers = request->parse_query_string();
   auto app = state::get_app_by_id(state->config, get_header(headers, "appid").value());

@@ -25,7 +25,7 @@ env = [
   "MOZ_LOG=1",
   "LOG_LEVEL=info",
   "RUN_GAMESCOPE=true",
-  "GOW_REQUIRED_DEVICES=/dev/uinput /dev/input/event* /dev/dri/*",
+  "GOW_REQUIRED_DEVICES=/dev/uinput /dev/input/event* /dev/dri/* /dev/nvidia*",
 ]
 devices = [
 ]

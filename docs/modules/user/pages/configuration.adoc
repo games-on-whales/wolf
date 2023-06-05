@@ -42,6 +42,10 @@ Wolf is configured via a TOML config file and some additional optional ENV varia
 |NVIDIA_DRIVER_VOLUME_NAME
 |nvidia-driver-vol
 |The name of the externally created Docker Volume that holds the Nvidia drivers
+
+|HOST_APPS_STATE_FOLDER
+|/etc/wolf
+|The base folder in the host where the running apps will store permanent state
 |===
 
 Additional env variables useful when debugging:

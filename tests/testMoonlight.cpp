@@ -49,6 +49,7 @@ TEST_CASE("LocalState load TOML", "[LocalState]") {
     REQUIRE_THAT(state.paired_clients.load().get()[0]->client_cert, Equals("A VERY VALID CERTIFICATE"));
     REQUIRE(state.paired_clients.load().get()[0]->run_uid == 1234);
     REQUIRE(state.paired_clients.load().get()[0]->run_gid == 5678);
+    REQUIRE_THAT(state.paired_clients.load().get()[0]->app_state_folder, Equals("some/folder"));
   }
 }
 

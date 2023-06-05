@@ -87,6 +87,7 @@ ENV XDG_RUNTIME_DIR=/tmp/sockets \
     WOLF_DOCKER_SOCKET=/var/run/docker.sock \
     RUST_BACKTRACE=full \
     NVIDIA_DRIVER_VOLUME_NAME=nvidia-driver-vol \
+    HOST_APPS_STATE_FOLDER=/etc/wolf \
     GST_DEBUG=2 \
     PUID=0 \
     PGID=0 \

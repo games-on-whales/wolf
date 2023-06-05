@@ -19,8 +19,9 @@ docker run \
     --network=host \
     -e XDG_RUNTIME_DIR=/tmp/sockets \
     -v /tmp/sockets:/tmp/sockets:rw \
+    -e HOST_APPS_STATE_FOLDER=/etc/wolf \
+    -v /etc/wolf/wolf:/wolf/cfg \
     -v /var/run/docker.sock:/var/run/docker.sock:rw \
-    -v ~/wolf:/wolf/cfg \
     --device /dev/dri/renderD128 \
     --device /dev/dri/card0 \
     --device /dev/uinput \
@@ -41,8 +42,9 @@ services:
     image: ghcr.io/games-on-whales/wolf:dev-wayland
     environment:
       - XDG_RUNTIME_DIR=/tmp/sockets
+      - HOST_APPS_STATE_FOLDER=/etc/wolf
     volumes:
-      - ~/wolf:/wolf/cfg
+      - /etc/wolf/wolf:/wolf/cfg
       - /tmp/sockets:/tmp/sockets:rw
       - /var/run/docker.sock:/var/run/docker.sock:rw
       - /dev/shm:/dev/shm:rw
@@ -99,25 +101,26 @@ Docker CLI:
 
 [source,bash]
 ....
-docker run --rm \
+docker run \
     --name wolf \
     --network=host \
     -e XDG_RUNTIME_DIR=/tmp/sockets \
     -v /tmp/sockets:/tmp/sockets:rw \
     -e NVIDIA_DRIVER_VOLUME_NAME=nvidia-driver-vol \
     -v nvidia-driver-vol:/usr/nvidia:rw \
+    -e HOST_APPS_STATE_FOLDER=/etc/wolf \
+    -v /etc/wolf/wolf:/wolf/cfg \
     -v /var/run/docker.sock:/var/run/docker.sock:rw \
-    -v ~/wolf:/wolf/cfg \
     --device-cgroup-rule "c 13:* rmw" \
     --device /dev/nvidia-uvm \
     --device /dev/nvidia-uvm-tools \
-    --device /dev/dri/renderD128 \
-    --device /dev/dri/card0 \
+    --device /dev/dri/ \
     --device /dev/nvidia-caps/nvidia-cap1 \
     --device /dev/nvidia-caps/nvidia-cap2 \
     --device /dev/nvidiactl \
     --device /dev/nvidia0 \
     --device /dev/nvidia-modeset \
+    --device /dev/uinput \
     -v /dev/shm:/dev/shm:rw \
     -v /dev/input:/dev/input:rw \
     -v /run/udev:/run/udev:rw \
@@ -135,8 +138,9 @@ services:
     environment:
       - XDG_RUNTIME_DIR=/tmp/sockets
       - NVIDIA_DRIVER_VOLUME_NAME=nvidia-driver-vol
+      - HOST_APPS_STATE_FOLDER=/etc/wolf
     volumes:
-      - ~/wolf:/wolf/cfg
+      - /etc/wolf/wolf:/wolf/cfg
       - /tmp/sockets:/tmp/sockets:rw
       - /var/run/docker.sock:/var/run/docker.sock:rw
       - /dev/shm:/dev/shm:rw
@@ -203,7 +207,7 @@ fi
 
 [WARNING]
 ====
-If you can only see a black screen in Moonlight when trying an app it's because the first time that you start an app Wolf will download the corresponding docker image.
+If you can only see a black screen with a cursor in Moonlight it's because the first time that you start an app Wolf will download the corresponding docker image + first time updates.
 ====
 
 To keep things simple the scripts above defaulted to `network:host`; that's not really required, the minimum set of ports that needs to be exposed are:

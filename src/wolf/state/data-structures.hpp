@@ -45,6 +45,7 @@ enum STANDARD_PORTS_MAPPING {
 
 struct PairedClient {
   std::string client_cert;
+  std::string app_state_folder;
   uint run_uid = 1000;
   uint run_gid = 1000;
 };
@@ -168,6 +169,7 @@ struct StreamSession {
   input::InputReady virtual_inputs;
 
   std::shared_ptr<App> app;
+  std::string app_state_folder;
   // gcm encryption keys
   std::string aes_key;
   std::string aes_iv;
