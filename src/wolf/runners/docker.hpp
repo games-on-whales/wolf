@@ -155,6 +155,7 @@ void RunDocker::run(std::size_t session_id,
       boost::this_thread::sleep_for(boost::chrono::milliseconds(300));
     } while (docker_api.get_by_id(container_id)->status == RUNNING);
 
+    logs::log(logs::debug, "Container logs: \n{}", docker_api.get_logs(container_id));
     logs::log(logs::debug, "Stopping container: {}", docker_container->name);
     if (const auto env = std::getenv("WOLF_STOP_CONTAINER_ON_EXIT")) {
       if (std::string(env) == "TRUE") {

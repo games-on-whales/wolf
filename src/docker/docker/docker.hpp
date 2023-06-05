@@ -135,6 +135,17 @@ public:
    * Downloads a Docker image
    */
   bool pull_image(std::string_view image_name, std::string_view registry_auth = {}) const;
+
+  /**
+   * Get the container logs
+   * https://docs.docker.com/engine/api/v1.40/#tag/Container/operation/ContainerLogs
+   */
+  std::string get_logs(std::string_view id,
+                       bool get_stdout = true,
+                       bool get_stderr = true,
+                       int since = 0,
+                       int until = 0,
+                       bool timestamps = false);
 };
 
 } // namespace docker

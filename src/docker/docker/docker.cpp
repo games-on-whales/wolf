@@ -193,11 +193,11 @@ std::optional<Container> DockerAPI::create(const Container &container,
       auto json = parse(raw_msg->second);
       auto created_id = json.at("Id").as_string();
       return get_by_id(std::string_view{created_id.data(), created_id.size()});
-    } else if (raw_msg && raw_msg->first == 404) { // 404 returned when the image is not present
+    } else if (raw_msg && raw_msg->first == 404) {      // 404 returned when the image is not present
       logs::log(logs::warning, "[DOCKER] Image {} not present, downloading...", container.image);
       if (pull_image(container.image, registry_auth)) { // Download the image
         return create(container, custom_params, registry_auth,
-                      force_recreate_if_present); // Then retry creating
+                      force_recreate_if_present);       // Then retry creating
       } else if (raw_msg) {
         logs::log(logs::warning, "[DOCKER] error {} - {}", raw_msg->first, raw_msg->second);
       }
@@ -296,6 +296,29 @@ bool DockerAPI::pull_image(std::string_view image_name, std::string_view registr
   }
 
   return false;
+}
+
+std::string
+DockerAPI::get_logs(std::string_view id, bool get_stdout, bool get_stderr, int since, int until, bool timestamps) {
+  if (auto conn = docker_connect(socket_path)) {
+    auto api_url = fmt::format(
+        "http://localhost/{}/containers/{}/logs?stdout={}&stderr={}&since={}&until={}&timestamps={}&follow=false",
+        DOCKER_API_VERSION,
+        id,
+        get_stdout,
+        get_stderr,
+        since,
+        until,
+        timestamps);
+    auto raw_msg = req(conn.value().get(), GET, api_url);
+    if (raw_msg && raw_msg->first == 200) {
+      return raw_msg->second; // TODO: erase first 8 bytes from each line, see Stream format in the API docs
+    } else if (raw_msg) {
+      logs::log(logs::warning, "[DOCKER] error {} - {}", raw_msg->first, raw_msg->second);
+    }
+  }
+
+  return "";
 }
 
 } // namespace docker
