@@ -93,7 +93,22 @@ target_link_libraries(
 target_include_directories(wolf_runner PUBLIC .)
 
 file(GLOB HEADER_LIST CONFIGURE_DEPENDS */*.hpp)
-file(GLOB SRC_LIST SRCS */*.cpp)
+file(GLOB SRC_LIST SRCS control/*.cpp rest/*.cpp rtp/*.cpp rtsp/*.cpp runners/*.cpp state/*.cpp)
+
+if (UNIX AND NOT APPLE)
+    pkg_check_modules(LIBDRM REQUIRED IMPORTED_TARGET libdrm)
+    pkg_check_modules(LIBPCI REQUIRED IMPORTED_TARGET libpci)
+
+    list(APPEND SRC_LIST platforms/hw_linux.cpp)
+    target_link_libraries(
+            wolf_runner
+            PUBLIC
+            PkgConfig::LIBDRM
+            PkgConfig::LIBPCI
+    )
+else ()
+    list(APPEND SRC_LIST platforms/hw_unknown.cpp)
+endif ()
 
 target_sources(wolf_runner
         PRIVATE

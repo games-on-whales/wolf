@@ -227,7 +227,7 @@ EXPOSE 48010/tcp # RTSP
 .Build dependencies
 [source,bash]
 ....
-apt install -y ninja-build cmake clang libboost-locale-dev libboost-thread-dev libboost-filesystem-dev libboost-log-dev libboost-stacktrace-dev libssl-dev libgstreamer1.0-dev  libgstreamer-plugins-base1.0-dev libevdev-dev
+apt install -y ninja-build cmake clang libboost-locale-dev libboost-thread-dev libboost-filesystem-dev libboost-log-dev libboost-stacktrace-dev libssl-dev libgstreamer1.0-dev  libgstreamer-plugins-base1.0-dev libevdev-dev libdrm-dev libpci-dev
 ....
 
 .Compile

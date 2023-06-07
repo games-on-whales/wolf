@@ -46,6 +46,8 @@ jobs:
               libpulse-dev \
               libevdev-dev \
               libudev-dev \
+              libdrm-dev \
+              libpci-dev \
               ${{ join(matrix.other_pkgs, ' ') }}
 
       - name: Setup Rust
@@ -70,6 +72,7 @@ jobs:
                 -DTEST_DOCKER=OFF \
                 -DLINK_RUST_WAYLAND=ON \
                 -DTEST_RUST_WAYLAND=OFF \
+                -DTEST_NVIDIA=OFF \
                 -G Ninja
 
       - name: Build tests + lib

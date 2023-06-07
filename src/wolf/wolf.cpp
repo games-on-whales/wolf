@@ -6,11 +6,13 @@
 #include <control/control.hpp>
 #include <csignal>
 #include <docker/docker.hpp>
+#include <fstream>
 #include <immer/array.hpp>
 #include <immer/array_transient.hpp>
 #include <immer/map_transient.hpp>
 #include <immer/vector_transient.hpp>
 #include <memory>
+#include <platforms/hw.hpp>
 #include <rest/rest.hpp>
 #include <rtp/udp-ping.hpp>
 #include <rtsp/net.hpp>
@@ -216,11 +218,12 @@ auto setup_sessions_handlers(const immer::box<state::AppState> &app_state,
             mounted_paths.push_back({audio_server_name, audio_server_name});
           }
 
+          auto render_node = get_env("WOLF_RENDER_NODE", "/dev/dri/renderD128"); // TODO: support render node per app
+
           /* Create video virtual wayland compositor */
           if (session->app->start_virtual_compositor) {
             logs::log(logs::debug, "[STREAM_SESSION] Create wayland compositor");
-            auto wl_state = streaming::create_wayland_display(session->virtual_inputs.devices_paths,
-                                                              get_env("WOLF_RENDER_NODE", "/dev/dri/renderD128"));
+            auto wl_state = streaming::create_wayland_display(session->virtual_inputs.devices_paths, render_node);
             streaming::set_resolution(*wl_state, session->display_mode);
             full_env.set("GAMESCOPE_WIDTH", std::to_string(session->display_mode.width));
             full_env.set("GAMESCOPE_HEIGHT", std::to_string(session->display_mode.height));
@@ -249,14 +252,13 @@ auto setup_sessions_handlers(const immer::box<state::AppState> &app_state,
           /* Adding custom state folder */
           mounted_paths.push_back({session->app_state_folder, "/home/retro"});
 
+          /* Additional GPU devices */
+          auto additional_devices = linked_devices(render_node);
+          std::copy(additional_devices.begin(), additional_devices.end(), std::back_inserter(full_devices));
+
           /* nvidia needs some extra paths */
-          if (session->app->h264_encoder == state::NVIDIA || session->app->hevc_encoder == state::NVIDIA) {
+          if (get_vendor(render_node) == NVIDIA) {
             mounted_paths.push_back({get_env("NVIDIA_DRIVER_VOLUME_NAME", "nvidia-driver-vol"), "/usr/nvidia"});
-            full_devices.push_back("/dev/nvidia0");
-            full_devices.push_back("/dev/nvidia-modeset");
-            full_devices.push_back("/dev/nvidia-uvm");
-            full_devices.push_back("/dev/nvidia-uvm-tools");
-            full_devices.push_back("/dev/nvidiactl");
           }
 
           /* Finally run the app, this will stop here until over */

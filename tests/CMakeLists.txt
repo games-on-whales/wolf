@@ -12,14 +12,21 @@ add_executable(wolftests main.cpp)
 
 file(GLOB SRC_LIST SRCS *.cpp)
 
-option(TEST_UINPUT "Enable uinput test" ON) # uinput doesn't work in GA
-if (TEST_UINPUT AND UNIX AND NOT APPLE)
-    list(APPEND SRC_LIST "platforms/linux/input.cpp")
-endif ()
+if (UNIX AND NOT APPLE)
+    option(TEST_UINPUT "Enable uinput test" ON) # uinput doesn't work in GA
+    if (TEST_UINPUT AND UNIX AND NOT APPLE)
+        list(APPEND SRC_LIST "platforms/linux/input.cpp")
+    endif ()
 
-option(TEST_RUST_WAYLAND "Enable custom wayland test" ON)
-if (TEST_RUST_WAYLAND AND UNIX AND NOT APPLE)
-    list(APPEND SRC_LIST "platforms/linux/wayland-display.cpp")
+    option(TEST_RUST_WAYLAND "Enable custom wayland test" ON)
+    if (TEST_RUST_WAYLAND AND UNIX AND NOT APPLE)
+        list(APPEND SRC_LIST "platforms/linux/wayland-display.cpp")
+    endif ()
+
+    option(TEST_NVIDIA "Enable Nvidia tests" ON)
+    if (TEST_NVIDIA)
+        list(APPEND SRC_LIST "platforms/linux/nvidia.cpp")
+    endif ()
 endif ()
 
 option(TEST_DOCKER "Enable docker tests" ON)

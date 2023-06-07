@@ -22,6 +22,8 @@ RUN apt-get update -y && \
     libpulse-dev \
     libunwind-dev \
     libudev-dev \
+    libdrm-dev \
+    libpci-dev \
     && rm -rf /var/lib/apt/lists/*
 
 ## Install Rust in order to build our custom compositor (the build will be done inside Cmake)
@@ -58,6 +60,8 @@ RUN apt-get update -y && \
     libevdev2 \
     libudev1 \
     libcurl4 \
+    libdrm2 \
+    libpci3 \
     && rm -rf /var/lib/apt/lists/*
 
 # gst-plugin-wayland runtime dependencies
