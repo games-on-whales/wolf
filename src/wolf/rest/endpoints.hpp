@@ -231,8 +231,7 @@ create_run_session(const immer::box<input::InputReady> &inputs,
 
   //  auto joypad_map = get_header(headers, "remoteControllersBitmap").value(); // TODO: decipher this (might be empty)
 
-  std::string host_state_folder = std::getenv("HOST_APPS_STATE_FOLDER");
-  host_state_folder = host_state_folder.empty() ? "/etc/wolf" : host_state_folder;
+  std::string host_state_folder = utils::get_env("HOST_APPS_STATE_FOLDER", "/etc/wolf");
   auto full_path = std::filesystem::path(host_state_folder) / current_client.app_state_folder / run_app.base.title;
   logs::log(logs::debug, "Host app state folder: {}, creating paths", full_path.string());
   std::filesystem::create_directories(full_path);

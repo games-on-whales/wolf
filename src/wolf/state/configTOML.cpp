@@ -203,6 +203,7 @@ Config load_or_default(const std::string &source, const std::shared_ptr<dp::even
       | ranges::views::transform([](const PairedClient &client) { return immer::box<PairedClient>{client}; }) //
       | ranges::to<immer::vector<immer::box<PairedClient>>>();
 
+  std::string default_app_render_node = utils::get_env("WOLF_RENDER_NODE", "/dev/dri/renderD128");
   /* Get apps, here we'll merge the default gstreamer settings with the app specific overrides */
   auto cfg_apps = toml::find<std::vector<toml::value>>(cfg, "apps");
   auto apps =
@@ -235,6 +236,8 @@ Config load_or_default(const std::string &source, const std::shared_ptr<dp::even
                           .h264_encoder = encoder_type(h264_encoder->plugin_name),
                           .hevc_gst_pipeline = hevc_gst_pipeline,
                           .hevc_encoder = encoder_type(hevc_encoder->plugin_name),
+                          .render_node = toml::find_or(item, "render_node", default_app_render_node),
+
                           .opus_gst_pipeline = opus_gst_pipeline,
                           .start_virtual_compositor = toml::find_or<bool>(item, "start_virtual_compositor", true),
                           .runner = get_runner(item, ev_bus)};

@@ -2,6 +2,7 @@
 #include <algorithm>
 #include <range/v3/view.hpp>
 #include <sstream>
+#include <stdlib.h>
 #include <string>
 
 namespace utils {
@@ -50,6 +51,11 @@ inline std::vector<std::string_view> split(std::string_view str, char separator)
  */
 inline std::string to_string(std::string_view str) {
   return {str.begin(), str.end()};
+}
+
+inline const char *get_env(const char *tag, const char *def = nullptr) noexcept {
+  const char *ret = std::getenv(tag);
+  return ret ? ret : def;
 }
 
 /**

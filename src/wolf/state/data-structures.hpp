@@ -83,6 +83,8 @@ struct App {
   std::string hevc_gst_pipeline;
   Encoder hevc_encoder;
 
+  std::string render_node;
+
   std::string opus_gst_pipeline;
   bool start_virtual_compositor;
   std::shared_ptr<Runner> runner;

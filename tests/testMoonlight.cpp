@@ -31,6 +31,7 @@ TEST_CASE("LocalState load TOML", "[LocalState]") {
     REQUIRE(first_app.start_virtual_compositor);
     REQUIRE(first_app.hevc_encoder == state::UNKNOWN);
     REQUIRE(first_app.h264_encoder == state::UNKNOWN);
+    REQUIRE(first_app.render_node == "/dev/dri/renderD128");
     REQUIRE_THAT(toml::find(first_app.runner->serialise(), "type").as_string(), Equals("docker"));
 
     auto second_app = state.apps[1];
@@ -39,8 +40,9 @@ TEST_CASE("LocalState load TOML", "[LocalState]") {
     REQUIRE_THAT(second_app.h264_gst_pipeline, Equals("override DEFAULT SOURCE ! params ! h264_pipeline ! video_sink"));
     REQUIRE_THAT(second_app.hevc_gst_pipeline, Equals("override DEFAULT SOURCE ! params ! hevc_pipeline ! video_sink"));
     REQUIRE(!second_app.start_virtual_compositor);
-    REQUIRE(first_app.hevc_encoder == state::UNKNOWN);
-    REQUIRE(first_app.h264_encoder == state::UNKNOWN);
+    REQUIRE(second_app.hevc_encoder == state::UNKNOWN);
+    REQUIRE(second_app.h264_encoder == state::UNKNOWN);
+    REQUIRE(second_app.render_node == "/tmp/dead_beef");
     REQUIRE_THAT(toml::find(second_app.runner->serialise(), "type").as_string(), Equals("process"));
   }
 

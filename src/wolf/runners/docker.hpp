@@ -49,8 +49,7 @@ public:
                                     })                                                          //
                                   | ranges::to_vector;                                          //
 
-    auto default_socket = std::getenv("WOLF_DOCKER_SOCKET") ? std::getenv("WOLF_DOCKER_SOCKET")
-                                                            : "/var/run/docker.sock";
+    auto default_socket = utils::get_env("WOLF_DOCKER_SOCKET", "/var/run/docker.sock");
     auto docker_socket = toml::find_or<std::string>(runner_obj, "docker_socket", default_socket);
 
     return RunDocker(std::move(ev_bus),
@@ -157,7 +156,7 @@ void RunDocker::run(std::size_t session_id,
 
     logs::log(logs::debug, "Container logs: \n{}", docker_api.get_logs(container_id));
     logs::log(logs::debug, "Stopping container: {}", docker_container->name);
-    if (const auto env = std::getenv("WOLF_STOP_CONTAINER_ON_EXIT")) {
+    if (const auto env = utils::get_env("WOLF_STOP_CONTAINER_ON_EXIT")) {
       if (std::string(env) == "TRUE") {
         docker_api.stop_by_id(container_id);
         docker_api.remove_by_id(container_id);

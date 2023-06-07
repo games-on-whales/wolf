@@ -136,7 +136,7 @@ GPU_VENDOR get_vendor(std::string_view gpu) {
                                             device->deviceinfo.pci->device_id);
   pci_cleanup(pacc);
 
-  logs::log(logs::debug, "{}, vendor: {}", gpu, vendor_name);
+  logs::log(logs::debug, "{} vendor: {}", gpu, vendor_name);
 
   vendor_name = utils::to_lower(vendor_name);
   if (vendor_name.find("nvidia") != std::string::npos) {

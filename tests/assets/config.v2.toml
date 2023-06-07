@@ -49,6 +49,7 @@ base_create_json = """
 [[apps]]
 title = "Test ball"
 start_virtual_compositor = false
+render_node = "/tmp/dead_beef"
 
 [apps.runner]
 type = "process"

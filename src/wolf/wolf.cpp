@@ -24,11 +24,6 @@ namespace ba = boost::asio;
 using namespace std::string_literals;
 using namespace std::chrono_literals;
 
-const char *get_env(const char *tag, const char *def = nullptr) noexcept {
-  const char *ret = std::getenv(tag);
-  return ret ? ret : def;
-}
-
 /**
  * @brief Will try to load the config file and fallback to defaults
  */
@@ -93,7 +88,7 @@ auto initialize(std::string_view config_file, std::string_view pkey_filename, st
 }
 
 static std::string backtrace_file_src() {
-  return fmt::format("{}/backtrace.dump", get_env("WOLF_CFG_FOLDER", "."));
+  return fmt::format("{}/backtrace.dump", utils::get_env("WOLF_CFG_FOLDER", "."));
 }
 
 static void shutdown_handler(int signum) {
@@ -122,7 +117,7 @@ void check_exceptions() {
     auto now = std::chrono::system_clock::now();
     boost::filesystem::rename(
         backtrace_file_src(),
-        fmt::format("{}/backtrace.{:%Y-%m-%d-%H-%M-%S}.dump", get_env("WOLF_CFG_FOLDER", "."), now));
+        fmt::format("{}/backtrace.{:%Y-%m-%d-%H-%M-%S}.dump", utils::get_env("WOLF_CFG_FOLDER", "."), now));
   }
 }
 
@@ -142,11 +137,11 @@ std::optional<AudioServer> setup_audio_server(const std::string &runtime_dir) {
     return {{.server = audio_server}};
   } else {
     logs::log(logs::info, "Starting PulseAudio docker container");
-    docker::DockerAPI docker_api(get_env("WOLF_DOCKER_SOCKET", "/var/run/docker.sock"));
+    docker::DockerAPI docker_api(utils::get_env("WOLF_DOCKER_SOCKET", "/var/run/docker.sock"));
     auto container = docker_api.create(docker::Container{
         .id = "",
         .name = "WolfPulseAudio",
-        .image = get_env("WOLF_PULSE_IMAGE", "ghcr.io/games-on-whales/pulseaudio:master"),
+        .image = utils::get_env("WOLF_PULSE_IMAGE", "ghcr.io/games-on-whales/pulseaudio:master"),
         .status = docker::CREATED,
         .ports = {},
         .mounts = {docker::MountPoint{.source = runtime_dir, .destination = "/tmp/pulse/", .mode = "rw"}},
@@ -218,7 +213,7 @@ auto setup_sessions_handlers(const immer::box<state::AppState> &app_state,
             mounted_paths.push_back({audio_server_name, audio_server_name});
           }
 
-          auto render_node = get_env("WOLF_RENDER_NODE", "/dev/dri/renderD128"); // TODO: support render node per app
+          auto render_node = session->app->render_node;
 
           /* Create video virtual wayland compositor */
           if (session->app->start_virtual_compositor) {
@@ -258,7 +253,7 @@ auto setup_sessions_handlers(const immer::box<state::AppState> &app_state,
 
           /* nvidia needs some extra paths */
           if (get_vendor(render_node) == NVIDIA) {
-            mounted_paths.push_back({get_env("NVIDIA_DRIVER_VOLUME_NAME", "nvidia-driver-vol"), "/usr/nvidia"});
+            mounted_paths.push_back({utils::get_env("NVIDIA_DRIVER_VOLUME_NAME", "nvidia-driver-vol"), "/usr/nvidia"});
           }
 
           /* Finally run the app, this will stop here until over */
@@ -334,7 +329,7 @@ auto setup_sessions_handlers(const immer::box<state::AppState> &app_state,
  * @brief here's where the magic starts
  */
 int main(int argc, char *argv[]) {
-  logs::init(logs::parse_level(get_env("WOLF_LOG_LEVEL", "INFO")));
+  logs::init(logs::parse_level(utils::get_env("WOLF_LOG_LEVEL", "INFO")));
   // Exception and termination handling
   check_exceptions();
   std::signal(SIGINT, shutdown_handler);
@@ -347,12 +342,12 @@ int main(int argc, char *argv[]) {
   control::init();   // Need to initialise enet once
   docker::init();    // Need to initialise libcurl once
 
-  auto runtime_dir = get_env("XDG_RUNTIME_DIR", "/tmp/sockets");
+  auto runtime_dir = utils::get_env("XDG_RUNTIME_DIR", "/tmp/sockets");
   logs::log(logs::debug, "XDG_RUNTIME_DIR={}", runtime_dir);
 
-  auto config_file = get_env("WOLF_CFG_FILE", "config.toml");
-  auto p_key_file = get_env("WOLF_PRIVATE_KEY_FILE", "key.pem");
-  auto p_cert_file = get_env("WOLF_PRIVATE_CERT_FILE", "cert.pem");
+  auto config_file = utils::get_env("WOLF_CFG_FILE", "config.toml");
+  auto p_key_file = utils::get_env("WOLF_PRIVATE_KEY_FILE", "key.pem");
+  auto p_cert_file = utils::get_env("WOLF_PRIVATE_CERT_FILE", "cert.pem");
   auto local_state = initialize(config_file, p_key_file, p_cert_file);
 
   // HTTP APIs
