@@ -134,6 +134,8 @@ static state::Encoder encoder_type(const std::string &gstreamer_plugin_name) {
     return VAAPI;
   case (utils::hash("qsv")):
     return QUICKSYNC;
+  case (utils::hash("applemedia")):
+    return APPLE;
   case (utils::hash("x264")):
   case (utils::hash("x265")):
     return SOFTWARE;

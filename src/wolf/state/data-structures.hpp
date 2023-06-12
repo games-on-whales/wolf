@@ -72,6 +72,7 @@ enum Encoder {
   VAAPI,
   QUICKSYNC,
   SOFTWARE,
+  APPLE,
   UNKNOWN
 };
 

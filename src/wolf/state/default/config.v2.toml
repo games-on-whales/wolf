@@ -17,7 +17,7 @@ start_virtual_compositor = true
 [apps.runner]
 type = "docker"
 name = "WolfFirefox"
-image = "ghcr.io/games-on-whales/firefox:wolf-changes"
+image = "ghcr.io/games-on-whales/firefox:edge"
 mounts = [
   "/run/udev:/run/udev:ro"
 ]
@@ -48,7 +48,7 @@ start_virtual_compositor = true
 [apps.runner]
 type = "docker"
 name = "WolfRetroarch"
-image = "ghcr.io/games-on-whales/retroarch:wolf-changes"
+image = "ghcr.io/games-on-whales/retroarch:edge"
 mounts = [
   "/run/udev:/run/udev:ro"
 ]
@@ -77,7 +77,7 @@ start_virtual_compositor = true
 [apps.runner]
 type = "docker"
 name = "WolfSteam"
-image = "ghcr.io/games-on-whales/steam:wolf-changes"
+image = "ghcr.io/games-on-whales/steam:edge"
 mounts = [
   "/run/udev:/run/udev:ro"
 ]
@@ -101,16 +101,31 @@ base_create_json = """
 """
 
 [[apps]]
-title = "Host Desktop (X11)"
-start_virtual_compositor = false
-[apps.runner]
-type = "process"
-run_cmd = "sh -c \"while :; do echo 'running...'; sleep 10; done\""
+title = "EmulationStation DE"
+start_virtual_compositor = true
 
-[apps.video]
-source = """
-ximagesrc show-pointer=true use-damage=false remote=true display-name=:0 do-timestamp=1 !
-video/x-raw, framerate={fps}/1
+[apps.runner]
+type = "docker"
+name = "WolfES-DE"
+image = "ghcr.io/games-on-whales/es-de:edge"
+mounts = [
+  "/run/udev:/run/udev:ro"
+]
+env = [
+  "RUN_GAMESCOPE=true",
+  "GOW_REQUIRED_DEVICES=/dev/uinput /dev/input/event* /dev/dri/* /dev/nvidia*",
+]
+devices = [
+]
+ports = []
+base_create_json = """
+{
+  "HostConfig": {
+    "IpcMode": "host",
+    "CapAdd": ["SYS_ADMIN", "SYS_NICE"],
+    "Privileged": false
+  }
+}
 \
 """
 
@@ -200,6 +215,24 @@ video/x-h265, profile=main, stream-format=byte-stream
 """
 
 [[gstreamer.video.hevc_encoders]]
+plugin_name = "applemedia" # OSX HW encoder
+video_params = """
+videoscale !
+videoconvert !
+videorate !
+video/x-raw, width={width}, height={height}, framerate={fps}/1, format=I420,
+chroma-site={color_range}, colorimetry={color_space}
+\
+"""
+check_elements = ["vtenc_h265_hw"]
+encoder_pipeline = """
+vtenc_h265_hw allow-frame-reordering=false bitrate={bitrate} max-keyframe-interval=-1 realtime=true !
+h265parse !
+video/x-h265, profile=main, stream-format=byte-stream
+\
+"""
+
+[[gstreamer.video.hevc_encoders]]
 plugin_name = "x265" # SW Encoding
 check_elements = ["x265enc"]
 video_params = """
@@ -267,6 +300,24 @@ height={height}, format=NV12, colorimetry={color_space}
 """
 encoder_pipeline = """
 vah264enc aud=false b-frames=0 ref-frames=1 num-slices=0 bitrate={bitrate} !
+h264parse !
+video/x-h264, profile=main, stream-format=byte-stream
+\
+"""
+
+[[gstreamer.video.h264_encoders]]
+plugin_name = "applemedia" # OSX HW encoder
+video_params = """
+videoscale !
+videoconvert !
+videorate !
+video/x-raw, width={width}, height={height}, framerate={fps}/1, format=I420,
+chroma-site={color_range}, colorimetry={color_space}
+\
+"""
+check_elements = ["vtenc_h264_hw"]
+encoder_pipeline = """
+vtenc_h264_hw allow-frame-reordering=false bitrate={bitrate} max-keyframe-interval=-1 realtime=true !
 h264parse !
 video/x-h264, profile=main, stream-format=byte-stream
 \
