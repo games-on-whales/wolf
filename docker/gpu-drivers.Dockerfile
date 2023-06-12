@@ -1,4 +1,4 @@
-ARG BASE_IMAGE=ghcr.io/games-on-whales/base-app:wolf-changes
+ARG BASE_IMAGE=ghcr.io/games-on-whales/base-app:edge
 FROM $BASE_IMAGE
 ENV DEBIAN_FRONTEND=noninteractive
 ENV BUILD_ARCHITECTURE=amd64

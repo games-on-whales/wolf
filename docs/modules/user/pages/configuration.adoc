@@ -146,7 +146,7 @@ Example:
 ....
 type = "docker"
 name = "WolfSteam"
-image = "ghcr.io/games-on-whales/steam:wolf-changes"
+image = "ghcr.io/games-on-whales/steam:edge"
 mounts = [
   "/run/udev:/run/udev:ro"
 ]

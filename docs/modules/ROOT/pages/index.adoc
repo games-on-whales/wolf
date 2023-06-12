@@ -7,19 +7,27 @@ image:https://img.shields.io/github/license/games-on-whales/wolf[License MIT]
 [quote,Matshona Dhliwayo.]
 An intelligent wolf is better than a foolish lion.
 
-video::z5jzLIUH6rA[youtube, width=1280, height=720]
+Wolf is an open source streaming server for https://moonlight-stream.org/[Moonlight] that allows you to share a single server with multiple remote clients in order to play videogames! +
 
-== Rationale
+image:wolf-introduction.svg[Wolf introduction image]
 
-The goal is to create an open source backend for https://moonlight-stream.org/[Moonlight] based on https://gstreamer.freedesktop.org/[GStreamer].
 
-In the process we would like to create a **platform-agnostic** C++ library that clearly defines the protocol and that can be used in other projects.
-While doing so, we are working on documenting and testing the protocol.
+It's made from the ground up with the following primary goals:
 
-At the beginning it'll be focused on running in Docker so that we can replace https://github.com/LizardByte/Sunshine[Sunshine] in https://github.com/games-on-whales/gow[GOW] but the code is already structured in order to support multiple platforms.
+* Allow multiple users to stream different content by sharing a single remote host hardware
+* Provide low latency video and audio stream with full support for gamepads
+* Linux and Docker first: run your games with low privileges in containers (based on https://github.com/games-on-whales/gow[Games On Whales])
+* Mostly hackable, just edit the config file to modify encoding pipelines, GPU settings or Docker/Podman low level details
+
+It's a specific tool for a specific need, are you looking for a general purpose streaming solution?
+Try out https://github.com/LizardByte/Sunshine[Sunshine]!
+
+video::z5jzLIUH6rA[youtube,width=1280,height=720]
 
 == Acknowledgements
 
+- https://github.com/Drakulix[@Drakulix] for the incredible help given in developing Wolf
+- https://github.com/zb140[@zb140] for the constant help and support in https://github.com/games-on-whales/gow[GOW]
 - https://github.com/loki-47-6F-64[@loki-47-6F-64] for creating and sharing https://github.com/loki-47-6F-64/sunshine[Sunshine]
+- https://github.com/ReenigneArcher[@ReenigneArcher] for beying the first stargazer of the project and taking care of keeping https://github.com/LizardByte/Sunshine[Sunshine alive]
 - All the guys at the https://moonlight-stream.org/[Moonlight] Discord channel, for the tireless help they provide to anyone
-- https://github.com/ReenigneArcher[@ReenigneArcher] for beying the first stargazer of the project and taking care of keeping https://github.com/SunshineStream/Sunshine[Sunshine alive]

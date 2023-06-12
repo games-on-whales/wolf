@@ -1,8 +1,8 @@
 = Quickstart
 
-== Docker
-
 Wolf runs as a single container, it'll spin up and down additional containers on-demand.
+
+== Docker
 
 [tabs]
 ======
@@ -22,8 +22,7 @@ docker run \
     -e HOST_APPS_STATE_FOLDER=/etc/wolf \
     -v /etc/wolf/wolf:/wolf/cfg \
     -v /var/run/docker.sock:/var/run/docker.sock:rw \
-    --device /dev/dri/renderD128 \
-    --device /dev/dri/card0 \
+    --device /dev/dri/
     --device /dev/uinput \
     --device-cgroup-rule "c 13:* rmw" \
     -v /dev/shm:/dev/shm:rw \
@@ -73,7 +72,7 @@ First, let's build an additional docker image that will contain the Nvidia drive
 
 [source,bash]
 ....
-curl https://raw.githubusercontent.com/games-on-whales/gow/wolf-changes/images/nvidia-driver/Dockerfile | docker build -t gow/nvidia-driver:latest -f - --build-arg NV_VERSION=$(cat /sys/module/nvidia/version) .
+curl https://raw.githubusercontent.com/games-on-whales/gow/master/images/nvidia-driver/Dockerfile | docker build -t gow/nvidia-driver:latest -f - --build-arg NV_VERSION=$(cat /sys/module/nvidia/version) .
 ....
 
 This will create `gow/nvidia-driver:latest` locally.
@@ -205,11 +204,9 @@ fi
 
 ======
 
-[WARNING]
+.Which ports are used by Wolf?
+[%collapsible]
 ====
-If you can only see a black screen with a cursor in Moonlight it's because the first time that you start an app Wolf will download the corresponding docker image + first time updates.
-====
-
 To keep things simple the scripts above defaulted to `network:host`; that's not really required, the minimum set of ports that needs to be exposed are:
 
 [source,dockerfile]
@@ -221,54 +218,23 @@ EXPOSE 47999/udp # Control
 EXPOSE 48000/udp # Audio
 EXPOSE 48010/tcp # RTSP
 ....
-
-== Manual build
-
-.Build dependencies
-[source,bash]
-....
-apt install -y ninja-build cmake clang libboost-locale-dev libboost-thread-dev libboost-filesystem-dev libboost-log-dev libboost-stacktrace-dev libssl-dev libgstreamer1.0-dev  libgstreamer-plugins-base1.0-dev libevdev-dev libdrm-dev libpci-dev
-....
-
-.Compile
-[source,bash]
-....
-cmake -Bbuild -DCMAKE_BUILD_TYPE=Release -DCMAKE_CXX_STANDARD=17 -DCMAKE_CXX_EXTENSIONS=OFF -G Ninja
-ninja -C build
-....
-
-If compilations completes correctly you can already start Wolf; in order to successfully streaming you'll probably need to install some Gstreamer plugins first:
-
-.Install gstreamer plugins
-[source,bash]
-....
-apt install -y gstreamer1.0-plugins-base gstreamer1.0-plugins-good gstreamer1.0-plugins-ugly gstreamer1.0-plugins-bad
-....
-
-[WARNING]
-====
-Based on your system you'll also need some specific plugins in order to enable HW acceleration.
-For Intel/AMD you'll need https://gstreamer.freedesktop.org/documentation/vaapi/index.html?gi-language=c[`vaapi`]; Nvidia instead will need https://gstreamer.freedesktop.org/documentation/nvcodec/index.html?gi-language=c[`nvcodec`].
-
-If your package manager doesn't include them you can build them from scratch by following the instructions used in our https://github.com/games-on-whales/wolf/blob/stable/gstreamer.Dockerfile[gstreamer.Dockerfile]
 ====
 
-.Run!
-[source,bash]
-....
-build/src/wolf/wolf
-INFO  | Reading config file from: config.toml
-WARN  | Unable to open config file: config.toml, creating one using defaults
-INFO  | x509 certificates not present, generating...
-INFO  | HTTP server listening on port: 47989
-INFO  | HTTPS server listening on port: 47984
-....
+== Moonlight pairing
 
-You should now be able to point Moonlight to the IP address of the server and start the pairing process.
+You should now be able to point Moonlight to the IP address of the server and start the pairing process:
 
-TIP: Make sure to follow the next steps on how to configure Wolf!
+* In Moonlight, you'll get a prompt for a PIN image:ROOT:moonlight-pairing-code.png[A screenshot of Moonlight asking for a PIN]
+* Wolf will log a line with a link to a page where you can input that PIN (ex: http://localhost:47989/pin/#337327E8A6FC0C66 make sure to replace `localhost` with your server IP) image:ROOT:wolf-pairing-code.png[A screenshot of the Wolf page where you can insert the PIN]
+* In Moonlight, you should now be able to see a list of the applications that are supported by Wolf image:ROOT:moonlight-pairing-done.png[A screenshot of Moonlight showing the apps]
 
-== devices support
+[TIP]
+====
+If you can only see a *black screen* with a cursor in Moonlight it's because the first time that you start an app Wolf will download the corresponding docker image + first time updates. +
+Keep an eye on the logs from Wolf to get more details.
+====
+
+== Virtual devices support
 
 We use uinput to create virtual devices (Mouse, Keyboard and Joypad), make sure that `/dev/uinput` is present in the host:
 
