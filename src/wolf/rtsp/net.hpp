@@ -6,8 +6,10 @@
 #include <boost/lexical_cast.hpp>
 #include <boost/shared_ptr.hpp>
 #include <rtsp/commands.hpp>
+#include <state/sessions.hpp>
 #include <string_view>
 #include <thread>
+#include <utility>
 
 namespace rtsp {
 
@@ -26,8 +28,10 @@ class tcp_connection : public boost::enable_shared_from_this<tcp_connection> {
 public:
   typedef boost::shared_ptr<tcp_connection> pointer;
 
-  static pointer create(boost::asio::io_context &io_context, immer::box<state::StreamSession> state) {
-    return pointer(new tcp_connection(io_context, std::move(state)));
+  static pointer create(boost::asio::io_context &io_context,
+                        const state::SessionsAtoms &stream_sessions,
+                        const std::shared_ptr<dp::event_bus> &event_bus) {
+    return pointer(new tcp_connection(io_context, stream_sessions, event_bus));
   }
 
   auto &socket() {
@@ -45,8 +49,14 @@ public:
     logs::log(logs::trace, "[RTSP] received connection from IP: {}", socket().remote_endpoint().address().to_string());
     receive_message([self = shared_from_this()](auto parsed_msg) {
       if (parsed_msg) {
-        auto response = commands::message_handler(parsed_msg.value(), self->stream_session);
-        self->send_message(response, [](auto bytes) {});
+        auto user_ip = self->socket().remote_endpoint().address().to_string();
+        auto session = get_session_by_ip(self->stream_sessions->load(), user_ip);
+        if (session) {
+          auto response = commands::message_handler(parsed_msg.value(), session.value(), *self->event_bus);
+          self->send_message(response, [](auto bytes) {});
+        } else {
+          logs::log(logs::warning, "[RTSP] received packet from unrecognised client: {}", user_ip);
+        }
       } else {
         logs::log(logs::error, "[RTSP] error parsing message");
         self->send_message((rtsp::commands::error_msg(400, "BAD REQUEST")), [](auto bytes) {});
@@ -68,7 +78,7 @@ public:
    * option in the message: Content-length which represent the size in bytes of the payload. We'll keep recursively call
    * receive_message() until our payload size matches the specified Content-length
    */
-  void receive_message(std::function<void(std::optional<RTSP_PACKET>)> on_msg_read) {
+  void receive_message(const std::function<void(std::optional<RTSP_PACKET>)> &on_msg_read) {
     deadline_.async_wait([self = shared_from_this()](auto error) {
       if (!error && self->deadline_.expiry() <= asio::steady_timer::clock_type::now()) { // The deadline has passed
         logs::log(logs::trace, "[RTSP] deadline over");
@@ -120,7 +130,8 @@ public:
    * Will fully write back the given message to the socket
    * calls on_sent(bytes_transferred) when over
    */
-  void send_message(const rtsp::RTSP_PACKET &response, std::function<void(int /* bytes_transferred */)> on_sent) {
+  void send_message(const rtsp::RTSP_PACKET &response,
+                    const std::function<void(int /* bytes_transferred */)> &on_sent) {
     auto raw_response = rtsp::to_string(response);
     logs::log(logs::trace, "[RTSP] sending reply: \n{}", raw_response);
     boost::asio::async_write(socket(),
@@ -135,20 +146,23 @@ public:
   }
 
 protected:
-  explicit tcp_connection(boost::asio::io_context &io_context, immer::box<state::StreamSession> state)
-      : socket_(io_context), streambuf_(max_msg_size), deadline_(io_context), stream_session(std::move(state)),
-        prev_read_(""), prev_read_bytes_(0) {}
+  explicit tcp_connection(boost::asio::io_context &io_context,
+                          state::SessionsAtoms stream_sessions,
+                          const std::shared_ptr<dp::event_bus> &event_bus)
+      : socket_(io_context), streambuf_(max_msg_size), deadline_(io_context),
+        stream_sessions(std::move(stream_sessions)), prev_read_bytes_(0), event_bus(event_bus) {}
   tcp::socket socket_;
 
   static constexpr auto max_msg_size = 2048;
-  static constexpr auto timeout_millis = 1500;
+  static constexpr auto timeout_millis = 2500;
 
   boost::asio::streambuf streambuf_;
   asio::steady_timer deadline_;
   std::string prev_read_;
   int prev_read_bytes_;
 
-  immer::box<state::StreamSession> stream_session;
+  state::SessionsAtoms stream_sessions;
+  std::shared_ptr<dp::event_bus> event_bus;
 };
 
 /**
@@ -157,9 +171,12 @@ protected:
  */
 class tcp_server {
 public:
-  tcp_server(boost::asio::io_context &io_context, int port, immer::box<state::StreamSession> state)
+  tcp_server(boost::asio::io_context &io_context,
+             int port,
+             state::SessionsAtoms state,
+             const std::shared_ptr<dp::event_bus> &event_bus)
       : io_context_(io_context), acceptor_(io_context, tcp::endpoint(tcp::v4(), port)),
-        stream_session(std::move(state)) {
+        stream_sessions(std::move(state)), event_bus(event_bus) {
     acceptor_.set_option(boost::asio::socket_base::reuse_address{true});
     acceptor_.listen(4096);
     start_accept();
@@ -170,7 +187,7 @@ private:
    * Creates a socket and initiates an asynchronous accept operation to wait for a new connection
    */
   void start_accept() {
-    tcp_connection::pointer new_connection = tcp_connection::create(io_context_, stream_session);
+    tcp_connection::pointer new_connection = tcp_connection::create(io_context_, stream_sessions, event_bus);
 
     acceptor_.async_accept(new_connection->socket(),
                            [this, new_connection](auto error) { handle_accept(new_connection, error); });
@@ -192,32 +209,24 @@ private:
 
   boost::asio::io_context &io_context_;
   tcp::acceptor acceptor_;
-  immer::box<state::StreamSession> stream_session;
+  state::SessionsAtoms stream_sessions;
+  std::shared_ptr<dp::event_bus> event_bus;
 };
 
 /**
- * Starts a new RTSP server in a separate Thread at the given port
- *
- * @return the thread instance
+ * Starts a new RTSP server, calling this method will block execution.
  */
-void run_server(int port, immer::box<state::StreamSession> state) {
+void run_server(int port,
+                const state::SessionsAtoms &running_sessions,
+                const std::shared_ptr<dp::event_bus> &event_bus) {
   try {
     boost::asio::io_context io_context;
-    tcp_server server(io_context, port, state);
+    tcp_server server(io_context, port, running_sessions, event_bus);
 
     logs::log(logs::info, "RTSP server started on port: {}", port);
 
-    auto stop_handler = state->event_bus->register_handler<immer::box<moonlight::control::TerminateEvent>>(
-        [sess_id = state->session_id, &io_context](immer::box<moonlight::control::TerminateEvent> term_ev) {
-          if (term_ev->session_id == sess_id) {
-            logs::log(logs::info, "RTSP received termination, stopping.");
-            io_context.stop();
-          }
-        });
-
     // This will block here until the context is stopped
     io_context.run();
-    stop_handler.unregister();
   } catch (std::exception &e) {
     logs::log(logs::error, "Unable to create RTSP server on port: {} ex: {}", port, e.what());
   }

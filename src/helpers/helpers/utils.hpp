@@ -1,5 +1,8 @@
 #pragma once
-#include "range/v3/view.hpp"
+#include <algorithm>
+#include <range/v3/view.hpp>
+#include <sstream>
+#include <stdlib.h>
 #include <string>
 
 namespace utils {
@@ -26,6 +29,12 @@ inline std::string_view sub_string(std::string_view str, char begin, char end) {
   return str.substr(s + 1, e - s - 1);
 }
 
+inline std::string to_lower(std::string_view str) {
+  std::string result(str);
+  std::transform(str.begin(), str.end(), result.begin(), [](unsigned char c) { return std::tolower(c); });
+  return result;
+}
+
 /**
  * Splits the given string into an array of strings at any given separator
  */
@@ -33,7 +42,27 @@ inline std::vector<std::string_view> split(std::string_view str, char separator)
   return str                                                                                              //
          | views::split(separator)                                                                        //
          | views::transform([](auto &&ptrs) { return std::string_view(&*ptrs.begin(), distance(ptrs)); }) //
-         | to_vector;                                                                                    //
+         | to_vector;                                                                                     //
+}
+
+/**
+ * Copies out a string_view content back to a string
+ * This differs from using .data() since it'll add the terminator
+ */
+inline std::string to_string(std::string_view str) {
+  return {str.begin(), str.end()};
+}
+
+inline const char *get_env(const char *tag, const char *def = nullptr) noexcept {
+  const char *ret = std::getenv(tag);
+  return ret ? ret : def;
+}
+
+/**
+ * Join a list of strings into a single string with separator in between elements
+ */
+template <class T> inline std::string join(const std::vector<T> &vec, std::string_view separator) {
+  return vec | views::join(separator);
 }
 
 } // namespace utils

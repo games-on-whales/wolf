@@ -1,0 +1,277 @@
+= Headless Wayland
+
+Gstreamer allows us to encode any video and stream it to Moonlight via our custom plugin, but we haven't discussed the upstream video source. +
+You can just use https://gstreamer.freedesktop.org/documentation/ximagesrc/index.html?gi-language=c[`ximagesrc`] and hook your host X11 desktop to the stream but there are some issues with that:
+
+* Xorg has to be up and running; we can run it via Docker in GOW but that's not without its challenges.
+* You need a physical monitor or a dummy plugged into your GPU (or some esoteric https://games-on-whales.github.io/gow/monitor.html#_force_xorg_to_use_a_custom_edid[EDID trick] which works only when also performing a human sacrifice).
+* It doesn't scale well with multiple remote clients when sharing a single host
+
+Ideally, can't we just plug the shared video memory from the running App straight into Gstreamer ??
+
+[plantuml,format=svg]
+....
+@startuml
+skinparam componentStyle rectangle
+
+frame "Applications" {
+  [Steam]
+  [Firefox]
+}
+
+frame "Wolf" #lightblue {
+  [Gstreamer]
+}
+
+cloud {
+ [Moonlight]
+}
+
+[Steam] --> [Gstreamer]
+[Firefox] --> [Gstreamer]
+[Gstreamer] --> [Moonlight]
+
+@enduml
+....
+
+In theory, for a single fullscreen application that's kind of possible (read until the end to get an idea of why it's not so simple); but we need some way to *compose* multiple running windows into a single scene to be then encoded via the Gstreamer pipeline. +
+Turns out that's exactly what a https://en.wikipedia.org/wiki/Compositing_window_manager[Compositing window manager] (or *compositor*) does, and since you can't have just a compositor without the full https://en.wikipedia.org/wiki/X_Window_System[X Window System (X11)] running, we decided to follow the https://en.wikipedia.org/wiki/Wayland_(protocol)[Wayland] route.
+
+== Wayland compositor
+
+We are in a very fortunate position: we don't even want to deal with real monitors, we just want to be the glue between an application running and the Gstreamer pipeline; for this reason we can have a simplified view (and implementation).
+
+.A high level overview of the main components
+[plantuml,format=svg]
+....
+@startuml
+skinparam componentStyle rectangle
+
+frame "Applications" {
+  [Steam]
+  [Firefox]
+}
+
+frame "Wolf" #lightblue {
+  [Gstreamer]
+  [Compositor]
+}
+
+cloud {
+ [Moonlight]
+}
+
+frame "Mesa" {
+  [EGL]
+  [OpenGL]
+  [GPU drivers]
+}
+
+frame "Kernel" {
+  [DRM]
+}
+
+[Steam] ---> [EGL]
+[Firefox] ---> [EGL]
+[Steam] <--> [Compositor]
+[Firefox] <--> [Compositor]
+
+[Compositor] <--> [EGL]
+[Compositor] -right-> [Gstreamer]
+[Gstreamer] -right-> [Moonlight]
+
+[EGL] -left-> [OpenGL]
+[OpenGL] -left-> [GPU drivers]
+[GPU drivers] <-down-> [DRM]
+
+@enduml
+....
+
+Let's dive into each of these parts in isolation.
+
+=== Wayland clients
+
+[quote,https://en.wikipedia.org/wiki/Wayland_(protocol)#Rendering_model]
+The Wayland protocol does not include a rendering API.
+Instead, Wayland follows a direct rendering model, in which the client must render the window contents to a buffer shareable with the compositor.
+
+By removing the X server from the picture we also removed the mechanism by which X clients typically render, but there's another mechanism: *direct rendering*. +
+
+With direct rendering, the client and the server share a video memory buffer.
+The client links to a rendering library such as OpenGL that knows how to program the hardware and renders directly into the buffer.
+The compositor in turn can take the buffer and use it as a texture when it composites the desktop.
+
+[plantuml,format=svg]
+....
+@startuml
+skinparam componentStyle rectangle
+
+frame "Applications" {
+  [Steam]
+  [Firefox]
+}
+
+frame "Wolf" #lightblue {
+  [Compositor]
+}
+
+[Steam] --> [Buffer]
+[Firefox] --> [Buffer]
+
+[Buffer] -> [Compositor]
+
+@enduml
+....
+
+One simple way to implement this buffer would be to use https://en.wikipedia.org/wiki/Shared_memory#Support_on_Unix-like_systems[shm] as a simple shared region between clients and the server.
+Most Wayland compositors do their rendering on the GPU, and many Wayland clients do their rendering on the GPU as well.
+With the shared memory approach, sending buffers from the client to the compositor in such cases is very inefficient, as the client has to read their data from the GPU to the CPU, then the compositor has to read it from the CPU back to the GPU to be rendered.
+
+The https://en.wikipedia.org/wiki/Direct_Rendering_Manager[Linux DRM] (Direct Rendering Manager) interface provides a means for us to export handles to GPU resources.
+Mesa, the predominant implementation of userspace Linux graphics drivers, implements a protocol that allows https://en.wikipedia.org/wiki/EGL_(API)[EGL] users to transfer handles to their GPU buffers from the client to the compositor for rendering, without ever copying data to the GPU.
+
+[plantuml,format=svg]
+....
+@startuml
+skinparam componentStyle rectangle
+
+frame "Applications" {
+  [Steam]
+  [Firefox]
+}
+
+frame "Wolf" #lightblue {
+  [Compositor]
+}
+
+frame "Mesa" {
+  [EGL]
+  [OpenGL]
+  [GPU drivers]
+}
+
+frame "Kernel" {
+  [DRM]
+}
+
+
+[Steam] --> [EGL]
+[Firefox] --> [EGL]
+
+[EGL] -> [Compositor]
+[EGL] -left-> [OpenGL]
+[OpenGL] -left-> [GPU drivers]
+[GPU drivers] <-down-> [DRM]
+
+@enduml
+....
+
+=== Wayland Compositor
+
+Wayland is designed to update everything atomically, such that no frame is ever presented in an invalid or intermediate state.
+Our custom Wayland compositor knows where to get the rendered buffers, but it doesn't know when the buffer is ready to be rendered; here's where the Wayland protocol comes into play. +
+
+Client surfaces will start in a _pending_ state (and no state at all when first created), this state is negotiated over the course of any number of _requests_ from clients and _events_ from the server; when both sides agree that it's a consistent surface, the surface is _committed_.
+Until this time, the compositor will continue to render the last consistent state.
+
+[NOTE]
+====
+In Wayland, instead of continuously pushing new frames, you can let the compositor tell you when it's ready for a new frame using _frame callbacks_.
+====
+
+The compositor must finally _compose_ the various surfaces into a single image, in order to do that efficiently we'll also use EGL.
+
+.The compositor communicates with the apps via the Wayland protocol, and compose surfaces via EGL
+[plantuml,format=svg]
+....
+@startuml
+skinparam componentStyle rectangle
+
+frame "Applications" {
+  [Steam]
+  [Firefox]
+}
+
+frame "Wolf" #lightblue {
+  [Compositor]
+}
+
+
+[Steam] --> [EGL]
+[Firefox] --> [EGL]
+[Steam] <--> [Compositor]
+[Firefox] <--> [Compositor]
+
+[EGL] -> [Compositor]
+[Compositor] -left-> [EGL]
+
+@enduml
+....
+
+=== Gstreamer
+
+Our compositor finally composed an image, and we are ready to send this to our Moonlight client, how do we push this to the selected encoder in the Gstreamer pipeline without copying?
+Sad news is, we don't (at least currently).
+
+Although Gstreamer supports https://gstreamer.freedesktop.org/documentation/additional/design/dmabuf.html?gi-language=c[DMA Buffers] (Direct Memory Access) which are an efficient way to share memory without going through the CPU,
+the support for modifiers of DMA Buffers is lacking behind significantly and varyies from one plugin to the next.
+
+What are modifiers? Modifiers add additional vendor specific properties to the internal pixel layout of a buffer. These modifiers are usually internally used by the GPU to speed up certain operations depending on characteristics of the hardware.
+None of this really has to worry us, because all of that is handled by the gpu driver. But because DMA buffers exist outside of the scope of a singular device, we need to carry the modifier of the buffer along.
+If it gets lost on the way, the program receiving the buffer has no idea how the data is layed out in memory and will likely output a broken image.
+
+Modifiers as such a crucial for communicating formats across devices, but they haven't existed all the time. So called "explicit" modifiers are a relatively new addition to the apis in question. Previously the drivers managed modifiers internally without exposing them to the user.
+Buffers without an accompanying modifier are as such described as having an "implicit" modifier. Because the modifier is handled internally by the driver communication across devices is impossible with such a buffer.
+
+Because these changes are relatively new, a lot of software still has to adapt to the new explicit apis and many try to be able to handle both, implicit and explicit buffers. Gstreamer being composed of many plugins currently results in very different stages of transitioning between these apis.
+Some apis even got support for explicit modifiers, only to drop it a release later, because users of older plugins were complaining about incompatibilities... This means the chance of getting a good image out of the pipeline starting with a DMA Buffer is very small.
+
+Given the state of things, we are currently copying the buffer through host-memory once to side-step this issue for now. The plan for the future is to provide first an experimental option for using DMA buffers,
+and later with more testing and development we will hopefully be able to share, compose and finally encode different buffer types with zero memory copied between the GPU and the CPU for truely the best possible latency.
+
+[plantuml,format=svg]
+....
+@startuml
+skinparam componentStyle rectangle
+
+frame "Applications" {
+  [Video Game]
+  [Steam]
+}
+
+frame "Wolf" #lightblue {
+ frame "GStreamer" {
+  [Compositor]
+  [DMA Buffer]
+  [HW H.264 encoding]
+}
+}
+
+cloud {
+ [Moonlight]
+}
+
+[Video Game] --> [Vulkan image]
+[Vulkan image] --> [Compositor]
+
+[Steam] --> [GL Texture]
+[GL Texture] --> [Compositor]
+[Compositor] ---> [EGL]
+
+[EGL] -> [DMA Buffer]
+[DMA Buffer] -> [HW H.264 encoding]
+[HW H.264 encoding] --> [Moonlight]
+
+
+@enduml
+....
+
+=== References
+
+Special thanks to https://github.com/Drakulix[@drakulix] for patiently explaining this to me and lead the way in https://github.com/Drakulix/sunrise[drakulix/sunrise]. +
+Here's a bunch of useful links, docs and videos:
+
+* The https://wayland.freedesktop.org/docs/html/ch01.html[official Wayland docs] and the https://wayland-book.com/introduction.html[Wayland book]
+* https://streaming.media.ccc.de/jev22/relive/49255[Why YOU should write a wayland compositor!] by https://github.com/Drakulix[@drakulix]
+* https://drewdevault.com/2017/06/10/Introduction-to-Wayland.html[An introduction to wayland]
+* https://www.khronos.org/egl/[EGL overview] and https://www.khronos.org/files/egl-1-4-quick-reference-card.pdf[quick reference card]

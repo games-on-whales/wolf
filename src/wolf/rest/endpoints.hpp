@@ -1,25 +1,33 @@
 #pragma once
 
 #include <crypto/crypto.hpp>
+#include <filesystem>
 #include <functional>
 #include <helpers/utils.hpp>
+#include <immer/vector_transient.hpp>
 #include <moonlight/protocol.hpp>
 #include <range/v3/view.hpp>
 #include <rest/helpers.hpp>
 #include <rest/rest.hpp>
 #include <state/config.hpp>
+#include <state/sessions.hpp>
+#include <utility>
 
 namespace endpoints {
 
-template <class T> void server_error(std::shared_ptr<typename SimpleWeb::Server<T>::Response> response) {
+static std::size_t get_client_id(const state::PairedClient &current_client) {
+  return std::hash<std::string>{}(current_client.client_cert);
+}
+
+template <class T> void server_error(const std::shared_ptr<typename SimpleWeb::Server<T>::Response> &response) {
   XML xml;
   xml.put("root.<xmlattr>.status_code", 400);
   send_xml<T>(response, SimpleWeb::StatusCode::client_error_bad_request, xml);
 }
 
 template <class T>
-void not_found(std::shared_ptr<typename SimpleWeb::Server<T>::Response> response,
-               std::shared_ptr<typename SimpleWeb::Server<T>::Request> request) {
+void not_found(const std::shared_ptr<typename SimpleWeb::Server<T>::Response> &response,
+               const std::shared_ptr<typename SimpleWeb::Server<T>::Request> &request) {
   log_req<T>(request);
 
   XML xml;
@@ -28,9 +36,9 @@ void not_found(std::shared_ptr<typename SimpleWeb::Server<T>::Response> response
 }
 
 template <class T>
-void serverinfo(std::shared_ptr<typename SimpleWeb::Server<T>::Response> response,
-                std::shared_ptr<typename SimpleWeb::Server<T>::Request> request,
-                const std::shared_ptr<state::AppState> &state) {
+void serverinfo(const std::shared_ptr<typename SimpleWeb::Server<T>::Response> &response,
+                const std::shared_ptr<typename SimpleWeb::Server<T>::Request> &request,
+                const immer::box<state::AppState> &state) {
   log_req<T>(request);
 
   SimpleWeb::CaseInsensitiveMultimap headers = request->parse_query_string();
@@ -38,26 +46,31 @@ void serverinfo(std::shared_ptr<typename SimpleWeb::Server<T>::Response> respons
   auto cfg = state->config;
   auto host = state->host;
   bool is_https = std::is_same_v<SimpleWeb::HTTPS, T>;
-  auto xml = moonlight::serverinfo(false, // TODO: isServerBusy
-                                   -1,    // TODO: current_appid
+
+  auto session = get_session_by_ip(state->running_sessions->load(), get_client_ip<T>(request));
+  bool is_busy = session.has_value();
+  int app_id = session.has_value() ? std::stoi(session->app->base.id) : -1;
+
+  auto xml = moonlight::serverinfo(is_busy,
+                                   app_id,
                                    state::HTTPS_PORT,
                                    state::HTTP_PORT,
-                                   cfg.uuid,
-                                   cfg.hostname,
-                                   host.mac_address,
-                                   host.external_ip,
-                                   host.internal_ip,
-                                   host.display_modes,
+                                   cfg->uuid,
+                                   cfg->hostname,
+                                   host->mac_address,
+                                   host->external_ip,
+                                   host->internal_ip,
+                                   host->display_modes,
                                    is_https,
-                                   cfg.support_hevc);
+                                   cfg->support_hevc);
 
   send_xml<T>(response, SimpleWeb::StatusCode::success_ok, xml);
 }
 
 template <class T>
-void pair(std::shared_ptr<typename SimpleWeb::Server<T>::Response> response,
-          std::shared_ptr<typename SimpleWeb::Server<T>::Request> request,
-          const std::shared_ptr<state::AppState> &state) {
+void pair(const std::shared_ptr<typename SimpleWeb::Server<T>::Response> &response,
+          const std::shared_ptr<typename SimpleWeb::Server<T>::Request> &request,
+          const immer::box<state::AppState> &state) {
   log_req<T>(request);
 
   SimpleWeb::CaseInsensitiveMultimap headers = request->parse_query_string();
@@ -82,22 +95,13 @@ void pair(std::shared_ptr<typename SimpleWeb::Server<T>::Response> response,
 
     future_pin->get_future().then(
         [state, salt, client_cert_str, cache_key, client_id, response](boost::future<std::string> fut_pin) {
-          auto server_pem = x509::get_cert_pem(*state->host.server_cert);
+          auto server_pem = x509::get_cert_pem(*state->host->server_cert);
           auto result = moonlight::pair::get_server_cert(fut_pin.get(), salt.value(), server_pem);
 
           auto client_cert_parsed = crypto::hex_to_str(client_cert_str.value(), true);
 
-          state->pairing_cache.update([&](const immer::map<std::string, state::PairCache> &pairing_cache) {
-            return pairing_cache.set(cache_key,
-                                     {client_id.value(),
-                                      client_cert_parsed,
-                                      state::RTSP_SETUP_PORT,
-                                      state::CONTROL_PORT,
-                                      state::VIDEO_STREAM_PORT,
-                                      state::AUDIO_STREAM_PORT,
-                                      result.second,
-                                      std::nullopt,
-                                      std::nullopt});
+          state->pairing_cache->update([&](const immer::map<std::string, state::PairCache> &pairing_cache) {
+            return pairing_cache.set(cache_key, {.client_cert = client_cert_parsed, .aes_key = result.second});
           });
 
           send_xml<T>(response, SimpleWeb::StatusCode::success_ok, result.first);
@@ -106,7 +110,7 @@ void pair(std::shared_ptr<typename SimpleWeb::Server<T>::Response> response,
     return;
   }
 
-  auto client_cache_it = state->pairing_cache.load()->find(cache_key);
+  auto client_cache_it = state->pairing_cache->load()->find(cache_key);
   if (client_cache_it == nullptr) {
     logs::log(logs::warning, "Unable to find {} {} in the pairing cache", client_id.value(), client_ip);
     return;
@@ -117,14 +121,14 @@ void pair(std::shared_ptr<typename SimpleWeb::Server<T>::Response> response,
   auto client_challenge = get_header(headers, "clientchallenge");
   if (client_challenge) {
 
-    auto server_cert_signature = x509::get_cert_signature(state->host.server_cert);
+    auto server_cert_signature = x509::get_cert_signature(state->host->server_cert);
     auto [xml, server_secret_pair] =
         moonlight::pair::send_server_challenge(client_cache.aes_key, client_challenge.value(), server_cert_signature);
 
     auto [server_secret, server_challenge] = server_secret_pair;
     client_cache.server_secret = server_secret;
     client_cache.server_challenge = server_challenge;
-    state->pairing_cache.update([&](const immer::map<std::string, state::PairCache> &pairing_cache) {
+    state->pairing_cache->update([&](const immer::map<std::string, state::PairCache> &pairing_cache) {
       return pairing_cache.set(cache_key, client_cache);
     });
 
@@ -140,11 +144,11 @@ void pair(std::shared_ptr<typename SimpleWeb::Server<T>::Response> response,
         client_cache.aes_key,
         client_cache.server_secret.value(),
         server_challenge.value(),
-        x509::get_pkey_content(const_cast<EVP_PKEY *>(state->host.server_pkey)));
+        x509::get_pkey_content(const_cast<EVP_PKEY *>(state->host->server_pkey)));
 
     client_cache.client_hash = client_hash;
 
-    state->pairing_cache.update([&](const immer::map<std::string, state::PairCache> &pairing_cache) {
+    state->pairing_cache->update([&](const immer::map<std::string, state::PairCache> &pairing_cache) {
       return pairing_cache.set(cache_key, client_cache);
     });
 
@@ -168,7 +172,7 @@ void pair(std::shared_ptr<typename SimpleWeb::Server<T>::Response> response,
 
     auto is_paired = xml.template get<int>("root.paired");
     if (is_paired == 1) {
-      state::pair(state->config, {client_id.value(), client_cache.client_cert});
+      state::pair(state->config, state::PairedClient{.client_cert = client_cache.client_cert});
       logs::log(logs::info, "Succesfully paired {}", client_ip);
     } else {
       logs::log(logs::warning, "Failed pairing with {}", client_ip);
@@ -185,7 +189,7 @@ void pair(std::shared_ptr<typename SimpleWeb::Server<T>::Response> response,
     xml.put("root.<xmlattr>.status_code", 200);
 
     // Cleanup temporary pairing_cache
-    state->pairing_cache.update([&cache_key](const immer::map<std::string, state::PairCache> &pairing_cache) {
+    state->pairing_cache->update([&cache_key](const immer::map<std::string, state::PairCache> &pairing_cache) {
       return pairing_cache.erase(cache_key);
     });
 
@@ -198,63 +202,122 @@ void pair(std::shared_ptr<typename SimpleWeb::Server<T>::Response> response,
 
 namespace https {
 
-template <class T>
-void applist(std::shared_ptr<typename SimpleWeb::Server<T>::Response> response,
-             std::shared_ptr<typename SimpleWeb::Server<T>::Request> request,
-             const std::shared_ptr<state::AppState> &state) {
-  log_req<T>(request);
+void applist(const std::shared_ptr<typename SimpleWeb::Server<SimpleWeb::HTTPS>::Response> &response,
+             const std::shared_ptr<typename SimpleWeb::Server<SimpleWeb::HTTPS>::Request> &request,
+             const immer::box<state::AppState> &state) {
+  log_req<SimpleWeb::HTTPS>(request);
 
-  auto base_apps = state->config.apps                                            //
+  auto base_apps = state->config->apps                                           //
                    | ranges::views::transform([](auto app) { return app.base; }) //
                    | ranges::to<immer::vector<moonlight::App>>();
   auto xml = moonlight::applist(base_apps);
 
-  send_xml<T>(response, SimpleWeb::StatusCode::success_ok, xml);
+  send_xml<SimpleWeb::HTTPS>(response, SimpleWeb::StatusCode::success_ok, xml);
 }
 
-template <class T>
-void launch(std::shared_ptr<typename SimpleWeb::Server<T>::Response> response,
-            std::shared_ptr<typename SimpleWeb::Server<T>::Request> request,
-            const state::PairedClient &current_client,
-            const std::shared_ptr<state::AppState> &state) {
-  log_req<T>(request);
-
-  // TODO: check if this stuff is valid?
+state::StreamSession
+create_run_session(const immer::box<input::InputReady> &inputs,
+                   const std::shared_ptr<typename SimpleWeb::Server<SimpleWeb::HTTPS>::Request> &request,
+                   const state::PairedClient &current_client,
+                   const state::App &run_app) {
   SimpleWeb::CaseInsensitiveMultimap headers = request->parse_query_string();
-  auto display_mode_str = utils::split(get_header(headers, "mode").value(), 'x');
+  auto display_mode_str = utils::split(get_header(headers, "mode").value_or("1920x1080x60"), 'x');
   moonlight::DisplayMode display_mode = {std::stoi(display_mode_str[0].data()),
                                          std::stoi(display_mode_str[1].data()),
                                          std::stoi(display_mode_str[2].data())};
 
-  // stereo TODO: what should we select here?
+  // forcing stereo, TODO: what should we select here?
   state::AudioMode audio_mode = {2, 1, 1, {state::AudioMode::FRONT_LEFT, state::AudioMode::FRONT_RIGHT}};
 
-  auto client_ip = request->remote_endpoint().address().to_string();
-  auto session_id = std::hash<std::string>{}(current_client.client_cert);
+  //  auto joypad_map = get_header(headers, "remoteControllersBitmap").value(); // TODO: decipher this (might be empty)
 
-  state::StreamSession session = {.session_id = session_id,
-                                  .event_bus = state->event_bus,
-                                  .display_mode = display_mode,
-                                  .audio_mode = audio_mode,
-                                  .app = state::get_app_by_id(state->config, get_header(headers, "appid").value()),
-                                  // gcm encryption keys
-                                  .gcm_key = get_header(headers, "rikey").value(),
-                                  .gcm_iv_key = get_header(headers, "rikeyid").value(),
-                                  // client info
-                                  .unique_id = get_header(headers, "uuid").value(),
-                                  .ip = client_ip,
-                                  // ports
-                                  .rtsp_port = current_client.rtsp_port,
-                                  .control_port = current_client.control_port,
-                                  .audio_port = current_client.audio_port,
-                                  .video_port = current_client.video_port};
-  immer::box<state::StreamSession> shared_session = {session};
+  std::string host_state_folder = utils::get_env("HOST_APPS_STATE_FOLDER", "/etc/wolf");
+  auto full_path = std::filesystem::path(host_state_folder) / current_client.app_state_folder / run_app.base.title;
+  logs::log(logs::debug, "Host app state folder: {}, creating paths", full_path.string());
+  std::filesystem::create_directories(full_path);
 
-  state->event_bus->fire_event(shared_session); // Anyone listening for this event will be called
-
-  auto xml = moonlight::launch_success(state->host.external_ip, std::to_string(current_client.rtsp_port));
-  send_xml<T>(response, SimpleWeb::StatusCode::success_ok, xml);
+  return state::StreamSession{.display_mode = display_mode,
+                              .audio_mode = audio_mode,
+                              .virtual_inputs = inputs,
+                              .app = std::make_shared<state::App>(run_app),
+                              .app_state_folder = full_path.string(),
+                              // gcm encryption keys
+                              .aes_key = get_header(headers, "rikey").value(),
+                              .aes_iv = get_header(headers, "rikeyid").value(),
+                              // client info
+                              .session_id = get_client_id(current_client),
+                              .ip = get_client_ip<SimpleWeb::HTTPS>(request)};
 }
+
+void launch(const std::shared_ptr<typename SimpleWeb::Server<SimpleWeb::HTTPS>::Response> &response,
+            const std::shared_ptr<typename SimpleWeb::Server<SimpleWeb::HTTPS>::Request> &request,
+            const state::PairedClient &current_client,
+            const immer::box<state::AppState> &state) {
+  log_req<SimpleWeb::HTTPS>(request);
+
+  auto client_id = get_client_id(current_client);
+  auto virtual_inputs = input::setup_handlers(client_id, state->event_bus);
+  SimpleWeb::CaseInsensitiveMultimap headers = request->parse_query_string();
+  auto app = state::get_app_by_id(state->config, get_header(headers, "appid").value());
+  auto new_session = create_run_session(virtual_inputs, request, current_client, app);
+  state->event_bus->fire_event(immer::box<state::StreamSession>(new_session));
+  state->running_sessions->update(
+      [&new_session](const immer::vector<state::StreamSession> &ses_v) { return ses_v.push_back(new_session); });
+
+  auto xml = moonlight::launch_success(state->host->external_ip, std::to_string(state::RTSP_SETUP_PORT));
+  send_xml<SimpleWeb::HTTPS>(response, SimpleWeb::StatusCode::success_ok, xml);
+}
+
+void resume(const std::shared_ptr<typename SimpleWeb::Server<SimpleWeb::HTTPS>::Response> &response,
+            const std::shared_ptr<typename SimpleWeb::Server<SimpleWeb::HTTPS>::Request> &request,
+            const state::PairedClient &current_client,
+            const immer::box<state::AppState> &state) {
+  log_req<SimpleWeb::HTTPS>(request);
+
+  auto client_ip = get_client_ip<SimpleWeb::HTTPS>(request);
+  auto old_session = get_session_by_ip(state->running_sessions->load(), client_ip);
+  if (old_session) {
+    auto new_session = create_run_session(old_session->virtual_inputs, request, current_client, *old_session->app);
+    state->running_sessions->update([&old_session, &new_session](const immer::vector<state::StreamSession> ses_v) {
+      return remove_session(ses_v, old_session.value()).push_back(new_session);
+    });
+  } else {
+    logs::log(logs::warning, "[HTTPS] Received resume event from an unregistered session, ip: {}", client_ip);
+  }
+
+  XML xml;
+  xml.put("root.<xmlattr>.status_code", 200);
+  xml.put("root.sessionUrl0",
+          "rtsp://"s + request->local_endpoint().address().to_string() + ':' + std::to_string(state::RTSP_SETUP_PORT));
+  xml.put("root.resume", 1);
+  send_xml<SimpleWeb::HTTPS>(response, SimpleWeb::StatusCode::success_ok, xml);
+}
+
+void cancel(const std::shared_ptr<typename SimpleWeb::Server<SimpleWeb::HTTPS>::Response> &response,
+            const std::shared_ptr<typename SimpleWeb::Server<SimpleWeb::HTTPS>::Request> &request,
+            const state::PairedClient &current_client,
+            const immer::box<state::AppState> &state) {
+  log_req<SimpleWeb::HTTPS>(request);
+
+  auto client_ip = get_client_ip<SimpleWeb::HTTPS>(request);
+  auto client_session = get_session_by_ip(state->running_sessions->load(), client_ip);
+  if (client_session) {
+    state->event_bus->fire_event(
+        immer::box<moonlight::StopStreamEvent>(moonlight::StopStreamEvent{.session_id = client_session->session_id}));
+
+    state->running_sessions->update([&client_session](const immer::vector<state::StreamSession> &ses_v) {
+      return remove_session(ses_v, client_session.value());
+    });
+  } else {
+    logs::log(logs::warning, "[HTTPS] Received resume event from an unregistered session, ip: {}", client_ip);
+  }
+
+  XML xml;
+  xml.put("root.<xmlattr>.status_code", 200);
+  xml.put("root.cancel", 1);
+  send_xml<SimpleWeb::HTTPS>(response, SimpleWeb::StatusCode::success_ok, xml);
+}
+
 } // namespace https
 
 } // namespace endpoints

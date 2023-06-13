@@ -93,16 +93,30 @@ jobs:
           username: ${{ github.repository_owner }}
           password: ${{ secrets.GHCR_TOKEN }}
 
+      - name: Build GPU Drivers
+        uses: docker/build-push-action@v3
+        with:
+          builder: ${{ steps.buildx.outputs.name }}
+          context: .
+          file: docker/gpu-drivers.Dockerfile
+          push: true
+          tags: ghcr.io/${{ github.repository_owner }}/gpu-drivers:2023.04,gameonwhales/gpu-drivers:2023.04 # TODO: set build version as param
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=registry,ref=ghcr.io/${{ github.repository_owner }}/gpu-drivers:buildcache-2023.04
+          cache-to: type=registry,ref=ghcr.io/${{ github.repository_owner }}/gpu-drivers:buildcache-2023.04,mode=max
+
       - name: Build Gstreamer
         uses: docker/build-push-action@v3
         with:
           builder: ${{ steps.buildx.outputs.name }}
           context: .
-          file: gstreamer.Dockerfile
+          file: docker/gstreamer.Dockerfile
           push: true
-          build-args : |
+          build-args: |
             GSTREAMER_VERSION=1.22.0
+            BASE_IMAGE=ghcr.io/${{ github.repository_owner }}/gpu-drivers:2023.04
           tags: ghcr.io/${{ github.repository_owner }}/gstreamer:1.22.0,gameonwhales/gstreamer:1.22.0 # TODO: set gstreamer version as param
+          labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=registry,ref=ghcr.io/${{ github.repository_owner }}/gstreamer:buildcache-1.20.3
           cache-to: type=registry,ref=ghcr.io/${{ github.repository_owner }}/gstreamer:buildcache-1.20.3,mode=max
 
@@ -111,11 +125,12 @@ jobs:
         with:
           builder: ${{ steps.buildx.outputs.name }}
           context: .
-          file: Dockerfile
+          file: docker/wolf.Dockerfile
           push: ${{ steps.prep.outputs.push }}
           tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
           build-args: |
-            GSTREAMER_VERSION=1.22.0
+            BASE_IMAGE=ghcr.io/${{ github.repository_owner }}/gstreamer:1.22.0
             IMAGE_SOURCE=${{ steps.prep.outputs.github_server_url }}/${{ github.repository }}
           cache-from: ${{ steps.prep.outputs.cache_from }}
           cache-to: ${{ steps.prep.outputs.cache_to }}

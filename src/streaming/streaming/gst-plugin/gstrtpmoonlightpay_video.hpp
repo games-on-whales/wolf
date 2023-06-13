@@ -1,6 +1,7 @@
 #pragma once
 
 #include <gst/base/gstbasetransform.h>
+#include <memory>
 
 G_BEGIN_DECLS
 

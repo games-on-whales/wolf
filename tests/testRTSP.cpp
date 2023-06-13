@@ -18,8 +18,11 @@ using namespace rtsp;
 class tcp_tester : public tcp_connection {
 
 public:
-  static auto create_client(asio::io_context &io_context, int port, immer::box<state::StreamSession> session) {
-    auto tester = new tcp_tester(io_context, std::move(session));
+  static auto create_client(asio::io_context &io_context,
+                            int port,
+                            const state::SessionsAtoms state,
+                            const std::shared_ptr<dp::event_bus> event_bus) {
+    auto tester = new tcp_tester(io_context, state, event_bus);
 
     tcp::resolver resolver(io_context);
     asio::connect(tester->socket(), resolver.resolve("0.0.0.0", std::to_string(port)));
@@ -47,8 +50,10 @@ public:
   }
 
 protected:
-  explicit tcp_tester(asio::io_context &io_context, immer::box<state::StreamSession> session)
-      : tcp_connection(io_context, std::move(session)), ioc(io_context) {}
+  explicit tcp_tester(asio::io_context &io_context,
+                      const state::SessionsAtoms state,
+                      const std::shared_ptr<dp::event_bus> event_bus)
+      : tcp_connection(io_context, state, event_bus), ioc(io_context) {}
 
   boost::asio::io_context &ioc;
 };
@@ -242,29 +247,30 @@ TEST_CASE("Custom Parser", "[RTSP]") {
   }
 }
 
-immer::box<StreamSession> test_init_state() {
-  StreamSession session = {.session_id = 1234,
-                           .event_bus = std::make_shared<dp::event_bus>(),
-                           .display_mode = {1920, 1080, 60},
-                           .audio_mode = {2, 1, 1, {state::AudioMode::FRONT_LEFT, state::AudioMode::FRONT_RIGHT}},
-                           .app = {},
-                           .gcm_key = crypto::hex_to_str("9d804e47a6aa6624b7d4b502b32cc522", true),
-                           .gcm_iv_key = crypto::hex_to_str("01234567890", true),
-                           .unique_id = "0f691f13730748328a22a6952a5ac3a2",
-                           .ip = "192.168.1.1",
-                           .rtsp_port = 1,
-                           .control_port = 2,
-                           .audio_port = 3,
-                           .video_port = 4};
-  return {session};
+state::SessionsAtoms test_init_state() {
+  StreamSession session = {
+      .display_mode = {1920, 1080, 60},
+      .audio_mode = {2, 1, 1, {state::AudioMode::FRONT_LEFT, state::AudioMode::FRONT_RIGHT}},
+      .app = std::make_shared<state::App>(state::App{.base = {},
+                                                     .h264_gst_pipeline = "",
+                                                     .hevc_gst_pipeline = "",
+                                                     .opus_gst_pipeline = "",
+                                                     .runner = nullptr}),
+      .aes_key = crypto::hex_to_str("9d804e47a6aa6624b7d4b502b32cc522", true),
+      .aes_iv = crypto::hex_to_str("01234567890", true),
+      .session_id = 1234,
+      .ip = "127.0.0.1",
+  };
+  return std::make_shared<immer::atom<immer::vector<StreamSession>>>(immer::vector<StreamSession>{session});
 }
 
 TEST_CASE("Commands", "[RTSP]") {
   constexpr int port = 8080;
   boost::asio::io_context ioc;
   auto state = test_init_state();
-  auto wolf_server = tcp_server(ioc, port, state);
-  auto wolf_client = tcp_tester::create_client(ioc, port, state);
+  auto ev_bus = std::make_shared<dp::event_bus>();
+  auto wolf_server = tcp_server(ioc, port, state, ev_bus);
+  auto wolf_client = tcp_tester::create_client(ioc, port, state, ev_bus);
 
   SECTION("MissingNo") {
     wolf_client->run("MissingNo rtsp://10.1.2.49:48010 RTSP/1.0\r\n"
@@ -307,42 +313,42 @@ TEST_CASE("Commands", "[RTSP]") {
   }
 
   SECTION("SETUP audio") {
-    wolf_client->run(
-        "SETUP streamid=audio/0/0 RTSP/1.0\n"
-        "CSeq: 3\n"
-        "X-GS-ClientVersion: 14\n"
-        "Host: 10.1.2.49\n"
-        "Transport: unicast;X-GS-ClientPort=50000-50001\n"
-        "If-Modified-Since: Thu, 01 Jan 1970 00:00:00 GMT"
-        "\r\n\r\n"sv,
-        [&state](std::optional<RTSP_PACKET> response) {
-          REQUIRE(response.has_value());
-          REQUIRE(response.value().response.status_code == 200);
-          REQUIRE(response.value().seq_number == 3);
+    wolf_client->run("SETUP streamid=audio/0/0 RTSP/1.0\n"
+                     "CSeq: 3\n"
+                     "X-GS-ClientVersion: 14\n"
+                     "Host: 10.1.2.49\n"
+                     "Transport: unicast;X-GS-ClientPort=50000-50001\n"
+                     "If-Modified-Since: Thu, 01 Jan 1970 00:00:00 GMT"
+                     "\r\n\r\n"sv,
+                     [](std::optional<RTSP_PACKET> response) {
+                       REQUIRE(response.has_value());
+                       REQUIRE(response.value().response.status_code == 200);
+                       REQUIRE(response.value().seq_number == 3);
 
-          REQUIRE_THAT(response.value().options["Session"], Equals("DEADBEEFCAFE;timeout = 90"));
-          REQUIRE_THAT(response.value().options["Transport"], Equals(fmt::format("server_port={}", state->audio_port)));
-        });
+                       REQUIRE_THAT(response.value().options["Session"], Equals("DEADBEEFCAFE;timeout = 90"));
+                       REQUIRE_THAT(response.value().options["Transport"],
+                                    Equals(fmt::format("server_port={}", state::AUDIO_PING_PORT)));
+                     });
   }
 
   SECTION("SETUP video") {
-    wolf_client->run(
-        "SETUP streamid=video/0/0 RTSP/1.0\n"
-        "CSeq: 4\n"
-        "X-GS-ClientVersion: 14\n"
-        "Host: 10.1.2.49\n"
-        "Session:  DEADBEEFCAFE\n"
-        "Transport: unicast;X-GS-ClientPort=50000-50001\n"
-        "If-Modified-Since: Thu, 01 Jan 1970 00:00:00 GMT"
-        "\r\n\r\n"sv,
-        [&state](std::optional<RTSP_PACKET> response) {
-          REQUIRE(response.has_value());
-          REQUIRE(response.value().response.status_code == 200);
-          REQUIRE(response.value().seq_number == 4);
+    wolf_client->run("SETUP streamid=video/0/0 RTSP/1.0\n"
+                     "CSeq: 4\n"
+                     "X-GS-ClientVersion: 14\n"
+                     "Host: 10.1.2.49\n"
+                     "Session:  DEADBEEFCAFE\n"
+                     "Transport: unicast;X-GS-ClientPort=50000-50001\n"
+                     "If-Modified-Since: Thu, 01 Jan 1970 00:00:00 GMT"
+                     "\r\n\r\n"sv,
+                     [](std::optional<RTSP_PACKET> response) {
+                       REQUIRE(response.has_value());
+                       REQUIRE(response.value().response.status_code == 200);
+                       REQUIRE(response.value().seq_number == 4);
 
-          REQUIRE_THAT(response.value().options["Session"], Equals("DEADBEEFCAFE;timeout = 90"));
-          REQUIRE_THAT(response.value().options["Transport"], Equals(fmt::format("server_port={}", state->video_port)));
-        });
+                       REQUIRE_THAT(response.value().options["Session"], Equals("DEADBEEFCAFE;timeout = 90"));
+                       REQUIRE_THAT(response.value().options["Transport"],
+                                    Equals(fmt::format("server_port={}", state::VIDEO_PING_PORT)));
+                     });
   }
 
   SECTION("SETUP control") {
@@ -354,14 +360,14 @@ TEST_CASE("Commands", "[RTSP]") {
                      "Transport: unicast;X-GS-ClientPort=50000-50001\n"
                      "If-Modified-Since: Thu, 01 Jan 1970 00:00:00 GMT"
                      "\r\n\r\n"sv,
-                     [&state](std::optional<RTSP_PACKET> response) {
+                     [](std::optional<RTSP_PACKET> response) {
                        REQUIRE(response.has_value());
                        REQUIRE(response.value().response.status_code == 200);
                        REQUIRE(response.value().seq_number == 5);
 
                        REQUIRE_THAT(response.value().options["Session"], Equals("DEADBEEFCAFE;timeout = 90"));
                        REQUIRE_THAT(response.value().options["Transport"],
-                                    Equals(fmt::format("server_port={}", state->control_port)));
+                                    Equals(fmt::format("server_port={}", state::CONTROL_PORT)));
                      });
   }
 

@@ -31,7 +31,7 @@ set(immer_BUILD_EXTRAS OFF)
 
 set(FPHSA_NAME_MISMATCHED on) # see: https://github.com/arximboldi/immer/issues/204
 FetchContent_MakeAvailable(immer)
-target_link_libraries(moonlight PUBLIC immer)
+target_link_libraries_system(moonlight PUBLIC immer)
 unset(FPHSA_NAME_MISMATCHED)
 
 # FEC implementation
@@ -54,7 +54,7 @@ if (NOT nanors_POPULATED)
     set_source_files_properties(${nanors_SOURCE_DIR}/rs.c
             PROPERTIES COMPILE_FLAGS "-include deps/obl/autoshim.h -ftree-vectorize")
 
-    target_link_libraries(moonlight PUBLIC nanors::nanors)
+    target_link_libraries_system(moonlight PUBLIC nanors::nanors)
 endif ()
 
 # Additional algorithms for dealing with containers
@@ -63,7 +63,7 @@ FetchContent_Declare(
         GIT_REPOSITORY https://github.com/ericniebler/range-v3.git
         GIT_TAG 0.12.0)
 FetchContent_MakeAvailable(range)
-target_link_libraries(moonlight PUBLIC range-v3::range-v3)
+target_link_libraries_system(moonlight PUBLIC range-v3::range-v3)
 
 # Custom parser
 FetchContent_Declare(
@@ -77,7 +77,7 @@ if (NOT peglib_POPULATED)
 
     add_library(peglib INTERFACE)
     target_include_directories(peglib INTERFACE ${peglib_SOURCE_DIR})
-    target_link_libraries(moonlight PUBLIC peglib)
+    target_link_libraries_system(moonlight PUBLIC peglib)
 endif ()
 
 # We need this directory, and users of our library will need it too

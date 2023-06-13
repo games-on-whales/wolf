@@ -1,21 +1,10 @@
 # Make an automatic library - will be static or dynamic based on user setting
 
-file(GLOB HEADER_LIST CONFIGURE_DEPENDS
-        "streaming/*.hpp"
-        "streaming/gst-plugin/*.hpp")
-file(GLOB SRC_LIST SRCS
-        "streaming/*.cpp"
-        "streaming/gst-plugin/*.cpp")
+file(GLOB HEADER_LIST CONFIGURE_DEPENDS "streaming/gst-plugin/*.hpp")
+file(GLOB SRC_LIST SRCS "streaming/gst-plugin/*.cpp")
 
 add_library(streaming)
 add_library(wolf::streaming ALIAS streaming)
-
-target_sources(streaming
-        PRIVATE
-        ${SRC_LIST}
-
-        PUBLIC
-        ${HEADER_LIST})
 
 # We need this directory, and users of our library will need it too
 target_include_directories(streaming PUBLIC .)
@@ -26,8 +15,8 @@ FetchContent_Declare(
         fmtlib
         GIT_REPOSITORY https://github.com/fmtlib/fmt.git
         GIT_TAG 9.1.0)
-
 FetchContent_MakeAvailable(fmtlib)
+target_link_libraries_system(streaming PUBLIC fmt::fmt-header-only)
 
 FetchContent_Declare(
         eventbus
@@ -36,31 +25,40 @@ FetchContent_Declare(
 )
 set(EVENTBUS_BUILD_TESTS OFF)
 FetchContent_MakeAvailable(eventbus)
+target_link_libraries_system(streaming PUBLIC dp::eventbus)
 
 find_package(PkgConfig)
-pkg_check_modules(GSTREAMER REQUIRED gstreamer-1.0 gstreamer-base-1.0)
-pkg_check_modules(GLIB2 REQUIRED glib-2.0)
-pkg_check_modules(GOBJECT REQUIRED gobject-2.0)
+pkg_check_modules(GSTREAMER REQUIRED IMPORTED_TARGET gstreamer-1.0 gstreamer-base-1.0 gstreamer-app-1.0)
+pkg_check_modules(GLIB2 REQUIRED IMPORTED_TARGET glib-2.0)
 
 if (NOT (GSTREAMER_FOUND))
     message(FATAL_ERROR "Please Install Gstreamer Dev: CMake will Exit")
 endif ()
 
+if (LINK_RUST_WAYLAND AND UNIX AND NOT APPLE)
+    target_link_libraries_system(streaming PUBLIC gstwaylanddisplay)
+    list(APPEND SRC_LIST streaming/platforms/linux/wayland-display.cpp)
+else ()
+    message(WARNING "Missing virtual display implementation for this platform")
+    list(APPEND SRC_LIST streaming/platforms/unknown/no-virtual-display.cpp)
+endif ()
+
+list(APPEND HEADER_LIST streaming/virtual-display.hpp streaming/streaming.hpp streaming/data-structures.hpp)
+list(APPEND SRC_LIST streaming/streaming.cpp)
+
+target_sources(streaming
+        PRIVATE
+        ${SRC_LIST}
+
+        PUBLIC
+        ${HEADER_LIST})
+
 target_link_libraries(streaming PUBLIC
+        PkgConfig::GLIB2
+        PkgConfig::GSTREAMER
         wolf::moonlight
         wolf::helpers
-        fmt::fmt-header-only
-        dp::eventbus
-        ${GOBJECT_LIBRARIES}
-        ${GLIB2_LIBRARIES}
-        ${GSTREAMER_LIBRARIES}
-        ${GSTREAMER_BASE_LIBRARIES})
-
-target_include_directories(streaming PUBLIC
-        ${GOBJECT_INCLUDE_DIR}
-        ${GLIB2_INCLUDE_DIR}
-        ${GSTREAMER_INCLUDE_DIRS}
-        ${GSTREAMER_BASE_INCLUDE_DIRS})
+        wolf::input)
 
 
 # All users of this library will need at least C++17

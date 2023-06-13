@@ -69,13 +69,18 @@ struct ControlEvent {
   std::string_view raw_packet;
 };
 
-/**
- * We use terminate as a special type of ControlEvent since it'll be handled differently
- */
-struct TerminateEvent {
+} // namespace control
+
+struct PauseStreamEvent {
   std::size_t session_id;
 };
 
-} // namespace control
+struct ResumeStreamEvent {
+  std::size_t session_id;
+};
+
+struct StopStreamEvent {
+  std::size_t session_id;
+};
 
 } // namespace moonlight

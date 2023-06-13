@@ -5,9 +5,9 @@
 #include <crypto/crypto.hpp>
 #include <gst/base/gstbasetransform.h>
 #include <gst/gst.h>
+#include <moonlight/fec.hpp>
 #include <streaming/data-structures.hpp>
 #include <vector>
-#include <moonlight/fec.hpp>
 
 static void gst_buffer_copy_into(GstBuffer *buf, unsigned char *destination) {
   auto size = gst_buffer_get_size(buf);

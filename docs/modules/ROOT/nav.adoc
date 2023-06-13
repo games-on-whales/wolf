@@ -1,11 +1,15 @@
 * User guide
+** xref:user:overview.adoc[]
 ** xref:user:quickstart.adoc[]
 ** xref:user:configuration.adoc[]
 ** xref:user:gstreamer.adoc[]
+** xref:user:troubleshooting.adoc[]
 
 * Developer guide
+** xref:dev:manual_build.adoc[]
 ** xref:dev:code-structure.adoc[]
 ** xref:dev:gstreamer.adoc[]
+** xref:dev:wayland.adoc[]
 
 ** xref:protocols:index.adoc[]
 *** xref:protocols:http-pairing.adoc[]

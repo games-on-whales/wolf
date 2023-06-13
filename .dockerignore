@@ -2,6 +2,9 @@
 *
 
 !src
+!Cargo.toml
 !cmake
 !CMakeLists.txt
 !.clang-format
+!docker/gstreamer.control
+!docker/startup.sh

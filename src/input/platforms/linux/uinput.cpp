@@ -39,9 +39,9 @@ std::optional<libevdev_uinput *> create_mouse(libevdev *dev) {
 
   libevdev_set_uniq(dev, "Wolf Mouse");
   libevdev_set_name(dev, "Wolf mouse virtual device");
-  libevdev_set_id_vendor(dev, 0xAB01);
-  libevdev_set_id_product(dev, 0xAB02);
-  libevdev_set_id_version(dev, 0xAB03);
+  libevdev_set_id_vendor(dev, 0xAB00);
+  libevdev_set_id_product(dev, 0xAB01);
+  libevdev_set_id_version(dev, 0xAB00);
   libevdev_set_id_bustype(dev, BUS_USB);
 
   libevdev_enable_event_type(dev, EV_KEY);
@@ -68,7 +68,7 @@ std::optional<libevdev_uinput *> create_mouse(libevdev *dev) {
 
   auto err = libevdev_uinput_create_from_device(dev, LIBEVDEV_UINPUT_OPEN_MANAGED, &uidev);
   if (err != 0) {
-    logs::log(logs::error, "Unable to create mouse device, error code: {}", err);
+    logs::log(logs::error, "Unable to create mouse device, error code: {}", strerror(-err));
     return {};
   }
 
@@ -82,9 +82,9 @@ std::optional<libevdev_uinput *> create_mouse_abs(libevdev *dev) {
 
   libevdev_set_uniq(dev, "Wolf Touchpad");
   libevdev_set_name(dev, "Wolf touchpad virtual device");
-  libevdev_set_id_vendor(dev, 0xAB11);
-  libevdev_set_id_product(dev, 0xAB12);
-  libevdev_set_id_version(dev, 0xAB13);
+  libevdev_set_id_vendor(dev, 0xAB00);
+  libevdev_set_id_product(dev, 0xAB02);
+  libevdev_set_id_version(dev, 0xAB00);
   libevdev_set_id_bustype(dev, BUS_USB);
 
   libevdev_enable_property(dev, INPUT_PROP_DIRECT);
@@ -103,7 +103,7 @@ std::optional<libevdev_uinput *> create_mouse_abs(libevdev *dev) {
 
   auto err = libevdev_uinput_create_from_device(dev, LIBEVDEV_UINPUT_OPEN_MANAGED, &uidev);
   if (err != 0) {
-    logs::log(logs::error, "Unable to create mouse device, error code: {}", err);
+    logs::log(logs::error, "Unable to create mouse device, error code: {}", strerror(-err));
     return {};
   }
 
@@ -195,9 +195,9 @@ std::optional<libevdev_uinput *> create_keyboard(libevdev *dev) {
 
   libevdev_set_uniq(dev, "Wolf Keyboard");
   libevdev_set_name(dev, "Wolf keyboard virtual device");
-  libevdev_set_id_vendor(dev, 0xAB21);
-  libevdev_set_id_product(dev, 0xAB22);
-  libevdev_set_id_version(dev, 0xAB33);
+  libevdev_set_id_vendor(dev, 0xAB00);
+  libevdev_set_id_product(dev, 0xAB03);
+  libevdev_set_id_version(dev, 0xAB00);
   libevdev_set_id_bustype(dev, BUS_USB);
 
   libevdev_enable_event_type(dev, EV_KEY);
@@ -209,7 +209,7 @@ std::optional<libevdev_uinput *> create_keyboard(libevdev *dev) {
 
   auto err = libevdev_uinput_create_from_device(dev, LIBEVDEV_UINPUT_OPEN_MANAGED, &uidev);
   if (err != 0) {
-    logs::log(logs::error, "Unable to create mouse device, error code: {}", err);
+    logs::log(logs::error, "Unable to create mouse device, error code: {}", strerror(-err));
     return {};
   }
 
@@ -324,10 +324,10 @@ std::optional<libevdev_uinput *> create_controller(libevdev *dev) {
   libevdev_set_name(dev, "Wolf X-Box One (virtual) pad");
   // Vendor and product are very important
   // see the full list at: https://github.com/torvalds/linux/blob/master/drivers/input/joystick/xpad.c#L147
-  libevdev_set_id_product(dev, 0x02d1);
-  libevdev_set_id_vendor(dev, 0x045e);
+  libevdev_set_id_product(dev, 0x02D1);
+  libevdev_set_id_vendor(dev, 0x045E);
   libevdev_set_id_bustype(dev, BUS_USB);
-  libevdev_set_id_version(dev, 0xAB34);
+  libevdev_set_id_version(dev, 0xAB00);
 
   libevdev_enable_event_type(dev, EV_KEY);
   libevdev_enable_event_code(dev, EV_KEY, BTN_WEST, nullptr);
@@ -355,6 +355,9 @@ std::optional<libevdev_uinput *> create_controller(libevdev *dev) {
   libevdev_enable_event_code(dev, EV_ABS, ABS_Y, &stick);
   libevdev_enable_event_code(dev, EV_ABS, ABS_RY, &stick);
 
+  // NOTE: Don't comment this in, without actually supporting rumble.
+  // Otherwise this will cause frozen processes.
+  /*
   libevdev_enable_event_type(dev, EV_FF);
   libevdev_enable_event_code(dev, EV_FF, FF_RUMBLE, nullptr);
   libevdev_enable_event_code(dev, EV_FF, FF_CONSTANT, nullptr);
@@ -362,10 +365,11 @@ std::optional<libevdev_uinput *> create_controller(libevdev *dev) {
   libevdev_enable_event_code(dev, EV_FF, FF_SINE, nullptr);
   libevdev_enable_event_code(dev, EV_FF, FF_RAMP, nullptr);
   libevdev_enable_event_code(dev, EV_FF, FF_GAIN, nullptr);
+  */
 
   auto err = libevdev_uinput_create_from_device(dev, LIBEVDEV_UINPUT_OPEN_MANAGED, &uidev);
   if (err != 0) {
-    logs::log(logs::error, "Unable to create controller device, error code: {}", err);
+    logs::log(logs::error, "Unable to create controller device, error code: {}", strerror(-err));
     return {};
   }
 
@@ -459,13 +463,42 @@ void controller_handle(libevdev_uinput *controller,
 
 } // namespace controller
 
-InputReady setup_handlers(std::size_t session_id,
-                          const std::shared_ptr<dp::event_bus> &event_bus,
-                          std::shared_ptr<boost::asio::thread_pool> t_pool) {
+/**
+ * Joypads will also have one `/dev/input/js*` device as child, we want to expose that as well
+ */
+std::vector<std::string> get_child_dev_nodes(libevdev_uinput *device) {
+  std::vector<std::string> result;
+  auto udev = udev_new();
+  if (auto device_ptr = udev_device_new_from_syspath(udev, libevdev_uinput_get_syspath(device))) {
+    auto enumerate = udev_enumerate_new(udev);
+    udev_enumerate_add_match_parent(enumerate, device_ptr);
+    udev_enumerate_scan_devices(enumerate);
+
+    udev_list_entry *dev_list_entry;
+    auto devices = udev_enumerate_get_list_entry(enumerate);
+    udev_list_entry_foreach(dev_list_entry, devices) {
+      auto path = udev_list_entry_get_name(dev_list_entry);
+      auto child_dev = udev_device_new_from_syspath(udev, path);
+      if (auto dev_path = udev_device_get_devnode(child_dev)) {
+        result.emplace_back(dev_path);
+        logs::log(logs::debug, "[INPUT] Found child: {} - {}", path, dev_path);
+      }
+      udev_device_unref(child_dev);
+    }
+
+    udev_enumerate_unref(enumerate);
+    udev_device_unref(device_ptr);
+  }
+
+  udev_unref(udev);
+  return result;
+}
+
+InputReady setup_handlers(std::size_t session_id, const std::shared_ptr<dp::event_bus> &event_bus) {
   logs::log(logs::debug, "Setting up input handlers for session: {}", session_id);
 
   auto v_devices = std::make_shared<VirtualDevices>();
-  auto devices_paths = immer::array<immer::box<std::string>>().transient();
+  auto devices_paths = immer::array<std::string>().transient();
 
   libevdev_ptr mouse_dev(libevdev_new(), ::libevdev_free);
   if (auto mouse_el = mouse::create_mouse(mouse_dev.get())) {
@@ -485,18 +518,27 @@ InputReady setup_handlers(std::size_t session_id,
     devices_paths.push_back(libevdev_uinput_get_devnode(*keyboard_el));
   }
 
-  // TODO: multiple controllers?
-  libevdev_ptr controller_dev(libevdev_new(), ::libevdev_free);
-  if (auto controller_el = controller::create_controller(controller_dev.get())) {
-    v_devices->controllers = {{*controller_el, ::libevdev_uinput_destroy}};
-    devices_paths.push_back(libevdev_uinput_get_devnode(*controller_el));
+  auto controllers = immer::array<controller::Controller>().transient();
+  for (int i = 0; i < 4; i++) { // TODO: Make max controller configurable
+    libevdev_ptr controller_dev(libevdev_new(), ::libevdev_free);
+    if (auto controller_el = controller::create_controller(controller_dev.get())) {
+      auto controller = controller::Controller{
+          .uinput = {*controller_el, ::libevdev_uinput_destroy},
+          .prev_pkt = std::make_shared<immer::atom<immer::box<data::CONTROLLER_MULTI_PACKET>>>(),
+      };
+      controllers.push_back(controller);
+      auto child_nodes = get_child_dev_nodes(*controller_el);
+      for (auto const &node : child_nodes) {
+        devices_paths.push_back(node);
+      }
+    }
   }
+  v_devices->controllers = controllers.persistent();
 
-  auto controller_state = std::make_shared<immer::atom<immer::box<data::CONTROLLER_MULTI_PACKET> /* prev packet */>>();
   auto keyboard_state = std::make_shared<immer::atom<immer::array<int> /* key codes */>>();
 
   auto ctrl_handler = event_bus->register_handler<immer::box<ControlEvent>>(
-      [sess_id = session_id, v_devices, controller_state, keyboard_state](immer::box<ControlEvent> ctrl_ev) {
+      [sess_id = session_id, v_devices, keyboard_state](const immer::box<ControlEvent> &ctrl_ev) {
         if (ctrl_ev->session_id == sess_id && ctrl_ev->type == INPUT_DATA) {
           auto input = (const data::INPUT_PKT *)(ctrl_ev->raw_packet.data());
 
@@ -566,11 +608,11 @@ InputReady setup_handlers(std::size_t session_id,
              */
             logs::log(logs::trace, "[INPUT] Received input of type: CONTROLLER_MULTI");
             auto new_controller_pkt = (data::CONTROLLER_MULTI_PACKET *)input;
-            auto prev_pkt = controller_state->exchange(immer::box<data::CONTROLLER_MULTI_PACKET>{*new_controller_pkt});
             if (new_controller_pkt->controller_number < v_devices->controllers.size()) {
-              controller::controller_handle(v_devices->controllers[new_controller_pkt->controller_number].get(),
-                                            *new_controller_pkt,
-                                            prev_pkt->get());
+              auto controller = v_devices->controllers[new_controller_pkt->controller_number];
+              auto prev_pkt =
+                  controller.prev_pkt->exchange(immer::box<data::CONTROLLER_MULTI_PACKET>{*new_controller_pkt});
+              controller::controller_handle(controller.uinput.get(), *new_controller_pkt, prev_pkt->get());
             } else {
               logs::log(logs::warning, "[INPUT] Unable to find controller {}", new_controller_pkt->controller_number);
             }
@@ -594,15 +636,15 @@ InputReady setup_handlers(std::size_t session_id,
    * Unfortunately, this event is not being sent by Moonlight.
    */
   auto kb_thread_over = std::make_shared<immer::atom<bool>>(false);
-  boost::asio::post(*t_pool, ([v_devices, keyboard_state, kb_thread_over]() {
+  std::thread(([v_devices, keyboard_state, kb_thread_over]() {
     while (!kb_thread_over->load()) {
       std::this_thread::sleep_for(50ms); // TODO: should this be configurable?
       keyboard::keyboard_repeat_press(v_devices->keyboard->get(), keyboard_state->load());
     }
-  }));
+  })).detach();
 
-  auto end_handler = event_bus->register_handler<immer::box<moonlight::control::TerminateEvent>>(
-      [sess_id = session_id, kb_thread_over](immer::box<moonlight::control::TerminateEvent> event) {
+  auto end_handler = event_bus->register_handler<immer::box<moonlight::StopStreamEvent>>(
+      [sess_id = session_id, kb_thread_over](const immer::box<moonlight::StopStreamEvent> &event) {
         if (event->session_id == sess_id) {
           kb_thread_over->update([](bool terminate) { return true; });
         }

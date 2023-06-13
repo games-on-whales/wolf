@@ -1,9 +1,6 @@
 #include <boost/property_tree/json_parser.hpp>
 #include <immer/atom.hpp>
 #include <rest/endpoints.hpp>
-#include <rest/helpers.hpp>
-#include <rest/rest.hpp>
-#include <state/config.hpp>
 
 namespace HTTPServers {
 
@@ -20,7 +17,7 @@ namespace bt = boost::property_tree;
  * @brief Start the generic server on the specified port
  * @return std::thread: the thread where this server will run
  */
-std::thread startServer(HttpServer *server, const std::shared_ptr<state::AppState> &state, int port) {
+void startServer(HttpServer *server, const immer::box<state::AppState> state, int port) {
   server->config.port = port;
   server->config.address = "0.0.0.0";
   server->default_resource["GET"] = endpoints::not_found<SimpleWeb::HTTP>;
@@ -63,36 +60,31 @@ std::thread startServer(HttpServer *server, const std::shared_ptr<state::AppStat
     auto cache_key = client_id.value() + "@" + client_ip;
 
     logs::log(logs::info, "Unpairing: {}", cache_key);
-    state::unpair(state->config, state->pairing_cache.load()->at(cache_key));
+    auto client = state->pairing_cache->load()->at(cache_key);
+    state::unpair(state->config, state::PairedClient{.client_cert = client.client_cert});
 
     XML xml;
     xml.put("root.<xmlattr>.status_code", 200);
     send_xml<SimpleWeb::HTTP>(resp, SimpleWeb::StatusCode::success_ok, xml);
   };
 
-  std::thread server_thread(
-      [pairing_atom, event_bus = state->event_bus](auto server) {
-        auto pair_handler = event_bus->register_handler<immer::box<state::PairSignal>>(
-            [pairing_atom](const immer::box<state::PairSignal> &pair_sig) {
-              pairing_atom->update([&pair_sig](auto m) {
-                auto secret = crypto::str_to_hex(crypto::random(8));
-                logs::log(logs::info, "Insert pin at http://localhost:47989/pin/#{}", secret);
-                return m.set(secret, pair_sig);
-              });
-            });
+  auto pair_handler = state->event_bus->register_handler<immer::box<state::PairSignal>>(
+      [pairing_atom](const immer::box<state::PairSignal> pair_sig) {
+        pairing_atom->update([&pair_sig](auto m) {
+          auto secret = crypto::str_to_hex(crypto::random(8));
+          logs::log(logs::info, "Insert pin at http://localhost:47989/pin/#{}", secret);
+          return m.set(secret, pair_sig);
+        });
+      });
 
-        // Start server
-        server->start([](unsigned short port) { logs::log(logs::info, "HTTP server listening on port: {} ", port); });
+  // Start server
+  server->start([](unsigned short port) { logs::log(logs::info, "HTTP server listening on port: {} ", port); });
 
-        pair_handler.unregister();
-      },
-      server);
-
-  return server_thread;
+  pair_handler.unregister();
 }
 
 std::optional<state::PairedClient>
-get_client_if_paired(const std::shared_ptr<state::AppState> &state,
+get_client_if_paired(const immer::box<state::AppState> state,
                      const std::shared_ptr<typename SimpleWeb::ServerBase<SimpleWeb::HTTPS>::Request> &request) {
   auto client_cert = SimpleWeb::Server<SimpleWeb::HTTPS>::get_client_cert(request);
   return state::get_client_via_ssl(state->config, client_cert);
@@ -111,7 +103,7 @@ void reply_unauthorized(const std::shared_ptr<typename SimpleWeb::ServerBase<Sim
   send_xml<SimpleWeb::HTTPS>(response, SimpleWeb::StatusCode::client_error_unauthorized, xml);
 }
 
-std::thread startServer(HttpsServer *server, const std::shared_ptr<state::AppState> &state, int port) {
+void startServer(HttpsServer *server, const immer::box<state::AppState> state, int port) {
   server->config.port = port;
   server->config.address = "0.0.0.0";
   server->default_resource["GET"] = endpoints::not_found<SimpleWeb::HTTPS>;
@@ -135,7 +127,7 @@ std::thread startServer(HttpsServer *server, const std::shared_ptr<state::AppSta
 
   server->resource["^/applist$"]["GET"] = [&state](auto resp, auto req) {
     if (get_client_if_paired(state, req)) {
-      endpoints::https::applist<SimpleWeb::HTTPS>(resp, req, state);
+      endpoints::https::applist(resp, req, state);
     } else {
       reply_unauthorized(req, resp);
     }
@@ -143,7 +135,23 @@ std::thread startServer(HttpsServer *server, const std::shared_ptr<state::AppSta
 
   server->resource["^/launch"]["GET"] = [&state](auto resp, auto req) {
     if (auto client = get_client_if_paired(state, req)) {
-      endpoints::https::launch<SimpleWeb::HTTPS>(resp, req, client.value(), state);
+      endpoints::https::launch(resp, req, client.value(), state);
+    } else {
+      reply_unauthorized(req, resp);
+    }
+  };
+
+  server->resource["^/resume$"]["GET"] = [&state](auto resp, auto req) {
+    if (auto client = get_client_if_paired(state, req)) {
+      endpoints::https::resume(resp, req, client.value(), state);
+    } else {
+      reply_unauthorized(req, resp);
+    }
+  };
+
+  server->resource["^/cancel$"]["GET"] = [&state](auto resp, auto req) {
+    if (auto client = get_client_if_paired(state, req)) {
+      endpoints::https::cancel(resp, req, client.value(), state);
     } else {
       reply_unauthorized(req, resp);
     }
@@ -151,17 +159,8 @@ std::thread startServer(HttpsServer *server, const std::shared_ptr<state::AppSta
 
   // TODO: add missing
   // https_server.resource["^/appasset$"]["GET"]
-  // https_server.resource["^/resume$"]["GET"]
-  // https_server.resource["^/cancel$"]["GET"]
 
-  std::thread server_thread(
-      [](auto server) {
-        // Start server
-        server->start([](unsigned short port) { logs::log(logs::info, "HTTPS server listening on port: {} ", port); });
-      },
-      server);
-
-  return server_thread;
+  server->start([](unsigned short port) { logs::log(logs::info, "HTTPS server listening on port: {} ", port); });
 }
 
 } // namespace HTTPServers

@@ -2,8 +2,18 @@
 
 #include <chrono>
 #include <eventbus/event_bus.hpp>
+#include <gst/gst.h>
+#include <immer/array.hpp>
+#include <immer/box.hpp>
+#include <input/input.hpp>
 #include <memory>
 #include <moonlight/data-structures.hpp>
+#include <optional>
+
+namespace streaming {
+using gst_element_ptr = std::shared_ptr<GstElement>;
+using gst_main_loop_ptr = std::shared_ptr<GMainLoop>;
+} // namespace streaming
 
 namespace state {
 
@@ -23,12 +33,10 @@ enum ColorSpace : int {
  */
 struct VideoSession {
   moonlight::DisplayMode display_mode;
-  bool video_format_h264; // true if h264 is requested
-  std::string_view gst_pipeline;
+  std::string gst_pipeline;
 
   // A unique ID that identifies this session
   std::size_t session_id;
-  std::shared_ptr<dp::event_bus> event_bus;
 
   std::uint16_t port;
   std::chrono::milliseconds timeout;
@@ -47,11 +55,10 @@ struct VideoSession {
 };
 
 struct AudioSession {
-  std::string_view gst_pipeline;
+  std::string gst_pipeline;
 
   // A unique ID that identifies this session
   std::size_t session_id;
-  std::shared_ptr<dp::event_bus> event_bus;
 
   bool encrypt_audio;
   std::string aes_key;
@@ -62,9 +69,33 @@ struct AudioSession {
 
   int packet_duration;
   int channels;
-  int mask;
   int bitrate = 48000;
 };
+
+/**
+ * This event will trigger the start of the application command
+ */
+struct SocketReadyEV {
+  std::size_t session_id;
+
+  std::string wayland_socket;
+  std::string xorg_socket;
+};
+
+#pragma pack(push, 1)
+struct VideoShortHeader {
+  uint8_t header_type; // Always 0x01 for short headers
+  uint8_t unknown[2];
+  // Currently known values:
+  // 1 = Normal P-frame
+  // 2 = IDR-frame
+  // 4 = P-frame with intra-refresh blocks
+  // 5 = P-frame after reference frame invalidation
+  uint8_t frame_type;
+
+  uint8_t unknown2[4];
+};
+#pragma pack(pop)
 
 struct VideoRTPHeaders {
   // headers

@@ -1,0 +1,111 @@
+# The name that will be displayed in Moonlight
+hostname = "Wolf"
+# A unique identifier for this host
+uuid = "0000-1111-2222-3333"
+# Set to false if this host doesn't support HEVC
+support_hevc = true
+# The version of this config file
+config_version = 2
+
+
+# A list of paired clients that will be allowed to stream
+[[paired_clients]]
+client_cert = "A VERY VALID CERTIFICATE"
+run_uid = 1234
+run_gid = 5678
+app_state_folder = "some/folder"
+
+
+[[apps]]
+title = "Firefox"
+start_virtual_compositor = true
+
+[apps.runner]
+type = "docker"
+name = "WolfRetroarch"
+image = "ghcr.io/games-on-whales/firefox:master"
+mounts = [
+  "/tmp/sockets:/tmp/.X11-unix/:ro",
+  "/tmp/sockets:/run/user/1000/pulse/:ro",
+  "/run/udev:/run/udev:ro",
+  "/var/local/retro:/home/retro:rw",
+]
+devices = []
+ports = []
+env = [
+  "LOG_LEVEL=info"
+]
+base_create_json = """
+{
+  "HostConfig": {
+    "IpcMode": "host",
+    "CapAdd": ["SYS_ADMIN"],
+    "DeviceRequests": [{"Driver":"","Count":-1,"Capabilities":[["gpu"]]}]
+  }
+}
+\
+"""
+
+[[apps]]
+title = "Test ball"
+start_virtual_compositor = false
+render_node = "/tmp/dead_beef"
+
+[apps.runner]
+type = "process"
+run_cmd = "destroy_computer_now"
+
+[apps.video]
+source = "override DEFAULT SOURCE"
+
+
+
+[gstreamer]
+
+[gstreamer.video]
+default_source = "video_source"
+default_sink = "video_sink"
+
+######################
+# HEVC encoders
+# Order here matters: Wolf will try them in order and pick the first one that's not failing
+###
+[[gstreamer.video.hevc_encoders]]
+plugin_name = "a-non-existing-plugin"
+check_elements = []
+video_params = ""
+encoder_pipeline = ""
+
+[[gstreamer.video.hevc_encoders]]
+plugin_name = "coreelements"
+check_elements = ["identity"]
+video_params = "params"
+encoder_pipeline = "hevc_pipeline"
+
+
+######################
+# H264 encoders
+# Order here matters: Wolf will try them in order and pick the first one that's not failing
+###
+[[gstreamer.video.h264_encoders]]
+plugin_name = "a-non-existing-plugin"
+check_elements = []
+video_params = ""
+encoder_pipeline = ""
+
+[[gstreamer.video.h264_encoders]]
+plugin_name = "coreelements"
+check_elements = ["identity"]
+video_params = "params"
+encoder_pipeline = "h264_pipeline"
+
+
+###########
+# Audio
+###
+[gstreamer.audio]
+default_source = "audio_source"
+default_audio_params = "audio_params"
+default_opus_encoder = "audio_encoder"
+default_sink = "audio_sink"
+

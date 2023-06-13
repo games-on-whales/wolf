@@ -1,14 +1,18 @@
+#include <audio/audio.hpp>
 #include <boost/asio.hpp>
 #include <boost/filesystem.hpp>
 #include <boost/stacktrace.hpp>
+#include <chrono>
 #include <control/control.hpp>
 #include <csignal>
+#include <docker/docker.hpp>
 #include <fstream>
 #include <immer/array.hpp>
+#include <immer/array_transient.hpp>
+#include <immer/map_transient.hpp>
 #include <immer/vector_transient.hpp>
-#include <input/input.hpp>
 #include <memory>
-#include <process/process.hpp>
+#include <platforms/hw.hpp>
 #include <rest/rest.hpp>
 #include <rtp/udp-ping.hpp>
 #include <rtsp/net.hpp>
@@ -17,18 +21,19 @@
 #include <vector>
 
 namespace ba = boost::asio;
+using namespace std::string_literals;
+using namespace std::chrono_literals;
 
 /**
  * @brief Will try to load the config file and fallback to defaults
  */
-auto load_config(std::string_view config_file) {
+auto load_config(std::string_view config_file, const std::shared_ptr<dp::event_bus> &ev_bus) {
   logs::log(logs::info, "Reading config file from: {}", config_file);
-  return state::load_or_default(config_file.data());
+  return state::load_or_default(config_file.data(), ev_bus);
 }
 
 /**
  * @brief Get the Display Modes
- * TODO: get them from the host properly
  */
 immer::array<moonlight::DisplayMode> getDisplayModes() {
   return {{1920, 1080, 60}, {1024, 768, 30}};
@@ -36,7 +41,6 @@ immer::array<moonlight::DisplayMode> getDisplayModes() {
 
 /**
  * @brief Get the Audio Modes
- * TODO: get them from the host properly
  */
 immer::array<state::AudioMode> getAudioModes() {
   // Stereo
@@ -69,149 +73,253 @@ state::Host get_host_config(std::string_view pkey_filename, std::string_view cer
  * @brief Local state initialization
  */
 auto initialize(std::string_view config_file, std::string_view pkey_filename, std::string_view cert_filename) {
-  auto config = load_config(config_file);
+  auto event_bus = std::make_shared<dp::event_bus>();
+  auto config = load_config(config_file, event_bus);
   auto display_modes = getDisplayModes();
 
   auto host = get_host_config(pkey_filename, cert_filename);
-  auto atom = new immer::atom<immer::map<std::string, state::PairCache>>();
-  state::AppState state = {config, host, *atom, std::make_shared<dp::event_bus>()};
-  return std::make_shared<state::AppState>(state);
+  auto state = state::AppState{
+      .config = config,
+      .host = host,
+      .pairing_cache = std::make_shared<immer::atom<immer::map<std::string, state::PairCache>>>(),
+      .event_bus = event_bus,
+      .running_sessions = std::make_shared<immer::atom<immer::vector<state::StreamSession>>>()};
+  return immer::box<state::AppState>(state);
 }
 
-/**
- * Taken from: https://stackoverflow.com/questions/11468414/using-auto-and-lambda-to-handle-signal
- * in order to have pass a lambda with variable capturing
- */
-namespace {
-std::function<void(int)> shutdown_handler;
-void signal_handler(int signal) {
-  shutdown_handler(signal);
+static std::string backtrace_file_src() {
+  return fmt::format("{}/backtrace.dump", utils::get_env("WOLF_CFG_FOLDER", "."));
 }
-} // namespace
+
+static void shutdown_handler(int signum) {
+  logs::log(logs::info, "Received interrupt signal {}, clean exit", signum);
+  if (signum == SIGABRT || signum == SIGSEGV) {
+    logs::log(logs::error, "Runtime error, dumping stacktrace to {}", backtrace_file_src());
+    boost::stacktrace::safe_dump_to(backtrace_file_src().c_str());
+  }
+
+  logs::log(logs::info, "See ya!");
+  exit(signum);
+}
 
 /**
  * @brief: if an exception was raised we should have created a dump file, here we can pretty print it
  */
 void check_exceptions() {
-  if (boost::filesystem::exists("./backtrace.dump")) {
-    std::ifstream ifs("./backtrace.dump");
+  if (boost::filesystem::exists(backtrace_file_src())) {
+    std::ifstream ifs(backtrace_file_src());
 
     auto st = boost::stacktrace::stacktrace::from_dump(ifs);
     logs::log(logs::error, "Previous run crashed: \n{}", to_string(st));
 
     // cleaning up
     ifs.close();
-    boost::filesystem::remove("./backtrace.dump");
+    auto now = std::chrono::system_clock::now();
+    boost::filesystem::rename(
+        backtrace_file_src(),
+        fmt::format("{}/backtrace.{:%Y-%m-%d-%H-%M-%S}.dump", utils::get_env("WOLF_CFG_FOLDER", "."), now));
   }
 }
 
-const char *get_env(const char *tag, const char *def = nullptr) noexcept {
-  const char *ret = std::getenv(tag);
-  return ret ? ret : def;
+struct AudioServer {
+  std::shared_ptr<audio::Server> server;
+  std::optional<docker::Container> container = {};
+};
+
+/**
+ * We first try to connect to a running PulseAudio server
+ * if that fails, we run our own PulseAudio container and connect to it
+ * if that fails, we can't return an AudioServer, hence the optional!
+ */
+std::optional<AudioServer> setup_audio_server(const std::string &runtime_dir) {
+  auto audio_server = audio::connect();
+  if (audio::connected(audio_server)) {
+    return {{.server = audio_server}};
+  } else {
+    logs::log(logs::info, "Starting PulseAudio docker container");
+    docker::DockerAPI docker_api(utils::get_env("WOLF_DOCKER_SOCKET", "/var/run/docker.sock"));
+    auto container = docker_api.create(docker::Container{
+        .id = "",
+        .name = "WolfPulseAudio",
+        .image = utils::get_env("WOLF_PULSE_IMAGE", "ghcr.io/games-on-whales/pulseaudio:master"),
+        .status = docker::CREATED,
+        .ports = {},
+        .mounts = {docker::MountPoint{.source = runtime_dir, .destination = "/tmp/pulse/", .mode = "rw"}},
+        .env = {{"XDG_RUNTIME_DIR", runtime_dir}}});
+    if (container && docker_api.start_by_id(container.value().id)) {
+      std::this_thread::sleep_for(1000ms); // TODO: configurable? Better way of knowing when ready?
+      return {{.server = audio::connect(fmt::format("{}/pulse-socket", runtime_dir)), .container = container}};
+    }
+  }
+
+  return {};
 }
 
-/**
- * A bit tricky here: on a basic level we want a map of [session_id] -> thread_pool
- */
-typedef immer::atom<immer::map<std::size_t, std::shared_ptr<boost::asio::thread_pool>>> TreadsMapAtom;
-
-/**
- * Glue code in order to start the sessions in response to events fired in the bus
- *
- * @param event_bus: the shared bus where the handlers will be registered
- * @param threads: holds reference to all running threads, grouped by session_id
- *
- * @returns a list of signals handlers that have been created
- */
-auto setup_sessions_handlers(std::shared_ptr<dp::event_bus> &event_bus, TreadsMapAtom &threads) {
+auto setup_sessions_handlers(const immer::box<state::AppState> &app_state,
+                             const std::string &runtime_dir,
+                             const std::optional<AudioServer> &audio_server) {
   immer::vector_transient<immer::box<dp::handler_registration>> handlers;
 
-  // RTSP
-  handlers.push_back(event_bus->register_handler<immer::box<state::StreamSession>>(
-      [&threads](immer::box<state::StreamSession> stream_session) {
-        // Create pool
-        auto t_pool = std::make_shared<ba::thread_pool>(10);
+  auto wayland_sessions =
+      std::make_shared<immer::atom<immer::map<std::size_t, boost::shared_future<streaming::wl_state_ptr>>>>();
 
-        // Start RTSP
-        ba::post(*t_pool, [stream_session]() { rtsp::run_server(stream_session->rtsp_port, stream_session); });
-
-        // Store pool for others
-        threads.update([sess_id = stream_session->session_id, t_pool](auto t_map) {
-          return t_map.update(sess_id, [t_pool](auto box) { return t_pool; });
-        });
+  // On termination cleanup the WaylandSession; since this is the only reference to it
+  // this will effectively destroy the virtual Wayland session
+  handlers.push_back(app_state->event_bus->register_handler<immer::box<moonlight::StopStreamEvent>>(
+      [wayland_sessions](const immer::box<moonlight::StopStreamEvent> &ev) {
+        logs::log(logs::debug, "Deleting WaylandSession {}", ev->session_id);
+        wayland_sessions->update([=](const auto map) { return map.erase(ev->session_id); });
       }));
 
-  // Control thread
-  control::init(); // Need to initialise enet once
-  handlers.push_back(event_bus->register_handler<immer::box<state::ControlSession>>(
-      [&threads](immer::box<state::ControlSession> control_sess) {
-        auto t_pool = threads.load()->at(control_sess->session_id);
-
-        // Start control stream
-        ba::post(*t_pool, [control_sess]() {
-          int timeout_millis = 1000; // TODO: config?
-          control::run_control(control_sess, timeout_millis);
-        });
-      }));
-
-  handlers.push_back(event_bus->register_handler<immer::box<process::LaunchAPPEvent>>(
-      [&threads](immer::box<process::LaunchAPPEvent> launch_ev) {
-        auto t_pool = threads.load()->at(launch_ev->session_id);
-
-        // Setup inputs and start selected app
-        ba::post(*t_pool, [launch_ev, t_pool]() {
-          // create virtual inputs
-          auto input_setup = input::setup_handlers(launch_ev->session_id, launch_ev->event_bus, t_pool);
-
-          // Start app
-          process::run_process(launch_ev);
-
-          // when the app exits, cleanup
-          for (const auto &handler : input_setup.registered_handlers) {
-            handler->unregister();
+  // Run process and our custom wayland as soon as a new StreamSession is created
+  handlers.push_back(app_state->event_bus->register_handler<immer::box<state::StreamSession>>(
+      [=](const immer::box<state::StreamSession> &session) {
+        auto wl_promise = std::make_shared<boost::promise<streaming::wl_state_ptr>>();
+        if (session->app->start_virtual_compositor) {
+          wayland_sessions->update([=](const auto map) {
+            return map.set(session->session_id,
+                           boost::shared_future<streaming::wl_state_ptr>(wl_promise->get_future()));
+          });
+        }
+        // Start selected app on a separate thread
+        std::thread([=]() {
+          /* Create audio virtual sink */
+          logs::log(logs::debug, "[STREAM_SESSION] Create virtual audio sink");
+          auto pulse_sink_name = fmt::format("virtual_sink_{}", session->session_id);
+          std::shared_ptr<audio::VSink> v_device;
+          if (audio_server && audio_server->server) {
+            v_device = audio::create_virtual_sink(audio_server->server,
+                                                  audio::AudioDevice{.sink_name = pulse_sink_name,
+                                                                     .n_channels = session->audio_mode.channels,
+                                                                     .bitrate = 48000}); // TODO:
           }
-        });
+
+          /* Setup devices paths */
+          auto full_devices = session->virtual_inputs.devices_paths.transient();
+
+          /* Setup mounted paths */
+          immer::array_transient<std::pair<std::string, std::string>> mounted_paths;
+
+          /* Setup environment paths */
+          immer::map_transient<std::string, std::string> full_env;
+          full_env.set("XDG_RUNTIME_DIR", runtime_dir);
+
+          auto audio_server_name = audio_server ? audio::get_server_name(audio_server->server) : "";
+          full_env.set("PULSE_SINK", pulse_sink_name);
+          full_env.set("PULSE_SOURCE", pulse_sink_name + ".monitor");
+
+          if (audio_server->container) {
+            full_env.set("PULSE_SERVER", audio_server_name);
+            mounted_paths.push_back({audio_server_name, audio_server_name});
+          }
+
+          auto render_node = session->app->render_node;
+
+          /* Create video virtual wayland compositor */
+          if (session->app->start_virtual_compositor) {
+            logs::log(logs::debug, "[STREAM_SESSION] Create wayland compositor");
+            auto wl_state = streaming::create_wayland_display(session->virtual_inputs.devices_paths, render_node);
+            streaming::set_resolution(*wl_state, session->display_mode);
+            full_env.set("GAMESCOPE_WIDTH", std::to_string(session->display_mode.width));
+            full_env.set("GAMESCOPE_HEIGHT", std::to_string(session->display_mode.height));
+            full_env.set("GAMESCOPE_REFRESH", std::to_string(session->display_mode.refreshRate));
+
+            /* Setup additional devices paths */
+            auto graphic_devices = streaming::get_devices(*wl_state);
+            std::copy(graphic_devices.begin(), graphic_devices.end(), std::back_inserter(full_devices));
+
+            /* Setup additional env paths */
+            for (const auto &env : streaming::get_env(*wl_state)) {
+              auto split = utils::split(env, '=');
+
+              if (split[0] == "WAYLAND_DISPLAY") {
+                auto socket_path = fmt::format("{}/{}", runtime_dir, split[1]);
+                logs::log(logs::debug, "WAYLAND_DISPLAY={}", socket_path);
+                mounted_paths.push_back({socket_path, socket_path});
+              }
+
+              full_env.set(utils::to_string(split[0]), utils::to_string(split[1]));
+            }
+
+            wl_promise->set_value(std::move(wl_state));
+          }
+
+          /* Adding custom state folder */
+          mounted_paths.push_back({session->app_state_folder, "/home/retro"});
+
+          /* Additional GPU devices */
+          auto additional_devices = linked_devices(render_node);
+          std::copy(additional_devices.begin(), additional_devices.end(), std::back_inserter(full_devices));
+
+          /* nvidia needs some extra paths */
+          if (get_vendor(render_node) == NVIDIA) {
+            mounted_paths.push_back({utils::get_env("NVIDIA_DRIVER_VOLUME_NAME", "nvidia-driver-vol"), "/usr/nvidia"});
+          }
+
+          /* Finally run the app, this will stop here until over */
+          session->app->runner->run(session->session_id,
+                                    full_devices.persistent(),
+                                    mounted_paths.persistent(),
+                                    full_env.persistent());
+
+          /* App exited, cleanup */
+          logs::log(logs::debug, "[STREAM_SESSION] Remove virtual audio sink");
+          if (audio_server && audio_server->server) {
+            audio::delete_virtual_sink(audio_server->server, v_device);
+          }
+
+          /* When the app closes there's no point in keeping the stream running */
+          app_state->event_bus->fire_event(
+              immer::box<moonlight::StopStreamEvent>(moonlight::StopStreamEvent{.session_id = session->session_id}));
+        }).detach();
       }));
 
-  // GStreamer video
-  streaming::init(); // Need to initialise streaming once
-  handlers.push_back(event_bus->register_handler<immer::box<state::VideoSession>>(
-      [&threads](immer::box<state::VideoSession> video_sess) {
-        auto t_pool = threads.load()->at(video_sess->session_id);
+  // Video streaming pipeline
+  handlers.push_back(app_state->event_bus->register_handler<immer::box<state::VideoSession>>(
+      [=](const immer::box<state::VideoSession> &sess) {
+        std::thread([=]() {
+          boost::promise<unsigned short> port_promise;
+          auto port_fut = port_promise.get_future();
+          auto ev_handler = app_state->event_bus->register_handler<immer::box<state::RTPVideoPingEvent>>(
+              [pp = std::ref(port_promise), sess](const immer::box<state::RTPVideoPingEvent> &ping_ev) {
+                if (ping_ev->client_ip == sess->client_ip) {
+                  pp.get().set_value(ping_ev->client_port);
+                }
+              });
 
-        ba::post(*t_pool, [video_sess]() {
-          auto client_port = rtp::wait_for_ping(video_sess->port);
-          streaming::start_streaming_video(std::move(video_sess), client_port);
-        });
+          auto client_port = port_fut.get();
+          ev_handler.unregister(); // We'll keep receiving PING requests, but we only want the first one
+
+          streaming::wl_state_ptr wl_state;
+          if (auto wayland_promise = wayland_sessions->load()->find(sess->session_id)) {
+            wl_state = wayland_promise->get(); // Stops here until the wayland socket is ready
+          }
+          streaming::start_streaming_video(sess, app_state->event_bus, std::move(wl_state), client_port);
+        }).detach();
       }));
 
-  // GStreamer audio
-  handlers.push_back(event_bus->register_handler<immer::box<state::AudioSession>>(
-      [&threads](immer::box<state::AudioSession> audio_sess) {
-        auto t_pool = threads.load()->at(audio_sess->session_id);
+  // Audio streaming pipeline
+  handlers.push_back(app_state->event_bus->register_handler<immer::box<state::AudioSession>>(
+      [=](const immer::box<state::AudioSession> &sess) {
+        std::thread([=]() {
+          boost::promise<unsigned short> port_promise;
+          auto port_fut = port_promise.get_future();
+          auto ev_handler = app_state->event_bus->register_handler<immer::box<state::RTPAudioPingEvent>>(
+              [pp = std::ref(port_promise), sess](const immer::box<state::RTPAudioPingEvent> &ping_ev) {
+                if (ping_ev->client_ip == sess->client_ip) {
+                  pp.get().set_value(ping_ev->client_port);
+                }
+              });
+          auto client_port = port_fut.get();
+          ev_handler.unregister(); // We'll keep receiving PING requests, but we only want the first one
 
-        ba::post(*t_pool, [audio_sess]() {
-          auto client_port = rtp::wait_for_ping(audio_sess->port);
-          streaming::start_streaming_audio(std::move(audio_sess), client_port);
-        });
-      }));
+          auto audio_server_name = audio_server ? audio::get_server_name(audio_server->server)
+                                                : std::optional<std::string>();
+          auto sink_name = fmt::format("virtual_sink_{}.monitor", sess->session_id);
+          auto server_name = audio_server_name ? audio_server_name.value() : "";
 
-  // On control session end, let's wait for all threads to finish then clean them up
-  handlers.push_back(event_bus->register_handler<immer::box<moonlight::control::TerminateEvent>>(
-      [&threads](immer::box<moonlight::control::TerminateEvent> event) {
-        // Events are dispatched from the calling thread; in this case it'll be the control stream thread.
-        // We have to create a new thread to process the cleaning and detach it from the original thread
-        auto cleanup_thread = std::thread([&threads, sess_id = event->session_id]() {
-          auto t_pool = threads.load()->at(sess_id);
-          logs::log(logs::debug, "Terminated session: {}, waiting for thread_pool to finish", sess_id);
-
-          t_pool->wait();
-
-          logs::log(logs::info, "Closed session: {}", sess_id);
-          threads.update([sess_id](auto t_map) { return t_map.erase(sess_id); });
-        });
-
-        cleanup_thread.detach();
+          streaming::start_streaming_audio(sess, app_state->event_bus, client_port, sink_name, server_name);
+        }).detach();
       }));
 
   return handlers.persistent();
@@ -221,53 +329,73 @@ auto setup_sessions_handlers(std::shared_ptr<dp::event_bus> &event_bus, TreadsMa
  * @brief here's where the magic starts
  */
 int main(int argc, char *argv[]) {
-  logs::init(logs::parse_level(get_env("LOG_LEVEL", "INFO")));
+  logs::init(logs::parse_level(utils::get_env("WOLF_LOG_LEVEL", "INFO")));
+  // Exception and termination handling
   check_exceptions();
+  std::signal(SIGINT, shutdown_handler);
+  std::signal(SIGTERM, shutdown_handler);
+  std::signal(SIGQUIT, shutdown_handler);
+  std::signal(SIGSEGV, shutdown_handler);
+  std::signal(SIGABRT, shutdown_handler);
 
-  auto config_file = get_env("CFG_FILE", "config.toml");
-  auto p_key_file = get_env("PRIVATE_KEY_FILE", "key.pem");
-  auto p_cert_file = get_env("PRIVATE_CERT_FILE", "cert.pem");
+  streaming::init(); // Need to initialise gstreamer once
+  control::init();   // Need to initialise enet once
+  docker::init();    // Need to initialise libcurl once
+
+  auto runtime_dir = utils::get_env("XDG_RUNTIME_DIR", "/tmp/sockets");
+  logs::log(logs::debug, "XDG_RUNTIME_DIR={}", runtime_dir);
+
+  auto config_file = utils::get_env("WOLF_CFG_FILE", "config.toml");
+  auto p_key_file = utils::get_env("WOLF_PRIVATE_KEY_FILE", "key.pem");
+  auto p_cert_file = utils::get_env("WOLF_PRIVATE_CERT_FILE", "cert.pem");
   auto local_state = initialize(config_file, p_key_file, p_cert_file);
 
-  // REST HTTP/S APIs
-  auto http_server = std::make_unique<HttpServer>();
-  auto http_thread = HTTPServers::startServer(http_server.get(), local_state, state::HTTP_PORT);
+  // HTTP APIs
+  auto http_thread = std::thread([local_state]() {
+    HttpServer server = HttpServer();
+    HTTPServers::startServer(&server, local_state, state::HTTP_PORT);
+  });
 
-  auto https_server = std::make_unique<HttpsServer>(p_cert_file, p_key_file);
-  auto https_thread = HTTPServers::startServer(https_server.get(), local_state, state::HTTPS_PORT);
+  // HTTPS APIs
+  std::thread([local_state, p_key_file, p_cert_file]() {
+    HttpsServer server = HttpsServer(p_cert_file, p_key_file);
+    HTTPServers::startServer(&server, local_state, state::HTTPS_PORT);
+  }).detach();
 
-  // Holds reference to all running threads, grouped by session_id
-  auto threads = TreadsMapAtom{};
-  // RTSP, RTP, Control and all the rest of Moonlight protocol will be started/stopped on demand via HTTPS
-  auto sess_handlers = setup_sessions_handlers(local_state->event_bus, threads);
+  // RTSP
+  std::thread([sessions = local_state->running_sessions, ev_bus = local_state->event_bus]() {
+    rtsp::run_server(state::RTSP_SETUP_PORT, sessions, ev_bus);
+  }).detach();
 
-  // Exception and termination handling
-  shutdown_handler = [&sess_handlers, &threads](int signum) {
-    logs::log(logs::info, "Received interrupt signal {}, clean exit", signum);
-    if (signum == SIGABRT || signum == SIGSEGV) {
-      auto trace_file = "./backtrace.dump";
-      logs::log(logs::error, "Runtime error, dumping stacktrace to {}", trace_file);
-      boost::stacktrace::safe_dump_to(trace_file);
-    }
+  // Control
+  std::thread([sessions = local_state->running_sessions, ev_bus = local_state->event_bus]() {
+    control::run_control(state::CONTROL_PORT, sessions, ev_bus);
+  }).detach();
 
-    for(const auto &thread_pool : *threads.load()){
-      thread_pool.second->stop();
-    }
+  // Video RTP Ping
+  std::thread([local_state]() {
+    rtp::wait_for_ping(state::VIDEO_PING_PORT, [=](unsigned short client_port, const std::string &client_ip) {
+      logs::log(logs::trace, "[PING] video from {}:{}", client_ip, client_port);
+      auto ev = state::RTPVideoPingEvent{.client_ip = client_ip, .client_port = client_port};
+      local_state->event_bus->fire_event(immer::box<state::RTPVideoPingEvent>(ev));
+    });
+  }).detach();
 
-    for (const auto &handler : sess_handlers) {
-      handler->unregister();
-    }
+  // Audio RTP Ping
+  std::thread([local_state]() {
+    rtp::wait_for_ping(state::AUDIO_PING_PORT, [=](unsigned short client_port, const std::string &client_ip) {
+      logs::log(logs::trace, "[PING] audio from {}:{}", client_ip, client_port);
+      auto ev = state::RTPAudioPingEvent{.client_ip = client_ip, .client_port = client_port};
+      local_state->event_bus->fire_event(immer::box<state::RTPAudioPingEvent>(ev));
+    });
+  }).detach();
 
-    logs::log(logs::info, "See ya!");
-    exit(signum);
-  };
-  std::signal(SIGINT, signal_handler);
-  std::signal(SIGTERM, signal_handler);
-  std::signal(SIGQUIT, signal_handler);
-  std::signal(SIGSEGV, signal_handler);
-  std::signal(SIGABRT, signal_handler);
+  auto audio_server = setup_audio_server(runtime_dir);
+  auto sess_handlers = setup_sessions_handlers(local_state, runtime_dir, audio_server);
 
-  // Let's park the main thread over here, HTTP/S should never stop
-  https_thread.join();
-  http_thread.join();
+  http_thread.join(); // Let's park the main thread over here
+
+  for (const auto &handler : sess_handlers) {
+    handler->unregister();
+  }
 }
