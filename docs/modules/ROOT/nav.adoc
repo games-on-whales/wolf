@@ -3,6 +3,7 @@
 ** xref:user:quickstart.adoc[]
 ** xref:user:configuration.adoc[]
 ** xref:user:gstreamer.adoc[]
+** xref:user:troubleshooting.adoc[]
 
 * Developer guide
 ** xref:dev:manual_build.adoc[]

@@ -46,6 +46,10 @@ Wolf is configured via a TOML config file and some additional optional ENV varia
 |HOST_APPS_STATE_FOLDER
 |/etc/wolf
 |The base folder in the host where the running apps will store permanent state
+
+|WOLF_RENDER_NODE
+|/dev/dri/renderD128
+|The default render node used for virtual desktops; see: <<_multiple_gpu>>
 |===
 
 Additional env variables useful when debugging:
@@ -178,3 +182,82 @@ In here we define the default pipeline for both video and audio streaming to Moo
 In order to automatically pick up the right encoder at runtime based on the user HW we run in order the list of encoders at `gstreamer.video.hevc_encoders` (and `gstreamer.video.h264_encoders`); the first set of plugins that can be correctly initialised by Gstreamer will be the selected encoder for all the pipelines.
 
 You can read more about gstreamer and custom pipelines in the xref:gstreamer.adoc[] page.
+
+[#_multiple_gpu]
+== Multiple GPUs
+
+When you have multiple GPUs installed in your host, you might want to have better control over which one is used by Wolf and how. +
+There are two main separated parts that make use of HW acceleration in Wolf:
+
+* Gstreamer video encoding: this will use HW acceleration in order to efficiently encode the video stream with H.264 or HEVC.
+* App render node: this will use HW acceleration in order to create virtual Wayland desktops and run the chosen app (ex: Firefox, Steam, ...)
+
+They can be configured separately, and ideally you could even *use two GPUs at the same time* for different jobs; a common setup would be to use the integrated GPU just for the streaming part and use a powerful GPU to play apps/games.
+
+=== Gstreamer video encoding
+
+The streaming video encoding pipeline is fully controlled by the `config.toml` file; here the order in which entries are listed is important because Wolf will just try each listed plugin; the first one that works is the one that will be used.
+
+[NOTE,caption=EXAMPLE]
+====
+If you have an Intel iGPU and a Nvidia card in the same host, and you would like to use QuickSync in order to do the encoding, you can either:
+
+* Delete the `nvcodec` entries under `gstreamer.video.hevc_encoders`
+* Cut the `qsv` entry and paste it above the `nvcodec` entry
+====
+
+On top of that, each single `apps` entry support overriding the default streaming pipeline; for example:
+
+[source,toml]
+....
+[[apps]]
+title = "Test ball"
+
+# More options here, removed for brevity...
+
+[apps.video]
+source = """
+videotestsrc pattern=ball flip=true is-live=true !
+video/x-raw, framerate={fps}/1
+\
+"""
+....
+
+In case you have two GPUs that will use the same encoder pipeline (example: an AMD iGPU and an AMD GPU card) you can override the `encoder_pipeline` with the corresponding encoder plugin; see:
+https://gitlab.freedesktop.org/gstreamer/gstreamer/-/issues/1167[gstreamer/issues/1167].
+
+=== App render node
+
+Each application that Wolf will start will have access only to a specific render node even if the host has multiple GPUs connected. +
+By default, Wolf will use the env variable `WOLF_RENDER_NODE` which defaults to `/dev/dri/renderD128`
+
+[TIP]
+====
+
+If you don't know which render node is associated with which GPU you can use the following command:
+
+[source,bash]
+....
+ls -l /sys/class/drm/renderD*/device/driver
+/sys/class/drm/renderD128/device/driver -> ../../../../bus/virtio/drivers/virtio_gpu <1>
+/sys/class/drm/renderD129/device/driver -> ../../../../bus/pci/drivers/nvidia <2>
+....
+
+<1> This line will tell you that `renderD128` is a virtual GPU
+<2> This line will tell you that `renderD129` is a Nvidia GPU
+
+====
+
+Wolf supports also overriding the render node in each single app defined in the `config.toml` config file by setting the `render_node` property; example:
+
+
+[source,toml]
+....
+[apps.runner]
+type = "docker"
+name = "WolfSteam"
+image = "ghcr.io/games-on-whales/steam:edge"
+
+# More options here, removed for brevity...
+render_node = "/dev/dri/renderD129"
+....

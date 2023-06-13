@@ -1,0 +1,63 @@
+= Troubleshooting
+
+[TIP]
+====
+When something doesn't work it'll be helpful to be able to see the logs from Wolf, please change the env variable `WOLF_LOG_LEVEL` to `DEBUG` and try to replicate the issue.
+====
+
+== Black screen in Moonlight
+
+If it's the very first time that you are running an app, and you can only see a black screen with a cursor in Moonlight, it's probably because Wolf is downloading the corresponding docker image and installing first time updates (when necessary).
+
+If this persists or Moonlight kicks you out of the streaming session then you should probably take a look at the Wolf logs to gather more informations.
+
+=== Vulkan errors in App
+
+Example log line:
+
+....
+vulkan: physical device 10de:1c03 compute queue doesn't support presenting on our surface, using graphics queue
+vulkan: selecting physical device 'NVIDIA GeForce GTX 1060 6GB': queue family 0
+vulkan: physical device supports DRM format modifiers
+vulkan: vkCreateDevice failed (VkResult: -7)
+Failed to initialize Vulkan
+....
+
+We don't have a solution (yet), reach us in our https://discord.gg/kRGUDHNHt2[Discord channel]
+
+== Address already in use
+
+You'll see something like the following log lines:
+
+....
+terminate called after throwing an instance of 'boost::wrapexcept<boost::system::system_error>'
+  what():  bind: Address already in use
+INFO  | Received interrupt signal 6, clean exit
+....
+
+This means that some other process is using the same ports that Wolf needs in order to communicate with Moonlight.
+
+[TIP]
+====
+Have you left Sunshine running in the background?
+====
+
+The following ports need to be available in order for Wolf to work:
+
+* 47984/tcp - HTTPS
+* 47989/tcp - HTTP
+* 47998/udp - Video
+* 47999/udp - Control
+* 48000/udp - Audio
+* 48010/tcp - RTSP
+
+== Unable to recognise GPU vendor
+
+Example log line:
+
+....
+WARN  | Unable to recognise GPU vendor: red hat, inc.
+....
+
+Do you have multiple GPUs installed (or even just a virtual display in a VM)?
+Checkout the xref:user:configuration.adoc#_multiple_gpu[Multiple GPU configuration page]
