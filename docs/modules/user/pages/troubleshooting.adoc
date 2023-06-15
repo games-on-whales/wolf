@@ -23,7 +23,42 @@ vulkan: vkCreateDevice failed (VkResult: -7)
 Failed to initialize Vulkan
 ....
 
-We don't have a solution (yet), reach us in our https://discord.gg/kRGUDHNHt2[Discord channel]
+Vulkan errors are generally related to the video drivers.
+
+.Nvidia GPU checklist
+[%collapsible]
+====
+
+Make sure to follow all the instructions on the xref:user:quickstart.adoc[] page.
+Here's a brief summary of things to check:
+
+* Check that the nvidia volume driver has been created...
+[source,bash]
+....
+docker volume ls | grep nvidia-driver
+
+local     nvidia-driver-vol
+....
+
+* ...and that the same volume name is passed in the env variable `NVIDIA_DRIVER_VOLUME_NAME`
+
+* Make sure that the `nvidia-drm` module has been loaded...
+[source,bash]
+....
+sudo dmesg | grep nvidia-drm    # Should print something like the following:
+[   12.561107] [drm] [nvidia-drm] [GPU ID 0x00000100] Loading driver
+[   14.138312] [drm] Initialized nvidia-drm 0.0.0 20160202 for 0000:01:00.0 on minor 0
+....
+
+* ...and check that the module is loaded with the flag `modeset=1`.
+[source,bash]
+....
+sudo cat /sys/module/nvidia_drm/parameters/modeset
+Y
+....
+
+
+====
 
 == Address already in use
 
@@ -59,5 +94,5 @@ Example log line:
 WARN  | Unable to recognise GPU vendor: red hat, inc.
 ....
 
-Do you have multiple GPUs installed (or even just a virtual display in a VM)?
+Do you have multiple GPUs installed (or even just a virtual display in a VM)? +
 Checkout the xref:user:configuration.adoc#_multiple_gpu[Multiple GPU configuration page]

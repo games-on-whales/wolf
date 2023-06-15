@@ -49,6 +49,21 @@ std::optional<std::string> get_nvidia_node(std::string_view primary_node) {
     return {};
   }
 
+  std::ifstream nvidia_drm("/sys/module/nvidia_drm/parameters/modeset");
+  if (nvidia_drm.is_open()) {
+    std::string content;
+    std::getline(nvidia_drm, content);
+    if (content.find('Y') == std::string::npos) { // if it doesn't report Y (Could be N or empty)
+      logs::log(logs::warning,
+                "Nvidia DRM is not loaded with the flag modeset=1 \n"
+                "Please read the docs at https://games-on-whales.github.io/wolf/stable/user/quickstart.html");
+    }
+  } else {
+    logs::log(logs::warning,
+              "Unable to check Nvidia DRM modeset opening /sys/module/nvidia_drm/parameters/modeset returns {}",
+              strerror(errno));
+  }
+
   std::ifstream driver_information(nv_information_path);
   if (driver_information.is_open()) {
     std::string line;
