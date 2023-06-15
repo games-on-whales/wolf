@@ -61,7 +61,7 @@ state::Host get_host_config(std::string_view pkey_filename, std::string_view cer
     x509::write_to_disk(server_pkey, pkey_filename, server_cert, cert_filename);
   }
 
-  // TODO: get network info from the host
+  // TODO: get network info from the host, this is used by Moonlight only for WOL AFAIK
   auto external_ip = "";
   auto internal_ip = "";
   auto mac_address = "";

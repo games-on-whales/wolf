@@ -18,13 +18,9 @@ start_virtual_compositor = true
 type = "docker"
 name = "WolfFirefox"
 image = "ghcr.io/games-on-whales/firefox:edge"
-mounts = [
-  "/run/udev:/run/udev:ro"
-]
+mounts = []
 env = [
-  "MOZ_LOG=1",
-  "LOG_LEVEL=info",
-  "RUN_GAMESCOPE=true",
+  "MOZ_ENABLE_WAYLAND=1",
   "GOW_REQUIRED_DEVICES=/dev/uinput /dev/input/event* /dev/dri/* /dev/nvidia*",
 ]
 devices = [
@@ -34,7 +30,6 @@ base_create_json = """
 {
   "HostConfig": {
     "IpcMode": "host",
-    "CapAdd": ["SYS_ADMIN", "SYS_NICE"],
     "Privileged": false
   }
 }

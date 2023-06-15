@@ -16,9 +16,10 @@ multiple remote clients in order to play videogames!
 It's made from the ground up with the following primary goals:
 
 - Allow multiple users to stream different content by sharing a single remote host hardware
-- On demand creation of virtual desktops with full support for any resolution/FPS without the need for a monitor or a dummy plug.
+- On demand creation of virtual desktops with full support for any resolution/FPS without the need for a monitor or a
+  dummy plug.
 - Allow multiple GPUs to be used simultaneously for different jobs
-  - Example: stream encoding on iGPU whilst gaming on GPU
+    - Example: stream encoding on iGPU whilst gaming on GPU
 - Provide low latency video and audio stream with full support for gamepads
 - Linux and Docker first: run your games with low privileges in containers (based
   on https://github.com/games-on-whales/gow[Games On Whales])
@@ -34,11 +35,11 @@ Want to give it a spin? [Checkout our docs](https://games-on-whales.github.io/wo
 
 ## Acknowledgements
 
-- https://github.com/Drakulix[@Drakulix] for the incredible help given in developing Wolf
-- https://github.com/zb140[@zb140] for the constant help and support in https://github.com/games-on-whales/gow[GOW]
-- https://github.com/loki-47-6F-64[@loki-47-6F-64] for creating and
-  sharing https://github.com/loki-47-6F-64/sunshine[Sunshine]
-- https://github.com/ReenigneArcher[@ReenigneArcher] for beying the first stargazer of the project and taking care of
-  keeping https://github.com/LizardByte/Sunshine[Sunshine alive]
-- All the guys at the https://moonlight-stream.org/[Moonlight] Discord channel, for the tireless help they provide to
+- [@Drakulix](https://github.com/Drakulix) for the incredible help given in developing Wolf
+- [@zb140](https://github.com/zb140) for the constant help and support in [GOW](https://github.com/games-on-whales/gow)
+- [@loki-47-6F-64](https://github.com/loki-47-6F-64) for creating and
+  sharing [Sunshine](https://github.com/loki-47-6F-64/sunshine)
+- [@ReenigneArcher](https://github.com/ReenigneArcher) for beying the first stargazer of the project and taking care of
+  keeping [Sunshine alive](https://github.com/LizardByte/Sunshine)
+- All the guys at the [Moonlight](https://moonlight-stream.org/) Discord channel, for the tireless help they provide to
   anyone
