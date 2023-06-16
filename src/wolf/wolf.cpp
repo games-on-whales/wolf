@@ -23,6 +23,7 @@
 namespace ba = boost::asio;
 using namespace std::string_literals;
 using namespace std::chrono_literals;
+using namespace moonlight::control;
 
 /**
  * @brief Will try to load the config file and fallback to defaults
@@ -165,8 +166,8 @@ auto setup_sessions_handlers(const immer::box<state::AppState> &app_state,
 
   // On termination cleanup the WaylandSession; since this is the only reference to it
   // this will effectively destroy the virtual Wayland session
-  handlers.push_back(app_state->event_bus->register_handler<immer::box<moonlight::StopStreamEvent>>(
-      [wayland_sessions](const immer::box<moonlight::StopStreamEvent> &ev) {
+  handlers.push_back(app_state->event_bus->register_handler<immer::box<StopStreamEvent>>(
+      [wayland_sessions](const immer::box<StopStreamEvent> &ev) {
         logs::log(logs::debug, "Deleting WaylandSession {}", ev->session_id);
         wayland_sessions->update([=](const auto map) { return map.erase(ev->session_id); });
       }));
@@ -270,7 +271,7 @@ auto setup_sessions_handlers(const immer::box<state::AppState> &app_state,
 
           /* When the app closes there's no point in keeping the stream running */
           app_state->event_bus->fire_event(
-              immer::box<moonlight::StopStreamEvent>(moonlight::StopStreamEvent{.session_id = session->session_id}));
+              immer::box<StopStreamEvent>(StopStreamEvent{.session_id = session->session_id}));
         }).detach();
       }));
 

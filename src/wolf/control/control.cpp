@@ -1,7 +1,8 @@
 #include "input/input.hpp"
 #include <control/control.hpp>
-#include <control/packet_utils.hpp>
+#include <enet/enet.h>
 #include <immer/box.hpp>
+#include <moonlight/control.hpp>
 #include <state/sessions.hpp>
 #include <sys/socket.h>
 
@@ -93,18 +94,18 @@ void run_control(int port,
           break;
         case ENET_EVENT_TYPE_CONNECT:
           logs::log(logs::debug, "[ENET] connected client: {}:{}", client_ip, client_port);
-          event_bus->fire_event(immer::box<moonlight::ResumeStreamEvent>(
-              moonlight::ResumeStreamEvent{.session_id = client_session->session_id}));
+          event_bus->fire_event(
+              immer::box<ResumeStreamEvent>(ResumeStreamEvent{.session_id = client_session->session_id}));
           break;
         case ENET_EVENT_TYPE_DISCONNECT:
           logs::log(logs::debug, "[ENET] disconnected client: {}:{}", client_ip, client_port);
-          event_bus->fire_event(immer::box<moonlight::PauseStreamEvent>(
-              moonlight::PauseStreamEvent{.session_id = client_session->session_id}));
+          event_bus->fire_event(
+              immer::box<PauseStreamEvent>(PauseStreamEvent{.session_id = client_session->session_id}));
           break;
         case ENET_EVENT_TYPE_RECEIVE:
           enet_packet packet = {event.packet, enet_packet_destroy};
 
-          auto type = get_type(packet->data);
+          auto type = get_type({(char *)packet->data, packet->dataLength});
 
           logs::log(logs::trace,
                     "[ENET] received {} of {} bytes from: {}:{} HEX: {}",
@@ -116,9 +117,8 @@ void run_control(int port,
 
           if (type == ENCRYPTED) {
             try {
-              auto decrypted = decrypt_packet(packet->data, client_session->aes_key);
-
-              auto sub_type = get_type(reinterpret_cast<const enet_uint8 *>(decrypted.data()));
+              auto decrypted = decrypt_packet((control_encrypted_t &)*packet->data, client_session->aes_key);
+              auto sub_type = get_type(decrypted);
 
               logs::log(logs::trace,
                         "[ENET] decrypted sub_type: {} HEX: {}",
@@ -126,7 +126,8 @@ void run_control(int port,
                         crypto::str_to_hex(decrypted));
 
               if (sub_type == TERMINATION) {
-                // TODO: moonlight asks to terminate (pause or end?)
+                event_bus->fire_event(
+                    immer::box<PauseStreamEvent>(PauseStreamEvent{.session_id = client_session->session_id}));
               }
 
               auto ev = ControlEvent{client_session->session_id, sub_type, decrypted};
@@ -134,11 +135,17 @@ void run_control(int port,
             } catch (std::runtime_error &e) {
               logs::log(logs::warning, "[ENET] Unable to decrypt incoming packet: {}", e.what());
             }
+          } else {
+            logs::log(logs::warning,
+                      "[ENET] Received unencrypted message: {} - {}",
+                      packet_type_to_str(type),
+                      crypto::str_to_hex({(char *)packet->data, packet->dataLength}));
           }
           break;
         }
       } else {
         logs::log(logs::warning, "[ENET] Received packet from unrecognised client {}:{}", client_ip, client_port);
+        enet_peer_disconnect_now(event.peer, 0);
       }
     }
   }

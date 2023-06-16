@@ -39,8 +39,8 @@ void RunProcess::run(std::size_t session_id,
     return;
   }
 
-  auto terminate_handler = this->ev_bus->register_handler<immer::box<moonlight::StopStreamEvent>>(
-      [&group_proc, session_id](const immer::box<moonlight::StopStreamEvent> &terminate_ev) {
+  auto terminate_handler = this->ev_bus->register_handler<immer::box<StopStreamEvent>>(
+      [&group_proc, session_id](const immer::box<StopStreamEvent> &terminate_ev) {
         if (terminate_ev->session_id == session_id) {
           group_proc.terminate(); // Manually terminate the process
         }

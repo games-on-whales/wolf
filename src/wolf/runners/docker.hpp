@@ -15,6 +15,7 @@ namespace docker {
 using namespace std::chrono_literals;
 using namespace ranges::views;
 using namespace utils;
+using namespace moonlight::control;
 
 class RunDocker : public state::Runner {
 public:
@@ -143,8 +144,8 @@ void RunDocker::run(std::size_t session_id,
     logs::log(logs::info, "Starting container: {}", docker_container->name);
     logs::log(logs::debug, "Starting container: {}", *docker_container);
 
-    auto terminate_handler = this->ev_bus->register_handler<immer::box<moonlight::StopStreamEvent>>(
-        [session_id, container_id, this](const immer::box<moonlight::StopStreamEvent> &terminate_ev) {
+    auto terminate_handler = this->ev_bus->register_handler<immer::box<StopStreamEvent>>(
+        [session_id, container_id, this](const immer::box<StopStreamEvent> &terminate_ev) {
           if (terminate_ev->session_id == session_id) {
             docker_api.stop_by_id(container_id);
           }

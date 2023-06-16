@@ -115,8 +115,24 @@ std::string aes_decrypt_cbc(std::string_view msg, std::string_view enc_key, std:
 std::pair<std::string, std::string> aes_encrypt_gcm(std::string_view msg,
                                                     std::string_view enc_key,
                                                     std::string_view iv = random(AES_BLOCK_SIZE),
+                                                    int iv_size = -1,
                                                     bool padding = false) {
   auto ctx = aes::init(EVP_aes_128_gcm(), enc_key, iv, false, padding);
+
+  if (iv_size != -1) {
+    if (EVP_CIPHER_CTX_ctrl(ctx.get(), EVP_CTRL_GCM_SET_IVLEN, iv_size, nullptr) != 1)
+      handle_openssl_error("EVP_CTRL_GCM_SET_IVLEN failed");
+
+    if (EVP_DecryptInit_ex(ctx.get(),
+                           nullptr,
+                           nullptr,
+                           (const std::uint8_t *)enc_key.data(),
+                           (const std::uint8_t *)iv.data()) != 1)
+      handle_openssl_error("EVP_DecryptInit_ex (2) failed");
+
+    EVP_CIPHER_CTX_set_padding(ctx.get(), padding);
+  }
+
   return aes::encrypt_authenticated(ctx.get(), msg);
 }
 

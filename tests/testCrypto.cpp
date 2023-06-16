@@ -98,8 +98,11 @@ TEST_CASE("AES gcm", "[Crypto]") {
   auto msg = "a message to be sent!"s;
   auto iv = "12345678"s;
 
-  auto [encrypted, tag] = crypto::aes_encrypt_gcm(msg, key, iv, true);
+  auto [encrypted, tag] = crypto::aes_encrypt_gcm(msg, key, iv, -1, true);
   REQUIRE(crypto::aes_decrypt_gcm(encrypted, key, tag, iv, -1, true) == msg);
+
+  auto [encrypted2, tag2] = crypto::aes_encrypt_gcm(msg, key, iv, (int)iv.size(), false);
+  REQUIRE(crypto::aes_decrypt_gcm(encrypted2, key, tag2, iv, iv.size(), false) == msg);
 }
 
 TEST_CASE("AES cbc", "[Crypto]") {

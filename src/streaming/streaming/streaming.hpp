@@ -5,6 +5,7 @@
 #include <gst/gst.h>
 #include <immer/box.hpp>
 #include <memory>
+#include <moonlight/control.hpp>
 #include <moonlight/data-structures.hpp>
 #include <streaming/data-structures.hpp>
 #include <streaming/virtual-display.hpp>

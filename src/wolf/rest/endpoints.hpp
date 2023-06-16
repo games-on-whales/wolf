@@ -5,6 +5,7 @@
 #include <functional>
 #include <helpers/utils.hpp>
 #include <immer/vector_transient.hpp>
+#include <moonlight/control.hpp>
 #include <moonlight/protocol.hpp>
 #include <range/v3/view.hpp>
 #include <rest/helpers.hpp>
@@ -14,6 +15,8 @@
 #include <utility>
 
 namespace endpoints {
+
+using namespace moonlight::control;
 
 static std::size_t get_client_id(const state::PairedClient &current_client) {
   return std::hash<std::string>{}(current_client.client_cert);
@@ -303,7 +306,7 @@ void cancel(const std::shared_ptr<typename SimpleWeb::Server<SimpleWeb::HTTPS>::
   auto client_session = get_session_by_ip(state->running_sessions->load(), client_ip);
   if (client_session) {
     state->event_bus->fire_event(
-        immer::box<moonlight::StopStreamEvent>(moonlight::StopStreamEvent{.session_id = client_session->session_id}));
+        immer::box<StopStreamEvent>(StopStreamEvent{.session_id = client_session->session_id}));
 
     state->running_sessions->update([&client_session](const immer::vector<state::StreamSession> &ses_v) {
       return remove_session(ses_v, client_session.value());

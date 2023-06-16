@@ -96,39 +96,15 @@ docker volume ls | grep nvidia-driver
 local     nvidia-driver-vol
 ....
 
-One last final check: we have to make sure that the `nvidia-drm` module has been loaded...
+One last final check: we have to make sure that the `nvidia-drm` module has been loaded and make sure that the module is loaded with the flag `modeset=1`.
 
-[source,bash]
-....
-sudo dmesg | grep nvidia-drm    # Should print something like the following:
-[   12.561107] [drm] [nvidia-drm] [GPU ID 0x00000100] Loading driver
-[   14.138312] [drm] Initialized nvidia-drm 0.0.0 20160202 for 0000:01:00.0 on minor 0
-....
-
-.I don't see that, how do I load the module?
-[%collapsible]
-====
-
-If using Grub, the easiest way to make the change persistent is to add `nvidia-drm.modeset=1` to the `GRUB_CMDLINE_LINUX_DEFAULT` line in `/etc/default/grub` ex:
-
-....
-GRUB_CMDLINE_LINUX_DEFAULT="quiet nvidia-drm.modeset=1"
-....
-
-Then `sudo update-grub` and *reboot*.
-
-For more options or details, you can see https://wiki.archlinux.org/title/Kernel_parameters[ArchWiki: Kernel parameters]
-
-====
-
-...and make sure that the module is loaded with the flag `modeset=1`.
 [source,bash]
 ....
 sudo cat /sys/module/nvidia_drm/parameters/modeset
 Y
 ....
 
-.I don't have that, how do I set the flag?
+.I get `N` or the file is not present, how do I set the flag?
 [%collapsible]
 ====
 

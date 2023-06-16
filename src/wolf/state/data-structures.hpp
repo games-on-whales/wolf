@@ -10,6 +10,7 @@
 #include <immer/map.hpp>
 #include <immer/vector.hpp>
 #include <input/input.hpp>
+#include <moonlight/control.hpp>
 #include <moonlight/data-structures.hpp>
 #include <openssl/x509.h>
 #include <optional>

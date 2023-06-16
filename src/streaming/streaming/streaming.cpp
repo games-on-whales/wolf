@@ -106,8 +106,8 @@ bool run_pipeline(
   /* Let the calling thread set extra things */
   auto handlers = on_pipeline_ready(pipeline.get());
 
-  auto pause_handler = event_bus->register_handler<immer::box<moonlight::PauseStreamEvent>>(
-      [session_id, loop](const immer::box<moonlight::PauseStreamEvent> &ev) {
+  auto pause_handler = event_bus->register_handler<immer::box<PauseStreamEvent>>(
+      [session_id, loop](const immer::box<PauseStreamEvent> &ev) {
         if (ev->session_id == session_id) {
           logs::log(logs::debug, "[GSTREAMER] Pausing pipeline: {}", session_id);
 
@@ -125,8 +125,8 @@ bool run_pipeline(
         }
       });
 
-  auto stop_handler = event_bus->register_handler<immer::box<moonlight::StopStreamEvent>>(
-      [session_id, loop](const immer::box<moonlight::StopStreamEvent> &ev) {
+  auto stop_handler = event_bus->register_handler<immer::box<StopStreamEvent>>(
+      [session_id, loop](const immer::box<StopStreamEvent> &ev) {
         if (ev->session_id == session_id) {
           logs::log(logs::debug, "[GSTREAMER] Stopping pipeline: {}", session_id);
           g_main_loop_quit(loop.get());

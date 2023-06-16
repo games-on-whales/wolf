@@ -80,6 +80,7 @@ std::string aes_decrypt_cbc(std::string_view msg,
 std::pair<std::string, std::string> aes_encrypt_gcm(std::string_view msg,
                                                     std::string_view enc_key,
                                                     std::string_view iv = random(AES_BLOCK_SIZE),
+                                                    int iv_size = -1,
                                                     bool padding = false);
 
 /**
