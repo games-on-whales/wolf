@@ -26,7 +26,7 @@ jobs:
             other_pkgs: [ clang-11 ]
           - cxx: clang++-14
             other_pkgs: [ clang-14 ]
-          - cxx: gcc-10
+          - cxx: g++-10
             other_pkgs: [ gcc-10 ]
 
 
