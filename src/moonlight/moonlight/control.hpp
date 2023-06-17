@@ -2,6 +2,7 @@
 #include <array>
 #include <boost/endian/conversion.hpp>
 #include <crypto/crypto.hpp>
+#include <memory>
 
 namespace moonlight::control {
 
@@ -43,6 +44,7 @@ struct StopStreamEvent {
 };
 
 static constexpr int GCM_TAG_SIZE = 16;
+static constexpr int MAX_PAYLOAD_SIZE = 128;
 static constexpr std::uint32_t TERMINATE_REASON_GRACEFULL = boost::endian::native_to_big(0x80030023);
 
 struct ControlPacket {
@@ -67,7 +69,7 @@ struct ControlEncryptedPacket {
   /**
    * Rest of the bytes are the encrypted message
    */
-  char payload[];
+  char payload[MAX_PAYLOAD_SIZE]; // TODO: this should be a char* with a variable size based on header
 
   /**
    * Helper function to get the payload as a string with the right size
@@ -100,7 +102,8 @@ static std::string decrypt_packet(const ControlEncryptedPacket &packet_data, std
 /**
  * Turns a payload into a properly formatted control encrypted packet
  */
-static ControlEncryptedPacket encrypt_packet(std::string_view gcm_key, std::uint32_t seq, std::string_view payload) {
+static std::unique_ptr<ControlEncryptedPacket>
+encrypt_packet(std::string_view gcm_key, std::uint32_t seq, std::string_view payload) {
   std::array<std::uint8_t, GCM_TAG_SIZE> iv_data = {0};
   iv_data[0] = boost::endian::native_to_little(seq);
 
@@ -117,7 +120,7 @@ static ControlEncryptedPacket encrypt_packet(std::string_view gcm_key, std::uint
   std::copy(gcm_tag.begin(), gcm_tag.end(), encrypted_pkt.gcm_tag);
   std::copy(encrypted_str.begin(), encrypted_str.end(), encrypted_pkt.payload);
 
-  return encrypted_pkt;
+  return std::make_unique<ControlEncryptedPacket>(encrypted_pkt);
 }
 
 static constexpr const char *packet_type_to_str(PACKET_TYPE p) noexcept {

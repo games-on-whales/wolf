@@ -108,7 +108,7 @@ void run_control(int port,
           auto terminate_pkt = ControlTerminatePacket{};
           std::string plaintext = {(char *)&terminate_pkt, sizeof(terminate_pkt)};
           auto encrypted = control::encrypt_packet(client_session->aes_key, 0, plaintext); // TODO: seq?
-          send_packet({(char *)&encrypted, encrypted.full_size()}, enet_peer->get().get());
+          send_packet({(char *)encrypted.get(), encrypted->full_size()}, enet_peer->get().get());
         }
       });
 
@@ -152,7 +152,8 @@ void run_control(int port,
 
           if (type == ENCRYPTED) {
             try {
-              auto decrypted = decrypt_packet((ControlEncryptedPacket &)*packet->data, client_session->aes_key);
+              auto enc_pkt = (ControlEncryptedPacket *)(packet->data);
+              auto decrypted = decrypt_packet(*enc_pkt, client_session->aes_key);
               auto sub_type = ((ControlPacket *)decrypted.data())->type;
 
               logs::log(logs::trace,
@@ -184,6 +185,8 @@ void run_control(int port,
       }
     }
   }
+
+  stop_ev.unregister();
 }
 
 } // namespace control

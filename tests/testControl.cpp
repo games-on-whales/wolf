@@ -5,7 +5,7 @@ using Catch::Matchers::Equals;
 using namespace moonlight::control;
 
 static std::string to_string(const ControlEncryptedPacket &packet) {
-  return {(char *)&packet, sizeof(std::uint32_t) + boost::endian::little_to_native(packet.header.length)};
+  return {(char *)&packet, packet.full_size()};
 }
 
 TEST_CASE("Control AES Encryption", "CONTROL") {
@@ -16,7 +16,7 @@ TEST_CASE("Control AES Encryption", "CONTROL") {
   SECTION("30 bytes") { // original packet: 01001A0000000000BF0EB6DA10E47C702EC8644EB87D9CF7B6FAC9FF75CA
     std::string payload = crypto::hex_to_str("020302000000");
     std::uint32_t seq = 0;
-    auto encrypted_packet = encrypt_packet(aes_key, seq, payload);
+    auto encrypted_packet = *encrypt_packet(aes_key, seq, payload);
     REQUIRE_THAT(crypto::str_to_hex(to_string(encrypted_packet)),
                  Equals("01001A0000000000BF0EB6DA10E47C702EC8644EB87D9CF7B6FAC9FF75CA"));
     REQUIRE(boost::endian::little_to_native(encrypted_packet.seq) == seq);
@@ -31,7 +31,7 @@ TEST_CASE("Control AES Encryption", "CONTROL") {
   SECTION("29 bytes") { // original packet: 010019000100000021DBB8DC0590AF3A2B20BCE5A347DE31D366E5B9C5"
     std::string payload = crypto::hex_to_str("0703010000");
     std::uint32_t seq = 1;
-    auto encrypted_packet = encrypt_packet(aes_key, seq, payload);
+    auto encrypted_packet = *encrypt_packet(aes_key, seq, payload);
     REQUIRE_THAT(crypto::str_to_hex(to_string(encrypted_packet)),
                  Equals("010019000100000021DBB8DC0590AF3A2B20BCE5A347DE31D366E5B9C5"));
     REQUIRE(boost::endian::little_to_native(encrypted_packet.seq) == seq);
@@ -46,7 +46,7 @@ TEST_CASE("Control AES Encryption", "CONTROL") {
   SECTION("36 bytes") { // original packet: 0100200002000000220722FBADED58A03F2E8898F0F1DCB7C93F6235590618E4186AD990
     std::string payload = crypto::hex_to_str("000208000400000000000000");
     std::uint32_t seq = 2;
-    auto encrypted_packet = encrypt_packet(aes_key, seq, payload);
+    auto encrypted_packet = *encrypt_packet(aes_key, seq, payload);
     REQUIRE_THAT(crypto::str_to_hex(to_string(encrypted_packet)),
                  Equals("0100200002000000220722FBADED58A03F2E8898F0F1DCB7C93F6235590618E4186AD990"));
     REQUIRE(boost::endian::little_to_native(encrypted_packet.seq) == seq);
@@ -62,7 +62,7 @@ TEST_CASE("Control AES Encryption", "CONTROL") {
                         // 01002A00060000005A4D999FB2542F85BDD39D99F77EB825254569D2C04E21241B5CEC01BD3F93129718ECC1F153
     std::string payload = crypto::hex_to_str("060212000000000E05000000033400C00000059F0329");
     std::uint32_t seq = 6;
-    auto encrypted_packet = encrypt_packet(aes_key, seq, payload);
+    auto encrypted_packet = *encrypt_packet(aes_key, seq, payload);
     REQUIRE_THAT(
         crypto::str_to_hex(to_string(encrypted_packet)),
         Equals("01002A00060000005A4D999FB2542F85BDD39D99F77EB825254569D2C04E21241B5CEC01BD3F93129718ECC1F153"));
