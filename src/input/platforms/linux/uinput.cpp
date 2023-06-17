@@ -589,9 +589,9 @@ InputReady setup_handlers(std::size_t session_id, const std::shared_ptr<dp::even
                   keyboard_state->update([&kb_action](const immer::array<int> &key_codes) {
                     return key_codes.push_back(kb_action->linux_code);
                   });
-                } else {             // Released key, remove it from the key_codes
+                } else { // Released key, remove it from the key_codes
                   keyboard_state->update([&kb_action](const immer::array<int> &key_codes) {
-                    return key_codes //
+                    return key_codes                                        //
                            | ranges::views::filter([&kb_action](int code) { //
                                return code != kb_action->linux_code;        //
                              })                                             //

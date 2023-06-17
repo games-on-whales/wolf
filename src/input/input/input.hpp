@@ -71,7 +71,7 @@ struct INPUT_PKT {
   unsigned short packet_type; // This should always be 0x0206 little endian (INPUT_DATA)
   unsigned short packet_len;  // the total size of the packet
 
-  unsigned int data_size;     // the size of the input data
+  unsigned int data_size; // the size of the input data
 
   INPUT_TYPE type;
 };
