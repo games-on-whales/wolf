@@ -193,11 +193,11 @@ std::optional<Container> DockerAPI::create(const Container &container,
       auto json = parse(raw_msg->second);
       auto created_id = json.at("Id").as_string();
       return get_by_id(std::string_view{created_id.data(), created_id.size()});
-    } else if (raw_msg && raw_msg->first == 404) { // 404 returned when the image is not present
+    } else if (raw_msg && raw_msg->first == 404) {      // 404 returned when the image is not present
       logs::log(logs::warning, "[DOCKER] Image {} not present, downloading...", container.image);
       if (pull_image(container.image, registry_auth)) { // Download the image
         return create(container, custom_params, registry_auth,
-                      force_recreate_if_present); // Then retry creating
+                      force_recreate_if_present);       // Then retry creating
       } else if (raw_msg) {
         logs::log(logs::warning, "[DOCKER] error {} - {}", raw_msg->first, raw_msg->second);
       }

@@ -177,7 +177,7 @@ video/x-h265, profile=main, stream-format=byte-stream
 
 [[gstreamer.video.hevc_encoders]]
 plugin_name = "qsv" # Intel QuickSync
-check_elements = ["qsvh265enc","vapostproc"]
+check_elements = ["qsvh265enc", "vapostproc"]
 video_params = """
 queue !
 vapostproc !
@@ -268,7 +268,7 @@ video/x-h264, profile=main, stream-format=byte-stream
 
 [[gstreamer.video.h264_encoders]]
 plugin_name = "qsv" # Intel QuickSync
-check_elements = ["qsvh264enc","vapostproc"]
+check_elements = ["qsvh264enc", "vapostproc"]
 video_params = """
 queue !
 vapostproc !
