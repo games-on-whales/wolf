@@ -164,10 +164,15 @@ auto setup_sessions_handlers(const immer::box<state::AppState> &app_state,
   auto wayland_sessions =
       std::make_shared<immer::atom<immer::map<std::size_t, boost::shared_future<streaming::wl_state_ptr>>>>();
 
-  // On termination cleanup the WaylandSession; since this is the only reference to it
-  // this will effectively destroy the virtual Wayland session
   handlers.push_back(app_state->event_bus->register_handler<immer::box<StopStreamEvent>>(
-      [wayland_sessions](const immer::box<StopStreamEvent> &ev) {
+      [&app_state, wayland_sessions](const immer::box<StopStreamEvent> &ev) {
+        // Remove session from app state so that HTTP/S applist gets updated
+        app_state->running_sessions->update([&ev](const immer::vector<state::StreamSession> &ses_v) {
+          return remove_session(ses_v, {.session_id = ev->session_id});
+        });
+
+        // On termination cleanup the WaylandSession; since this is the only reference to it
+        // this will effectively destroy the virtual Wayland session
         logs::log(logs::debug, "Deleting WaylandSession {}", ev->session_id);
         wayland_sessions->update([=](const auto map) { return map.erase(ev->session_id); });
       }));

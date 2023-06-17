@@ -5,18 +5,18 @@
 
 namespace moonlight::control {
 
-enum PACKET_TYPE {
-  START_A = 0x0305,
-  START_B = 0x0307,
-  INVALIDATE_REF_FRAMES = 0x0301,
-  LOSS_STATS = 0x0201,
-  FRAME_STATS = 0x0204,
-  INPUT_DATA = 0x0206,
-  RUMBLE_DATA = 0x010b,
-  TERMINATION = 0x0100,
-  PERIODIC_PING = 0x0200,
-  IDR_FRAME = 0x0302,
-  ENCRYPTED = 0x0001
+enum PACKET_TYPE : std::uint16_t {
+  START_A = boost::endian::little_to_native(0x0305),
+  START_B = boost::endian::little_to_native(0x0307),
+  INVALIDATE_REF_FRAMES = boost::endian::little_to_native(0x0301),
+  LOSS_STATS = boost::endian::little_to_native(0x0201),
+  FRAME_STATS = boost::endian::little_to_native(0x0204),
+  INPUT_DATA = boost::endian::little_to_native(0x0206),
+  RUMBLE_DATA = boost::endian::little_to_native(0x010b),
+  TERMINATION = boost::endian::little_to_native(0x0109),
+  PERIODIC_PING = boost::endian::little_to_native(0x0200),
+  IDR_FRAME = boost::endian::little_to_native(0x0302),
+  ENCRYPTED = boost::endian::little_to_native(0x0001)
 };
 
 /**
@@ -43,12 +43,21 @@ struct StopStreamEvent {
 };
 
 static constexpr int GCM_TAG_SIZE = 16;
+static constexpr std::uint32_t TERMINATE_REASON_GRACEFULL = boost::endian::native_to_big(0x80030023);
 
-struct control_encrypted_t {
-  std::uint16_t header_type; // Always 0x0001 (see PACKET_TYPE ENCRYPTED)
-  std::uint16_t length;      // sizeof(seq) + 16 byte tag + sizeof(encrypted_msg)
+struct ControlPacket {
+  PACKET_TYPE type;
+  std::uint16_t length; // The length of the REST of the packet, EXCLUDING size of type and length
+};
 
-  std::uint32_t seq;         // Monotonically increasing sequence number (used as IV for AES-GCM)
+struct ControlTerminatePacket {
+  ControlPacket header = {.type = TERMINATION, .length = sizeof(std::uint32_t)};
+  std::uint32_t reason = TERMINATE_REASON_GRACEFULL;
+};
+
+struct ControlEncryptedPacket {
+  ControlPacket header; // Always 0x0001 (see PACKET_TYPE ENCRYPTED)
+  std::uint32_t seq;    // Monotonically increasing sequence number (used as IV for AES-GCM)
 
   /**
    * First 16 bytes are the AES GCM TAG
@@ -64,8 +73,12 @@ struct control_encrypted_t {
    * Helper function to get the payload as a string with the right size
    */
   [[nodiscard]] std::string_view encrypted_msg() const {
-    auto len = boost::endian::little_to_native(this->length);
+    auto len = boost::endian::little_to_native(this->header.length);
     return {payload, static_cast<size_t>(len - GCM_TAG_SIZE - sizeof(seq))};
+  }
+
+  [[nodiscard]] size_t full_size() const {
+    return boost::endian::little_to_native(this->header.length) + sizeof(ControlPacket);
   }
 };
 
@@ -73,7 +86,7 @@ struct control_encrypted_t {
  * Given a received packet will decrypt the payload inside it.
  * This includes checking that the AES GCM TAG is valid and not tampered
  */
-static std::string decrypt_packet(const control_encrypted_t &packet_data, std::string_view gcm_key) {
+static std::string decrypt_packet(const ControlEncryptedPacket &packet_data, std::string_view gcm_key) {
   std::array<std::uint8_t, GCM_TAG_SIZE> iv_data = {0};
   iv_data[0] = boost::endian::little_to_native(packet_data.seq);
 
@@ -87,7 +100,7 @@ static std::string decrypt_packet(const control_encrypted_t &packet_data, std::s
 /**
  * Turns a payload into a properly formatted control encrypted packet
  */
-static control_encrypted_t encrypt_packet(std::string_view gcm_key, std::uint32_t seq, std::string_view payload) {
+static ControlEncryptedPacket encrypt_packet(std::string_view gcm_key, std::uint32_t seq, std::string_view payload) {
   std::array<std::uint8_t, GCM_TAG_SIZE> iv_data = {0};
   iv_data[0] = boost::endian::native_to_little(seq);
 
@@ -97,20 +110,14 @@ static control_encrypted_t encrypt_packet(std::string_view gcm_key, std::uint32_
                                                           GCM_TAG_SIZE);
 
   std::uint16_t size = sizeof(seq) + GCM_TAG_SIZE + encrypted_str.length();
-  control_encrypted_t encrypted_pkt = {.header_type = boost::endian::native_to_little((std::uint16_t)ENCRYPTED),
-                                       .length = boost::endian::native_to_little(size),
-                                       .seq = boost::endian::native_to_little(seq)};
+  ControlEncryptedPacket encrypted_pkt = {
+      .header = {.type = ENCRYPTED, .length = boost::endian::native_to_little(size)},
+      .seq = boost::endian::native_to_little(seq)};
 
   std::copy(gcm_tag.begin(), gcm_tag.end(), encrypted_pkt.gcm_tag);
   std::copy(encrypted_str.begin(), encrypted_str.end(), encrypted_pkt.payload);
 
   return encrypted_pkt;
-}
-
-static PACKET_TYPE get_type(std::string_view packet_payload) {
-  auto type = *(std::uint16_t *)packet_payload.data();
-  auto type_little = boost::endian::little_to_native(type);
-  return (PACKET_TYPE)type_little;
 }
 
 static constexpr const char *packet_type_to_str(PACKET_TYPE p) noexcept {

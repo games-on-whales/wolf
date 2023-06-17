@@ -70,6 +70,19 @@ std::pair<std::string /* ip */, int /* port */> get_ip(const sockaddr *const ip_
   return {std::string{data}, port};
 }
 
+bool send_packet(std::string_view payload, ENetPeer *peer) {
+  logs::log(logs::debug, "[ENET] Sending packet");
+  auto packet = enet_packet_create(payload.data(), payload.size(), ENET_PACKET_FLAG_RELIABLE);
+  if (enet_peer_send(peer, 0, packet) < 0) {
+    logs::log(logs::warning, "[ENET] Failed to send packet");
+    enet_packet_destroy(packet);
+    return false;
+  }
+  return true;
+}
+
+using enet_clients_map = immer::map<std::size_t, immer::box<std::shared_ptr<ENetPeer>>>;
+
 void run_control(int port,
                  const state::SessionsAtoms &running_sessions,
                  const std::shared_ptr<dp::event_bus> &event_bus,
@@ -82,7 +95,22 @@ void run_control(int port,
 
   ENetEvent event;
 
-  // TODO: send termination when stream is stopped, see: IDX_TERMINATION
+  immer::atom<enet_clients_map> connected_clients;
+
+  auto stop_ev = event_bus->register_handler<immer::box<StopStreamEvent>>(
+      [&connected_clients, &running_sessions](const immer::box<StopStreamEvent> &ev) {
+        auto clients = connected_clients.load();
+        auto client_session = get_session_by_id(running_sessions->load(), ev->session_id);
+        auto enet_peer = clients->find(ev->session_id);
+        if (enet_peer == nullptr) {
+          logs::log(logs::debug, "[ENET] Unable to find enet client {}", ev->session_id);
+        } else {
+          auto terminate_pkt = ControlTerminatePacket{};
+          std::string plaintext = {(char *)&terminate_pkt, sizeof(terminate_pkt)};
+          auto encrypted = control::encrypt_packet(client_session->aes_key, 0, plaintext); // TODO: seq?
+          send_packet({(char *)&encrypted, encrypted.full_size()}, enet_peer->get().get());
+        }
+      });
 
   while (true) {
     if (enet_host_service(host.get(), &event, timeout.count()) > 0) {
@@ -94,18 +122,25 @@ void run_control(int port,
           break;
         case ENET_EVENT_TYPE_CONNECT:
           logs::log(logs::debug, "[ENET] connected client: {}:{}", client_ip, client_port);
+          connected_clients.update([&event, sess_id = client_session->session_id](const enet_clients_map &m) {
+            return m.set(sess_id, std::shared_ptr<ENetPeer>(event.peer, [](auto peer) {
+                           // DO NOTHING, we don't want to free peer, the lifecycle is dictated by enet
+                         }));
+          });
           event_bus->fire_event(
               immer::box<ResumeStreamEvent>(ResumeStreamEvent{.session_id = client_session->session_id}));
           break;
         case ENET_EVENT_TYPE_DISCONNECT:
           logs::log(logs::debug, "[ENET] disconnected client: {}:{}", client_ip, client_port);
+          connected_clients.update(
+              [sess_id = client_session->session_id](const enet_clients_map &m) { return m.erase(sess_id); });
           event_bus->fire_event(
               immer::box<PauseStreamEvent>(PauseStreamEvent{.session_id = client_session->session_id}));
           break;
         case ENET_EVENT_TYPE_RECEIVE:
           enet_packet packet = {event.packet, enet_packet_destroy};
 
-          auto type = get_type({(char *)packet->data, packet->dataLength});
+          auto type = ((ControlPacket *)packet->data)->type;
 
           logs::log(logs::trace,
                     "[ENET] received {} of {} bytes from: {}:{} HEX: {}",
@@ -117,8 +152,8 @@ void run_control(int port,
 
           if (type == ENCRYPTED) {
             try {
-              auto decrypted = decrypt_packet((control_encrypted_t &)*packet->data, client_session->aes_key);
-              auto sub_type = get_type(decrypted);
+              auto decrypted = decrypt_packet((ControlEncryptedPacket &)*packet->data, client_session->aes_key);
+              auto sub_type = ((ControlPacket *)decrypted.data())->type;
 
               logs::log(logs::trace,
                         "[ENET] decrypted sub_type: {} HEX: {}",

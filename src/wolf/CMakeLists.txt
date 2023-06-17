@@ -45,7 +45,7 @@ set(CMAKE_PROJECT_INCLUDE_BEFORE "${PROJECT_SOURCE_DIR}/cmake/EnableCMP0048.cmak
 FetchContent_Declare(
         enet
         GIT_REPOSITORY https://github.com/cgutman/enet
-        GIT_TAG 4cde9cc3dcc5c30775a80da1de87f39f98672a31)
+        GIT_TAG 47e42dbf422396ce308a03b5a95ec056f0f0180c)
 FetchContent_MakeAvailable(enet)
 target_link_libraries_system(wolf_runner PUBLIC enet)
 unset(CMAKE_PROJECT_INCLUDE_BEFORE)
