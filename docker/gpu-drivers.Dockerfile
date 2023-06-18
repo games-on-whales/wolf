@@ -30,3 +30,5 @@ RUN --mount=type=cache,target=/var/cache/apt \
     apt-get remove --purge -y --autoremove wget gnupg2 && \
     rm -rf /var/lib/apt/lists/*
 
+LABEL org.opencontainers.image.source="https://github.com/games-on-whales/wolf/"
+LABEL org.opencontainers.image.description="A base image with all the required GPU drivers"

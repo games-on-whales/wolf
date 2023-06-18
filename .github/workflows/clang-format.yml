@@ -1,6 +1,18 @@
 name: Run clang-format Linter
 
-on: [push]
+on:
+  push:
+    paths:
+      - "src"
+      - "tests"
+      - "cmake"
+      - "**/CMakeLists.txt"
+  pull_request:
+    paths:
+      - "src"
+      - "tests"
+      - "cmake"
+      - "**/CMakeLists.txt"
 
 jobs:
   build:

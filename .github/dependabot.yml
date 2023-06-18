@@ -6,7 +6,7 @@
 version: 2
 updates:
   - package-ecosystem: "docker"
-    directory: "/"
+    directory: "docker"
     schedule:
       interval: "daily"
       time: "00:00"

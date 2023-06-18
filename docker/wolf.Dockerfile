@@ -112,6 +112,9 @@ EXPOSE 48000/udp
 # RTSP
 EXPOSE 48010/tcp
 
+LABEL org.opencontainers.image.source="https://github.com/games-on-whales/wolf/"
+LABEL org.opencontainers.image.description="Wolf: stream virtual desktops and games in Docker"
+
 # See GOW/base-app
 COPY --chmod=777 docker/startup.sh /opt/gow/startup-app.sh
 ENTRYPOINT ["/entrypoint.sh"]

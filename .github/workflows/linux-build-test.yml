@@ -1,10 +1,22 @@
 # Adapted from https://github.com/catchorg/Catch2/blob/devel/.github/workflows/linux-simple-builds.yml
 name: Linux build and test
 
-on: [ push, pull_request ]
+on:
+  push:
+    paths:
+      - "src"
+      - "tests"
+      - "cmake"
+      - "**/CMakeLists.txt"
+  pull_request:
+    paths:
+      - "src"
+      - "tests"
+      - "cmake"
+      - "**/CMakeLists.txt"
 
 jobs:
-  build:
+  test:
     runs-on: ubuntu-22.04
     strategy:
       fail-fast: false
@@ -14,7 +26,8 @@ jobs:
           - g++-12
           - clang++-11
           - clang++-14
-        build_type: [ Debug, Release ]
+        build_type: [ Release ]
+        shared: [ true, false ]
         std: [ 17 ]
         include:
           - cxx: g++-10
@@ -64,6 +77,7 @@ jobs:
         #       This is important
         run: |
           cmake -Bbuild -H$GITHUB_WORKSPACE \
+                -DBUILD_SHARED_LIBS=${{ matrix.shared }}  \ 
                 -DCMAKE_BUILD_TYPE=${{matrix.build_type}} \
                 -DCMAKE_CXX_STANDARD=${{matrix.std}} \
                 -DCMAKE_CXX_EXTENSIONS=OFF \

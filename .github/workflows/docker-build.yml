@@ -2,16 +2,11 @@ name: Docker build
 
 on:
   push:
-  # TODO: enable workflow_run when merged into master
-#  workflow_run:
-#    workflows: [ "Linux build and test" ]
-#    types:
-#      - completed
+    paths-ignore:
+      - "docs"
 
 jobs:
   buildx:
-    # Only run this when tests are passing, see: https://github.com/orgs/community/discussions/26238
-    #    if: ${{ github.event.workflow_run.conclusion == 'success' }}
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -97,19 +92,19 @@ jobs:
         uses: docker/build-push-action@v3
         with:
           builder: ${{ steps.buildx.outputs.name }}
-          context: .
+          context: docker/
           file: docker/gpu-drivers.Dockerfile
           push: true
           tags: ghcr.io/${{ github.repository_owner }}/gpu-drivers:2023.04,gameonwhales/gpu-drivers:2023.04 # TODO: set build version as param
           labels: ${{ steps.meta.outputs.labels }}
-          cache-from: type=registry,ref=ghcr.io/${{ github.repository_owner }}/gpu-drivers:buildcache-2023.04
-          cache-to: type=registry,ref=ghcr.io/${{ github.repository_owner }}/gpu-drivers:buildcache-2023.04,mode=max
+          cache-from: type=registry,ref=ghcr.io/${{ github.repository_owner }}/gpu-drivers:buildcache
+          cache-to: type=registry,ref=ghcr.io/${{ github.repository_owner }}/gpu-drivers:buildcache,mode=max
 
       - name: Build Gstreamer
         uses: docker/build-push-action@v3
         with:
           builder: ${{ steps.buildx.outputs.name }}
-          context: .
+          context: docker/
           file: docker/gstreamer.Dockerfile
           push: true
           build-args: |
@@ -117,8 +112,8 @@ jobs:
             BASE_IMAGE=ghcr.io/${{ github.repository_owner }}/gpu-drivers:2023.04
           tags: ghcr.io/${{ github.repository_owner }}/gstreamer:1.22.0,gameonwhales/gstreamer:1.22.0 # TODO: set gstreamer version as param
           labels: ${{ steps.meta.outputs.labels }}
-          cache-from: type=registry,ref=ghcr.io/${{ github.repository_owner }}/gstreamer:buildcache-1.20.3
-          cache-to: type=registry,ref=ghcr.io/${{ github.repository_owner }}/gstreamer:buildcache-1.20.3,mode=max
+          cache-from: type=registry,ref=ghcr.io/${{ github.repository_owner }}/gstreamer:buildcache
+          cache-to: type=registry,ref=ghcr.io/${{ github.repository_owner }}/gstreamer:buildcache,mode=max
 
       - name: Build Wolf
         uses: docker/build-push-action@v3

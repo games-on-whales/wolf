@@ -73,5 +73,9 @@ RUN <<_GSTREAMER_INSTALL
     /var/lib/apt/lists/*
 _GSTREAMER_INSTALL
 
+LABEL org.opencontainers.image.source="https://github.com/games-on-whales/wolf/"
+LABEL org.opencontainers.image.description="GStreamer: https://gstreamer.freedesktop.org/"
+
+
 ENTRYPOINT ["/bin/bash"]
 CMD ["/usr/local/bin/gst-inspect-1.0"]
