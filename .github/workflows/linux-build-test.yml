@@ -72,11 +72,12 @@ jobs:
         # Note: $GITHUB_WORKSPACE is distinct from ${{runner.workspace}}.
         #       This is important
         run: |
-          cmake -Bbuild -H$GITHUB_WORKSPACE \
-                -DBUILD_SHARED_LIBS=${{ matrix.shared }} \ 
-                -DCMAKE_BUILD_TYPE=${{matrix.build_type}} \
-                -DCMAKE_CXX_STANDARD=${{matrix.std}} \
+          cmake -Bbuild \
+                -H$GITHUB_WORKSPACE \
+                -DCMAKE_BUILD_TYPE=${{ matrix.build_type }} \
+                -DCMAKE_CXX_STANDARD=${{ matrix.std }} \
                 -DCMAKE_CXX_EXTENSIONS=OFF \
+                -DBUILD_SHARED_LIBS=${{ matrix.shared }} \
                 -DCATCH_DEVELOPMENT_BUILD=ON \
                 -DTEST_UINPUT=OFF \
                 -DTEST_DOCKER=OFF \
