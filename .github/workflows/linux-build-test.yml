@@ -22,7 +22,7 @@ jobs:
         run: |
           sudo apt-get update -y
           sudo apt-get install -y \
-              build-essential \
+              g++-11 \
               cmake \
               ninja-build \
               libboost-locale-dev libboost-thread-dev libboost-filesystem-dev libboost-log-dev libboost-stacktrace-dev \
@@ -43,6 +43,8 @@ jobs:
 
       - name: Configure build
         working-directory: ${{runner.workspace}}
+        env:
+          CXX: g++-11
         run: |
           cmake -Bbuild \
                 -H$GITHUB_WORKSPACE \
