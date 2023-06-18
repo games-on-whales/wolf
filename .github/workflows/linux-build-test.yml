@@ -11,23 +11,20 @@ jobs:
       matrix:
         cxx:
           - g++-10
-          - g++-11
+          - g++-12
           - clang++-11
           - clang++-14
-          - gcc-10
         build_type: [ Debug, Release ]
         std: [ 17 ]
         include:
           - cxx: g++-10
             other_pkgs: [ g++-10 ]
-          - cxx: g++-11
-            other_pkgs: [ g++-11 ]
+          - cxx: g++-12
+            other_pkgs: [ g++-12 ]
           - cxx: clang++-11
             other_pkgs: [ clang-11 ]
           - cxx: clang++-14
             other_pkgs: [ clang-14 ]
-          - cxx: g++-10
-            other_pkgs: [ gcc-10 ]
 
 
     steps:
