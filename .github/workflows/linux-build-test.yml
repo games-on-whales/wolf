@@ -3,17 +3,13 @@ name: Linux build and test
 
 on:
   push:
-    paths:
-      - "src"
-      - "tests"
-      - "cmake"
-      - "**/CMakeLists.txt"
+    paths-ignore:
+      - "docs"
+      - "docker"
   pull_request:
     paths:
-      - "src"
-      - "tests"
-      - "cmake"
-      - "**/CMakeLists.txt"
+      - "docs"
+      - "docker"
 
 jobs:
   test:

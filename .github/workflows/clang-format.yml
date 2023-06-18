@@ -2,17 +2,15 @@ name: Run clang-format Linter
 
 on:
   push:
-    paths:
-      - "src"
-      - "tests"
-      - "cmake"
-      - "**/CMakeLists.txt"
+    paths-ignore:
+      - "docs"
+      - "docker"
+      - ".github"
   pull_request:
     paths:
-      - "src"
-      - "tests"
-      - "cmake"
-      - "**/CMakeLists.txt"
+      - "docs"
+      - "docker"
+      - ".github"
 
 jobs:
   build:
