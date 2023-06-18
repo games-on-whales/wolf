@@ -48,11 +48,9 @@ jobs:
         run: |
           cmake -Bbuild \
                 -H$GITHUB_WORKSPACE \
-                -DCMAKE_BUILD_TYPE=Release \
+                -DCMAKE_BUILD_TYPE=Debug \
                 -DCMAKE_CXX_EXTENSIONS=OFF \
                 -DCMAKE_CXX_STANDARD=17 \
-                -DCMAKE_CXX_EXTENSIONS=OFF \
-                -DCATCH_DEVELOPMENT_BUILD=ON \
                 -DTEST_UINPUT=ON \
                 -DTEST_DOCKER=ON \
                 -DLINK_RUST_WAYLAND=ON \
