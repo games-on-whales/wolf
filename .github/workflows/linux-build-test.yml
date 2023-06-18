@@ -12,6 +12,61 @@ on:
       - "docker"
 
 jobs:
+  test-arm:
+    timeout-minutes: 30
+    runs-on: [ self-hosted, ARM64 ] # self-hosted, using Oracle free tier instance
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Prepare environment
+        run: |
+          sudo apt-get update -y
+          sudo apt-get install -y \
+              build-essential \
+              cmake \
+              ninja-build \
+              libboost-locale-dev libboost-thread-dev libboost-filesystem-dev libboost-log-dev libboost-stacktrace-dev \
+              libssl-dev \
+              libgstreamer1.0-dev libgstreamer-plugins-base1.0-dev \
+              libwayland-dev libwayland-server0 libinput-dev libxkbcommon-dev libgbm-dev \
+              libcurl4-openssl-dev \
+              libpulse-dev \
+              libevdev-dev \
+              libudev-dev \
+              libdrm-dev \
+              libpci-dev
+
+      - name: Setup Rust
+        uses: ATiltedTree/setup-rust@v1
+        with:
+          rust-version: stable
+
+      - name: Configure build
+        working-directory: ${{runner.workspace}}
+        run: |
+          cmake -Bbuild \
+                -H$GITHUB_WORKSPACE \
+                -DCMAKE_BUILD_TYPE=Release \
+                -DCMAKE_CXX_EXTENSIONS=OFF \
+                -DCMAKE_CXX_STANDARD=17 \
+                -DCMAKE_CXX_EXTENSIONS=OFF \
+                -DCATCH_DEVELOPMENT_BUILD=ON \
+                -DTEST_UINPUT=ON \
+                -DTEST_DOCKER=ON \
+                -DLINK_RUST_WAYLAND=ON \
+                -DTEST_RUST_WAYLAND=OFF \
+                -DTEST_NVIDIA=OFF \
+                -DCARGO_TARGET_BUILD=aarch64-unknown-linux-gnu \
+                -G Ninja
+
+      - name: Build tests + lib
+        working-directory: ${{runner.workspace}}/build
+        run: ninja -j 4 wolftests
+
+      - name: Run tests
+        working-directory: ${{runner.workspace}}/build/tests
+        run: ./wolftests
+
   test:
     runs-on: ubuntu-22.04
     strategy:

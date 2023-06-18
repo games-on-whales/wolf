@@ -3,8 +3,10 @@
 .Build dependencies
 [source,bash]
 ....
-apt install -y ninja-build cmake clang libboost-locale-dev libboost-thread-dev libboost-filesystem-dev libboost-log-dev libboost-stacktrace-dev libssl-dev libgstreamer1.0-dev  libgstreamer-plugins-base1.0-dev libevdev-dev libdrm-dev libpci-dev
+apt install -y git ninja-build cmake clang libboost-locale-dev libboost-thread-dev libboost-filesystem-dev libboost-log-dev libboost-stacktrace-dev libssl-dev libgstreamer1.0-dev  libgstreamer-plugins-base1.0-dev libevdev-dev libdrm-dev libpci-dev libinput-dev libxkbcommon-dev libgbm-dev libpulse-dev libcurl4-openssl-dev
 ....
+
+Install Rust following the https://www.rust-lang.org/tools/install[official docs] or avoid building our custom compositor by passing `-DLINK_RUST_WAYLAND=OFF` to cmake.
 
 .Compile
 [source,bash]
