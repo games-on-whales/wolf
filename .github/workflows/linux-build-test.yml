@@ -47,6 +47,7 @@ jobs:
           CXX: g++-11
         run: |
           cmake -Bbuild \
+                -H$GITHUB_WORKSPACE \
                 -DCMAKE_BUILD_TYPE=Release \
                 -DCMAKE_CXX_EXTENSIONS=OFF \
                 -DCMAKE_CXX_STANDARD=17 \
