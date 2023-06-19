@@ -22,7 +22,7 @@ It's made from the ground up with the following primary goals:
     - Example: stream encoding on iGPU whilst gaming on GPU
 - Provide low latency video and audio stream with full support for gamepads
 - Linux and Docker first: run your games with low privileges in containers (based
-  on https://github.com/games-on-whales/gow[Games On Whales])
+  on [Games On Whales](https://github.com/games-on-whales/gow))
 - Mostly hackable, just edit the config file to modify encoding pipelines, GPU settings or Docker/Podman low level
   details
 
