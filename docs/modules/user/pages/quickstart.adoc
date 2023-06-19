@@ -22,7 +22,7 @@ docker run \
     -e HOST_APPS_STATE_FOLDER=/etc/wolf \
     -v /etc/wolf/wolf:/wolf/cfg \
     -v /var/run/docker.sock:/var/run/docker.sock:rw \
-    --device /dev/dri/
+    --device /dev/dri/ \
     --device /dev/uinput \
     --device-cgroup-rule "c 13:* rmw" \
     -v /dev/shm:/dev/shm:rw \
