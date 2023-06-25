@@ -1,0 +1,89 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<!-- Created with Inkscape (http://www.inkscape.org/) -->
+
+<svg
+   width="800"
+   height="800"
+   viewBox="0 0 220 220"
+   style="background-color: black;"
+   version="1.1"
+   id="svg5"
+   inkscape:version="1.2.2 (732a01da63, 2022-12-09)"
+   sodipodi:docname="wolf-logo.svg"
+   xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape"
+   xmlns:sodipodi="http://sodipodi.sourceforge.net/DTD/sodipodi-0.dtd"
+   xmlns="http://www.w3.org/2000/svg"
+   xmlns:svg="http://www.w3.org/2000/svg">
+  <sodipodi:namedview
+     id="namedview7"
+     pagecolor="#505050"
+     bordercolor="#eeeeee"
+     borderopacity="1"
+     inkscape:showpageshadow="0"
+     inkscape:pageopacity="0"
+     inkscape:pagecheckerboard="0"
+     inkscape:deskcolor="#505050"
+     inkscape:document-units="mm"
+     showgrid="false"
+     inkscape:zoom="1"
+     inkscape:cx="400"
+     inkscape:cy="400"
+     inkscape:window-width="800"
+     inkscape:window-height="800"
+     inkscape:window-x="0"
+     inkscape:window-y="0"
+     inkscape:window-maximized="1"
+     inkscape:current-layer="layer1" />
+  <defs
+     id="defs2">
+    <mask
+       maskUnits="userSpaceOnUse"
+       id="wolf-mask">
+
+      <rect id="wolf-background"
+         width="100%"
+         height="100%"
+         fill="#ffffff"
+         x="0"
+         y="0"
+         style="display:inline" />
+      <path
+         fill="#000000"
+         d="m 17.5757,82.38172 c 14.227046,-9.75078 53.995414,-11.88019 34.591351,-12.75061 16.282728,-3.03472 24.338465,-4.85061 34.93049,-8.08372 23.315919,-0.52544 20.602909,6.49164 24.977089,4.4915 4.79339,-2.19185 44.50261,-13.79909 52.99626,-22.731587 1.83198,-1.226027 6.08619,-6.130147 9.58357,0 3.49739,4.55382 5.69195,8.373168 2.69419,17.480817 -0.66617,3.32779 -2.30794,4.30612 -2.30794,4.30612 l -0.64942,7.2038 -4.61585,-4.07606 c 0,0 14.69446,-4.76025 -13.33317,15.05536 10.92802,-5.76672 14.6892,-6.47831 14.6892,-6.47831 l -2.95736,-6.63069 7.38501,5.76741 c 0,0 4.72034,-1.21873 7.38501,-0.69328 2.66467,0 5.88614,10.74405 5.38651,17.92508 -20.29252,27.48227 -35.10529,18.82657 -46.42883,54.22032 0.25773,-10.86166 -7.31428,0.89339 -12.4752,11.36198 1.1983,-9.59474 -4.41208,-7.17876 -9.1636,15.97007 -6.84922,-20.02399 -3.47176,3.61527 -6.188,18.80124 -1.93606,-5.50872 -5.43253,-2.78778 -10.03684,11.17685 -8.03022,24.35521 -95.200126,14.31652 -95.200126,14.31652 l -31.519395,-90.47147 c 0,0 43.039754,-27.33439 61.859035,-39.94498 C 21.024574,85.79573 24.903561,89.21245 17.5757,82.38172 Z"
+         id="wolf"
+         inkscape:label="wolf"
+         sodipodi:nodetypes="cccsccccccccccccccccscccc" />
+    </mask>
+    <filter
+       id="wolf-mask_inverse"
+       inkscape:label="wolf-mask-effect"
+       style="color-interpolation-filters:sRGB"
+       height="220"
+       width="220"
+       x="0"
+       y="0">
+      <feColorMatrix
+         id="wolf-mask-effect_primitive1"
+         values="1"
+         type="saturate"
+         result="fbSourceGraphic" />
+      <feColorMatrix
+         id="wolf-mask-effect_primitive2"
+         values="-1 0 0 0 1 0 -1 0 0 1 0 0 -1 0 1 0 0 0 1 0 "
+         in="fbSourceGraphic" />
+    </filter>
+  </defs>
+  <g
+     inkscape:label="Main"
+     inkscape:groupmode="layer"
+     id="main">
+    <circle fill="#ffffff"
+       id="moon"
+       mask="url(#wolf-mask)"
+       inkscape:path-effect="#wolf-mask"
+       cx="110"
+       cy="110"
+       r="100"
+       style="display:inline" />
+  </g>
+</svg>
