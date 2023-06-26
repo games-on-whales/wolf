@@ -4,6 +4,7 @@ using Catch::Matchers::Contains;
 using Catch::Matchers::Equals;
 
 #include <docker/docker.hpp>
+#include <runners/docker.hpp>
 
 TEST_CASE("Docker API", "DOCKER") {
   docker::init();
@@ -46,4 +47,53 @@ TEST_CASE("Docker API", "DOCKER") {
 
   REQUIRE(!docker_api.remove_by_id(first_container->id)); // This container doesn't exist anymore
   REQUIRE(docker_api.remove_by_id(second_container->id));
+}
+
+TEST_CASE("Docker TOML", "DOCKER") {
+  docker::init();
+  docker::DockerAPI docker_api;
+
+  auto event_bus = std::make_shared<dp::event_bus>();
+  std::string toml_cfg = R"(
+
+    type = "docker"
+    name = "WolfTestHelloWorld"
+    image = "hello-world"
+    mounts = [
+      "/tmp/sockets:/tmp/.X11-unix/",
+      "/tmp/sockets:/run/user/1000/pulse/:ro"
+    ]
+    devices = [
+      "/dev/input/mice:/dev/input/mice:ro",
+      "/a/b/c:/d/e/f",
+      "/tmp:/tmp:rw",
+    ]
+    ports = [
+      "1234:1235",
+      "1234:1235:udp"
+    ]
+    env = [
+      "LOG_LEVEL=info"
+    ]
+    base_create_json = "{'HostConfig': {}}"
+
+    )";
+  std::istringstream is(toml_cfg, std::ios_base::binary | std::ios_base::in);
+  auto container = docker::RunDocker::from_toml(event_bus, toml::parse(is, "std::string")).serialise();
+
+  REQUIRE_THAT(container.at("type").as_string(), Equals("docker"));
+  REQUIRE_THAT(container.at("name").as_string(), Equals("WolfTestHelloWorld"));
+  REQUIRE_THAT(container.at("image").as_string(), Equals("hello-world"));
+
+  REQUIRE_THAT(toml::get<std::vector<std::string>>(container.at("ports")),
+               Equals(std::vector<std::string>{"1234:1235/tcp", "1234:1235/udp"}));
+  REQUIRE_THAT(toml::get<std::vector<std::string>>(container.at("devices")),
+               Equals(std::vector<std::string>{
+                   "/dev/input/mice:/dev/input/mice:ro",
+                   "/a/b/c:/d/e/f:mrw",
+                   "/tmp:/tmp:rw",
+               }));
+  REQUIRE_THAT(toml::get<std::vector<std::string>>(container.at("env")),
+               Equals(std::vector<std::string>{"LOG_LEVEL=info"}));
+  REQUIRE_THAT(container.at("base_create_json").as_string(), Equals("{'HostConfig': {}}"));
 }

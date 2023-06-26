@@ -21,34 +21,50 @@ class RunDocker : public state::Runner {
 public:
   static RunDocker from_toml(std::shared_ptr<dp::event_bus> ev_bus, const toml::value &runner_obj) {
     std::vector<std::string> rec_mounts = toml::find_or<std::vector<std::string>>(runner_obj, "mounts", {});
-    std::vector<MountPoint> mounts = rec_mounts                                  //
-                                     | transform([](const std::string &mount) {  //
-                                         auto splits = utils::split(mount, ':'); //
-                                         return MountPoint{.source = to_string(splits[0]),
-                                                           .destination = to_string(splits[1]),
-                                                           .mode = to_string(splits[2])}; //
-                                       })                                                 //
-                                     | ranges::to_vector;                                 //
+    std::vector<MountPoint> mounts =
+        rec_mounts                                  //
+        | transform([](const std::string &mount) {  //
+            auto splits = utils::split(mount, ':'); //
+            if (splits.size() < 2) {
+              throw std::runtime_error(fmt::format("[TOML] Docker, invalid mount point definition: {}", mount));
+            }
+            return MountPoint{.source = to_string(splits.at(0)),
+                              .destination = to_string(splits.at(1)),
+                              .mode = to_string(splits.size() > 2 ? splits.at(2) : "rw")}; //
+          })                                                                               //
+        | ranges::to_vector;                                                               //
 
     std::vector<std::string> rec_ports = toml::find_or<std::vector<std::string>>(runner_obj, "ports", {});
-    std::vector<Port> ports = rec_ports                                 //
-                              | transform([](const std::string &port) { //
-                                  auto splits = utils::split(port, ':');
-                                  return Port{.private_port = std::stoi(to_string(splits[0])),
-                                              .public_port = std::stoi(to_string(splits[1])),
-                                              .type = splits[2] == "tcp" ? TCP : UDP};
-                                }) //
-                              | ranges::to_vector;
+    std::vector<Port> ports =
+        rec_ports                                 //
+        | transform([](const std::string &port) { //
+            auto splits = utils::split(port, ':');
+            if (splits.size() < 2) {
+              throw std::runtime_error(fmt::format("[TOML] Docker, invalid port definition: {}", port));
+            }
+            PortType port_type = TCP;
+            if (splits.size() > 2 && to_string(splits.at(2)) == "udp") {
+              port_type = UDP;
+            }
+            return Port{.private_port = std::stoi(to_string(splits.at(0))),
+                        .public_port = std::stoi(to_string(splits.at(1))),
+                        .type = port_type};
+          }) //
+        | ranges::to_vector;
 
     std::vector<std::string> rec_devices = toml::find_or<std::vector<std::string>>(runner_obj, "devices", {});
-    std::vector<Device> devices = rec_devices                                 //
-                                  | transform([](const std::string &mount) {  //
-                                      auto splits = utils::split(mount, ':'); //
-                                      return Device{.path_on_host = to_string(splits[0]),
-                                                    .path_in_container = to_string(splits[1]),
-                                                    .cgroup_permission = to_string(splits[2])}; //
-                                    })                                                          //
-                                  | ranges::to_vector;                                          //
+    std::vector<Device> devices =
+        rec_devices                                 //
+        | transform([](const std::string &mount) {  //
+            auto splits = utils::split(mount, ':'); //
+            if (splits.size() < 2) {
+              throw std::runtime_error(fmt::format("[TOML] Docker, invalid device definition: {}", mount));
+            }
+            return Device{.path_on_host = to_string(splits.at(0)),
+                          .path_in_container = to_string(splits.at(1)),
+                          .cgroup_permission = to_string(splits.size() > 2 ? splits.at(2) : "mrw")}; //
+          })                                                                                         //
+        | ranges::to_vector;                                                                         //
 
     auto default_socket = utils::get_env("WOLF_DOCKER_SOCKET", "/var/run/docker.sock");
     auto docker_socket = toml::find_or<std::string>(runner_obj, "docker_socket", default_socket);
@@ -57,7 +73,6 @@ public:
                      toml::find_or<std::string>(runner_obj, "base_create_json", R"({
                         "HostConfig": {
                           "IpcMode": "host",
-                          "DeviceRequests": [{"Driver":"","Count":-1,"Capabilities":[["gpu"]]}]
                         }
                       })"),
                      Container{.id = "",
@@ -86,7 +101,8 @@ public:
              container.mounts | transform([](const auto &el) { return fmt::format("{}", el); }) | ranges::to_vector},
             {"devices",
              container.devices | transform([](const auto &el) { return fmt::format("{}", el); }) | ranges::to_vector},
-            {"env", container.env}};
+            {"env", container.env},
+            {"base_create_json", base_create_json}};
   }
 
 protected:
