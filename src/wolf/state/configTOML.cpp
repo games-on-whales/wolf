@@ -172,7 +172,16 @@ Config load_or_default(const std::string &source, const std::shared_ptr<dp::even
     cfg = v1_to_v2(cfg, source);
   }
 
-  auto uuid = toml::find_or(cfg, "uuid", gen_uuid());
+  std::string uuid;
+  if (cfg.contains("uuid")) {
+    uuid = toml::find(cfg, "uuid").as_string();
+  } else {
+    logs::log(logs::warning, "No uuid found, generating a new one");
+    uuid = gen_uuid();
+    cfg["uuid"] = uuid;
+    write(cfg, source);
+  }
+
   auto hostname = toml::find_or(cfg, "hostname", "Wolf");
 
   GstVideoCfg default_gst_video_settings = toml::find<GstVideoCfg>(cfg, "gstreamer", "video");
