@@ -134,4 +134,4 @@ std::string get_server_name(const std::shared_ptr<Server> &server) {
   return pa_context_get_server(server->ctx);
 }
 
-} // namespace audio
+} // namespace wolf::core::audio

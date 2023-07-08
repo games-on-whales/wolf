@@ -1,6 +1,6 @@
 #include <boost/json/src.hpp>
-#include <curl/curl.h>
 #include <core/docker.hpp>
+#include <curl/curl.h>
 #include <docker/formatters.hpp>
 #include <docker/json_formatters.hpp>
 #include <helpers/logger.hpp>
@@ -321,4 +321,4 @@ DockerAPI::get_logs(std::string_view id, bool get_stdout, bool get_stderr, int s
   return "";
 }
 
-} // namespace docker
+} // namespace wolf::core::docker

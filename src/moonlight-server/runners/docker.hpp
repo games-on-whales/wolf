@@ -184,4 +184,4 @@ void RunDocker::run(std::size_t session_id,
   }
 }
 
-} // namespace docker
+} // namespace wolf::core::docker

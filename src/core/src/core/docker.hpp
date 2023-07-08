@@ -148,4 +148,4 @@ public:
                        bool timestamps = false);
 };
 
-} // namespace docker
+} // namespace wolf::core::docker

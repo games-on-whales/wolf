@@ -1,12 +1,12 @@
 #include <fstream>
+#include <gst/gstelementfactory.h>
+#include <gst/gstregistry.h>
 #include <range/v3/view.hpp>
 #include <runners/docker.hpp>
 #include <runners/process.hpp>
 #include <state/config.hpp>
 #include <toml.hpp>
 #include <utility>
-#include <gst/gstregistry.h>
-#include <gst/gstelementfactory.h>
 
 namespace state {
 

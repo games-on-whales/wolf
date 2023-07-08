@@ -67,4 +67,4 @@ struct VirtualDevices {
   immer::array<controller::Controller> controllers{};
 };
 
-} // namespace input
+} // namespace wolf::core::input

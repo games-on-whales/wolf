@@ -75,4 +75,4 @@ static const std::map<short, KEY_MAP> key_mappings = {
     {0xDE, {KEY_APOSTROPHE, 0x70034}}, {0xE2, {KEY_102ND, 0x70064}},
 };
 
-} // namespace input::keyboard
+} // namespace wolf::core::input::keyboard
