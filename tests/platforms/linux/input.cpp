@@ -3,13 +3,13 @@
 #include <boost/locale.hpp>
 #include <chrono>
 #include <fcntl.h>
-#include <platforms/linux/keyboard.hpp>
-#include <platforms/linux/uinput.hpp>
+#include <platforms/linux/uinput/keyboard.hpp>
+#include <platforms/linux/uinput/uinput.hpp>
 #include <thread>
 
 using Catch::Matchers::Equals;
 
-using namespace input;
+using namespace wolf::core::input;
 using namespace std::string_literals;
 
 void link_devnode(libevdev *dev, libevdev_uinput *dev_input) {

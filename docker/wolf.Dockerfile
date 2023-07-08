@@ -44,9 +44,9 @@ RUN --mount=type=cache,target=/cache/ccache \
     -DBoost_USE_STATIC_LIBS=ON \
     -DBUILD_TESTING=OFF \
     -G Ninja && \
-    ninja -C $CMAKE_BUILD_DIR && \
+    ninja -C $CMAKE_BUILD_DIR wolf && \
     # We have to copy out the built executable because this will only be available inside the buildkit cache
-    cp $CMAKE_BUILD_DIR/src/wolf/wolf /wolf/wolf
+    cp $CMAKE_BUILD_DIR/src/moonlight-server/wolf /wolf/wolf
 
 ########################################################
 FROM $BASE_IMAGE AS runner

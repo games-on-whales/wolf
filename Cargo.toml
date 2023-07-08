@@ -1,5 +1,5 @@
 [workspace]
-members = ["src/rust/gst-wayland-display", "src/rust/gst-plugin-wayland-display"]
+members = ["src/core/rust/gst-wayland-display", "src/core/rust/gst-plugin-wayland-display"]
 
 [workspace.dependencies]
 gst = { version = "0.20", package = "gstreamer", features = ["v1_18"] }
