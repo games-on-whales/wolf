@@ -1,8 +1,8 @@
 #pragma once
 
-#include <helpers/logger.hpp>
 #include <gst-plugin/gstrtpmoonlightpay_audio.hpp>
 #include <gst-plugin/utils.hpp>
+#include <helpers/logger.hpp>
 #include <moonlight/data-structures.hpp>
 
 namespace audio {
@@ -23,7 +23,6 @@ struct AudioFECPacket {
   moonlight::RTP_PACKET rtp;
   AudioFECHeader fec_header;
 };
-
 
 constexpr auto RTP_HEADER_SIZE = sizeof(AudioRTPHeaders);
 constexpr auto FEC_HEADER_SIZE = sizeof(AudioFECPacket);

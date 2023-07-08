@@ -1,7 +1,7 @@
 #include <gstreamer-1.0/gst/gstbuffer.h>
 #include <gstreamer-1.0/gst/video/video-info.h>
 
-typedef void* WaylandDisplay;
+typedef void *WaylandDisplay;
 
 WaylandDisplay display_init(const char *render_node);
 void display_finish(WaylandDisplay dpy);

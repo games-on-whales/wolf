@@ -26,4 +26,4 @@ std::string get_server_name(const std::shared_ptr<Server> &server) {
   return "";
 }
 
-} // namespace audio
+} // namespace wolf::core::audio

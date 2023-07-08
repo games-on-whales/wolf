@@ -39,4 +39,4 @@ void disconnect(const std::shared_ptr<Server> &server);
 
 std::string get_server_name(const std::shared_ptr<Server> &server);
 
-} // namespace audio
+} // namespace wolf::core::audio

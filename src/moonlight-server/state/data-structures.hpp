@@ -1,15 +1,15 @@
 #pragma once
 
-#include <core/audio.hpp>
 #include <boost/asio.hpp>
 #include <chrono>
+#include <core/audio.hpp>
+#include <core/input.hpp>
 #include <eventbus/event_bus.hpp>
 #include <immer/array.hpp>
 #include <immer/atom.hpp>
 #include <immer/box.hpp>
 #include <immer/map.hpp>
 #include <immer/vector.hpp>
-#include <core/input.hpp>
 #include <moonlight/control.hpp>
 #include <moonlight/data-structures.hpp>
 #include <openssl/x509.h>

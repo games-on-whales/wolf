@@ -1,7 +1,7 @@
+#include <core/virtual-display.hpp>
 #include <gst/app/gstappsrc.h>
 #include <helpers/logger.hpp>
 #include <immer/vector_transient.hpp>
-#include <core/virtual-display.hpp>
 
 extern "C" {
 #include <waylanddisplay.h>
@@ -92,4 +92,4 @@ static void destroy(WaylandState *w_state) {
   display_finish(w_state->display);
 }
 
-} // namespace streaming
+} // namespace wolf::core::virtual_display
