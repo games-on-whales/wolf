@@ -35,7 +35,12 @@ RTSP_PACKET ok_msg(int sequence_number,
   };
 }
 
-RTSP_PACKET describe(const RTSP_PACKET &req, const state::StreamSession &session) {
+// Additional feature supports
+constexpr uint32_t FS_PEN_TOUCH_EVENTS = 0x01;
+constexpr uint32_t FS_CONTROLLER_TOUCH_EVENTS = 0x02;
+
+RTSP_PACKET
+describe(const RTSP_PACKET &req, const state::StreamSession &session) {
   std::vector<std::pair<std::string, std::string>> payloads;
   if (session.display_mode.hevc_supported) {
     payloads.push_back({"", "sprop-parameter-sets=AAAAAU"});
@@ -54,6 +59,8 @@ RTSP_PACKET describe(const RTSP_PACKET &req, const state::StreamSession &session
                                   session.audio_mode.streams,
                                   session.audio_mode.coupled_streams,
                                   audio_speakers)});
+
+  payloads.push_back(a, fmt::format("x-ss-general.featureFlags: {}", FS_PEN_TOUCH_EVENTS | FS_CONTROLLER_TOUCH_EVENTS));
 
   return ok_msg(req.seq_number, {}, payloads);
 }
