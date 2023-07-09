@@ -40,7 +40,7 @@ enet_host create_host(std::string_view host, std::uint16_t port, std::size_t pee
   enet_address_set_host(&addr, host.data());
   enet_address_set_port(&addr, port);
 
-  auto enet_host = enet_host_create(AF_INET, &addr, peers, 1, 0, 0);
+  auto enet_host = enet_host_create(AF_INET, &addr, peers, 0, 0, 0);
   if (enet_host == nullptr) {
     logs::log(logs::error, "An error occurred while trying to create an ENet server host.");
   }
