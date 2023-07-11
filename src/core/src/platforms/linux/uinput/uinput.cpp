@@ -7,6 +7,16 @@
  *
  * You can debug your system using `evemu-describe`, `evemu-record` and `udevadm monitor`
  * (they can be installed using: `apt install -y evemu-tools`)
+ *
+ * For controllers there's a set of tools in the `joystick` package:
+ * - ffcfstress  - force-feedback stress test
+ * - ffmvforce   - force-feedback orientation test
+ * - ffset       - force-feedback configuration tool
+ * - fftest      - general force-feedback test
+ * - jstest      - joystick test
+ * - jscal       - joystick calibration tool
+ *
+ * For force feedback see: https://www.kernel.org/doc/html/v4.15/input/ff.html
  */
 
 #include "uinput.hpp"
@@ -31,6 +41,32 @@ using namespace wolf::core::api;
 
 constexpr int ABS_MAX_WIDTH = 1920;
 constexpr int ABS_MAX_HEIGHT = 1080;
+
+std::vector<libevdev_event_ptr> fetch_events(const libevdev_ptr &dev, int max_events) {
+  std::vector<libevdev_event_ptr> events = {};
+  input_event evt = {};
+  int read_events = 1;
+  int ret = libevdev_next_event(dev.get(), LIBEVDEV_READ_FLAG_NORMAL, &evt);
+  if (ret == LIBEVDEV_READ_STATUS_SUCCESS) { // In normal mode libevdev_next_event returns SUCCESS and returns the event
+    events.push_back(std::make_shared<input_event>(evt));
+  }
+  // If the current event is an EV_SYN SYN_DROPPED event, libevdev_next_event returns LIBEVDEV_READ_STATUS_SYNC and ev
+  // is set to the EV_SYN event The caller should now call this function with the LIBEVDEV_READ_FLAG_SYNC flag set, to
+  // get the set of events that make up the device state delta libevdev_next_event returns LIBEVDEV_READ_STATUS_SYNC for
+  // each event part of that delta, until it returns -EAGAIN once all events have been synced
+  while (ret >= 0 && read_events < max_events) {
+    if (ret == LIBEVDEV_READ_STATUS_SYNC) {
+      ret = libevdev_next_event(dev.get(), LIBEVDEV_READ_FLAG_SYNC, &evt);
+    } else if (ret == LIBEVDEV_READ_STATUS_SUCCESS) {
+      ret = libevdev_next_event(dev.get(), LIBEVDEV_READ_FLAG_NORMAL, &evt);
+    }
+    if (evt.type != EV_SYN) { // We want to return all events apart from EV_SYN
+      events.push_back(std::make_shared<input_event>(evt));
+    }
+    read_events++;
+  }
+  return events;
+}
 
 namespace mouse {
 
@@ -317,17 +353,40 @@ std::optional<Action> keyboard_handle(libevdev_uinput *keyboard, const data::KEY
 
 namespace controller {
 
-std::optional<libevdev_uinput *> create_controller(libevdev *dev) {
+static void set_controller_type(libevdev *dev, data::CONTROLLER_TYPE type) {
+  switch (type) {
+  case data::UNKNOWN: // Unknown defaults to XBOX
+  case data::XBOX:
+    // Xbox one controller
+    // https://github.com/torvalds/linux/blob/master/drivers/input/joystick/xpad.c#L147
+    libevdev_set_name(dev, "Wolf X-Box One (virtual) pad");
+    libevdev_set_id_vendor(dev, 0x045E);
+    libevdev_set_id_product(dev, 0x02D1);
+    break;
+  case data::PS:
+    // Sony PS5 controller
+    // https://github.com/torvalds/linux/blob/master/drivers/hid/hid-ids.h#L1182
+    libevdev_set_name(dev, "Wolf PS5 (virtual) pad");
+    libevdev_set_id_vendor(dev, 0x054c);
+    libevdev_set_id_product(dev, 0x0ce6);
+    break;
+  case data::NINTENDO:
+    // Nintendo switch pro controller
+    // https://github.com/torvalds/linux/blob/master/drivers/hid/hid-ids.h#L981
+    libevdev_set_name(dev, "Wolf Nintendo (virtual) pad");
+    libevdev_set_id_vendor(dev, 0x057e);
+    libevdev_set_id_product(dev, 0x2009);
+    break;
+  }
+}
+
+std::optional<libevdev_uinput *> create_controller(libevdev *dev, data::CONTROLLER_TYPE type, uint8_t capabilities) {
   libevdev_uinput *uidev;
 
   libevdev_set_uniq(dev, "Wolf gamepad");
-  libevdev_set_name(dev, "Wolf X-Box One (virtual) pad");
-  // Vendor and product are very important
-  // see the full list at: https://github.com/torvalds/linux/blob/master/drivers/input/joystick/xpad.c#L147
-  libevdev_set_id_product(dev, 0x02D1);
-  libevdev_set_id_vendor(dev, 0x045E);
-  libevdev_set_id_bustype(dev, BUS_USB);
+  set_controller_type(dev, type);
   libevdev_set_id_version(dev, 0xAB00);
+  libevdev_set_id_bustype(dev, BUS_USB);
 
   libevdev_enable_event_type(dev, EV_KEY);
   libevdev_enable_event_code(dev, EV_KEY, BTN_WEST, nullptr);
@@ -342,30 +401,33 @@ std::optional<libevdev_uinput *> create_controller(libevdev *dev) {
   libevdev_enable_event_code(dev, EV_KEY, BTN_MODE, nullptr);
   libevdev_enable_event_code(dev, EV_KEY, BTN_START, nullptr);
 
-  input_absinfo stick{0, -32768, 32767, 16, 128, 0};
-  input_absinfo trigger{0, 0, 255, 0, 0, 0};
-  input_absinfo dpad{0, -1, 1, 0, 0, 0};
   libevdev_enable_event_type(dev, EV_ABS);
+
+  input_absinfo dpad{0, -1, 1, 0, 0, 0};
   libevdev_enable_event_code(dev, EV_ABS, ABS_HAT0Y, &dpad);
   libevdev_enable_event_code(dev, EV_ABS, ABS_HAT0X, &dpad);
-  libevdev_enable_event_code(dev, EV_ABS, ABS_Z, &trigger);
-  libevdev_enable_event_code(dev, EV_ABS, ABS_RZ, &trigger);
+
+  input_absinfo stick{0, -32768, 32767, 16, 128, 0};
   libevdev_enable_event_code(dev, EV_ABS, ABS_X, &stick);
   libevdev_enable_event_code(dev, EV_ABS, ABS_RX, &stick);
   libevdev_enable_event_code(dev, EV_ABS, ABS_Y, &stick);
   libevdev_enable_event_code(dev, EV_ABS, ABS_RY, &stick);
 
-  // NOTE: Don't comment this in, without actually supporting rumble.
-  // Otherwise this will cause frozen processes.
-  /*
-  libevdev_enable_event_type(dev, EV_FF);
-  libevdev_enable_event_code(dev, EV_FF, FF_RUMBLE, nullptr);
-  libevdev_enable_event_code(dev, EV_FF, FF_CONSTANT, nullptr);
-  libevdev_enable_event_code(dev, EV_FF, FF_PERIODIC, nullptr);
-  libevdev_enable_event_code(dev, EV_FF, FF_SINE, nullptr);
-  libevdev_enable_event_code(dev, EV_FF, FF_RAMP, nullptr);
-  libevdev_enable_event_code(dev, EV_FF, FF_GAIN, nullptr);
-  */
+  if (capabilities & data::ANALOG_TRIGGERS) {
+    input_absinfo trigger{0, 0, 255, 0, 0, 0};
+    libevdev_enable_event_code(dev, EV_ABS, ABS_Z, &trigger);
+    libevdev_enable_event_code(dev, EV_ABS, ABS_RZ, &trigger);
+  }
+
+  if (capabilities & data::RUMBLE) {
+    libevdev_enable_event_type(dev, EV_FF);
+    libevdev_enable_event_code(dev, EV_FF, FF_RUMBLE, nullptr);
+    libevdev_enable_event_code(dev, EV_FF, FF_CONSTANT, nullptr);
+    libevdev_enable_event_code(dev, EV_FF, FF_PERIODIC, nullptr);
+    libevdev_enable_event_code(dev, EV_FF, FF_SINE, nullptr);
+    libevdev_enable_event_code(dev, EV_FF, FF_RAMP, nullptr);
+    libevdev_enable_event_code(dev, EV_FF, FF_GAIN, nullptr);
+  }
 
   auto err = libevdev_uinput_create_from_device(dev, LIBEVDEV_UINPUT_OPEN_MANAGED, &uidev);
   if (err != 0) {
@@ -521,7 +583,8 @@ InputReady setup_handlers(std::size_t session_id, const std::shared_ptr<dp::even
   auto controllers = immer::array<controller::Controller>().transient();
   for (int i = 0; i < 4; i++) { // TODO: Make max controller configurable
     libevdev_ptr controller_dev(libevdev_new(), ::libevdev_free);
-    if (auto controller_el = controller::create_controller(controller_dev.get())) {
+    uint8_t controller_caps = data::ANALOG_TRIGGERS;
+    if (auto controller_el = controller::create_controller(controller_dev.get(), data::PS, controller_caps)) {
       auto controller = controller::Controller{
           .uinput = {*controller_el, ::libevdev_uinput_destroy},
           .prev_pkt = std::make_shared<immer::atom<immer::box<data::CONTROLLER_MULTI_PACKET>>>(),
@@ -589,9 +652,9 @@ InputReady setup_handlers(std::size_t session_id, const std::shared_ptr<dp::even
                   keyboard_state->update([&kb_action](const immer::array<int> &key_codes) {
                     return key_codes.push_back(kb_action->linux_code);
                   });
-                } else { // Released key, remove it from the key_codes
+                } else {             // Released key, remove it from the key_codes
                   keyboard_state->update([&kb_action](const immer::array<int> &key_codes) {
-                    return key_codes                                        //
+                    return key_codes //
                            | ranges::views::filter([&kb_action](int code) { //
                                return code != kb_action->linux_code;        //
                              })                                             //
@@ -624,6 +687,20 @@ InputReady setup_handlers(std::size_t session_id, const std::shared_ptr<dp::even
               keyboard::paste_utf(v_devices->keyboard->get(), *txt_pkt);
             }
           }
+          case data::TOUCH:
+            break;
+          case data::PEN:
+            break;
+          case data::CONTROLLER_ARRIVAL:
+            break;
+          case data::CONTROLLER_TOUCH:
+            break;
+          case data::CONTROLLER_MOTION:
+            break;
+          case data::CONTROLLER_BATTERY:
+            break;
+          case data::HAPTICS:
+            break;
           }
         }
       });

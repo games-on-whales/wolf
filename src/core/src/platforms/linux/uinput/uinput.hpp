@@ -11,6 +11,15 @@ namespace wolf::core::input {
 
 using libevdev_ptr = std::shared_ptr<libevdev>;
 using libevdev_uinput_ptr = std::shared_ptr<libevdev_uinput>;
+using libevdev_event_ptr = std::shared_ptr<input_event>;
+
+/**
+ * Given a device will read all queued events available at this time up to max_events
+ * It'll automatically discard all EV_SYN events
+ *
+ * @returns a list of smart pointers of evdev input_event (empty when no events are available)
+ */
+std::vector<libevdev_event_ptr> fetch_events(const libevdev_ptr &dev, int max_events = 50);
 
 namespace mouse {
 
@@ -51,7 +60,7 @@ struct Controller {
   std::shared_ptr<immer::atom<immer::box<data::CONTROLLER_MULTI_PACKET>>> prev_pkt;
 };
 
-std::optional<libevdev_uinput *> create_controller(libevdev *dev);
+std::optional<libevdev_uinput *> create_controller(libevdev *dev, data::CONTROLLER_TYPE type, uint8_t capabilities);
 
 void controller_handle(libevdev_uinput *controller,
                        const data::CONTROLLER_MULTI_PACKET &ctrl_pkt,

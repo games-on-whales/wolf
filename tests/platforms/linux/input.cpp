@@ -24,12 +24,11 @@ void link_devnode(libevdev *dev, libevdev_uinput *dev_input) {
 TEST_CASE("uinput - keyboard", "UINPUT") {
   libevdev_ptr keyboard_dev(libevdev_new(), ::libevdev_free);
   libevdev_uinput_ptr keyboard_el = {keyboard::create_keyboard(keyboard_dev.get()).value(), ::libevdev_uinput_destroy};
-  struct input_event ev {};
 
   link_devnode(keyboard_dev.get(), keyboard_el.get());
 
-  auto rc = libevdev_next_event(keyboard_dev.get(), LIBEVDEV_READ_FLAG_NORMAL, &ev);
-  REQUIRE(rc == -EAGAIN);
+  auto events = fetch_events(keyboard_dev);
+  REQUIRE(events.empty());
 
   auto press_shift_key = data::KEYBOARD_PACKET{.key_code = boost::endian::native_to_little((short)0xA0)};
   press_shift_key.type = data::KEY_PRESS;
@@ -38,13 +37,11 @@ TEST_CASE("uinput - keyboard", "UINPUT") {
   REQUIRE(press_action->pressed);
   REQUIRE(press_action->linux_code == KEY_LEFTSHIFT);
 
-  rc = libevdev_next_event(keyboard_dev.get(), LIBEVDEV_READ_FLAG_NORMAL, &ev);
-  REQUIRE(rc == LIBEVDEV_READ_STATUS_SUCCESS);
-  REQUIRE_THAT(libevdev_event_type_get_name(ev.type), Equals("EV_KEY"));
-  REQUIRE_THAT(libevdev_event_code_get_name(ev.type, ev.code), Equals("KEY_LEFTSHIFT"));
-  REQUIRE(ev.value == 1);
-  rc = libevdev_next_event(keyboard_dev.get(), LIBEVDEV_READ_FLAG_NORMAL, &ev);
-  REQUIRE(rc == LIBEVDEV_READ_STATUS_SUCCESS);
+  events = fetch_events(keyboard_dev);
+  REQUIRE(events.size() == 1);
+  REQUIRE_THAT(libevdev_event_type_get_name(events[0]->type), Equals("EV_KEY"));
+  REQUIRE_THAT(libevdev_event_code_get_name(events[0]->type, events[0]->code), Equals("KEY_LEFTSHIFT"));
+  REQUIRE(events[0]->value == 1);
 
   auto release_shift_key = data::KEYBOARD_PACKET{.key_code = boost::endian::native_to_little((short)0xA0)};
   release_shift_key.type = data::KEY_RELEASE;
@@ -53,41 +50,35 @@ TEST_CASE("uinput - keyboard", "UINPUT") {
   REQUIRE(!release_action->pressed);
   REQUIRE(release_action->linux_code == KEY_LEFTSHIFT);
 
-  rc = libevdev_next_event(keyboard_dev.get(), LIBEVDEV_READ_FLAG_NORMAL, &ev);
-  REQUIRE(rc == LIBEVDEV_READ_STATUS_SUCCESS);
-  REQUIRE_THAT(libevdev_event_type_get_name(ev.type), Equals("EV_KEY"));
-  REQUIRE_THAT(libevdev_event_code_get_name(ev.type, ev.code), Equals("KEY_LEFTSHIFT"));
-  REQUIRE(ev.value == 0);
+  events = fetch_events(keyboard_dev);
+  REQUIRE(events.size() == 1);
+  REQUIRE_THAT(libevdev_event_type_get_name(events[0]->type), Equals("EV_KEY"));
+  REQUIRE_THAT(libevdev_event_code_get_name(events[0]->type, events[0]->code), Equals("KEY_LEFTSHIFT"));
+  REQUIRE(events[0]->value == 0);
 }
 
 TEST_CASE("uinput - mouse", "UINPUT") {
   libevdev_ptr mouse_dev(libevdev_new(), ::libevdev_free);
   libevdev_uinput_ptr mouse_el = {mouse::create_mouse(mouse_dev.get()).value(), ::libevdev_uinput_destroy};
-  struct input_event ev {};
 
   link_devnode(mouse_dev.get(), mouse_el.get());
 
-  auto rc = libevdev_next_event(mouse_dev.get(), LIBEVDEV_READ_FLAG_NORMAL, &ev);
-  REQUIRE(rc == -EAGAIN);
+  auto events = fetch_events(mouse_dev);
+  REQUIRE(events.empty());
 
   SECTION("Mouse move") {
     auto mv_packet = data::MOUSE_MOVE_REL_PACKET{.delta_x = 10, .delta_y = 20};
     mouse::move_mouse(mouse_el.get(), mv_packet);
 
-    rc = libevdev_next_event(mouse_dev.get(), LIBEVDEV_READ_FLAG_NORMAL, &ev);
-    REQUIRE(rc == LIBEVDEV_READ_STATUS_SUCCESS);
-    REQUIRE_THAT(libevdev_event_type_get_name(ev.type), Equals("EV_REL"));
-    REQUIRE_THAT(libevdev_event_code_get_name(ev.type, ev.code), Equals("REL_X"));
+    events = fetch_events(mouse_dev);
+    REQUIRE(events.size() == 2);
+    REQUIRE_THAT(libevdev_event_type_get_name(events[0]->type), Equals("EV_REL"));
+    REQUIRE_THAT(libevdev_event_code_get_name(events[0]->type, events[0]->code), Equals("REL_X"));
     REQUIRE(10 == mv_packet.delta_x);
 
-    rc = libevdev_next_event(mouse_dev.get(), LIBEVDEV_READ_FLAG_NORMAL, &ev);
-    REQUIRE(rc == LIBEVDEV_READ_STATUS_SUCCESS);
-    REQUIRE_THAT(libevdev_event_type_get_name(ev.type), Equals("EV_REL"));
-    REQUIRE_THAT(libevdev_event_code_get_name(ev.type, ev.code), Equals("REL_Y"));
+    REQUIRE_THAT(libevdev_event_type_get_name(events[1]->type), Equals("EV_REL"));
+    REQUIRE_THAT(libevdev_event_code_get_name(events[1]->type, events[1]->code), Equals("REL_Y"));
     REQUIRE(20 == mv_packet.delta_y);
-
-    rc = libevdev_next_event(mouse_dev.get(), LIBEVDEV_READ_FLAG_NORMAL, &ev);
-    REQUIRE(rc == LIBEVDEV_READ_STATUS_SUCCESS);
   }
 
   SECTION("Mouse press button") {
@@ -95,20 +86,15 @@ TEST_CASE("uinput - mouse", "UINPUT") {
     pressed_packet.type = data::MOUSE_BUTTON_PRESS;
     mouse::mouse_press(mouse_el.get(), pressed_packet);
 
-    rc = libevdev_next_event(mouse_dev.get(), LIBEVDEV_READ_FLAG_NORMAL, &ev);
-    REQUIRE(rc == LIBEVDEV_READ_STATUS_SUCCESS);
-    REQUIRE_THAT(libevdev_event_type_get_name(ev.type), Equals("EV_MSC"));
-    REQUIRE_THAT(libevdev_event_code_get_name(ev.type, ev.code), Equals("MSC_SCAN"));
-    REQUIRE(ev.value == 90005);
+    events = fetch_events(mouse_dev);
+    REQUIRE(events.size() == 2);
+    REQUIRE_THAT(libevdev_event_type_get_name(events[0]->type), Equals("EV_MSC"));
+    REQUIRE_THAT(libevdev_event_code_get_name(events[0]->type, events[0]->code), Equals("MSC_SCAN"));
+    REQUIRE(events[0]->value == 90005);
 
-    rc = libevdev_next_event(mouse_dev.get(), LIBEVDEV_READ_FLAG_NORMAL, &ev);
-    REQUIRE(rc == LIBEVDEV_READ_STATUS_SUCCESS);
-    REQUIRE_THAT(libevdev_event_type_get_name(ev.type), Equals("EV_KEY"));
-    REQUIRE_THAT(libevdev_event_code_get_name(ev.type, ev.code), Equals("BTN_EXTRA"));
-    REQUIRE(ev.value == 1);
-
-    rc = libevdev_next_event(mouse_dev.get(), LIBEVDEV_READ_FLAG_NORMAL, &ev);
-    REQUIRE(rc == LIBEVDEV_READ_STATUS_SUCCESS);
+    REQUIRE_THAT(libevdev_event_type_get_name(events[1]->type), Equals("EV_KEY"));
+    REQUIRE_THAT(libevdev_event_code_get_name(events[1]->type, events[1]->code), Equals("BTN_EXTRA"));
+    REQUIRE(events[1]->value == 1);
   }
 
   SECTION("Mouse scroll") {
@@ -116,14 +102,11 @@ TEST_CASE("uinput - mouse", "UINPUT") {
     auto scroll_packet = data::MOUSE_SCROLL_PACKET{.scroll_amt1 = boost::endian::native_to_big(scroll_amt)};
     mouse::mouse_scroll(mouse_el.get(), scroll_packet);
 
-    rc = libevdev_next_event(mouse_dev.get(), LIBEVDEV_READ_FLAG_NORMAL, &ev);
-    REQUIRE(rc == LIBEVDEV_READ_STATUS_SUCCESS);
-    REQUIRE_THAT(libevdev_event_type_get_name(ev.type), Equals("EV_REL"));
-    REQUIRE_THAT(libevdev_event_code_get_name(ev.type, ev.code), Equals("REL_WHEEL_HI_RES"));
-    REQUIRE(ev.value == scroll_amt);
-
-    rc = libevdev_next_event(mouse_dev.get(), LIBEVDEV_READ_FLAG_NORMAL, &ev);
-    REQUIRE(rc == LIBEVDEV_READ_STATUS_SUCCESS);
+    events = fetch_events(mouse_dev);
+    REQUIRE(events.size() == 1);
+    REQUIRE_THAT(libevdev_event_type_get_name(events[0]->type), Equals("EV_REL"));
+    REQUIRE_THAT(libevdev_event_code_get_name(events[0]->type, events[0]->code), Equals("REL_WHEEL_HI_RES"));
+    REQUIRE(events[0]->value == scroll_amt);
   }
 
   SECTION("Mouse horizontal scroll") {
@@ -131,77 +114,61 @@ TEST_CASE("uinput - mouse", "UINPUT") {
     auto scroll_packet = data::MOUSE_HSCROLL_PACKET{.scroll_amount = boost::endian::native_to_big(scroll_amt)};
     mouse::mouse_scroll_horizontal(mouse_el.get(), scroll_packet);
 
-    rc = libevdev_next_event(mouse_dev.get(), LIBEVDEV_READ_FLAG_NORMAL, &ev);
-    REQUIRE(rc == LIBEVDEV_READ_STATUS_SUCCESS);
-    REQUIRE_THAT(libevdev_event_type_get_name(ev.type), Equals("EV_REL"));
-    REQUIRE_THAT(libevdev_event_code_get_name(ev.type, ev.code), Equals("REL_HWHEEL_HI_RES"));
-    REQUIRE(ev.value == scroll_amt);
-
-    rc = libevdev_next_event(mouse_dev.get(), LIBEVDEV_READ_FLAG_NORMAL, &ev);
-    REQUIRE(rc == LIBEVDEV_READ_STATUS_SUCCESS);
+    events = fetch_events(mouse_dev);
+    REQUIRE(events.size() == 1);
+    REQUIRE_THAT(libevdev_event_type_get_name(events[0]->type), Equals("EV_REL"));
+    REQUIRE_THAT(libevdev_event_code_get_name(events[0]->type, events[0]->code), Equals("REL_HWHEEL_HI_RES"));
+    REQUIRE(events[0]->value == scroll_amt);
   }
 }
 
 TEST_CASE("uinput - touchpad", "UINPUT") {
-  //  libevdev_ptr mouse_abs(libevdev_new(), ::libevdev_free);
-  //  libevdev_uinput_ptr touch_el = {mouse::create_mouse_abs(mouse_abs.get()).value(), ::libevdev_uinput_destroy};
-  //  struct input_event ev {};
-  //
-  //  link_devnode(mouse_abs.get(), touch_el.get());
-  //
-  //  auto rc = libevdev_next_event(mouse_abs.get(), LIBEVDEV_READ_FLAG_NORMAL, &ev);
-  //  REQUIRE(rc == -EAGAIN);
-  //
-  //  auto mv_packet = data::MOUSE_MOVE_ABS_PACKET{.x = boost::endian::native_to_big((short)10),
-  //                                               .y = boost::endian::native_to_big((short)20),
-  //                                               .width = boost::endian::native_to_big((short)1920),
-  //                                               .height = boost::endian::native_to_big((short)1080)};
-  //  mouse::move_mouse_abs(touch_el.get(), mv_packet);
-  //
-  //  rc = libevdev_next_event(mouse_abs.get(), LIBEVDEV_READ_FLAG_NORMAL, &ev);
-  //  REQUIRE(rc == LIBEVDEV_READ_STATUS_SUCCESS);
-  //  REQUIRE_THAT(libevdev_event_type_get_name(ev.type), Equals("EV_ABS"));
-  //  REQUIRE_THAT(libevdev_event_code_get_name(ev.type, ev.code), Equals("ABS_X"));
-  //  REQUIRE(ev.value == 10);
+  libevdev_ptr mouse_abs(libevdev_new(), ::libevdev_free);
+  libevdev_uinput_ptr touch_el = {mouse::create_mouse_abs(mouse_abs.get()).value(), ::libevdev_uinput_destroy};
 
-  // TODO: why are the followings not reported?
+  link_devnode(mouse_abs.get(), touch_el.get());
 
-  //  REQUIRE(rc == LIBEVDEV_READ_STATUS_SUCCESS);
-  //  REQUIRE_THAT(libevdev_event_type_get_name(ev.type), Equals("EV_ABS"));
-  //  REQUIRE_THAT(libevdev_event_code_get_name(ev.type, ev.code), Equals("ABS_Y"));
-  //  REQUIRE(ev.value == 20);
-  //
-  //  REQUIRE(rc == LIBEVDEV_READ_STATUS_SUCCESS);
-  //  REQUIRE_THAT(libevdev_event_type_get_name(ev.type), Equals("EV_KEY"));
-  //  REQUIRE_THAT(libevdev_event_code_get_name(ev.type, ev.code), Equals("BTN_TOOL_FINGER"));
-  //  REQUIRE(ev.value == 1);
-  //
-  //  REQUIRE(rc == LIBEVDEV_READ_STATUS_SUCCESS);
-  //  REQUIRE_THAT(libevdev_event_type_get_name(ev.type), Equals("EV_KEY"));
-  //  REQUIRE_THAT(libevdev_event_code_get_name(ev.type, ev.code), Equals("BTN_TOOL_FINGER"));
-  //  REQUIRE(ev.value == 0);
+  auto events = fetch_events(mouse_abs);
+  REQUIRE(events.empty());
+
+  auto mv_packet = data::MOUSE_MOVE_ABS_PACKET{.x = boost::endian::native_to_big((short)10),
+                                               .y = boost::endian::native_to_big((short)20),
+                                               .width = boost::endian::native_to_big((short)1920),
+                                               .height = boost::endian::native_to_big((short)1080)};
+  mouse::move_mouse_abs(touch_el.get(), mv_packet);
+
+  events = fetch_events(mouse_abs);
+  REQUIRE(events.size() == 2);
+  REQUIRE_THAT(libevdev_event_type_get_name(events[0]->type), Equals("EV_ABS"));
+  REQUIRE_THAT(libevdev_event_code_get_name(events[0]->type, events[0]->code), Equals("ABS_X"));
+  REQUIRE(events[0]->value == 10);
+
+  REQUIRE_THAT(libevdev_event_type_get_name(events[1]->type), Equals("EV_ABS"));
+  REQUIRE_THAT(libevdev_event_code_get_name(events[1]->type, events[1]->code), Equals("ABS_Y"));
+  REQUIRE(events[1]->value == 20);
 }
 
 TEST_CASE("uinput - joypad", "UINPUT") {
+  uint8_t controller_caps = data::ANALOG_TRIGGERS;
   libevdev_ptr controller_dev(libevdev_new(), ::libevdev_free);
-  libevdev_uinput_ptr controller_el = {controller::create_controller(controller_dev.get()).value(),
-                                       ::libevdev_uinput_destroy};
-  struct input_event ev {};
+  libevdev_uinput_ptr controller_el = {
+      controller::create_controller(controller_dev.get(), data::PS, controller_caps).value(),
+      ::libevdev_uinput_destroy};
 
   link_devnode(controller_dev.get(), controller_el.get());
 
-  auto rc = libevdev_next_event(controller_dev.get(), LIBEVDEV_READ_FLAG_NORMAL, &ev);
-  REQUIRE(rc == -EAGAIN);
+  auto events = fetch_events(controller_dev);
+  REQUIRE(events.empty());
 
   auto prev_packet = data::CONTROLLER_MULTI_PACKET{};
   auto mv_packet = data::CONTROLLER_MULTI_PACKET{.controller_number = 0, .button_flags = data::RIGHT_STICK};
   controller::controller_handle(controller_el.get(), mv_packet, prev_packet);
 
-  rc = libevdev_next_event(controller_dev.get(), LIBEVDEV_READ_FLAG_NORMAL, &ev);
-  REQUIRE(rc == LIBEVDEV_READ_STATUS_SUCCESS);
-  REQUIRE_THAT(libevdev_event_type_get_name(ev.type), Equals("EV_KEY"));
-  REQUIRE_THAT(libevdev_event_code_get_name(ev.type, ev.code), Equals("BTN_THUMBR"));
-  REQUIRE(ev.value == 1);
+  events = fetch_events(controller_dev);
+  REQUIRE(events.size() == 1);
+  REQUIRE_THAT(libevdev_event_type_get_name(events[0]->type), Equals("EV_KEY"));
+  REQUIRE_THAT(libevdev_event_code_get_name(events[0]->type, events[0]->code), Equals("BTN_THUMBR"));
+  REQUIRE(events[0]->value == 1);
 }
 
 TEST_CASE("uinput - paste UTF8", "UINPUT") {
@@ -223,29 +190,28 @@ TEST_CASE("uinput - paste UTF8", "UINPUT") {
     libevdev_ptr keyboard_dev(libevdev_new(), ::libevdev_free);
     libevdev_uinput_ptr keyboard_el = {keyboard::create_keyboard(keyboard_dev.get()).value(),
                                        ::libevdev_uinput_destroy};
-    struct input_event ev {};
 
     link_devnode(keyboard_dev.get(), keyboard_el.get());
 
-    auto rc = libevdev_next_event(keyboard_dev.get(), LIBEVDEV_READ_FLAG_NORMAL, &ev);
-    REQUIRE(rc == -EAGAIN);
+    auto events = fetch_events(keyboard_dev);
+    REQUIRE(events.empty());
 
     auto utf8_pkt = data::UTF8_TEXT_PACKET{.text = "\xF0\x9F\x92\xA9"};
     utf8_pkt.data_size = boost::endian::native_to_big(8);
 
     keyboard::paste_utf(keyboard_el.get(), utf8_pkt);
 
+    events = fetch_events(keyboard_dev);
+    REQUIRE(events.size() == 16);
+
     /**
      * Lambda, checks that the given key_name has been correctly sent via evdev
      */
+    auto ev_idx = 0;
     auto require_ev = [&](const std::string &key_name, bool pressed = true) {
-      rc = libevdev_next_event(keyboard_dev.get(), LIBEVDEV_READ_FLAG_NORMAL, &ev);
-      REQUIRE(rc == LIBEVDEV_READ_STATUS_SUCCESS);
-      REQUIRE_THAT(libevdev_event_code_get_name(ev.type, ev.code), Equals(key_name));
-      REQUIRE(ev.value == (pressed ? 1 : 0));
-      rc = libevdev_next_event(keyboard_dev.get(), LIBEVDEV_READ_FLAG_NORMAL, &ev);
-      REQUIRE(rc == LIBEVDEV_READ_STATUS_SUCCESS);
-      REQUIRE_THAT(libevdev_event_code_get_name(ev.type, ev.code), Equals("SYN_REPORT"));
+      REQUIRE_THAT(libevdev_event_code_get_name(events[ev_idx]->type, events[ev_idx]->code), Equals(key_name));
+      REQUIRE(events[ev_idx]->value == (pressed ? 1 : 0));
+      ev_idx++;
     };
 
     /*

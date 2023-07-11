@@ -35,9 +35,50 @@ enum INPUT_TYPE : int {
   KEY_RELEASE = boost::endian::native_to_little(0x00000004),
   MOUSE_SCROLL = boost::endian::native_to_little(0x0000000A),
   MOUSE_HSCROLL = boost::endian::native_to_little(0x55000001),
+  TOUCH = boost::endian::native_to_little(0x55000002),
+  PEN = boost::endian::native_to_little(0x55000003),
   CONTROLLER_MULTI = boost::endian::native_to_little(0x0000000C),
+  CONTROLLER_ARRIVAL = boost::endian::native_to_little(0x55000004),
+  CONTROLLER_TOUCH = boost::endian::native_to_little(0x55000005),
+  CONTROLLER_MOTION = boost::endian::native_to_little(0x55000006),
+  CONTROLLER_BATTERY = boost::endian::native_to_little(0x55000007),
+  HAPTICS = boost::endian::native_to_little(0x0000000D),
   UTF8_TEXT = boost::endian::native_to_little(0x00000017),
 };
+
+enum CONTROLLER_TYPE : uint8_t {
+  UNKNOWN = 0x00,
+  XBOX = 0x01,
+  PS = 0x02,
+  NINTENDO = 0x03
+};
+
+enum CONTROLLER_CAPABILITIES : uint8_t {
+  ANALOG_TRIGGERS = 0x01,
+  RUMBLE = 0x02,
+  TRIGGER_RUMBLE = 0x04,
+  TOUCHPAD = 0x08,
+  ACCELEROMETER = 0x10,
+  GYRO = 0x20,
+  BATTERY = 0x40,
+  RGB_LED = 0x80
+};
+
+enum BATTERY_STATE : uint8_t {
+  NOT_KNOWN = 0x00,
+  NOT_PRESENT = 0x01,
+  DISCHARGING = 0x02,
+  CHARGHING = 0x03,
+  NOT_CHARGING = 0x04,
+  FULL = 0x05
+};
+
+enum MOTION_TYPE : uint8_t {
+  ACCELERATION = 0x01,
+  GYROSCOPE = 0x02
+};
+
+constexpr uint8_t BATTERY_PERCENTAGE_UNKNOWN = 0xFF;
 
 enum CONTROLLER_BTN : unsigned short {
   DPAD_UP = 0x0001,
@@ -54,6 +95,14 @@ enum CONTROLLER_BTN : unsigned short {
   LEFT_BUTTON = 0x0100,
   RIGHT_BUTTON = 0x0200,
 
+  SPECIAL_FLAG = 0x0400,
+  PADDLE1_FLAG = 0x0100,
+  PADDLE2_FLAG = 0x0200,
+  PADDLE3_FLAG = 0x0400,
+  PADDLE4_FLAG = 0x0800,
+  TOUCHPAD_FLAG = 0x1000, // Touchpad buttons on Sony controllers
+  MISC_FLAG = 0x2000,     // Share/Mic/Capture/Mute buttons on various controllers
+
   A = 0x1000,
   B = 0x2000,
   X = 0x4000,
@@ -68,7 +117,7 @@ struct INPUT_PKT {
   unsigned short packet_type; // This should always be 0x0206 little endian (INPUT_DATA)
   unsigned short packet_len;  // the total size of the packet
 
-  unsigned int data_size; // the size of the input data
+  unsigned int data_size;     // the size of the input data
 
   INPUT_TYPE type;
 };
@@ -127,6 +176,69 @@ struct CONTROLLER_MULTI_PACKET : INPUT_PKT {
   short right_stick_y;
   int tail_a;
   short tail_b;
+};
+
+struct HAPTICS_PACKET : INPUT_PKT {
+  uint16_t enable;
+};
+
+// netfloat is just a little-endian float in byte form
+// for network transmission.
+typedef uint8_t netfloat[4];
+
+struct TOUCH_PACKET : INPUT_PKT {
+  uint8_t event_type;
+  uint8_t zero[3]; // Alignment/reserved
+  uint32_t pointer_id;
+  netfloat x;
+  netfloat y;
+  netfloat pressure;
+};
+
+struct PEN_PACKET : INPUT_PKT {
+  uint8_t event_type;
+  uint8_t tool_type;
+  uint8_t pen_buttons;
+  uint8_t zero[1]; // Alignment/reserved
+  netfloat x;
+  netfloat y;
+  netfloat pressure;
+  uint16_t rotation;
+  uint8_t tilt;
+  uint8_t zero2[1];
+};
+
+struct CONTROLLER_ARRIVAL : INPUT_PKT {
+  uint8_t controller_number;
+  CONTROLLER_TYPE type;
+  uint8_t capabilities; // see: CONTROLLER_CAPABILITIES
+  uint32_t supported_buttonFlags;
+};
+
+struct CONTROLLER_TOUCH : INPUT_PKT {
+  uint8_t controller_number;
+  uint8_t event_type;
+  uint8_t zero[2]; // Alignment/reserved
+  uint32_t pointer_id;
+  netfloat x;
+  netfloat y;
+  netfloat pressure;
+};
+
+struct CONTROLLER_MOTION : INPUT_PKT {
+  uint8_t controller_number;
+  MOTION_TYPE motion_type;
+  uint8_t zero[2]; // Alignment/reserved
+  netfloat x;
+  netfloat y;
+  netfloat z;
+};
+
+struct CONTROLLER_BATTERY : INPUT_PKT {
+  uint8_t controller_number;
+  BATTERY_STATE battery_state;
+  uint8_t battery_percentage;
+  uint8_t zero[1]; // Alignment/reserved
 };
 
 #pragma pack(pop)
