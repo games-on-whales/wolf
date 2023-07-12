@@ -4,6 +4,7 @@
 #include <chrono>
 #include <core/audio.hpp>
 #include <core/input.hpp>
+#include <deque>
 #include <eventbus/event_bus.hpp>
 #include <immer/array.hpp>
 #include <immer/atom.hpp>
@@ -25,7 +26,7 @@ namespace ba = boost::asio;
 struct Runner {
 
   virtual void run(std::size_t session_id,
-                   const immer::array<std::string> &virtual_inputs,
+                   immer::atom<immer::vector<std::string>> &virtual_inputs,
                    const immer::array<std::pair<std::string, std::string>> &paths,
                    const immer::map<std::string, std::string> &env_variables) = 0;
 
@@ -174,7 +175,6 @@ struct PairCache {
 struct StreamSession {
   moonlight::DisplayMode display_mode;
   AudioMode audio_mode;
-  input::InputReady virtual_inputs;
 
   std::shared_ptr<App> app;
   std::string app_state_folder;

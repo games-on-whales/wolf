@@ -12,11 +12,15 @@ enum PACKET_TYPE : std::uint16_t {
   LOSS_STATS = boost::endian::little_to_native(0x0201),
   FRAME_STATS = boost::endian::little_to_native(0x0204),
   INPUT_DATA = boost::endian::little_to_native(0x0206),
-  RUMBLE_DATA = boost::endian::little_to_native(0x010b),
   TERMINATION = boost::endian::little_to_native(0x0109),
   PERIODIC_PING = boost::endian::little_to_native(0x0200),
   IDR_FRAME = boost::endian::little_to_native(0x0302),
-  ENCRYPTED = boost::endian::little_to_native(0x0001)
+  ENCRYPTED = boost::endian::little_to_native(0x0001),
+  HDR_MODE = boost::endian::little_to_native(0x010e),
+  RUMBLE_DATA = boost::endian::little_to_native(0x010b),
+  RUMBLE_TRIGGERS = boost::endian::little_to_native(0x5500),
+  MOTION_EVENT = boost::endian::little_to_native(0x5501),
+  RGB_LED = boost::endian::little_to_native(0x5502),
 };
 
 /**

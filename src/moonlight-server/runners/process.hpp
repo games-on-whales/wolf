@@ -16,7 +16,7 @@ public:
       : run_cmd(std::move(run_cmd)), ev_bus(std::move(ev_bus)) {}
 
   void run(std::size_t session_id,
-           const immer::array<std::string> &virtual_inputs,
+           immer::atom<immer::vector<std::string>> &virtual_inputs,
            const immer::array<std::pair<std::string, std::string>> &paths,
            const immer::map<std::string, std::string> &env_variables) override;
 

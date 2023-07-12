@@ -193,11 +193,11 @@ std::optional<Container> DockerAPI::create(const Container &container,
       auto json = parse(raw_msg->second);
       auto created_id = json.at("Id").as_string();
       return get_by_id(std::string_view{created_id.data(), created_id.size()});
-    } else if (raw_msg && raw_msg->first == 404) { // 404 returned when the image is not present
+    } else if (raw_msg && raw_msg->first == 404) {      // 404 returned when the image is not present
       logs::log(logs::warning, "[DOCKER] Image {} not present, downloading...", container.image);
       if (pull_image(container.image, registry_auth)) { // Download the image
         return create(container, custom_params, registry_auth,
-                      force_recreate_if_present); // Then retry creating
+                      force_recreate_if_present);       // Then retry creating
       } else if (raw_msg) {
         logs::log(logs::warning, "[DOCKER] error {} - {}", raw_msg->first, raw_msg->second);
       }
@@ -319,6 +319,40 @@ DockerAPI::get_logs(std::string_view id, bool get_stdout, bool get_stderr, int s
   }
 
   return "";
+}
+
+bool DockerAPI::exec(std::string_view id, const std::vector<std::string_view> &command, std::string_view user) const {
+  if (auto conn = docker_connect(socket_path)) {
+    auto api_url = fmt::format("http://localhost/{}/containers/{}/exec", DOCKER_API_VERSION, id);
+    auto post_params = json::object{
+        {"Cmd", command},
+        {"User", user},
+        {"AttachStdin", false},
+        {"AttachStdout", true},
+        {"AttachStderr", true},
+    };
+    auto json_payload = json::serialize(post_params);
+    auto raw_msg = req(conn.value().get(), POST, api_url, json_payload);
+    if (raw_msg && raw_msg->first == 201) {
+      // Exec request created, start it
+      auto json = parse(raw_msg->second);
+      std::string exec_id = json.at("Id").as_string().data();
+      api_url = fmt::format("http://localhost/{}/exec/{}/start", DOCKER_API_VERSION, exec_id);
+      post_params = json::object{{"Detach", false}, {"Tty", false}};
+      json_payload = json::serialize(post_params);
+      raw_msg = req(conn.value().get(), POST, api_url, json_payload);
+      if (raw_msg && raw_msg->first == 200) {
+        // Exec request completed, return
+        return true;
+      }
+    }
+
+    if (raw_msg) {
+      logs::log(logs::warning, "[DOCKER] error {} - {}", raw_msg->first, raw_msg->second);
+    }
+  }
+
+  return false;
 }
 
 } // namespace wolf::core::docker

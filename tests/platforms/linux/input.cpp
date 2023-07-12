@@ -30,7 +30,7 @@ TEST_CASE("uinput - keyboard", "UINPUT") {
   auto events = fetch_events(keyboard_dev);
   REQUIRE(events.empty());
 
-  auto press_shift_key = data::KEYBOARD_PACKET{.key_code = boost::endian::native_to_little((short)0xA0)};
+  auto press_shift_key = data::pkts::KEYBOARD_PACKET{.key_code = boost::endian::native_to_little((short)0xA0)};
   press_shift_key.type = data::KEY_PRESS;
 
   auto press_action = keyboard::keyboard_handle(keyboard_el.get(), press_shift_key);
@@ -43,7 +43,7 @@ TEST_CASE("uinput - keyboard", "UINPUT") {
   REQUIRE_THAT(libevdev_event_code_get_name(events[0]->type, events[0]->code), Equals("KEY_LEFTSHIFT"));
   REQUIRE(events[0]->value == 1);
 
-  auto release_shift_key = data::KEYBOARD_PACKET{.key_code = boost::endian::native_to_little((short)0xA0)};
+  auto release_shift_key = data::pkts::KEYBOARD_PACKET{.key_code = boost::endian::native_to_little((short)0xA0)};
   release_shift_key.type = data::KEY_RELEASE;
 
   auto release_action = keyboard::keyboard_handle(keyboard_el.get(), release_shift_key);
@@ -67,7 +67,7 @@ TEST_CASE("uinput - mouse", "UINPUT") {
   REQUIRE(events.empty());
 
   SECTION("Mouse move") {
-    auto mv_packet = data::MOUSE_MOVE_REL_PACKET{.delta_x = 10, .delta_y = 20};
+    auto mv_packet = data::pkts::MOUSE_MOVE_REL_PACKET{.delta_x = 10, .delta_y = 20};
     mouse::move_mouse(mouse_el.get(), mv_packet);
 
     events = fetch_events(mouse_dev);
@@ -82,7 +82,7 @@ TEST_CASE("uinput - mouse", "UINPUT") {
   }
 
   SECTION("Mouse press button") {
-    auto pressed_packet = data::MOUSE_BUTTON_PACKET{.button = 5};
+    auto pressed_packet = data::pkts::MOUSE_BUTTON_PACKET{.button = 5};
     pressed_packet.type = data::MOUSE_BUTTON_PRESS;
     mouse::mouse_press(mouse_el.get(), pressed_packet);
 
@@ -99,7 +99,7 @@ TEST_CASE("uinput - mouse", "UINPUT") {
 
   SECTION("Mouse scroll") {
     short scroll_amt = 10;
-    auto scroll_packet = data::MOUSE_SCROLL_PACKET{.scroll_amt1 = boost::endian::native_to_big(scroll_amt)};
+    auto scroll_packet = data::pkts::MOUSE_SCROLL_PACKET{.scroll_amt1 = boost::endian::native_to_big(scroll_amt)};
     mouse::mouse_scroll(mouse_el.get(), scroll_packet);
 
     events = fetch_events(mouse_dev);
@@ -111,7 +111,7 @@ TEST_CASE("uinput - mouse", "UINPUT") {
 
   SECTION("Mouse horizontal scroll") {
     short scroll_amt = 10;
-    auto scroll_packet = data::MOUSE_HSCROLL_PACKET{.scroll_amount = boost::endian::native_to_big(scroll_amt)};
+    auto scroll_packet = data::pkts::MOUSE_HSCROLL_PACKET{.scroll_amount = boost::endian::native_to_big(scroll_amt)};
     mouse::mouse_scroll_horizontal(mouse_el.get(), scroll_packet);
 
     events = fetch_events(mouse_dev);
@@ -131,10 +131,10 @@ TEST_CASE("uinput - touchpad", "UINPUT") {
   auto events = fetch_events(mouse_abs);
   REQUIRE(events.empty());
 
-  auto mv_packet = data::MOUSE_MOVE_ABS_PACKET{.x = boost::endian::native_to_big((short)10),
-                                               .y = boost::endian::native_to_big((short)20),
-                                               .width = boost::endian::native_to_big((short)1920),
-                                               .height = boost::endian::native_to_big((short)1080)};
+  auto mv_packet = data::pkts::MOUSE_MOVE_ABS_PACKET{.x = boost::endian::native_to_big((short)10),
+                                                     .y = boost::endian::native_to_big((short)20),
+                                                     .width = boost::endian::native_to_big((short)1920),
+                                                     .height = boost::endian::native_to_big((short)1080)};
   mouse::move_mouse_abs(touch_el.get(), mv_packet);
 
   events = fetch_events(mouse_abs);
@@ -160,8 +160,8 @@ TEST_CASE("uinput - joypad", "UINPUT") {
   auto events = fetch_events(controller_dev);
   REQUIRE(events.empty());
 
-  auto prev_packet = data::CONTROLLER_MULTI_PACKET{};
-  auto mv_packet = data::CONTROLLER_MULTI_PACKET{.controller_number = 0, .button_flags = data::RIGHT_STICK};
+  auto prev_packet = data::pkts::CONTROLLER_MULTI_PACKET{};
+  auto mv_packet = data::pkts::CONTROLLER_MULTI_PACKET{.controller_number = 0, .button_flags = data::RIGHT_STICK};
   controller::controller_handle(controller_el.get(), mv_packet, prev_packet);
 
   events = fetch_events(controller_dev);
@@ -196,7 +196,7 @@ TEST_CASE("uinput - paste UTF8", "UINPUT") {
     auto events = fetch_events(keyboard_dev);
     REQUIRE(events.empty());
 
-    auto utf8_pkt = data::UTF8_TEXT_PACKET{.text = "\xF0\x9F\x92\xA9"};
+    auto utf8_pkt = data::pkts::UTF8_TEXT_PACKET{.text = "\xF0\x9F\x92\xA9"};
     utf8_pkt.data_size = boost::endian::native_to_big(8);
 
     keyboard::paste_utf(keyboard_el.get(), utf8_pkt);

@@ -27,15 +27,15 @@ std::optional<libevdev_uinput *> create_mouse(libevdev *dev);
 
 std::optional<libevdev_uinput *> create_mouse_abs(libevdev *dev);
 
-void move_mouse(libevdev_uinput *mouse, const data::MOUSE_MOVE_REL_PACKET &move_pkt);
+void move_mouse(libevdev_uinput *mouse, const data::pkts::MOUSE_MOVE_REL_PACKET &move_pkt);
 
-void move_mouse_abs(libevdev_uinput *mouse, const data::MOUSE_MOVE_ABS_PACKET &move_pkt);
+void move_mouse_abs(libevdev_uinput *mouse, const data::pkts::MOUSE_MOVE_ABS_PACKET &move_pkt);
 
-void mouse_press(libevdev_uinput *mouse, const data::MOUSE_BUTTON_PACKET &btn_pkt);
+void mouse_press(libevdev_uinput *mouse, const data::pkts::MOUSE_BUTTON_PACKET &btn_pkt);
 
-void mouse_scroll(libevdev_uinput *mouse, const data::MOUSE_SCROLL_PACKET &scroll_pkt);
+void mouse_scroll(libevdev_uinput *mouse, const data::pkts::MOUSE_SCROLL_PACKET &scroll_pkt);
 
-void mouse_scroll_horizontal(libevdev_uinput *mouse, const data::MOUSE_HSCROLL_PACKET &scroll_pkt);
+void mouse_scroll_horizontal(libevdev_uinput *mouse, const data::pkts::MOUSE_HSCROLL_PACKET &scroll_pkt);
 } // namespace mouse
 
 namespace keyboard {
@@ -47,8 +47,8 @@ struct Action {
   int linux_code;
 };
 
-std::optional<Action> keyboard_handle(libevdev_uinput *keyboard, const data::KEYBOARD_PACKET &key_pkt);
-void paste_utf(libevdev_uinput *kb, const data::UTF8_TEXT_PACKET &pkt);
+std::optional<Action> keyboard_handle(libevdev_uinput *keyboard, const data::pkts::KEYBOARD_PACKET &key_pkt);
+void paste_utf(libevdev_uinput *kb, const data::pkts::UTF8_TEXT_PACKET &pkt);
 std::string to_hex(const std::basic_string<char32_t> &str);
 
 } // namespace keyboard
@@ -57,14 +57,14 @@ namespace controller {
 
 struct Controller {
   libevdev_uinput_ptr uinput;
-  std::shared_ptr<immer::atom<immer::box<data::CONTROLLER_MULTI_PACKET>>> prev_pkt;
+  std::shared_ptr<immer::atom<immer::box<data::pkts::CONTROLLER_MULTI_PACKET>>> prev_pkt;
 };
 
 std::optional<libevdev_uinput *> create_controller(libevdev *dev, data::CONTROLLER_TYPE type, uint8_t capabilities);
 
 void controller_handle(libevdev_uinput *controller,
-                       const data::CONTROLLER_MULTI_PACKET &ctrl_pkt,
-                       const data::CONTROLLER_MULTI_PACKET &prev_ctrl_pkt);
+                       const data::pkts::CONTROLLER_MULTI_PACKET &ctrl_pkt,
+                       const data::pkts::CONTROLLER_MULTI_PACKET &prev_ctrl_pkt);
 
 } // namespace controller
 
@@ -73,7 +73,7 @@ struct VirtualDevices {
   std::optional<libevdev_uinput_ptr> mouse_abs;
   std::optional<libevdev_uinput_ptr> keyboard;
 
-  immer::array<controller::Controller> controllers{};
+  immer::atom<immer::array<controller::Controller>> controllers{}; // Hot-plug; see CONTROLLER_ARRIVAL
 };
 
 } // namespace wolf::core::input

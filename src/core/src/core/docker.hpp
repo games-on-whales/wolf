@@ -136,6 +136,8 @@ public:
    */
   bool pull_image(std::string_view image_name, std::string_view registry_auth = {}) const;
 
+  bool exec(std::string_view id, const std::vector<std::string_view> &command, std::string_view user = "root") const;
+
   /**
    * Get the container logs
    * https://docs.docker.com/engine/api/v1.40/#tag/Container/operation/ContainerLogs

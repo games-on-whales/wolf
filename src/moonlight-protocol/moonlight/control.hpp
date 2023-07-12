@@ -114,6 +114,14 @@ static constexpr const char *packet_type_to_str(PACKET_TYPE p) noexcept {
     return "IDR_FRAME";
   case ENCRYPTED:
     return "ENCRYPTED";
+  case HDR_MODE:
+    return "HDR_MODE";
+  case RUMBLE_TRIGGERS:
+    return "RUMBLE_TRIGGERS";
+  case MOTION_EVENT:
+    return "MOTION_EVENT";
+  case RGB_LED:
+    return "RGB_LED";
   }
   return "Unrecognised";
 }

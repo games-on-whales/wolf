@@ -25,6 +25,7 @@
 #include <boost/locale.hpp>
 #include <chrono>
 #include <core/api.hpp>
+#include <filesystem>
 #include <helpers/logger.hpp>
 #include <immer/array.hpp>
 #include <immer/array_transient.hpp>
@@ -38,6 +39,7 @@ namespace wolf::core::input {
 using namespace std::chrono_literals;
 using namespace std::string_literals;
 using namespace wolf::core::api;
+namespace fs = std::filesystem;
 
 constexpr int ABS_MAX_WIDTH = 1920;
 constexpr int ABS_MAX_HEIGHT = 1080;
@@ -148,7 +150,7 @@ std::optional<libevdev_uinput *> create_mouse_abs(libevdev *dev) {
   return uidev;
 }
 
-void move_mouse(libevdev_uinput *mouse, const data::MOUSE_MOVE_REL_PACKET &move_pkt) {
+void move_mouse(libevdev_uinput *mouse, const data::pkts::MOUSE_MOVE_REL_PACKET &move_pkt) {
   short delta_x = boost::endian::big_to_native(move_pkt.delta_x);
   short delta_y = boost::endian::big_to_native(move_pkt.delta_y);
   if (delta_x) {
@@ -162,7 +164,7 @@ void move_mouse(libevdev_uinput *mouse, const data::MOUSE_MOVE_REL_PACKET &move_
   libevdev_uinput_write_event(mouse, EV_SYN, SYN_REPORT, 0);
 }
 
-void move_mouse_abs(libevdev_uinput *mouse, const data::MOUSE_MOVE_ABS_PACKET &move_pkt) {
+void move_mouse_abs(libevdev_uinput *mouse, const data::pkts::MOUSE_MOVE_ABS_PACKET &move_pkt) {
   float x = boost::endian::big_to_native(move_pkt.x);
   float y = boost::endian::big_to_native(move_pkt.y);
   float width = boost::endian::big_to_native(move_pkt.width);
@@ -177,7 +179,7 @@ void move_mouse_abs(libevdev_uinput *mouse, const data::MOUSE_MOVE_ABS_PACKET &m
   libevdev_uinput_write_event(mouse, EV_SYN, SYN_REPORT, 0);
 }
 
-void mouse_press(libevdev_uinput *mouse, const data::MOUSE_BUTTON_PACKET &btn_pkt) {
+void mouse_press(libevdev_uinput *mouse, const data::pkts::MOUSE_BUTTON_PACKET &btn_pkt) {
   int btn_type;
   int scan;
   auto release = btn_pkt.type == data::MOUSE_BUTTON_RELEASE;
@@ -204,7 +206,7 @@ void mouse_press(libevdev_uinput *mouse, const data::MOUSE_BUTTON_PACKET &btn_pk
   libevdev_uinput_write_event(mouse, EV_SYN, SYN_REPORT, 0);
 }
 
-void mouse_scroll(libevdev_uinput *mouse, const data::MOUSE_SCROLL_PACKET &scroll_pkt) {
+void mouse_scroll(libevdev_uinput *mouse, const data::pkts::MOUSE_SCROLL_PACKET &scroll_pkt) {
   int high_res_distance = boost::endian::big_to_native(scroll_pkt.scroll_amt1);
   int distance = high_res_distance / 120;
 
@@ -213,7 +215,7 @@ void mouse_scroll(libevdev_uinput *mouse, const data::MOUSE_SCROLL_PACKET &scrol
   libevdev_uinput_write_event(mouse, EV_SYN, SYN_REPORT, 0);
 }
 
-void mouse_scroll_horizontal(libevdev_uinput *mouse, const data::MOUSE_HSCROLL_PACKET &scroll_pkt) {
+void mouse_scroll_horizontal(libevdev_uinput *mouse, const data::pkts::MOUSE_HSCROLL_PACKET &scroll_pkt) {
   int high_res_distance = boost::endian::big_to_native(scroll_pkt.scroll_amount);
   int distance = high_res_distance / 120;
 
@@ -295,7 +297,7 @@ std::string to_hex(const std::basic_string<char32_t> &str) {
  * - then type: CTRL+SHIFT+U+1F4A9
  * see the conversion at: https://www.compart.com/en/unicode/U+1F4A9
  */
-void paste_utf(libevdev_uinput *kb, const data::UTF8_TEXT_PACKET &pkt) {
+void paste_utf(libevdev_uinput *kb, const data::pkts::UTF8_TEXT_PACKET &pkt) {
   auto size = boost::endian::big_to_native(pkt.data_size) - sizeof(pkt.packet_type) - 2;
 
   /* Reading input text as UTF-8 */
@@ -326,7 +328,7 @@ void paste_utf(libevdev_uinput *kb, const data::UTF8_TEXT_PACKET &pkt) {
   keyboard::keyboard_ev(kb, KEY_LEFTCTRL, 0);
 }
 
-std::optional<Action> keyboard_handle(libevdev_uinput *keyboard, const data::KEYBOARD_PACKET &key_pkt) {
+std::optional<Action> keyboard_handle(libevdev_uinput *keyboard, const data::pkts::KEYBOARD_PACKET &key_pkt) {
   auto release = key_pkt.type == data::KEY_RELEASE;
   // moonlight always sets the high bit; not sure why but mask it off here
   auto moonlight_key = (short)boost::endian::little_to_native((short)key_pkt.key_code) & 0x7fff;
@@ -451,8 +453,8 @@ using namespace input::data;
  * Example: previous packet had `DPAD_UP` and `A` -> user release `A` -> new packet only has `DPAD_UP`
  */
 void controller_handle(libevdev_uinput *controller,
-                       const data::CONTROLLER_MULTI_PACKET &ctrl_pkt,
-                       const data::CONTROLLER_MULTI_PACKET &prev_ctrl_pkt) {
+                       const data::pkts::CONTROLLER_MULTI_PACKET &ctrl_pkt,
+                       const data::pkts::CONTROLLER_MULTI_PACKET &prev_ctrl_pkt) {
 
   // Button flags that have been changed between current and prev
   auto bf_changed = ctrl_pkt.button_flags ^ prev_ctrl_pkt.button_flags;
@@ -528,8 +530,8 @@ void controller_handle(libevdev_uinput *controller,
 /**
  * Joypads will also have one `/dev/input/js*` device as child, we want to expose that as well
  */
-std::vector<std::string> get_child_dev_nodes(libevdev_uinput *device) {
-  std::vector<std::string> result;
+immer::array<std::string> get_child_dev_nodes(libevdev_uinput *device) {
+  auto result = immer::array<std::string>().transient();
   auto udev = udev_new();
   if (auto device_ptr = udev_device_new_from_syspath(udev, libevdev_uinput_get_syspath(device))) {
     auto enumerate = udev_enumerate_new(udev);
@@ -542,7 +544,7 @@ std::vector<std::string> get_child_dev_nodes(libevdev_uinput *device) {
       auto path = udev_list_entry_get_name(dev_list_entry);
       auto child_dev = udev_device_new_from_syspath(udev, path);
       if (auto dev_path = udev_device_get_devnode(child_dev)) {
-        result.emplace_back(dev_path);
+        result.push_back(dev_path);
         logs::log(logs::debug, "[INPUT] Found child: {} - {}", path, dev_path);
       }
       udev_device_unref(child_dev);
@@ -553,90 +555,77 @@ std::vector<std::string> get_child_dev_nodes(libevdev_uinput *device) {
   }
 
   udev_unref(udev);
-  return result;
+  return result.persistent();
 }
 
 InputReady setup_handlers(std::size_t session_id, const std::shared_ptr<dp::event_bus> &event_bus) {
   logs::log(logs::debug, "Setting up input handlers for session: {}", session_id);
 
   auto v_devices = std::make_shared<VirtualDevices>();
-  auto devices_paths = immer::array<std::string>().transient();
 
-  libevdev_ptr mouse_dev(libevdev_new(), ::libevdev_free);
-  if (auto mouse_el = mouse::create_mouse(mouse_dev.get())) {
-    v_devices->mouse = {*mouse_el, ::libevdev_uinput_destroy};
-    devices_paths.push_back(libevdev_uinput_get_devnode(*mouse_el));
-  }
-
-  libevdev_ptr mouse_abs_dev(libevdev_new(), ::libevdev_free);
-  if (auto touch_el = mouse::create_mouse_abs(mouse_abs_dev.get())) {
-    v_devices->mouse_abs = {*touch_el, ::libevdev_uinput_destroy};
-    devices_paths.push_back(libevdev_uinput_get_devnode(*touch_el));
-  }
-
-  libevdev_ptr keyboard_dev(libevdev_new(), ::libevdev_free);
-  if (auto keyboard_el = keyboard::create_keyboard(keyboard_dev.get())) {
-    v_devices->keyboard = {*keyboard_el, ::libevdev_uinput_destroy};
-    devices_paths.push_back(libevdev_uinput_get_devnode(*keyboard_el));
-  }
-
-  auto controllers = immer::array<controller::Controller>().transient();
-  for (int i = 0; i < 4; i++) { // TODO: Make max controller configurable
+  auto create_controller = [=](data::CONTROLLER_TYPE type, uint8_t capabilities) -> bool {
     libevdev_ptr controller_dev(libevdev_new(), ::libevdev_free);
-    uint8_t controller_caps = data::ANALOG_TRIGGERS;
-    if (auto controller_el = controller::create_controller(controller_dev.get(), data::PS, controller_caps)) {
+    if (auto controller_el = controller::create_controller(controller_dev.get(), type, capabilities))
+    // TODO: controller_number
+    // TODO: support_button_flags
+    {
       auto controller = controller::Controller{
           .uinput = {*controller_el, ::libevdev_uinput_destroy},
-          .prev_pkt = std::make_shared<immer::atom<immer::box<data::CONTROLLER_MULTI_PACKET>>>(),
+          .prev_pkt = std::make_shared<immer::atom<immer::box<data::pkts::CONTROLLER_MULTI_PACKET>>>(),
       };
-      controllers.push_back(controller);
-      auto child_nodes = get_child_dev_nodes(*controller_el);
-      for (auto const &node : child_nodes) {
-        devices_paths.push_back(node);
-      }
+      v_devices->controllers.update([controller](const immer::array<controller::Controller> &controllers) {
+        return controllers.push_back(controller);
+      });
+
+      event_bus->fire_event(immer::box<NewControllerEvent>(
+          NewControllerEvent{.session_id = session_id, .devices_paths = get_child_dev_nodes(*controller_el)}));
+      return true;
+    } else {
+      logs::log(logs::warning, "[INPUT] Unable to create controller {}", type);
+      return false;
     }
-  }
-  v_devices->controllers = controllers.persistent();
+  };
 
   auto keyboard_state = std::make_shared<immer::atom<immer::array<int> /* key codes */>>();
 
   auto ctrl_handler = event_bus->register_handler<immer::box<ControlEvent>>(
-      [sess_id = session_id, v_devices, keyboard_state](const immer::box<ControlEvent> &ctrl_ev) {
+      [sess_id = session_id, event_bus, v_devices, keyboard_state, create_controller](
+          const immer::box<ControlEvent> &ctrl_ev) {
         if (ctrl_ev->session_id == sess_id && ctrl_ev->type == INPUT_DATA) {
-          auto input = (const data::INPUT_PKT *)(ctrl_ev->raw_packet.data());
+          auto input = (const data::pkts::INPUT_PKT *)(ctrl_ev->raw_packet.data());
 
           switch (input->type) {
           case data::MOUSE_MOVE_REL:
             logs::log(logs::trace, "[INPUT] Received input of type: MOUSE_MOVE_REL");
             if (v_devices->mouse) {
-              mouse::move_mouse(v_devices->mouse->get(), *(data::MOUSE_MOVE_REL_PACKET *)input);
+              mouse::move_mouse(v_devices->mouse->get(), *(data::pkts::MOUSE_MOVE_REL_PACKET *)input);
             }
             break;
           case data::MOUSE_MOVE_ABS:
             logs::log(logs::trace, "[INPUT] Received input of type: MOUSE_MOVE_ABS");
             if (v_devices->mouse_abs) {
-              mouse::move_mouse_abs(v_devices->mouse_abs->get(), *(data::MOUSE_MOVE_ABS_PACKET *)input);
+              mouse::move_mouse_abs(v_devices->mouse_abs->get(), *(data::pkts::MOUSE_MOVE_ABS_PACKET *)input);
             }
             break;
           case data::MOUSE_BUTTON_PRESS:
           case data::MOUSE_BUTTON_RELEASE:
             logs::log(logs::trace, "[INPUT] Received input of type: MOUSE_BUTTON");
             if (v_devices->mouse) {
-              mouse::mouse_press(v_devices->mouse->get(), *(data::MOUSE_BUTTON_PACKET *)input);
+              mouse::mouse_press(v_devices->mouse->get(), *(data::pkts::MOUSE_BUTTON_PACKET *)input);
             }
             break;
 
           case data::MOUSE_SCROLL:
             logs::log(logs::trace, "[INPUT] Received input of type: MOUSE_SCROLL_PACKET");
             if (v_devices->mouse) {
-              mouse::mouse_scroll(v_devices->mouse->get(), *(data::MOUSE_SCROLL_PACKET *)input);
+              mouse::mouse_scroll(v_devices->mouse->get(), *(data::pkts::MOUSE_SCROLL_PACKET *)input);
             }
             break;
 
           case data::MOUSE_HSCROLL:
             logs::log(logs::trace, "[INPUT] Received input of type: MOUSE_HSCROLL_PACKET");
             if (v_devices->mouse) {
-              mouse::mouse_scroll_horizontal(v_devices->mouse->get(), *(data::MOUSE_HSCROLL_PACKET *)input);
+              mouse::mouse_scroll_horizontal(v_devices->mouse->get(), *(data::pkts::MOUSE_HSCROLL_PACKET *)input);
             }
             break;
 
@@ -644,7 +633,8 @@ InputReady setup_handlers(std::size_t session_id, const std::shared_ptr<dp::even
           case data::KEY_RELEASE: {
             logs::log(logs::trace, "[INPUT] Received input of type: KEYBOARD_PACKET");
             if (v_devices->keyboard) {
-              auto kb_action = keyboard::keyboard_handle(v_devices->keyboard->get(), *(data::KEYBOARD_PACKET *)input);
+              auto kb_action =
+                  keyboard::keyboard_handle(v_devices->keyboard->get(), *(data::pkts::KEYBOARD_PACKET *)input);
 
               // Setting up the shared keyboard_state with the currently pressed keys
               if (kb_action) {
@@ -670,40 +660,76 @@ InputReady setup_handlers(std::size_t session_id, const std::shared_ptr<dp::even
              * TODO: rumble?
              */
             logs::log(logs::trace, "[INPUT] Received input of type: CONTROLLER_MULTI");
-            auto new_controller_pkt = (data::CONTROLLER_MULTI_PACKET *)input;
-            if (new_controller_pkt->controller_number < v_devices->controllers.size()) {
-              auto controller = v_devices->controllers[new_controller_pkt->controller_number];
+            auto new_controller_pkt = (data::pkts::CONTROLLER_MULTI_PACKET *)input;
+            if (new_controller_pkt->controller_number < v_devices->controllers.load()->size()) {
+              auto controller = v_devices->controllers.load()->at(new_controller_pkt->controller_number);
               auto prev_pkt =
-                  controller.prev_pkt->exchange(immer::box<data::CONTROLLER_MULTI_PACKET>{*new_controller_pkt});
+                  controller.prev_pkt->exchange(immer::box<data::pkts::CONTROLLER_MULTI_PACKET>{*new_controller_pkt});
               controller::controller_handle(controller.uinput.get(), *new_controller_pkt, prev_pkt->get());
             } else {
-              logs::log(logs::warning, "[INPUT] Unable to find controller {}", new_controller_pkt->controller_number);
+              logs::log(logs::warning,
+                        "[INPUT] Unable to find controller {}, creating one...",
+                        new_controller_pkt->controller_number);
+              create_controller(data::XBOX, data::ANALOG_TRIGGERS | data::RUMBLE);
             }
             break;
           }
           case data::UTF8_TEXT: {
-            auto txt_pkt = (data::UTF8_TEXT_PACKET *)input;
+            auto txt_pkt = (data::pkts::UTF8_TEXT_PACKET *)input;
             if (v_devices->keyboard) {
               keyboard::paste_utf(v_devices->keyboard->get(), *txt_pkt);
             }
+            break;
           }
           case data::TOUCH:
+            logs::log(logs::trace, "[INPUT] Received input of type: TOUCH");
             break;
           case data::PEN:
+            logs::log(logs::trace, "[INPUT] Received input of type: PEN");
             break;
-          case data::CONTROLLER_ARRIVAL:
+          case data::CONTROLLER_ARRIVAL: {
+            auto new_controller = (data::pkts::CONTROLLER_ARRIVAL *)input;
+            logs::log(logs::debug, "[INPUT] Creating new controller of type: {}", new_controller->type);
+            if (new_controller->controller_number < v_devices->controllers.load()->size()) {
+              create_controller(new_controller->type, new_controller->capabilities);
+            }
             break;
+          }
           case data::CONTROLLER_TOUCH:
+            logs::log(logs::trace, "[INPUT] Received input of type: CONTROLLER_TOUCH");
             break;
           case data::CONTROLLER_MOTION:
+            logs::log(logs::trace, "[INPUT] Received input of type: CONTROLLER_MOTION");
             break;
           case data::CONTROLLER_BATTERY:
+            logs::log(logs::trace, "[INPUT] Received input of type: CONTROLLER_BATTERY");
             break;
           case data::HAPTICS:
+            logs::log(logs::trace, "[INPUT] Received input of type: HAPTICS");
             break;
           }
         }
       });
+
+  auto devices_paths = immer::array<std::string>().transient();
+
+  libevdev_ptr mouse_dev(libevdev_new(), ::libevdev_free);
+  if (auto mouse_el = mouse::create_mouse(mouse_dev.get())) {
+    v_devices->mouse = {*mouse_el, ::libevdev_uinput_destroy};
+    devices_paths.push_back(libevdev_uinput_get_devnode(*mouse_el));
+  }
+
+  libevdev_ptr mouse_abs_dev(libevdev_new(), ::libevdev_free);
+  if (auto touch_el = mouse::create_mouse_abs(mouse_abs_dev.get())) {
+    v_devices->mouse_abs = {*touch_el, ::libevdev_uinput_destroy};
+    devices_paths.push_back(libevdev_uinput_get_devnode(*touch_el));
+  }
+
+  libevdev_ptr keyboard_dev(libevdev_new(), ::libevdev_free);
+  if (auto keyboard_el = keyboard::create_keyboard(keyboard_dev.get())) {
+    v_devices->keyboard = {*keyboard_el, ::libevdev_uinput_destroy};
+    devices_paths.push_back(libevdev_uinput_get_devnode(*keyboard_el));
+  }
 
   /**
    * We have to keep sending the EV_KEY with a value of 2 until the user release the key.

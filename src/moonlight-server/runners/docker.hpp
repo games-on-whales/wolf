@@ -8,6 +8,8 @@
 #include <helpers/utils.hpp>
 #include <range/v3/view.hpp>
 #include <state/data-structures.hpp>
+#include <sys/stat.h>
+#include <sys/sysmacros.h>
 #include <utility>
 
 namespace wolf::core::docker {
@@ -87,7 +89,7 @@ public:
   }
 
   void run(std::size_t session_id,
-           const immer::array<std::string> &virtual_inputs,
+           immer::atom<immer::vector<std::string>> &virtual_inputs,
            const immer::array<std::pair<std::string, std::string>> &paths,
            const immer::map<std::string, std::string> &env_variables) override;
 
@@ -120,7 +122,7 @@ protected:
 };
 
 void RunDocker::run(std::size_t session_id,
-                    const immer::array<std::string> &virtual_inputs,
+                    immer::atom<immer::vector<std::string>> &virtual_inputs,
                     const immer::array<std::pair<std::string, std::string>> &paths,
                     const immer::map<std::string, std::string> &env_variables) {
 
@@ -132,11 +134,15 @@ void RunDocker::run(std::size_t session_id,
 
   std::vector<Device> devices;
   devices.insert(devices.end(), this->container.devices.begin(), this->container.devices.end());
-  for (const auto &v_input : virtual_inputs) {
-    devices.push_back(Device{.path_on_host = to_string(v_input),
-                             .path_in_container = to_string(v_input),
-                             .cgroup_permission = "mrw"});
-  }
+  virtual_inputs.update([&devices](const immer::vector<std::string> &initial_devices) {
+    for (const auto &device : initial_devices) {
+      devices.push_back(Device{.path_on_host = to_string(device),
+                               .path_in_container = to_string(device),
+                               .cgroup_permission = "mrw"});
+    }
+
+    return immer::vector<std::string>{};
+  });
 
   std::vector<MountPoint> mounts;
   mounts.insert(mounts.end(), this->container.mounts.begin(), this->container.mounts.end());
@@ -157,8 +163,8 @@ void RunDocker::run(std::size_t session_id,
     auto container_id = docker_container->id;
     docker_api.start_by_id(container_id);
 
-    logs::log(logs::info, "Starting container: {}", docker_container->name);
-    logs::log(logs::debug, "Starting container: {}", *docker_container);
+    logs::log(logs::info, "[DOCKER] Starting container: {}", docker_container->name);
+    logs::log(logs::debug, "[DOCKER] Starting container: {}", *docker_container);
 
     auto terminate_handler = this->ev_bus->register_handler<immer::box<StopStreamEvent>>(
         [session_id, container_id, this](const immer::box<StopStreamEvent> &terminate_ev) {
@@ -168,11 +174,31 @@ void RunDocker::run(std::size_t session_id,
         });
 
     do {
-      boost::this_thread::sleep_for(boost::chrono::milliseconds(300));
+      boost::this_thread::sleep_for(boost::chrono::milliseconds(500));
+      virtual_inputs.update([&container_id, this](const immer::vector<std::string> &initial_devices) {
+        struct stat buf {};
+        for (const auto &device : initial_devices) {
+          if (stat(device.c_str(), &buf)) {
+            logs::log(logs::warning, "Failed to stat {}: {}", device, strerror(errno));
+            continue;
+          }
+          if (!S_ISCHR(buf.st_mode)) {
+            logs::log(logs::warning, "Device {} is not a character device", device);
+            continue;
+          }
+          unsigned int dev_major = major(buf.st_rdev);
+          unsigned int dev_minor = minor(buf.st_rdev);
+          auto cmd = fmt::format("mknod {} c {} {} && chown 1000:1000 {}", device, dev_major, dev_minor, device);
+          logs::log(logs::debug, "[DOCKER] Executing command: {}", cmd);
+          docker_api.exec(container_id, {"/bin/bash", "-c", cmd});
+        }
+
+        return immer::vector<std::string>{};
+      });
     } while (docker_api.get_by_id(container_id)->status == RUNNING);
 
-    logs::log(logs::debug, "Container logs: \n{}", docker_api.get_logs(container_id));
-    logs::log(logs::debug, "Stopping container: {}", docker_container->name);
+    logs::log(logs::debug, "[DOCKER] Container logs: \n{}", docker_api.get_logs(container_id));
+    logs::log(logs::debug, "[DOCKER] Stopping container: {}", docker_container->name);
     if (const auto env = utils::get_env("WOLF_STOP_CONTAINER_ON_EXIT")) {
       if (std::string(env) == "TRUE") {
         docker_api.stop_by_id(container_id);

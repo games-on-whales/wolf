@@ -234,8 +234,7 @@ void applist(const std::shared_ptr<typename SimpleWeb::Server<SimpleWeb::HTTPS>:
 }
 
 state::StreamSession
-create_run_session(const immer::box<input::InputReady> &inputs,
-                   const std::shared_ptr<typename SimpleWeb::Server<SimpleWeb::HTTPS>::Request> &request,
+create_run_session(const std::shared_ptr<typename SimpleWeb::Server<SimpleWeb::HTTPS>::Request> &request,
                    const state::PairedClient &current_client,
                    const state::App &run_app) {
   SimpleWeb::CaseInsensitiveMultimap headers = request->parse_query_string();
@@ -256,7 +255,6 @@ create_run_session(const immer::box<input::InputReady> &inputs,
 
   return state::StreamSession{.display_mode = display_mode,
                               .audio_mode = audio_mode,
-                              .virtual_inputs = inputs,
                               .app = std::make_shared<state::App>(run_app),
                               .app_state_folder = full_path.string(),
                               // gcm encryption keys
@@ -273,11 +271,9 @@ void launch(const std::shared_ptr<typename SimpleWeb::Server<SimpleWeb::HTTPS>::
             const immer::box<state::AppState> &state) {
   log_req<SimpleWeb::HTTPS>(request);
 
-  auto client_id = get_client_id(current_client);
-  auto virtual_inputs = input::setup_handlers(client_id, state->event_bus);
   SimpleWeb::CaseInsensitiveMultimap headers = request->parse_query_string();
   auto app = state::get_app_by_id(state->config, get_header(headers, "appid").value());
-  auto new_session = create_run_session(virtual_inputs, request, current_client, app);
+  auto new_session = create_run_session(request, current_client, app);
   state->event_bus->fire_event(immer::box<state::StreamSession>(new_session));
   state->running_sessions->update(
       [&new_session](const immer::vector<state::StreamSession> &ses_v) { return ses_v.push_back(new_session); });
@@ -296,7 +292,7 @@ void resume(const std::shared_ptr<typename SimpleWeb::Server<SimpleWeb::HTTPS>::
   auto client_ip = get_client_ip<SimpleWeb::HTTPS>(request);
   auto old_session = get_session_by_ip(state->running_sessions->load(), client_ip);
   if (old_session) {
-    auto new_session = create_run_session(old_session->virtual_inputs, request, current_client, *old_session->app);
+    auto new_session = create_run_session(request, current_client, *old_session->app);
     state->running_sessions->update([&old_session, &new_session](const immer::vector<state::StreamSession> ses_v) {
       return remove_session(ses_v, old_session.value()).push_back(new_session);
     });

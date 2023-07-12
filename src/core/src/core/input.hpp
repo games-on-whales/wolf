@@ -15,6 +15,11 @@ struct InputReady {
   immer::array<immer::box<dp::handler_registration>> registered_handlers;
 };
 
+struct NewControllerEvent {
+  std::size_t session_id;
+  immer::array<std::string> devices_paths;
+};
+
 /**
  * PLATFORM DEPENDENT
  * will wait for events on the event bus and setup virtual devices accordingly.
@@ -109,6 +114,7 @@ enum CONTROLLER_BTN : unsigned short {
   Y = 0x8000
 };
 
+namespace pkts {
 // make sure these structs are allocated in 1-byte blocks so the data aligns
 // right
 #pragma pack(push, 1)
@@ -212,7 +218,7 @@ struct CONTROLLER_ARRIVAL : INPUT_PKT {
   uint8_t controller_number;
   CONTROLLER_TYPE type;
   uint8_t capabilities; // see: CONTROLLER_CAPABILITIES
-  uint32_t supported_buttonFlags;
+  uint32_t support_button_flags;
 };
 
 struct CONTROLLER_TOUCH : INPUT_PKT {
@@ -243,6 +249,6 @@ struct CONTROLLER_BATTERY : INPUT_PKT {
 
 #pragma pack(pop)
 
+} // namespace pkts
 } // namespace data
-
 } // namespace wolf::core::input
