@@ -66,7 +66,8 @@ void serverinfo(const std::shared_ptr<typename SimpleWeb::Server<T>::Response> &
                                    host->internal_ip,
                                    host->display_modes,
                                    is_https,
-                                   cfg->support_hevc);
+                                   cfg->support_hevc,
+                                   cfg->support_av1);
 
   send_xml<T>(response, SimpleWeb::StatusCode::success_ok, xml);
 }
