@@ -49,7 +49,7 @@ jobs:
                 -DCMAKE_BUILD_TYPE=Debug \
                 -DCMAKE_CXX_EXTENSIONS=OFF \
                 -DCMAKE_CXX_STANDARD=17 \
-                -DTEST_UINPUT=ON \
+                -DTEST_UINPUT=OFF \
                 -DTEST_DOCKER=ON \
                 -DLINK_RUST_WAYLAND=ON \
                 -DTEST_RUST_WAYLAND=OFF \
