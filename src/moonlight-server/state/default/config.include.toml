@@ -338,6 +338,26 @@ video/x-h264, profile=high, stream-format=byte-stream
 \
 """
 
+##############
+# AV1 encoders
+###
+[[gstreamer.video.av1_encoders]]
+plugin_name = "aom"
+check_elements = ["av1enc"]
+video_params = """
+videoscale !
+videoconvert !
+videorate !
+video/x-raw, width={width}, height={height}, framerate={fps}/1, format=I420,
+chroma-site={color_range}, colorimetry={color_space}
+\
+"""
+encoder_pipeline = """
+av1enc usage-profile=realtime end-usage=vbr target-bitrate={bitrate} !
+av1parse !
+video/x-av1, stream-format=obu-stream, alignment=frame, profile=main
+\
+"""
 
 ###########
 # Audio

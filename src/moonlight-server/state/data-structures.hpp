@@ -85,6 +85,8 @@ struct App {
   Encoder h264_encoder;
   std::string hevc_gst_pipeline;
   Encoder hevc_encoder;
+  std::string av1_gst_pipeline;
+  Encoder av1_encoder;
 
   std::string render_node;
 
@@ -101,6 +103,7 @@ struct Config {
   std::string hostname;
   std::string config_source;
   bool support_hevc;
+  bool support_av1;
 
   /**
    * Mutable, paired_clients will be loaded up on startup

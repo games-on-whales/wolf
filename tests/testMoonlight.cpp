@@ -122,7 +122,7 @@ TEST_CASE("Mocked serverinfo", "[MoonlightProtocol]") {
   auto cfg = state::load_or_default("config.v2.toml", event_bus);
   immer::array<DisplayMode> displayModes = {{1920, 1080, 60}, {1024, 768, 30}};
 
-  SECTION("server_info conforms with the expected server_info_response.xml") {
+  SECTION("server_info conforms with the expected HEVC response") {
     auto result = serverinfo(false,
                              0,
                              0,
@@ -133,7 +133,8 @@ TEST_CASE("Mocked serverinfo", "[MoonlightProtocol]") {
                              "192.168.99.1",
                              displayModes,
                              false,
-                             true);
+                             true,
+                             false);
 
     REQUIRE(xml_to_str(result) ==
             "<?xml version=\"1.0\" encoding=\"utf-8\"?>\n"
@@ -143,7 +144,7 @@ TEST_CASE("Mocked serverinfo", "[MoonlightProtocol]") {
             "<GfeVersion>3.23.0.74</GfeVersion>"
             "<uniqueid>0000-1111-2222-3333</uniqueid>"
             "<MaxLumaPixelsHEVC>1869449984</MaxLumaPixelsHEVC>"
-            "<ServerCodecModeSupport>259</ServerCodecModeSupport>"
+            "<ServerCodecModeSupport>257</ServerCodecModeSupport>"
             "<HttpsPort>0</HttpsPort>"
             "<ExternalPort>1</ExternalPort>"
             "<mac>AA:BB:CC:DD</mac>"
@@ -156,6 +157,45 @@ TEST_CASE("Mocked serverinfo", "[MoonlightProtocol]") {
             "<state>SUNSHINE_SERVER_FREE</state>"
             "</root>");
     REQUIRE(result.get<bool>("root.PairStatus") == false);
+  }
+
+  SECTION("server_info conforms with the expected AV1 response") {
+    auto result = serverinfo(true,
+                             0,
+                             0,
+                             1,
+                             cfg.uuid,
+                             cfg.hostname,
+                             "AA:BB:CC:DD",
+                             "192.168.99.1",
+                             "192.168.1.1",
+                             displayModes,
+                             true,
+                             false,
+                             true);
+
+    REQUIRE(xml_to_str(result) ==
+            "<?xml version=\"1.0\" encoding=\"utf-8\"?>\n"
+            "<root status_code=\"200\">"
+            "<hostname>Wolf</hostname>"
+            "<appversion>7.1.431.-1</appversion>"
+            "<GfeVersion>3.23.0.74</GfeVersion>"
+            "<uniqueid>0000-1111-2222-3333</uniqueid>"
+            "<MaxLumaPixelsHEVC>0</MaxLumaPixelsHEVC>"
+            "<ServerCodecModeSupport>4097</ServerCodecModeSupport>"
+            "<HttpsPort>0</HttpsPort>"
+            "<ExternalPort>1</ExternalPort>"
+            "<mac>AA:BB:CC:DD</mac>"
+            "<ExternalIP>192.168.99.1</ExternalIP>"
+            "<LocalIP>192.168.1.1</LocalIP>"
+            "<SupportedDisplayMode>"
+            "<DisplayMode><Width>1920</Width><Height>1080</Height><RefreshRate>60</RefreshRate></DisplayMode>"
+            "<DisplayMode><Width>1024</Width><Height>768</Height><RefreshRate>30</RefreshRate></DisplayMode>"
+            "</SupportedDisplayMode><PairStatus>1</PairStatus>"
+            "<currentgame>0</currentgame>"
+            "<state>SUNSHINE_SERVER_BUSY</state>"
+            "</root>");
+    REQUIRE(result.get<bool>("root.PairStatus") == true);
   }
 }
 

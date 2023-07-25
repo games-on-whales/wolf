@@ -20,6 +20,8 @@ struct GstEncoder {
 struct GstVideoCfg {
   std::string default_source;
   std::string default_sink;
+
+  std::vector<GstEncoder> av1_encoders;
   std::vector<GstEncoder> hevc_encoders;
   std::vector<GstEncoder> h264_encoders;
 };
@@ -33,7 +35,8 @@ struct GstAudioCfg {
 } // namespace state
 
 TOML11_DEFINE_CONVERSION_NON_INTRUSIVE(state::GstEncoder, plugin_name, check_elements, video_params, encoder_pipeline)
-TOML11_DEFINE_CONVERSION_NON_INTRUSIVE(state::GstVideoCfg, default_source, default_sink, hevc_encoders, h264_encoders)
+TOML11_DEFINE_CONVERSION_NON_INTRUSIVE(
+    state::GstVideoCfg, default_source, default_sink, av1_encoders, hevc_encoders, h264_encoders)
 TOML11_DEFINE_CONVERSION_NON_INTRUSIVE(
     state::GstAudioCfg, default_source, default_audio_params, default_opus_encoder, default_sink)
 
@@ -140,6 +143,7 @@ static state::Encoder encoder_type(const std::string &gstreamer_plugin_name) {
     return APPLE;
   case (utils::hash("x264")):
   case (utils::hash("x265")):
+  case (utils::hash("aom")):
     return SOFTWARE;
   }
   logs::log(logs::warning, "Unrecognised Gstreamer plugin name: {}", gstreamer_plugin_name);
@@ -233,6 +237,16 @@ Config load_or_default(const std::string &source, const std::shared_ptr<dp::even
   }
   logs::log(logs::info, "Selected HEVC encoder: {}", hevc_encoder->plugin_name);
 
+  /* Automatic pick best AV1 encoder */
+  auto av1_encoder = std::find_if(default_gst_video_settings.av1_encoders.begin(),
+                                  default_gst_video_settings.av1_encoders.end(),
+                                  is_available);
+  if (av1_encoder == std::end(default_gst_video_settings.av1_encoders)) {
+    throw std::runtime_error("Unable to find a compatible AV1 encoder, please check [[gstreamer.video.av1_encoders]] "
+                             "in your config.toml or your Gstreamer installation");
+  }
+  logs::log(logs::info, "Selected AV1 encoder: {}", av1_encoder->plugin_name);
+
   /* Get paired clients */
   auto cfg_clients = toml::find<std::vector<PairedClient>>(cfg, "paired_clients");
   auto paired_clients =
@@ -260,6 +274,11 @@ Config load_or_default(const std::string &source, const std::shared_ptr<dp::even
                                  " ! " +
                                  toml::find_or(item, "video", " sink ", default_gst_video_settings.default_sink);
 
+        auto av1_gst_pipeline = toml::find_or(item, "video", "source", default_gst_video_settings.default_source) +
+                                " ! " + toml::find_or(item, "video", "video_params", av1_encoder->video_params) +
+                                " ! " + toml::find_or(item, "video", "av1_encoder", av1_encoder->encoder_pipeline) +
+                                " ! " + toml::find_or(item, "video", " sink ", default_gst_video_settings.default_sink);
+
         auto opus_gst_pipeline =
             toml::find_or(item, "audio", "source", default_gst_audio_settings.default_source) + " ! " +
             toml::find_or(item, "audio", "video_params", default_gst_audio_settings.default_audio_params) + " ! " +
@@ -273,6 +292,8 @@ Config load_or_default(const std::string &source, const std::shared_ptr<dp::even
                           .h264_encoder = encoder_type(h264_encoder->plugin_name),
                           .hevc_gst_pipeline = hevc_gst_pipeline,
                           .hevc_encoder = encoder_type(hevc_encoder->plugin_name),
+                          .av1_gst_pipeline = av1_gst_pipeline,
+                          .av1_encoder = encoder_type(av1_encoder->plugin_name),
                           .render_node = toml::find_or(item, "render_node", default_app_render_node),
 
                           .opus_gst_pipeline = opus_gst_pipeline,
@@ -286,6 +307,7 @@ Config load_or_default(const std::string &source, const std::shared_ptr<dp::even
                 .hostname = hostname,
                 .config_source = source,
                 .support_hevc = toml::find_or<bool>(cfg, "support_hevc", false),
+                .support_av1 = toml::find_or<bool>(cfg, "support_av1", false),
                 .paired_clients = *clients_atom,
                 .apps = apps};
 }
