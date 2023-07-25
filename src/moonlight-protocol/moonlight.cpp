@@ -39,7 +39,7 @@ XML serverinfo(bool isServerBusy,
     max_luma_pixels = 1869449984;
     codec_support |= VIDEO_FORMAT_H265;
   }
-  if (support_av1){
+  if (support_av1) {
     codec_support |= VIDEO_FORMAT_AV1_MAIN8;
   }
 

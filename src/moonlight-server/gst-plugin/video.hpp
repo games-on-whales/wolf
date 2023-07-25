@@ -98,7 +98,7 @@ static GstBuffer *prepend_video_header(const gst_rtp_moonlight_pay_video &rtpmoo
   packet->header_type = 0x01;
   packet->frame_type = is_key ? 0x02 : 0x01;
   packet->last_payload_len = (in_buf_size + video_payload_header_size) %
-                           (rtpmoonlightpay.payload_size - sizeof(moonlight::NV_VIDEO_PACKET));
+                             (rtpmoonlightpay.payload_size - sizeof(moonlight::NV_VIDEO_PACKET));
   if (packet->last_payload_len == 0) {
     packet->last_payload_len = rtpmoonlightpay.payload_size - sizeof(moonlight::NV_VIDEO_PACKET);
   }

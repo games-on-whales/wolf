@@ -102,7 +102,7 @@ std::pair<std::string, std::optional<int>> parse_arg_line(const std::pair<std::s
 RTSP_PACKET
 announce(const RTSP_PACKET &req, const state::StreamSession &session, dp::event_bus &event_bus) {
 
-  auto args = req.payloads                                     //
+  auto args = req.payloads //
               | views::filter([](const std::pair<std::string, std::string> &line) {
                   return line.first == "a";                    // all args start with a=
                 })                                             //
