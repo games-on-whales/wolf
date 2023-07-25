@@ -36,22 +36,26 @@ RTSP_PACKET ok_msg(int sequence_number,
 }
 
 RTSP_PACKET describe(const RTSP_PACKET &req, const state::StreamSession &session) {
-  auto video_params = "";
+  std::vector<std::pair<std::string, std::string>> payloads;
   if (session.display_mode.hevc_supported) {
-    video_params = "sprop-parameter-sets=AAAAAU";
+    payloads.push_back({"", "sprop-parameter-sets=AAAAAU"});
+  }
+  if (session.display_mode.av1_supported) {
+    payloads.push_back({"a", "a=rtpmap:98 AV1/90000"});
   }
 
   std::string audio_speakers = session.audio_mode.speakers                                            //
                                | views::transform([](auto speaker) { return (char)(speaker + '0'); }) //
                                | to<std::string>;                                                     //
 
-  auto audio_params = fmt::format("fmtp:97 surround-params={}{}{}{}",
+  payloads.push_back({"a",
+                      fmt::format("fmtp:97 surround-params={}{}{}{}",
                                   session.audio_mode.channels,
                                   session.audio_mode.streams,
                                   session.audio_mode.coupled_streams,
-                                  audio_speakers);
+                                  audio_speakers)});
 
-  return ok_msg(req.seq_number, {}, {{"", video_params}, {"a", audio_params}});
+  return ok_msg(req.seq_number, {}, payloads);
 }
 
 RTSP_PACKET setup(const RTSP_PACKET &req) {
@@ -105,20 +109,32 @@ announce(const RTSP_PACKET &req, const state::StreamSession &session, dp::event_
               | views::transform(parse_arg_line)               // turns an arg line into a pair
               | to<std::map<std::string, std::optional<int>>>; // to map
 
-  // Video session
-  moonlight::DisplayMode display = {
-      .width = args["x-nv-video[0].clientViewportWd"].value(),
-      .height = args["x-nv-video[0].clientViewportHt"].value(),
-      .refreshRate = args["x-nv-video[0].maxFPS"].value(),
-      .hevc_supported = static_cast<bool>(args["x-nv-clientSupportHevc"].value()),
-  };
-
-  auto video_format_h264 = args["x-nv-vqos[0].bitStreamFormat"].value() == 0;
+  bool video_format_hevc = args["x-nv-vqos[0].bitStreamFormat"].value() == 1;
+  bool video_format_av1 = args["x-nv-vqos[0].bitStreamFormat"].value() == 2;
   auto csc = args["x-nv-video[0].encoderCscMode"].value();
+
+  // Video session
+  moonlight::DisplayMode display = {.width = args["x-nv-video[0].clientViewportWd"].value(),
+                                    .height = args["x-nv-video[0].clientViewportHt"].value(),
+                                    .refreshRate = args["x-nv-video[0].maxFPS"].value(),
+                                    .hevc_supported = video_format_hevc,
+                                    .av1_supported = video_format_av1};
+
+  std::string gst_pipeline;
+  if (video_format_av1) {
+    logs::log(logs::debug, "[RTSP] Moonlight requested video format AV1");
+    gst_pipeline = session.app->av1_gst_pipeline;
+  } else if (video_format_hevc) {
+    logs::log(logs::debug, "[RTSP] Moonlight requested video format HEVC");
+    gst_pipeline = session.app->hevc_gst_pipeline;
+  } else {
+    logs::log(logs::debug, "[RTSP] Moonlight requested video format H264");
+    gst_pipeline = session.app->h264_gst_pipeline;
+  }
 
   state::VideoSession video = {
       .display_mode = {.width = display.width, .height = display.height, .refreshRate = display.refreshRate},
-      .gst_pipeline = video_format_h264 ? session.app->h264_gst_pipeline : session.app->hevc_gst_pipeline,
+      .gst_pipeline = gst_pipeline,
 
       .session_id = session.session_id,
 

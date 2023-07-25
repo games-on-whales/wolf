@@ -9,6 +9,7 @@ struct DisplayMode {
   int height;
   int refreshRate;
   bool hevc_supported = true;
+  bool av1_supported = false;
 };
 
 struct App {

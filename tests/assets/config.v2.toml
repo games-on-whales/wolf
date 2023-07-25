@@ -4,6 +4,7 @@ hostname = "Wolf"
 uuid = "0000-1111-2222-3333"
 # Set to false if this host doesn't support HEVC
 support_hevc = true
+support_av1 = false
 # The version of this config file
 config_version = 2
 
@@ -65,6 +66,22 @@ source = "override DEFAULT SOURCE"
 [gstreamer.video]
 default_source = "video_source"
 default_sink = "video_sink"
+
+######################
+# AV1 encoders
+# Order here matters: Wolf will try them in order and pick the first one that's not failing
+###
+[[gstreamer.video.av1_encoders]]
+plugin_name = "a-non-existing-plugin"
+check_elements = []
+video_params = ""
+encoder_pipeline = ""
+
+[[gstreamer.video.av1_encoders]]
+plugin_name = "coreelements"
+check_elements = ["identity"]
+video_params = "params"
+encoder_pipeline = "h264_pipeline"
 
 ######################
 # HEVC encoders

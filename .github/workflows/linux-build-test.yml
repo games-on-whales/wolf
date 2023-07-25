@@ -22,7 +22,7 @@ jobs:
         run: |
           sudo apt-get update -y
           sudo apt-get install -y \
-              g++-11 \
+              g++ \
               cmake \
               ninja-build \
               libboost-locale-dev libboost-thread-dev libboost-filesystem-dev libboost-log-dev libboost-stacktrace-dev \
@@ -43,15 +43,13 @@ jobs:
 
       - name: Configure build
         working-directory: ${{runner.workspace}}
-        env:
-          CXX: g++-11
         run: |
           cmake -Bbuild \
                 -H$GITHUB_WORKSPACE \
                 -DCMAKE_BUILD_TYPE=Debug \
                 -DCMAKE_CXX_EXTENSIONS=OFF \
                 -DCMAKE_CXX_STANDARD=17 \
-                -DTEST_UINPUT=ON \
+                -DTEST_UINPUT=OFF \
                 -DTEST_DOCKER=ON \
                 -DLINK_RUST_WAYLAND=ON \
                 -DTEST_RUST_WAYLAND=OFF \

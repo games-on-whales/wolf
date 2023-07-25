@@ -5,6 +5,12 @@ namespace pt = boost::property_tree;
 
 namespace moonlight {
 
+constexpr int VIDEO_FORMAT_H264 = 0x0001;
+constexpr int VIDEO_FORMAT_H265 = 0x0100;
+constexpr int VIDEO_FORMAT_H265_MAIN10 = 0x0200;
+constexpr int VIDEO_FORMAT_AV1_MAIN8 = 0x1000;
+constexpr int VIDEO_FORMAT_AV1_MAIN10 = 0x2000;
+
 XML serverinfo(bool isServerBusy,
                int current_appid,
                int https_port,
@@ -16,7 +22,8 @@ XML serverinfo(bool isServerBusy,
                const std::string &local_ip,
                const immer::array<DisplayMode> &display_modes,
                int pair_status,
-               bool support_hevc) {
+               bool support_hevc,
+               bool support_av1) {
   XML resp;
 
   resp.put("root.<xmlattr>.status_code", 200);
@@ -26,13 +33,18 @@ XML serverinfo(bool isServerBusy,
   resp.put("root.GfeVersion", M_GFE_VERSION);
   resp.put("root.uniqueid", uuid);
 
+  int codec_support = VIDEO_FORMAT_H264;
+  int max_luma_pixels = 0;
   if (support_hevc) {
-    resp.put("root.MaxLumaPixelsHEVC", "1869449984");
-    resp.put("root.ServerCodecModeSupport", "259");
-  } else {
-    resp.put("root.MaxLumaPixelsHEVC", "0");
-    resp.put("root.ServerCodecModeSupport", "3");
+    max_luma_pixels = 1869449984;
+    codec_support |= VIDEO_FORMAT_H265;
   }
+  if (support_av1) {
+    codec_support |= VIDEO_FORMAT_AV1_MAIN8;
+  }
+
+  resp.put("root.MaxLumaPixelsHEVC", std::to_string(max_luma_pixels));
+  resp.put("root.ServerCodecModeSupport", std::to_string(codec_support));
 
   resp.put("root.HttpsPort", https_port);
   resp.put("root.ExternalPort", http_port);

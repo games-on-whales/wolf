@@ -46,7 +46,6 @@ target_link_libraries_system(wolftests PRIVATE
 
 ## Test assets
 configure_file(assets/config.v2.toml ${CMAKE_CURRENT_BINARY_DIR}/config.v2.toml COPYONLY)
-configure_file(assets/server_info_response.xml ${CMAKE_CURRENT_BINARY_DIR}/server_info_response.xml COPYONLY)
 
 # See: https://github.com/catchorg/Catch2/blob/devel/docs/cmake-integration.md
 list(APPEND CMAKE_MODULE_PATH ${catch2_SOURCE_DIR}/extras)

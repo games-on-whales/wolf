@@ -1,4 +1,5 @@
 #pragma once
+#include <boost/endian.hpp>
 #include <cmath>
 #include <gst-plugin/gstrtpmoonlightpay_video.hpp>
 #include <gst-plugin/utils.hpp>
@@ -25,7 +26,11 @@ struct VideoShortHeader {
   // 5 = P-frame after reference frame invalidation
   uint8_t frame_type;
 
-  uint8_t unknown2[4];
+  // Length of the final packet payload for codecs that cannot handle
+  // zero padding, such as AV1 (Sunshine extension).
+  boost::endian::little_uint16_at last_payload_len;
+
+  uint8_t unknown2[2];
 };
 #pragma pack(pop)
 
@@ -74,10 +79,15 @@ create_rtp_header(const gst_rtp_moonlight_pay_video &rtpmoonlightpay, int packet
   return buf;
 }
 
-static GstBuffer *prepend_video_header(GstBuffer *inbuf) {
+static GstBuffer *prepend_video_header(const gst_rtp_moonlight_pay_video &rtpmoonlightpay, GstBuffer *inbuf) {
   constexpr auto video_payload_header_size = 8;
+  auto in_buf_size = gst_buffer_get_size(inbuf);
   GstBuffer *video_header = gst_buffer_new_and_fill(video_payload_header_size, 0x00);
-  bool is_key = !GST_BUFFER_FLAG_SET(inbuf, GST_BUFFER_FLAG_DELTA_UNIT);
+  bool is_key = !GST_BUFFER_FLAG_IS_SET(inbuf, GST_BUFFER_FLAG_DELTA_UNIT);
+
+  if (is_key) {
+    logs::log(logs::trace, "[GStreamer] KEYFRAME!");
+  }
 
   /* get WRITE access to the memory */
   GstMapInfo info;
@@ -87,6 +97,11 @@ static GstBuffer *prepend_video_header(GstBuffer *inbuf) {
   auto packet = (VideoShortHeader *)info.data;
   packet->header_type = 0x01;
   packet->frame_type = is_key ? 0x02 : 0x01;
+  packet->last_payload_len = (in_buf_size + video_payload_header_size) %
+                             (rtpmoonlightpay.payload_size - sizeof(moonlight::NV_VIDEO_PACKET));
+  if (packet->last_payload_len == 0) {
+    packet->last_payload_len = rtpmoonlightpay.payload_size - sizeof(moonlight::NV_VIDEO_PACKET);
+  }
 
   gst_buffer_unmap(video_header, &info);
 
@@ -309,7 +324,7 @@ static GstBufferList *generate_fec_multi_blocks(gst_rtp_moonlight_pay_video *rtp
  * @return a list of buffers, each element representing a single RTP packet
  */
 static GstBufferList *split_into_rtp(gst_rtp_moonlight_pay_video *rtpmoonlightpay, GstBuffer *inbuf) {
-  auto full_payload_buf = prepend_video_header(inbuf);
+  auto full_payload_buf = prepend_video_header(*rtpmoonlightpay, inbuf);
 
   GstBufferList *rtp_packets = generate_rtp_packets(*rtpmoonlightpay, full_payload_buf);
 
