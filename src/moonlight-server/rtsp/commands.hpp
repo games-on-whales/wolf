@@ -60,7 +60,8 @@ describe(const RTSP_PACKET &req, const state::StreamSession &session) {
                                   session.audio_mode.coupled_streams,
                                   audio_speakers)});
 
-  payloads.push_back(a, fmt::format("x-ss-general.featureFlags: {}", FS_PEN_TOUCH_EVENTS | FS_CONTROLLER_TOUCH_EVENTS));
+  payloads.push_back(
+      {"a", fmt::format("x-ss-general.featureFlags: {}", FS_PEN_TOUCH_EVENTS | FS_CONTROLLER_TOUCH_EVENTS)});
 
   return ok_msg(req.seq_number, {}, payloads);
 }

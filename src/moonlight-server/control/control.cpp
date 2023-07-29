@@ -1,5 +1,6 @@
 #include "core/input.hpp"
 #include <control/control.hpp>
+#include <control/input_handler.hpp>
 #include <enet/enet.h>
 #include <immer/box.hpp>
 #include <moonlight/control.hpp>
@@ -164,10 +165,12 @@ void run_control(int port,
               if (sub_type == TERMINATION) {
                 event_bus->fire_event(
                     immer::box<PauseStreamEvent>(PauseStreamEvent{.session_id = client_session->session_id}));
+              } else if (sub_type == INPUT_DATA) {
+                handle_input(client_session.value(), (INPUT_PKT *)decrypted.data());
+              } else {
+                auto ev = ControlEvent{client_session->session_id, sub_type, decrypted};
+                event_bus->fire_event(immer::box<ControlEvent>{ev});
               }
-
-              auto ev = ControlEvent{client_session->session_id, sub_type, decrypted};
-              event_bus->fire_event(immer::box<ControlEvent>{ev});
             } catch (std::runtime_error &e) {
               logs::log(logs::warning, "[ENET] Unable to decrypt incoming packet: {}", e.what());
             }

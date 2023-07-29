@@ -101,16 +101,21 @@ file(GLOB SRC_LIST SRCS
         streaming/*.cpp)
 
 if (UNIX AND NOT APPLE)
-    pkg_check_modules(LIBDRM REQUIRED IMPORTED_TARGET libdrm)
-    pkg_check_modules(LIBPCI REQUIRED IMPORTED_TARGET libpci)
+    pkg_check_modules(LIBDRM IMPORTED_TARGET libdrm)
+    pkg_check_modules(LIBPCI IMPORTED_TARGET libpci)
 
-    list(APPEND SRC_LIST platforms/hw_linux.cpp)
-    target_link_libraries(
-            wolf_runner
-            PUBLIC
-            PkgConfig::LIBDRM
-            PkgConfig::LIBPCI
-    )
+    if (LIBDRM_FOUND AND LIBPCI_FOUND)
+        list(APPEND SRC_LIST platforms/hw_linux.cpp)
+        target_link_libraries(
+                wolf_runner
+                PUBLIC
+                PkgConfig::LIBDRM
+                PkgConfig::LIBPCI
+        )
+    else()
+        message(WARNING "Missing libdrm or libpci, automatic GPU recognition will not work with this build.")
+        list(APPEND SRC_LIST platforms/hw_unknown.cpp)
+    endif ()
 else ()
     list(APPEND SRC_LIST platforms/hw_unknown.cpp)
 endif ()

@@ -54,8 +54,12 @@ set(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} ${CMAKE_CURRENT_SOURCE_DIR}/cmake/)
 include(TargetLinkLibrariesSystem)
 
 add_subdirectory(src/core)
-add_subdirectory(src/moonlight-protocol)
-add_subdirectory(src/moonlight-server)
+
+option(BUILD_MOONLIGHT "Build Moonlight server" ON)
+if (BUILD_MOONLIGHT)
+    add_subdirectory(src/moonlight-protocol)
+    add_subdirectory(src/moonlight-server)
+endif (BUILD_MOONLIGHT)
 
 # Testing only available if this is the main app
 # Emergency override MODERN_CMAKE_BUILD_TESTING provided as well

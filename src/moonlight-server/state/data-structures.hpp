@@ -26,7 +26,7 @@ namespace ba = boost::asio;
 struct Runner {
 
   virtual void run(std::size_t session_id,
-                   immer::atom<immer::vector<std::string>> &virtual_inputs,
+                   const immer::array<std::string> &virtual_inputs,
                    const immer::array<std::pair<std::string, std::string>> &paths,
                    const immer::map<std::string, std::string> &env_variables) = 0;
 
@@ -166,6 +166,8 @@ struct PairCache {
   std::optional<std::string> client_hash;
 };
 
+using JoypadList = immer::map<int /* controller number */, std::shared_ptr<input::Joypad>>;
+
 /**
  * A StreamSession is created when a Moonlight user call `launch`
  *
@@ -178,12 +180,19 @@ struct StreamSession {
 
   std::shared_ptr<App> app;
   std::string app_state_folder;
+
   // gcm encryption keys
   std::string aes_key;
   std::string aes_iv;
+
   // client info
   std::size_t session_id;
   std::string ip;
+
+  // virtual devices
+  std::shared_ptr<input::Mouse> mouse;
+  std::shared_ptr<input::Keyboard> keyboard;
+  std::shared_ptr<immer::atom<JoypadList>> joypads;
 };
 
 using SessionsAtoms = std::shared_ptr<immer::atom<immer::vector<StreamSession>>>;

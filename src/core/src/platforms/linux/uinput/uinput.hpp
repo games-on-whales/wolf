@@ -1,3 +1,24 @@
+/**
+* This is all based on libevdev
+*  - Here's a great introductory blog post:
+* https://web.archive.org/web/20200809000852/https://who-t.blogspot.com/2016/09/understanding-evdev.html/
+*  - Main docs: https://www.freedesktop.org/software/libevdev/doc/latest/index.html
+*  - Python docs are also of good quality: https://python-libevdev.readthedocs.io/en/latest/index.html
+*
+* You can debug your system using `evemu-describe`, `evemu-record` and `udevadm monitor`
+* (they can be installed using: `apt install -y evemu-tools`)
+*
+* For controllers there's a set of tools in the `joystick` package:
+* - ffcfstress  - force-feedback stress test
+* - ffmvforce   - force-feedback orientation test
+* - ffset       - force-feedback configuration tool
+* - fftest      - general force-feedback test
+* - jstest      - joystick test
+* - jscal       - joystick calibration tool
+*
+* For force feedback see: https://www.kernel.org/doc/html/v4.15/input/ff.html
+*/
+
 #include <core/input.hpp>
 #include <immer/array.hpp>
 #include <immer/atom.hpp>
@@ -6,6 +27,8 @@
 #include <libudev.h>
 #include <memory>
 #include <optional>
+#include <string>
+#include <iomanip>
 
 namespace wolf::core::input {
 
@@ -21,59 +44,23 @@ using libevdev_event_ptr = std::shared_ptr<input_event>;
  */
 std::vector<libevdev_event_ptr> fetch_events(const libevdev_ptr &dev, int max_events = 50);
 
-namespace mouse {
+/**
+ * Takes an UTF-32 encoded string and returns a hex string representation of the bytes (uppercase)
+ *
+ * ex: ['💩'] = "1F4A9" // see UTF encoding at https://www.compart.com/en/unicode/U+1F4A9
+ *
+ * adapted from: https://stackoverflow.com/a/7639754
+ */
+static std::string to_hex(const std::basic_string<char32_t> &str) {
+  std::stringstream ss;
+  ss << std::hex << std::setfill('0');
+  for (const auto &ch : str) {
+    ss << ch;
+  }
 
-std::optional<libevdev_uinput *> create_mouse(libevdev *dev);
-
-std::optional<libevdev_uinput *> create_mouse_abs(libevdev *dev);
-
-void move_mouse(libevdev_uinput *mouse, const data::pkts::MOUSE_MOVE_REL_PACKET &move_pkt);
-
-void move_mouse_abs(libevdev_uinput *mouse, const data::pkts::MOUSE_MOVE_ABS_PACKET &move_pkt);
-
-void mouse_press(libevdev_uinput *mouse, const data::pkts::MOUSE_BUTTON_PACKET &btn_pkt);
-
-void mouse_scroll(libevdev_uinput *mouse, const data::pkts::MOUSE_SCROLL_PACKET &scroll_pkt);
-
-void mouse_scroll_horizontal(libevdev_uinput *mouse, const data::pkts::MOUSE_HSCROLL_PACKET &scroll_pkt);
-} // namespace mouse
-
-namespace keyboard {
-
-std::optional<libevdev_uinput *> create_keyboard(libevdev *dev);
-
-struct Action {
-  bool pressed;
-  int linux_code;
-};
-
-std::optional<Action> keyboard_handle(libevdev_uinput *keyboard, const data::pkts::KEYBOARD_PACKET &key_pkt);
-void paste_utf(libevdev_uinput *kb, const data::pkts::UTF8_TEXT_PACKET &pkt);
-std::string to_hex(const std::basic_string<char32_t> &str);
-
-} // namespace keyboard
-
-namespace controller {
-
-struct Controller {
-  libevdev_uinput_ptr uinput;
-  std::shared_ptr<immer::atom<immer::box<data::pkts::CONTROLLER_MULTI_PACKET>>> prev_pkt;
-};
-
-std::optional<libevdev_uinput *> create_controller(libevdev *dev, data::CONTROLLER_TYPE type, uint8_t capabilities);
-
-void controller_handle(libevdev_uinput *controller,
-                       const data::pkts::CONTROLLER_MULTI_PACKET &ctrl_pkt,
-                       const data::pkts::CONTROLLER_MULTI_PACKET &prev_ctrl_pkt);
-
-} // namespace controller
-
-struct VirtualDevices {
-  std::optional<libevdev_uinput_ptr> mouse;
-  std::optional<libevdev_uinput_ptr> mouse_abs;
-  std::optional<libevdev_uinput_ptr> keyboard;
-
-  immer::atom<immer::array<controller::Controller>> controllers{}; // Hot-plug; see CONTROLLER_ARRIVAL
-};
+  std::string hex_unicode(ss.str());
+  std::transform(hex_unicode.begin(), hex_unicode.end(), hex_unicode.begin(), ::toupper);
+  return hex_unicode;
+}
 
 } // namespace wolf::core::input

@@ -209,24 +209,6 @@ auto setup_sessions_handlers(const immer::box<state::AppState> &app_state,
         }
         // Start selected app on a separate thread
         std::thread([=]() {
-          /* Create virtual inputs */
-          auto virtual_inputs = input::setup_handlers(session->session_id, app_state->event_bus);
-          /* Setup devices paths, we have to queue them here because they might arrive before the app is ready to accept
-           * them */
-          immer::atom<immer::vector<std::string>> devices_atom = {};
-          auto controller_handler = app_state->event_bus->register_handler<immer::box<input::NewControllerEvent>>(
-              [sess_id = session->session_id, &devices_atom](const immer::box<input::NewControllerEvent> &ev) {
-                if (ev->session_id == sess_id) {
-                  devices_atom.update([&ev](const immer::vector<std::string> queue) {
-                    auto new_queue = queue.transient();
-                    for (const auto &path : ev->devices_paths) {
-                      new_queue.push_back(path);
-                    }
-                    return new_queue.persistent();
-                  });
-                }
-              });
-
           /* Create audio virtual sink */
           logs::log(logs::debug, "[STREAM_SESSION] Create virtual audio sink");
           auto pulse_sink_name = fmt::format("virtual_sink_{}", session->session_id);
@@ -239,7 +221,7 @@ auto setup_sessions_handlers(const immer::box<state::AppState> &app_state,
           }
 
           /* Setup devices paths */
-          auto full_devices = virtual_inputs.devices_paths.transient();
+          auto all_devices = immer::array_transient<std::string>();
 
           /* Setup mounted paths */
           immer::array_transient<std::pair<std::string, std::string>> mounted_paths;
@@ -259,7 +241,14 @@ auto setup_sessions_handlers(const immer::box<state::AppState> &app_state,
           /* Create video virtual wayland compositor */
           if (session->app->start_virtual_compositor) {
             logs::log(logs::debug, "[STREAM_SESSION] Create wayland compositor");
-            auto wl_state = virtual_display::create_wayland_display(virtual_inputs.devices_paths, render_node);
+
+            auto mouse_nodes = session->mouse->get_nodes();
+            auto kb_nodes = session->keyboard->get_nodes();
+            auto input_nodes = immer::array_transient<std::string>();
+            std::copy(mouse_nodes.begin(), mouse_nodes.end(), std::back_inserter(input_nodes));
+            std::copy(kb_nodes.begin(), kb_nodes.end(), std::back_inserter(input_nodes));
+
+            auto wl_state = virtual_display::create_wayland_display(input_nodes.persistent(), render_node);
             virtual_display::set_resolution(
                 *wl_state,
                 {session->display_mode.width, session->display_mode.height, session->display_mode.refreshRate});
@@ -269,7 +258,7 @@ auto setup_sessions_handlers(const immer::box<state::AppState> &app_state,
 
             /* Setup additional devices paths */
             auto graphic_devices = virtual_display::get_devices(*wl_state);
-            std::copy(graphic_devices.begin(), graphic_devices.end(), std::back_inserter(full_devices));
+            std::copy(graphic_devices.begin(), graphic_devices.end(), std::back_inserter(all_devices));
 
             /* Setup additional env paths */
             for (const auto &env : virtual_display::get_env(*wl_state)) {
@@ -292,24 +281,16 @@ auto setup_sessions_handlers(const immer::box<state::AppState> &app_state,
 
           /* Additional GPU devices */
           auto additional_devices = linked_devices(render_node);
-          std::copy(additional_devices.begin(), additional_devices.end(), std::back_inserter(full_devices));
+          std::copy(additional_devices.begin(), additional_devices.end(), std::back_inserter(all_devices));
 
           /* nvidia needs some extra paths */
           if (get_vendor(render_node) == NVIDIA) {
             mounted_paths.push_back({utils::get_env("NVIDIA_DRIVER_VOLUME_NAME", "nvidia-driver-vol"), "/usr/nvidia"});
           }
 
-          devices_atom.update([&full_devices](const immer::vector<std::string> queue) {
-            auto new_queue = queue.transient();
-            for (const auto &path : full_devices) {
-              new_queue.push_back(path);
-            }
-            return new_queue.persistent();
-          });
-
           /* Finally run the app, this will stop here until over */
           session->app->runner->run(session->session_id,
-                                    devices_atom,
+                                    all_devices.persistent(),
                                     mounted_paths.persistent(),
                                     full_env.persistent());
 
@@ -319,7 +300,6 @@ auto setup_sessions_handlers(const immer::box<state::AppState> &app_state,
             audio::delete_virtual_sink(audio_server->server, v_device);
           }
 
-          controller_handler.unregister();
           /* When the app closes there's no point in keeping the stream running */
           app_state->event_bus->fire_event(
               immer::box<StopStreamEvent>(StopStreamEvent{.session_id = session->session_id}));

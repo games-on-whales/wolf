@@ -257,12 +257,20 @@ create_run_session(const std::shared_ptr<typename SimpleWeb::Server<SimpleWeb::H
                               .audio_mode = audio_mode,
                               .app = std::make_shared<state::App>(run_app),
                               .app_state_folder = full_path.string(),
+
                               // gcm encryption keys
                               .aes_key = get_header(headers, "rikey").value(),
                               .aes_iv = get_header(headers, "rikeyid").value(),
+
                               // client info
                               .session_id = get_client_id(current_client),
-                              .ip = get_client_ip<SimpleWeb::HTTPS>(request)};
+                              .ip = get_client_ip<SimpleWeb::HTTPS>(request),
+
+                              // virtual devices
+                              .mouse = std::make_shared<input::Mouse>(),
+                              .keyboard = std::make_shared<input::Keyboard>(),
+                              // joypads will be created on-demand in the Control stream
+                              .joypads = std::make_shared<immer::atom<state::JoypadList>>()};
 }
 
 void launch(const std::shared_ptr<typename SimpleWeb::Server<SimpleWeb::HTTPS>::Response> &response,

@@ -89,7 +89,7 @@ public:
   }
 
   void run(std::size_t session_id,
-           immer::atom<immer::vector<std::string>> &virtual_inputs,
+           const immer::array<std::string> &virtual_inputs,
            const immer::array<std::pair<std::string, std::string>> &paths,
            const immer::map<std::string, std::string> &env_variables) override;
 
@@ -122,7 +122,7 @@ protected:
 };
 
 void RunDocker::run(std::size_t session_id,
-                    immer::atom<immer::vector<std::string>> &virtual_inputs,
+                    const immer::array<std::string> &virtual_inputs,
                     const immer::array<std::pair<std::string, std::string>> &paths,
                     const immer::map<std::string, std::string> &env_variables) {
 
@@ -134,15 +134,11 @@ void RunDocker::run(std::size_t session_id,
 
   std::vector<Device> devices;
   devices.insert(devices.end(), this->container.devices.begin(), this->container.devices.end());
-  virtual_inputs.update([&devices](const immer::vector<std::string> &initial_devices) {
-    for (const auto &device : initial_devices) {
-      devices.push_back(Device{.path_on_host = to_string(device),
-                               .path_in_container = to_string(device),
-                               .cgroup_permission = "mrw"});
-    }
-
-    return immer::vector<std::string>{};
-  });
+  for (const auto &v_input : virtual_inputs) {
+    devices.push_back(Device{.path_on_host = to_string(v_input),
+                             .path_in_container = to_string(v_input),
+                             .cgroup_permission = "mrw"});
+  }
 
   std::vector<MountPoint> mounts;
   mounts.insert(mounts.end(), this->container.mounts.begin(), this->container.mounts.end());
@@ -175,26 +171,23 @@ void RunDocker::run(std::size_t session_id,
 
     do {
       boost::this_thread::sleep_for(boost::chrono::milliseconds(500));
-      virtual_inputs.update([&container_id, this](const immer::vector<std::string> &initial_devices) {
-        struct stat buf {};
-        for (const auto &device : initial_devices) {
-          if (stat(device.c_str(), &buf)) {
-            logs::log(logs::warning, "Failed to stat {}: {}", device, strerror(errno));
-            continue;
-          }
-          if (!S_ISCHR(buf.st_mode)) {
-            logs::log(logs::warning, "Device {} is not a character device", device);
-            continue;
-          }
-          unsigned int dev_major = major(buf.st_rdev);
-          unsigned int dev_minor = minor(buf.st_rdev);
-          auto cmd = fmt::format("mknod {} c {} {} && chown 1000:1000 {}", device, dev_major, dev_minor, device);
-          logs::log(logs::debug, "[DOCKER] Executing command: {}", cmd);
-          docker_api.exec(container_id, {"/bin/bash", "-c", cmd});
-        }
-
-        return immer::vector<std::string>{};
-      });
+      // TODO: on_new_device
+      //        struct stat buf {};
+      //        for (const auto &device : initial_devices) {
+      //          if (stat(device.c_str(), &buf)) {
+      //            logs::log(logs::warning, "Failed to stat {}: {}", device, strerror(errno));
+      //            continue;
+      //          }
+      //          if (!S_ISCHR(buf.st_mode)) {
+      //            logs::log(logs::warning, "Device {} is not a character device", device);
+      //            continue;
+      //          }
+      //          unsigned int dev_major = major(buf.st_rdev);
+      //          unsigned int dev_minor = minor(buf.st_rdev);
+      //          auto cmd = fmt::format("mknod {} c {} {} && chown 1000:1000 {}", device, dev_major, dev_minor,
+      //          device); logs::log(logs::debug, "[DOCKER] Executing command: {}", cmd); docker_api.exec(container_id,
+      //          {"/bin/bash", "-c", cmd});
+      //        }
     } while (docker_api.get_by_id(container_id)->status == RUNNING);
 
     logs::log(logs::debug, "[DOCKER] Container logs: \n{}", docker_api.get_logs(container_id));

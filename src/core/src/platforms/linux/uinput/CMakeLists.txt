@@ -1,5 +1,5 @@
 # Optionally glob, but only for CMake 3.12 or later:
-file(GLOB PRIVATE_LIST SRCS input/*.cpp)
+file(GLOB PRIVATE_LIST SRCS *.cpp)
 
 # Make an automatic library - will be static or dynamic based on user setting
 add_library(wolf_uinput)
@@ -24,19 +24,9 @@ find_package(ICU 61.0 COMPONENTS uc REQUIRED)
 target_link_libraries_system(wolf_uinput PRIVATE ICU::uc)
 
 target_include_directories(wolf_uinput PRIVATE ../../../)
-target_sources(wolf_uinput PUBLIC
-        "uinput.cpp"
-        "keyboard.hpp"
-        "uinput.hpp")
-
-FetchContent_Declare(
-        eventbus
-        GIT_REPOSITORY https://github.com/DeveloperPaul123/eventbus
-        GIT_TAG 0.10.1
-)
-set(EVENTBUS_BUILD_TESTS OFF)
-FetchContent_MakeAvailable(eventbus)
-target_link_libraries_system(wolf_uinput PUBLIC dp::eventbus)
+target_sources(wolf_uinput
+        PUBLIC "keyboard.hpp" "uinput.hpp"
+        PRIVATE ${PRIVATE_LIST})
 
 FetchContent_Declare(
         immer

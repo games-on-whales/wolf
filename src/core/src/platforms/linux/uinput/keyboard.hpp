@@ -1,3 +1,4 @@
+#include <core/input.hpp>
 #include <libevdev/libevdev-uinput.h>
 #include <libevdev/libevdev.h>
 #include <map>
