@@ -213,6 +213,7 @@ Config load_or_default(const std::string &source, const std::shared_ptr<dp::even
   }
 
   auto hostname = toml::find_or(cfg, "hostname", "Wolf");
+  bool support_av1 = toml::find_or<bool>(cfg, "support_av1", false);
 
   GstVideoCfg default_gst_video_settings = toml::find<GstVideoCfg>(cfg, "gstreamer", "video");
   GstAudioCfg default_gst_audio_settings = toml::find<GstAudioCfg>(cfg, "gstreamer", "audio");
@@ -241,11 +242,12 @@ Config load_or_default(const std::string &source, const std::shared_ptr<dp::even
   auto av1_encoder = std::find_if(default_gst_video_settings.av1_encoders.begin(),
                                   default_gst_video_settings.av1_encoders.end(),
                                   is_available);
-  if (av1_encoder == std::end(default_gst_video_settings.av1_encoders)) {
+  if (support_av1 && av1_encoder == std::end(default_gst_video_settings.av1_encoders)) {
     throw std::runtime_error("Unable to find a compatible AV1 encoder, please check [[gstreamer.video.av1_encoders]] "
                              "in your config.toml or your Gstreamer installation");
+  } else if (support_av1) {
+    logs::log(logs::info, "Selected AV1 encoder: {}", av1_encoder->plugin_name);
   }
-  logs::log(logs::info, "Selected AV1 encoder: {}", av1_encoder->plugin_name);
 
   /* Get paired clients */
   auto cfg_clients = toml::find<std::vector<PairedClient>>(cfg, "paired_clients");
@@ -274,10 +276,12 @@ Config load_or_default(const std::string &source, const std::shared_ptr<dp::even
                                  " ! " +
                                  toml::find_or(item, "video", " sink ", default_gst_video_settings.default_sink);
 
-        auto av1_gst_pipeline = toml::find_or(item, "video", "source", default_gst_video_settings.default_source) +
-                                " ! " + toml::find_or(item, "video", "video_params", av1_encoder->video_params) +
-                                " ! " + toml::find_or(item, "video", "av1_encoder", av1_encoder->encoder_pipeline) +
-                                " ! " + toml::find_or(item, "video", " sink ", default_gst_video_settings.default_sink);
+        auto av1_gst_pipeline =
+            support_av1 ? toml::find_or(item, "video", "source", default_gst_video_settings.default_source) + " ! " +
+                              toml::find_or(item, "video", "video_params", av1_encoder->video_params) + " ! " +
+                              toml::find_or(item, "video", "av1_encoder", av1_encoder->encoder_pipeline) + " ! " +
+                              toml::find_or(item, "video", " sink ", default_gst_video_settings.default_sink)
+                        : "";
 
         auto opus_gst_pipeline =
             toml::find_or(item, "audio", "source", default_gst_audio_settings.default_source) + " ! " +
@@ -293,7 +297,7 @@ Config load_or_default(const std::string &source, const std::shared_ptr<dp::even
                           .hevc_gst_pipeline = hevc_gst_pipeline,
                           .hevc_encoder = encoder_type(hevc_encoder->plugin_name),
                           .av1_gst_pipeline = av1_gst_pipeline,
-                          .av1_encoder = encoder_type(av1_encoder->plugin_name),
+                          .av1_encoder = support_av1 ? encoder_type(av1_encoder->plugin_name) : UNKNOWN,
                           .render_node = toml::find_or(item, "render_node", default_app_render_node),
 
                           .opus_gst_pipeline = opus_gst_pipeline,
@@ -307,7 +311,7 @@ Config load_or_default(const std::string &source, const std::shared_ptr<dp::even
                 .hostname = hostname,
                 .config_source = source,
                 .support_hevc = toml::find_or<bool>(cfg, "support_hevc", false),
-                .support_av1 = toml::find_or<bool>(cfg, "support_av1", false),
+                .support_av1 = support_av1,
                 .paired_clients = *clients_atom,
                 .apps = apps};
 }

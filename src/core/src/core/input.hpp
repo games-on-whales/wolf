@@ -32,7 +32,7 @@ private:
 public:
   Mouse();
 
-  ~Mouse();
+  ~Mouse() override;
 
   std::vector<std::string> get_nodes() const override;
 
@@ -92,9 +92,9 @@ private:
   std::shared_ptr<KeyboardState> _state;
 
 public:
-  Keyboard(std::chrono::milliseconds timeout_repress_key = 50ms);
+  explicit Keyboard(std::chrono::milliseconds timeout_repress_key = 50ms);
 
-  ~Keyboard();
+  ~Keyboard() override;
 
   std::vector<std::string> get_nodes() const override;
 
@@ -124,6 +124,7 @@ class Joypad : public VirtualDevice {
 protected:
   typedef struct JoypadState JoypadState;
 
+private:
   std::shared_ptr<JoypadState> _state;
 
 public:
