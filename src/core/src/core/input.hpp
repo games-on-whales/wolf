@@ -31,7 +31,8 @@ private:
 
 public:
   Mouse();
-
+  Mouse(const Mouse &j) : _state(j._state) {}
+  Mouse(Mouse &&j) : _state(std::move(j._state)) {}
   ~Mouse() override;
 
   std::vector<std::string> get_nodes() const override;
@@ -93,7 +94,8 @@ private:
 
 public:
   explicit Keyboard(std::chrono::milliseconds timeout_repress_key = 50ms);
-
+  Keyboard(const Keyboard &j) : _state(j._state) {}
+  Keyboard(Keyboard &&j) : _state(std::move(j._state)) {}
   ~Keyboard() override;
 
   std::vector<std::string> get_nodes() const override;
@@ -147,6 +149,9 @@ public:
   };
 
   Joypad(CONTROLLER_TYPE type, uint8_t capabilities);
+  Joypad(const Joypad &j) : _state(j._state) {}
+  Joypad(Joypad &&j) : _state(std::move(j._state)) {}
+  ~Joypad() override;
 
   std::vector<std::string> get_nodes() const override;
 
@@ -199,7 +204,7 @@ public:
 
   void set_stick(STICK_POSITION stick_type, short x, short y);
 
-  void set_on_rumble(const std::function<void(int intensity)> &callback);
+  void set_on_rumble(const std::function<void(int low_freq, int high_freq)> &callback);
 
   enum MOTION_TYPE : uint8_t {
     ACCELERATION = 0x01,

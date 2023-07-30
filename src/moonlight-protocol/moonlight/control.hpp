@@ -245,6 +245,41 @@ struct ControlTerminatePacket {
   std::uint32_t reason = TERMINATE_REASON_GRACEFULL;
 };
 
+struct ControlRumblePacket {
+  ControlPacket header;
+
+  std::uint32_t useless;
+
+  std::uint16_t controller_number;
+  std::uint16_t low_freq;
+  std::uint16_t high_freq;
+};
+
+struct ControlRumbleTriggerPacket {
+  ControlPacket header;
+
+  std::uint16_t controller_number;
+  std::uint16_t left;
+  std::uint16_t right;
+};
+
+struct ControlMotionEventPacket {
+  ControlPacket header;
+
+  std::uint16_t controller_number;
+  std::uint16_t reportrate;
+  std::uint8_t type;
+};
+
+struct ControlRGBLedPacket {
+  ControlPacket header;
+
+  std::uint16_t controller_number;
+  std::uint8_t r;
+  std::uint8_t g;
+  std::uint8_t b;
+};
+
 struct ControlEncryptedPacket {
   ControlPacket header; // Always 0x0001 (see PACKET_TYPE ENCRYPTED)
   std::uint32_t seq;    // Monotonically increasing sequence number (used as IV for AES-GCM)

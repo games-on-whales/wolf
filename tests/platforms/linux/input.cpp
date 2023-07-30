@@ -36,7 +36,7 @@ TEST_CASE("uinput - keyboard", "UINPUT") {
   auto press_shift_key = pkts::KEYBOARD_PACKET{.key_code = boost::endian::native_to_little((short)0xA0)};
   press_shift_key.type = pkts::KEY_PRESS;
 
-  control::handle_input(session, &press_shift_key);
+  control::handle_input(session, {}, &press_shift_key);
   events = fetch_events(keyboard_dev);
   REQUIRE(events.size() == 1);
   REQUIRE_THAT(libevdev_event_type_get_name(events[0]->type), Equals("EV_KEY"));
@@ -46,7 +46,7 @@ TEST_CASE("uinput - keyboard", "UINPUT") {
   auto release_shift_key = pkts::KEYBOARD_PACKET{.key_code = boost::endian::native_to_little((short)0xA0)};
   release_shift_key.type = pkts::KEY_RELEASE;
 
-  control::handle_input(session, &release_shift_key);
+  control::handle_input(session, {}, &release_shift_key);
   events = fetch_events(keyboard_dev);
   REQUIRE(events.size() == 1);
   REQUIRE_THAT(libevdev_event_type_get_name(events[0]->type), Equals("EV_KEY"));
@@ -72,7 +72,7 @@ TEST_CASE("uinput - mouse", "UINPUT") {
     auto mv_packet = pkts::MOUSE_MOVE_REL_PACKET{.delta_x = 10, .delta_y = 20};
     mv_packet.type = pkts::MOUSE_MOVE_REL;
 
-    control::handle_input(session, &mv_packet);
+    control::handle_input(session, {}, &mv_packet);
     events = fetch_events(mouse_rel_dev);
     REQUIRE(events.size() == 2);
     REQUIRE_THAT(libevdev_event_type_get_name(events[0]->type), Equals("EV_REL"));
@@ -91,7 +91,7 @@ TEST_CASE("uinput - mouse", "UINPUT") {
                                                  .height = boost::endian::native_to_big((short)1080)};
     mv_packet.type = pkts::MOUSE_MOVE_ABS;
 
-    control::handle_input(session, &mv_packet);
+    control::handle_input(session, {}, &mv_packet);
     events = fetch_events(mouse_abs_dev);
     REQUIRE(events.size() == 2);
     REQUIRE_THAT(libevdev_event_type_get_name(events[0]->type), Equals("EV_ABS"));
@@ -105,7 +105,7 @@ TEST_CASE("uinput - mouse", "UINPUT") {
     auto pressed_packet = pkts::MOUSE_BUTTON_PACKET{.button = 5};
     pressed_packet.type = pkts::MOUSE_BUTTON_PRESS;
 
-    control::handle_input(session, &pressed_packet);
+    control::handle_input(session, {}, &pressed_packet);
     events = fetch_events(mouse_rel_dev);
     REQUIRE(events.size() == 2);
     REQUIRE_THAT(libevdev_event_type_get_name(events[0]->type), Equals("EV_MSC"));
@@ -122,7 +122,7 @@ TEST_CASE("uinput - mouse", "UINPUT") {
     auto scroll_packet = pkts::MOUSE_SCROLL_PACKET{.scroll_amt1 = boost::endian::native_to_big(scroll_amt)};
     scroll_packet.type = pkts::MOUSE_SCROLL;
 
-    control::handle_input(session, &scroll_packet);
+    control::handle_input(session, {}, &scroll_packet);
     events = fetch_events(mouse_rel_dev);
     REQUIRE(events.size() == 1);
     REQUIRE_THAT(libevdev_event_type_get_name(events[0]->type), Equals("EV_REL"));
@@ -135,7 +135,7 @@ TEST_CASE("uinput - mouse", "UINPUT") {
     auto scroll_packet = pkts::MOUSE_HSCROLL_PACKET{.scroll_amount = boost::endian::native_to_big(scroll_amt)};
     scroll_packet.type = pkts::MOUSE_HSCROLL;
 
-    control::handle_input(session, &scroll_packet);
+    control::handle_input(session, {}, &scroll_packet);
     events = fetch_events(mouse_rel_dev);
     REQUIRE(events.size() == 1);
     REQUIRE_THAT(libevdev_event_type_get_name(events[0]->type), Equals("EV_REL"));
@@ -152,7 +152,7 @@ TEST_CASE("uinput - joypad", "UINPUT") {
         pkts::CONTROLLER_MULTI_PACKET{.controller_number = controller_number, .button_flags = Joypad::RIGHT_STICK};
     c_pkt.type = pkts::CONTROLLER_MULTI;
 
-    control::handle_input(session, &c_pkt);
+    control::handle_input(session, {}, &c_pkt);
 
     REQUIRE(session.joypads->load()->size() == 1);
     REQUIRE(session.joypads->load()->at(controller_number)->get_nodes().size() == 3);
@@ -166,7 +166,7 @@ TEST_CASE("uinput - joypad", "UINPUT") {
                                                  .capabilities = Joypad::ANALOG_TRIGGERS | Joypad::RUMBLE};
     c_pkt.type = pkts::CONTROLLER_ARRIVAL;
 
-    control::handle_input(session, &c_pkt);
+    control::handle_input(session, {}, &c_pkt);
 
     REQUIRE(session.joypads->load()->size() == 1);
     REQUIRE(session.joypads->load()->at(controller_number)->get_nodes().size() == 3);
@@ -201,7 +201,7 @@ TEST_CASE("uinput - paste UTF8", "UINPUT") {
     utf8_pkt.type = pkts::UTF8_TEXT;
     utf8_pkt.data_size = boost::endian::native_to_big(8);
 
-    control::handle_input(state::StreamSession{.keyboard = std::make_shared<Keyboard>(keyboard)}, &utf8_pkt);
+    control::handle_input(state::StreamSession{.keyboard = std::make_shared<Keyboard>(keyboard)}, {}, &utf8_pkt);
     events = fetch_events(keyboard_dev);
     REQUIRE(events.size() == 16);
 

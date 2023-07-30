@@ -69,8 +69,15 @@ static std::optional<keyboard::KEY_MAP> press_btn(libevdev_uinput *kb, short key
   return {};
 }
 
+static void destroy_keyboard(KeyboardState *state) {
+  state->stop_repeat_thread = true;
+  state->repeat_press_t.join();
+  free(state);
+}
+
 Keyboard::Keyboard(std::chrono::milliseconds timeout_repress_key) {
-  this->_state = std::make_shared<KeyboardState>(KeyboardState{});
+  auto state = new KeyboardState;
+  this->_state = std::shared_ptr<KeyboardState>(state, destroy_keyboard);
   auto repeat_thread = std::thread([state = this->_state, timeout_repress_key]() {
     while (!state->stop_repeat_thread) {
       std::this_thread::sleep_for(timeout_repress_key);
@@ -90,9 +97,7 @@ Keyboard::Keyboard(std::chrono::milliseconds timeout_repress_key) {
   }
 }
 
-Keyboard::~Keyboard() {
-  this->_state->stop_repeat_thread = true;
-}
+Keyboard::~Keyboard() {}
 
 void Keyboard::press(short key_code) {
   if (auto keyboard = _state->kb.get()) {

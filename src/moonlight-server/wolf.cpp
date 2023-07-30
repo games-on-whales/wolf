@@ -247,6 +247,7 @@ auto setup_sessions_handlers(const immer::box<state::AppState> &app_state,
             auto input_nodes = immer::array_transient<std::string>();
             std::copy(mouse_nodes.begin(), mouse_nodes.end(), std::back_inserter(input_nodes));
             std::copy(kb_nodes.begin(), kb_nodes.end(), std::back_inserter(input_nodes));
+            std::copy(input_nodes.begin(), input_nodes.end(), std::back_inserter(all_devices));
 
             auto wl_state = virtual_display::create_wayland_display(input_nodes.persistent(), render_node);
             virtual_display::set_resolution(

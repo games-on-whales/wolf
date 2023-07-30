@@ -2,18 +2,35 @@
 #include <boost/locale.hpp>
 #include <control/input_handler.hpp>
 #include <helpers/logger.hpp>
+#include <moonlight/control.hpp>
 #include <string>
 
 namespace control {
 
 using namespace wolf::core::input;
 using namespace std::string_literals;
+using namespace moonlight::control;
 
 std::shared_ptr<Joypad> create_new_joypad(const state::StreamSession &session,
+                                          const immer::atom<enet_clients_map> &connected_clients,
                                           int controller_number,
                                           Joypad::CONTROLLER_TYPE type,
                                           uint8_t capabilities) {
-  auto new_pad = std::make_shared<Joypad>(Joypad{type, capabilities});
+  auto new_pad = std::make_shared<Joypad>(type, capabilities);
+
+  new_pad->set_on_rumble([clients = &connected_clients,
+                          controller_number,
+                          session_id = session.session_id,
+                          aes_key = session.aes_key](int low_freq, int high_freq) {
+    auto rumble_pkt = ControlRumblePacket{
+        .header = {.type = RUMBLE_DATA, .length = sizeof(ControlRumblePacket) - sizeof(ControlPacket)},
+        .controller_number = boost::endian::native_to_little((uint16_t)controller_number),
+        .low_freq = boost::endian::native_to_little((uint16_t)low_freq),
+        .high_freq = boost::endian::native_to_little((uint16_t)high_freq)};
+    std::string plaintext = {(char *)&rumble_pkt, sizeof(rumble_pkt)};
+    encrypt_and_send(plaintext, aes_key, *clients, session_id);
+  });
+
   session.joypads->update([&](state::JoypadList joypads) {
     logs::log(logs::debug, "[INPUT] Creating joypad {} of type: {}", controller_number, type);
     // TODO: trigger event in the event bus so that Docker can pick this up
@@ -26,7 +43,9 @@ std::shared_ptr<Joypad> create_new_joypad(const state::StreamSession &session,
   return new_pad;
 }
 
-void handle_input(const state::StreamSession &session, INPUT_PKT *pkt) {
+void handle_input(const state::StreamSession &session,
+                  const immer::atom<enet_clients_map> &connected_clients,
+                  INPUT_PKT *pkt) {
   switch (pkt->type) {
     /*
      *  MOUSE
@@ -130,6 +149,7 @@ void handle_input(const state::StreamSession &session, INPUT_PKT *pkt) {
   case CONTROLLER_ARRIVAL: {
     auto new_controller = static_cast<CONTROLLER_ARRIVAL_PACKET *>(pkt);
     create_new_joypad(session,
+                      connected_clients,
                       new_controller->controller_number,
                       (Joypad::CONTROLLER_TYPE)new_controller->controller_type,
                       new_controller->capabilities);
@@ -145,6 +165,7 @@ void handle_input(const state::StreamSession &session, INPUT_PKT *pkt) {
     } else {
       // Old Moonlight versions don't support CONTROLLER_ARRIVAL, we create a default pad when it's first mentioned
       selected_pad = create_new_joypad(session,
+                                       connected_clients,
                                        controller_pkt->controller_number,
                                        Joypad::XBOX,
                                        Joypad::ANALOG_TRIGGERS | Joypad::RUMBLE);

@@ -1,9 +1,7 @@
 #include "core/input.hpp"
 #include <control/control.hpp>
 #include <control/input_handler.hpp>
-#include <enet/enet.h>
 #include <immer/box.hpp>
-#include <moonlight/control.hpp>
 #include <state/sessions.hpp>
 #include <sys/socket.h>
 
@@ -72,7 +70,7 @@ std::pair<std::string /* ip */, int /* port */> get_ip(const sockaddr *const ip_
 }
 
 bool send_packet(std::string_view payload, ENetPeer *peer) {
-  logs::log(logs::debug, "[ENET] Sending packet");
+  logs::log(logs::trace, "[ENET] Sending packet");
   auto packet = enet_packet_create(payload.data(), payload.size(), ENET_PACKET_FLAG_RELIABLE);
   if (enet_peer_send(peer, 0, packet) < 0) {
     logs::log(logs::warning, "[ENET] Failed to send packet");
@@ -82,7 +80,19 @@ bool send_packet(std::string_view payload, ENetPeer *peer) {
   return true;
 }
 
-using enet_clients_map = immer::map<std::size_t, immer::box<std::shared_ptr<ENetPeer>>>;
+bool encrypt_and_send(std::string_view payload,
+                      std::string_view aes_key,
+                      const immer::atom<enet_clients_map> &connected_clients,
+                      std::size_t session_id) {
+  auto clients = connected_clients.load();
+  auto enet_peer = clients->find(session_id);
+  if (enet_peer == nullptr) {
+    logs::log(logs::debug, "[ENET] Unable to find enet client {}", session_id);
+  } else {
+    auto encrypted = control::encrypt_packet(aes_key, 0, payload); // TODO: seq?
+    send_packet({(char *)encrypted.get(), encrypted->full_size()}, enet_peer->get().get());
+  }
+}
 
 void run_control(int port,
                  const state::SessionsAtoms &running_sessions,
@@ -100,17 +110,10 @@ void run_control(int port,
 
   auto stop_ev = event_bus->register_handler<immer::box<StopStreamEvent>>(
       [&connected_clients, &running_sessions](const immer::box<StopStreamEvent> &ev) {
-        auto clients = connected_clients.load();
         auto client_session = get_session_by_id(running_sessions->load(), ev->session_id);
-        auto enet_peer = clients->find(ev->session_id);
-        if (enet_peer == nullptr) {
-          logs::log(logs::debug, "[ENET] Unable to find enet client {}", ev->session_id);
-        } else {
-          auto terminate_pkt = ControlTerminatePacket{};
-          std::string plaintext = {(char *)&terminate_pkt, sizeof(terminate_pkt)};
-          auto encrypted = control::encrypt_packet(client_session->aes_key, 0, plaintext); // TODO: seq?
-          send_packet({(char *)encrypted.get(), encrypted->full_size()}, enet_peer->get().get());
-        }
+        auto terminate_pkt = ControlTerminatePacket{};
+        std::string plaintext = {(char *)&terminate_pkt, sizeof(terminate_pkt)};
+        encrypt_and_send(plaintext, client_session->aes_key, connected_clients, ev->session_id);
       });
 
   while (true) {
@@ -166,7 +169,7 @@ void run_control(int port,
                 event_bus->fire_event(
                     immer::box<PauseStreamEvent>(PauseStreamEvent{.session_id = client_session->session_id}));
               } else if (sub_type == INPUT_DATA) {
-                handle_input(client_session.value(), (INPUT_PKT *)decrypted.data());
+                handle_input(client_session.value(), connected_clients, (INPUT_PKT *)decrypted.data());
               } else {
                 auto ev = ControlEvent{client_session->session_id, sub_type, decrypted};
                 event_bus->fire_event(immer::box<ControlEvent>{ev});

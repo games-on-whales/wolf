@@ -16,7 +16,7 @@
 * - jstest      - joystick test
 * - jscal       - joystick calibration tool
 *
-* For force feedback see: https://www.kernel.org/doc/html/v4.15/input/ff.html
+* For force feedback see: https://www.kernel.org/doc/html/latest/input/ff.html
 */
 
 #include <core/input.hpp>
@@ -43,6 +43,11 @@ using libevdev_event_ptr = std::shared_ptr<input_event>;
  * @returns a list of smart pointers of evdev input_event (empty when no events are available)
  */
 std::vector<libevdev_event_ptr> fetch_events(const libevdev_ptr &dev, int max_events = 50);
+
+/**
+ * Given a uinput fd will read all queued events available at this time up to max_events
+ */
+std::vector<libevdev_event_ptr> fetch_events(int uinput_fd, int max_events = 50);
 
 /**
  * Takes an UTF-32 encoded string and returns a hex string representation of the bytes (uppercase)

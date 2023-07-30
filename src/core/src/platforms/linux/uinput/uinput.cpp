@@ -1,4 +1,5 @@
 #include "uinput.hpp"
+#include <helpers/logger.hpp>
 
 namespace wolf::core::input {
 
@@ -27,4 +28,22 @@ std::vector<libevdev_event_ptr> fetch_events(const libevdev_ptr &dev, int max_ev
   }
   return events;
 }
+
+std::vector<libevdev_event_ptr> fetch_events(int uinput_fd, int max_events) {
+  std::vector<libevdev_event_ptr> events = {};
+  struct input_event ev {};
+  int ret, read_events = 0;
+  while (read_events < max_events && (ret = read(uinput_fd, &ev, sizeof(ev))) == sizeof(ev)) {
+    events.push_back(std::make_shared<input_event>(ev));
+    read_events++;
+  }
+  if (ret < 0 && errno != EAGAIN) {
+    logs::log(logs::warning, "Failed reading uinput fd; ret={}", strerror(errno));
+  } else if (ret > 0) {
+    logs::log(logs::warning, "Uinput incorrect read size of {}", ret);
+  }
+
+  return events;
+}
+
 } // namespace wolf::core::input
