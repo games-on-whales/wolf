@@ -16,7 +16,7 @@ using namespace std::string_literals;
 
 void link_devnode(libevdev *dev, const std::string &device_node) {
   // We have to sleep in order to be able to read from the newly created device
-  std::this_thread::sleep_for(std::chrono::milliseconds(100));
+  std::this_thread::sleep_for(std::chrono::milliseconds(200));
 
   auto fd = open(device_node.c_str(), O_RDONLY | O_NONBLOCK);
   REQUIRE(fd >= 0);
@@ -25,10 +25,8 @@ void link_devnode(libevdev *dev, const std::string &device_node) {
 
 TEST_CASE("uinput - keyboard", "UINPUT") {
   libevdev_ptr keyboard_dev(libevdev_new(), ::libevdev_free);
-  auto keyboard = Keyboard();
-  auto session = state::StreamSession{.keyboard = std::make_shared<Keyboard>(keyboard)};
-
-  link_devnode(keyboard_dev.get(), keyboard.get_nodes()[0]);
+  auto session = state::StreamSession{.keyboard = std::make_shared<Keyboard>()};
+  link_devnode(keyboard_dev.get(), session.keyboard->get_nodes()[0]);
 
   auto events = fetch_events(keyboard_dev);
   REQUIRE(events.empty());
@@ -161,15 +159,135 @@ TEST_CASE("uinput - joypad", "UINPUT") {
   SECTION("NEW Moonlight: create joypad with CONTROLLER_ARRIVAL") {
     auto session = state::StreamSession{.joypads = std::make_shared<immer::atom<state::JoypadList>>()};
     uint8_t controller_number = 1;
-    auto c_pkt = pkts::CONTROLLER_ARRIVAL_PACKET{.controller_number = controller_number,
-                                                 .controller_type = pkts::NINTENDO,
-                                                 .capabilities = Joypad::ANALOG_TRIGGERS | Joypad::RUMBLE};
+    auto c_pkt = pkts::CONTROLLER_ARRIVAL_PACKET{
+        .controller_number = controller_number,
+        .controller_type = pkts::PS,
+        .capabilities = Joypad::ANALOG_TRIGGERS | Joypad::RUMBLE | Joypad::TOUCHPAD};
     c_pkt.type = pkts::CONTROLLER_ARRIVAL;
 
     control::handle_input(session, {}, &c_pkt);
 
+    auto dev_nodes = session.joypads->load()->at(controller_number)->get_nodes();
     REQUIRE(session.joypads->load()->size() == 1);
-    REQUIRE(session.joypads->load()->at(controller_number)->get_nodes().size() == 3);
+    REQUIRE(dev_nodes.size() == 4);
+
+    libevdev_ptr touch_rel_dev(libevdev_new(), ::libevdev_free);
+    // We know that the last node is the touchpad
+    link_devnode(touch_rel_dev.get(), dev_nodes.back());
+
+    SECTION("Joypad touchpad") {
+      { // Touch finger one
+        auto touch_packet = pkts::CONTROLLER_TOUCH_PACKET{.controller_number = controller_number,
+                                                          .event_type = moonlight::control::pkts::TOUCH_EVENT_DOWN,
+                                                          .pointer_id = 0,
+                                                          .x = {255, 255, 255, 0},
+                                                          .y = {0, 255, 255, 255}};
+        touch_packet.type = pkts::CONTROLLER_TOUCH;
+
+        control::handle_input(session, {}, &touch_packet);
+        auto events = fetch_events(touch_rel_dev);
+        REQUIRE(events.size() == 3); // TODO: why there are no ABS_X and ABS_Y?
+
+        REQUIRE_THAT(libevdev_event_type_get_name(events[0]->type), Equals("EV_ABS"));
+        REQUIRE_THAT(libevdev_event_code_get_name(events[0]->type, events[0]->code), Equals("ABS_MT_TRACKING_ID"));
+        REQUIRE(events[0]->value == 0);
+
+        REQUIRE_THAT(libevdev_event_type_get_name(events[1]->type), Equals("EV_KEY"));
+        REQUIRE_THAT(libevdev_event_code_get_name(events[1]->type, events[1]->code), Equals("BTN_TOOL_FINGER"));
+        REQUIRE(events[1]->value == 1);
+
+        REQUIRE_THAT(libevdev_event_type_get_name(events[2]->type), Equals("EV_KEY"));
+        REQUIRE_THAT(libevdev_event_code_get_name(events[2]->type, events[2]->code), Equals("BTN_TOUCH"));
+        REQUIRE(events[2]->value == 1);
+      }
+
+      { // Touch finger 2
+        auto touch_2_pkt = pkts::CONTROLLER_TOUCH_PACKET{.controller_number = controller_number,
+                                                         .event_type = moonlight::control::pkts::TOUCH_EVENT_DOWN,
+                                                         .pointer_id = boost::endian::native_to_little(1),
+                                                         .x = {255, 255, 255, 0},
+                                                         .y = {0, 255, 255, 255}};
+        touch_2_pkt.type = pkts::CONTROLLER_TOUCH;
+
+        control::handle_input(session, {}, &touch_2_pkt);
+        auto events = fetch_events(touch_rel_dev);
+        REQUIRE(events.size() == 4); // TODO: why there are no ABS_X and ABS_Y?
+
+        REQUIRE_THAT(libevdev_event_type_get_name(events[0]->type), Equals("EV_ABS"));
+        REQUIRE_THAT(libevdev_event_code_get_name(events[0]->type, events[0]->code), Equals("ABS_MT_SLOT"));
+        REQUIRE(events[0]->value == 1);
+
+        REQUIRE_THAT(libevdev_event_type_get_name(events[1]->type), Equals("EV_ABS"));
+        REQUIRE_THAT(libevdev_event_code_get_name(events[1]->type, events[1]->code), Equals("ABS_MT_TRACKING_ID"));
+        REQUIRE(events[1]->value == 1);
+
+        REQUIRE_THAT(libevdev_event_type_get_name(events[2]->type), Equals("EV_KEY"));
+        REQUIRE_THAT(libevdev_event_code_get_name(events[2]->type, events[2]->code), Equals("BTN_TOOL_FINGER"));
+        REQUIRE(events[2]->value == 0);
+
+        REQUIRE_THAT(libevdev_event_type_get_name(events[3]->type), Equals("EV_KEY"));
+        REQUIRE_THAT(libevdev_event_code_get_name(events[3]->type, events[3]->code), Equals("BTN_TOOL_DOUBLETAP"));
+        REQUIRE(events[3]->value == 1);
+      }
+
+      { // Remove finger one
+        auto touch_2_pkt = pkts::CONTROLLER_TOUCH_PACKET{.controller_number = controller_number,
+                                                         .event_type = moonlight::control::pkts::TOUCH_EVENT_UP,
+                                                         .pointer_id = 0,
+                                                         .x = {0},
+                                                         .y = {0}};
+        touch_2_pkt.type = pkts::CONTROLLER_TOUCH;
+
+        control::handle_input(session, {}, &touch_2_pkt);
+        auto events = fetch_events(touch_rel_dev);
+        REQUIRE(events.size() == 4); // TODO: why there are no ABS_X and ABS_Y?
+
+        REQUIRE_THAT(libevdev_event_type_get_name(events[0]->type), Equals("EV_ABS"));
+        REQUIRE_THAT(libevdev_event_code_get_name(events[0]->type, events[0]->code), Equals("ABS_MT_SLOT"));
+        REQUIRE(events[0]->value == 0);
+
+        REQUIRE_THAT(libevdev_event_type_get_name(events[1]->type), Equals("EV_ABS"));
+        REQUIRE_THAT(libevdev_event_code_get_name(events[1]->type, events[1]->code), Equals("ABS_MT_TRACKING_ID"));
+        REQUIRE(events[1]->value == -1);
+
+        REQUIRE_THAT(libevdev_event_type_get_name(events[2]->type), Equals("EV_KEY"));
+        REQUIRE_THAT(libevdev_event_code_get_name(events[2]->type, events[2]->code), Equals("BTN_TOOL_FINGER"));
+        REQUIRE(events[2]->value == 1);
+
+        REQUIRE_THAT(libevdev_event_type_get_name(events[3]->type), Equals("EV_KEY"));
+        REQUIRE_THAT(libevdev_event_code_get_name(events[3]->type, events[3]->code), Equals("BTN_TOOL_DOUBLETAP"));
+        REQUIRE(events[3]->value == 0);
+      }
+
+      { // Remove finger two, no fingers left on the touchpad
+        auto touch_2_pkt = pkts::CONTROLLER_TOUCH_PACKET{.controller_number = controller_number,
+                                                         .event_type = moonlight::control::pkts::TOUCH_EVENT_UP,
+                                                         .pointer_id = boost::endian::native_to_little(1),
+                                                         .x = {0},
+                                                         .y = {0}};
+        touch_2_pkt.type = pkts::CONTROLLER_TOUCH;
+
+        control::handle_input(session, {}, &touch_2_pkt);
+        auto events = fetch_events(touch_rel_dev);
+        REQUIRE(events.size() == 4); // TODO: why there are no ABS_X and ABS_Y?
+
+        REQUIRE_THAT(libevdev_event_type_get_name(events[0]->type), Equals("EV_ABS"));
+        REQUIRE_THAT(libevdev_event_code_get_name(events[0]->type, events[0]->code), Equals("ABS_MT_SLOT"));
+        REQUIRE(events[0]->value == 1);
+
+        REQUIRE_THAT(libevdev_event_type_get_name(events[1]->type), Equals("EV_ABS"));
+        REQUIRE_THAT(libevdev_event_code_get_name(events[1]->type, events[1]->code), Equals("ABS_MT_TRACKING_ID"));
+        REQUIRE(events[1]->value == -1);
+
+        REQUIRE_THAT(libevdev_event_type_get_name(events[2]->type), Equals("EV_KEY"));
+        REQUIRE_THAT(libevdev_event_code_get_name(events[2]->type, events[2]->code), Equals("BTN_TOOL_FINGER"));
+        REQUIRE(events[2]->value == 0);
+
+        REQUIRE_THAT(libevdev_event_type_get_name(events[3]->type), Equals("EV_KEY"));
+        REQUIRE_THAT(libevdev_event_code_get_name(events[3]->type, events[3]->code), Equals("BTN_TOUCH"));
+        REQUIRE(events[3]->value == 0);
+      }
+    }
   }
 }
 
@@ -190,9 +308,8 @@ TEST_CASE("uinput - paste UTF8", "UINPUT") {
 
   SECTION("Paste UTF8") {
     libevdev_ptr keyboard_dev(libevdev_new(), ::libevdev_free);
-    auto keyboard = Keyboard();
-
-    link_devnode(keyboard_dev.get(), keyboard.get_nodes()[0]);
+    auto session = state::StreamSession{.keyboard = std::make_shared<Keyboard>()};
+    link_devnode(keyboard_dev.get(), session.keyboard->get_nodes()[0]);
 
     auto events = fetch_events(keyboard_dev);
     REQUIRE(events.empty());
@@ -201,7 +318,7 @@ TEST_CASE("uinput - paste UTF8", "UINPUT") {
     utf8_pkt.type = pkts::UTF8_TEXT;
     utf8_pkt.data_size = boost::endian::native_to_big(8);
 
-    control::handle_input(state::StreamSession{.keyboard = std::make_shared<Keyboard>(keyboard)}, {}, &utf8_pkt);
+    control::handle_input(session, {}, &utf8_pkt);
     events = fetch_events(keyboard_dev);
     REQUIRE(events.size() == 16);
 

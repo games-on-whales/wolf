@@ -1,5 +1,6 @@
 #pragma once
 #include <algorithm>
+#include <boost/endian.hpp>
 #include <range/v3/view.hpp>
 #include <sstream>
 #include <stdlib.h>
@@ -63,6 +64,20 @@ inline const char *get_env(const char *tag, const char *def = nullptr) noexcept 
  */
 template <class T> inline std::string join(const std::vector<T> &vec, std::string_view separator) {
   return vec | views::join(separator);
+}
+
+/**
+ * netfloat is just a little-endian float in byte form for network transmission.
+ */
+typedef uint8_t netfloat[4];
+
+/**
+ * @brief Converts a little-endian netfloat to a native endianness float.
+ * @param f Netfloat value.
+ * @return Float value.
+ */
+inline float from_netfloat(netfloat f) {
+  return boost::endian::endian_load<float, sizeof(float), boost::endian::order::little>(f);
 }
 
 } // namespace utils

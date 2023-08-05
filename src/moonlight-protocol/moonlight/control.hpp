@@ -3,6 +3,7 @@
 #include <boost/endian/conversion.hpp>
 #include <core/api.hpp>
 #include <crypto/crypto.hpp>
+#include <helpers/utils.hpp>
 #include <cstdint>
 #include <memory>
 
@@ -64,7 +65,7 @@ enum MOTION_TYPE : uint8_t {
 
 constexpr uint8_t BATTERY_PERCENTAGE_UNKNOWN = 0xFF;
 
-enum CONTROLLER_BTN : unsigned short {
+enum CONTROLLER_BTN : unsigned int {
   DPAD_UP = 0x0001,
   DPAD_DOWN = 0x0002,
   DPAD_LEFT = 0x0004,
@@ -80,12 +81,12 @@ enum CONTROLLER_BTN : unsigned short {
   RIGHT_BUTTON = 0x0200,
 
   SPECIAL_FLAG = 0x0400,
-  PADDLE1_FLAG = 0x0100,
-  PADDLE2_FLAG = 0x0200,
-  PADDLE3_FLAG = 0x0400,
-  PADDLE4_FLAG = 0x0800,
-  TOUCHPAD_FLAG = 0x1000, // Touchpad buttons on Sony controllers
-  MISC_FLAG = 0x2000,     // Share/Mic/Capture/Mute buttons on various controllers
+  PADDLE1_FLAG = 0x010000,
+  PADDLE2_FLAG = 0x020000,
+  PADDLE3_FLAG = 0x040000,
+  PADDLE4_FLAG = 0x080000,
+  TOUCHPAD_FLAG = 0x100000, // Touchpad buttons on Sony controllers
+  MISC_FLAG = 0x200000,     // Share/Mic/Capture/Mute buttons on various controllers
 
   A = 0x1000,
   B = 0x2000,
@@ -158,25 +159,22 @@ struct CONTROLLER_MULTI_PACKET : INPUT_PKT {
   short left_stick_y;
   short right_stick_x;
   short right_stick_y;
-  int tail_a;
-  short tail_b;
+  short tail_a;
+  short buttonFlags2; // Sunshine protocol extension (always 0 for GFE)
+  short tailB;
 };
 
 struct HAPTICS_PACKET : INPUT_PKT {
   uint16_t enable;
 };
 
-// netfloat is just a little-endian float in byte form
-// for network transmission.
-typedef uint8_t netfloat[4];
-
 struct TOUCH_PACKET : INPUT_PKT {
   uint8_t event_type;
   uint8_t zero[3]; // Alignment/reserved
   uint32_t pointer_id;
-  netfloat x;
-  netfloat y;
-  netfloat pressure;
+  utils::netfloat x;
+  utils::netfloat y;
+  utils::netfloat pressure;
 };
 
 struct PEN_PACKET : INPUT_PKT {
@@ -184,9 +182,9 @@ struct PEN_PACKET : INPUT_PKT {
   uint8_t tool_type;
   uint8_t pen_buttons;
   uint8_t zero[1]; // Alignment/reserved
-  netfloat x;
-  netfloat y;
-  netfloat pressure;
+  utils::netfloat x;
+  utils::netfloat y;
+  utils::netfloat pressure;
   uint16_t rotation;
   uint8_t tilt;
   uint8_t zero2[1];
@@ -199,23 +197,34 @@ struct CONTROLLER_ARRIVAL_PACKET : INPUT_PKT {
   uint32_t support_button_flags;
 };
 
+enum TOUCH_EVENT_TYPE : uint8_t {
+  TOUCH_EVENT_HOVER = 0x00,
+  TOUCH_EVENT_DOWN = 0x01,
+  TOUCH_EVENT_UP = 0x02,
+  TOUCH_EVENT_MOVE = 0x03,
+  TOUCH_EVENT_CANCEL = 0x04,
+  TOUCH_EVENT_BUTTON_ONLY = 0x05,
+  TOUCH_EVENT_HOVER_LEAVE = 0x06,
+  TOUCH_EVENT_CANCEL_ALL = 0x07
+};
+
 struct CONTROLLER_TOUCH_PACKET : INPUT_PKT {
   uint8_t controller_number;
-  uint8_t event_type;
+  TOUCH_EVENT_TYPE event_type;
   uint8_t zero[2]; // Alignment/reserved
   uint32_t pointer_id;
-  netfloat x;
-  netfloat y;
-  netfloat pressure;
+  utils::netfloat x;
+  utils::netfloat y;
+  utils::netfloat pressure;
 };
 
 struct CONTROLLER_MOTION_PACKET : INPUT_PKT {
   uint8_t controller_number;
   MOTION_TYPE motion_type;
   uint8_t zero[2]; // Alignment/reserved
-  netfloat x;
-  netfloat y;
-  netfloat z;
+  utils::netfloat x;
+  utils::netfloat y;
+  utils::netfloat z;
 };
 
 struct CONTROLLER_BATTERY_PACKET : INPUT_PKT {

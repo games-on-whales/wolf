@@ -94,8 +94,12 @@ private:
 
 public:
   explicit Keyboard(std::chrono::milliseconds timeout_repress_key = 50ms);
-  Keyboard(const Keyboard &j) : _state(j._state) {}
-  Keyboard(Keyboard &&j) : _state(std::move(j._state)) {}
+
+  // A keyboard can't be copied, you can only create a new one
+  Keyboard(const Keyboard &j) = delete;
+  Keyboard(Keyboard &&j) = delete;
+  void operator=(const Keyboard &j) = delete;
+
   ~Keyboard() override;
 
   std::vector<std::string> get_nodes() const override;
@@ -149,13 +153,17 @@ public:
   };
 
   Joypad(CONTROLLER_TYPE type, uint8_t capabilities);
-  Joypad(const Joypad &j) : _state(j._state) {}
-  Joypad(Joypad &&j) : _state(std::move(j._state)) {}
+
+  // A joypad can't be copied, you can only create a new one
+  Joypad(const Joypad &j) = delete;
+  Joypad(Joypad &&j) = delete;
+  void operator=(const Joypad &j) = delete;
+
   ~Joypad() override;
 
   std::vector<std::string> get_nodes() const override;
 
-  enum CONTROLLER_BTN : unsigned short {
+  enum CONTROLLER_BTN : int {
     DPAD_UP = 0x0001,
     DPAD_DOWN = 0x0002,
     DPAD_LEFT = 0x0004,
@@ -171,12 +179,12 @@ public:
     RIGHT_BUTTON = 0x0200,
 
     SPECIAL_FLAG = 0x0400,
-    PADDLE1_FLAG = 0x0100,
-    PADDLE2_FLAG = 0x0200,
-    PADDLE3_FLAG = 0x0400,
-    PADDLE4_FLAG = 0x0800,
-    TOUCHPAD_FLAG = 0x1000, // Touchpad buttons on Sony controllers
-    MISC_FLAG = 0x2000,     // Share/Mic/Capture/Mute buttons on various controllers
+    PADDLE1_FLAG = 0x010000,
+    PADDLE2_FLAG = 0x020000,
+    PADDLE3_FLAG = 0x040000,
+    PADDLE4_FLAG = 0x080000,
+    TOUCHPAD_FLAG = 0x100000, // Touchpad buttons on Sony controllers
+    MISC_FLAG = 0x200000,     // Share/Mic/Capture/Mute buttons on various controllers
 
     A = 0x1000,
     B = 0x2000,
@@ -193,7 +201,7 @@ public:
    *
    * Example: previous state had `DPAD_UP` and `A` -> user release `A` -> new state only has `DPAD_UP`
    */
-  void set_pressed_buttons(short newly_pressed);
+  void set_pressed_buttons(int newly_pressed);
 
   void set_triggers(unsigned char left, unsigned char right);
 
@@ -205,6 +213,14 @@ public:
   void set_stick(STICK_POSITION stick_type, short x, short y);
 
   void set_on_rumble(const std::function<void(int low_freq, int high_freq)> &callback);
+
+  /**
+   * We expect (x,y) to be in the range [0.0, 1.0]; x and y values are normalised device coordinates
+   * from the top-left corner (0.0, 0.0) to bottom-right corner (1.0, 1.0)
+   */
+  void touchpad_place_finger(int finger_nr, float x, float y);
+
+  void touchpad_release_finger(int finger_nr);
 
   enum MOTION_TYPE : uint8_t {
     ACCELERATION = 0x01,

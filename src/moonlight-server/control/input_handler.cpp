@@ -43,6 +43,10 @@ std::shared_ptr<Joypad> create_new_joypad(const state::StreamSession &session,
   return new_pad;
 }
 
+float netfloat_to_0_1(utils::netfloat f) {
+  return std::clamp(utils::from_netfloat(f), 0.0f, 1.0f);
+}
+
 void handle_input(const state::StreamSession &session,
                   const immer::atom<enet_clients_map> &connected_clients,
                   INPUT_PKT *pkt) {
@@ -170,15 +174,45 @@ void handle_input(const state::StreamSession &session,
                                        Joypad::XBOX,
                                        Joypad::ANALOG_TRIGGERS | Joypad::RUMBLE);
     }
-    selected_pad->set_pressed_buttons(controller_pkt->button_flags);
+    selected_pad->set_pressed_buttons(controller_pkt->button_flags | (controller_pkt->buttonFlags2 << 16));
     selected_pad->set_stick(Joypad::L2, controller_pkt->left_stick_x, controller_pkt->left_stick_y);
     selected_pad->set_stick(Joypad::R2, controller_pkt->right_stick_x, controller_pkt->right_stick_y);
     selected_pad->set_triggers(controller_pkt->left_trigger, controller_pkt->right_trigger);
     break;
   }
-  case CONTROLLER_TOUCH:
+  case CONTROLLER_TOUCH: {
     logs::log(logs::trace, "[INPUT] Received input of type: CONTROLLER_TOUCH");
+    auto touch_pkt = static_cast<CONTROLLER_TOUCH_PACKET *>(pkt);
+    auto joypads = session.joypads->load();
+    std::shared_ptr<Joypad> selected_pad;
+    if (auto joypad = joypads->find(touch_pkt->controller_number)) {
+      selected_pad = std::move(*joypad);
+      auto pointer_id = boost::endian::little_to_native(touch_pkt->pointer_id);
+      switch (touch_pkt->event_type) {
+      case TOUCH_EVENT_DOWN:
+      case TOUCH_EVENT_HOVER:
+      case TOUCH_EVENT_MOVE:
+        selected_pad->touchpad_place_finger(pointer_id, netfloat_to_0_1(touch_pkt->x), netfloat_to_0_1(touch_pkt->y));
+        break;
+      case TOUCH_EVENT_UP:
+      case TOUCH_EVENT_HOVER_LEAVE:
+        selected_pad->touchpad_release_finger(pointer_id);
+        break;
+      case TOUCH_EVENT_CANCEL:
+        selected_pad->touchpad_release_finger(pointer_id);
+        break;
+      case TOUCH_EVENT_CANCEL_ALL:
+        logs::log(logs::warning, "Received TOUCH_EVENT_CANCEL_ALL which isn't supported");
+        break;                      // TODO: remove all fingers
+      case TOUCH_EVENT_BUTTON_ONLY: // TODO: ???
+        logs::log(logs::warning, "Received TOUCH_EVENT_BUTTON_ONLY which isn't supported");
+        break;
+      }
+    } else {
+      logs::log(logs::warning, "Received controller touch for unknown controller {}", touch_pkt->controller_number);
+    }
     break;
+  }
   case CONTROLLER_MOTION:
     logs::log(logs::trace, "[INPUT] Received input of type: CONTROLLER_MOTION");
     break;

@@ -88,9 +88,10 @@ bool encrypt_and_send(std::string_view payload,
   auto enet_peer = clients->find(session_id);
   if (enet_peer == nullptr) {
     logs::log(logs::debug, "[ENET] Unable to find enet client {}", session_id);
+    return false;
   } else {
     auto encrypted = control::encrypt_packet(aes_key, 0, payload); // TODO: seq?
-    send_packet({(char *)encrypted.get(), encrypted->full_size()}, enet_peer->get().get());
+    return send_packet({(char *)encrypted.get(), encrypted->full_size()}, enet_peer->get().get());
   }
 }
 
