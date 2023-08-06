@@ -162,14 +162,14 @@ TEST_CASE("uinput - joypad", "UINPUT") {
     auto c_pkt = pkts::CONTROLLER_ARRIVAL_PACKET{
         .controller_number = controller_number,
         .controller_type = pkts::PS,
-        .capabilities = Joypad::ANALOG_TRIGGERS | Joypad::RUMBLE | Joypad::TOUCHPAD};
+        .capabilities = Joypad::ANALOG_TRIGGERS | Joypad::RUMBLE | Joypad::TOUCHPAD | Joypad::GYRO};
     c_pkt.type = pkts::CONTROLLER_ARRIVAL;
 
     control::handle_input(session, {}, &c_pkt);
 
     auto dev_nodes = session.joypads->load()->at(controller_number)->get_nodes();
     REQUIRE(session.joypads->load()->size() == 1);
-    REQUIRE(dev_nodes.size() == 4);
+    REQUIRE(dev_nodes.size() == 5);
 
     libevdev_ptr touch_rel_dev(libevdev_new(), ::libevdev_free);
     // We know that the last node is the touchpad
@@ -287,6 +287,37 @@ TEST_CASE("uinput - joypad", "UINPUT") {
         REQUIRE_THAT(libevdev_event_code_get_name(events[3]->type, events[3]->code), Equals("BTN_TOUCH"));
         REQUIRE(events[3]->value == 0);
       }
+    }
+
+    libevdev_ptr motion_dev(libevdev_new(), ::libevdev_free);
+    // We know that the second to last node is the motion sensor
+    link_devnode(motion_dev.get(), dev_nodes.rbegin()[1]);
+    SECTION("Motion sensor") {
+      auto motion_pkt = pkts::CONTROLLER_MOTION_PACKET{.controller_number = controller_number,
+                                                       .motion_type = Joypad::ACCELERATION,
+                                                       .x = {255, 255, 255, 0},
+                                                       .y = {0, 255, 255, 255},
+                                                       .z = {0, 0, 0, 0}};
+      motion_pkt.type = pkts::CONTROLLER_MOTION;
+
+      control::handle_input(session, {}, &motion_pkt);
+      auto events = fetch_events(motion_dev);
+      REQUIRE(events.size() == 4);
+
+      REQUIRE_THAT(libevdev_event_type_get_name(events[0]->type), Equals("EV_ABS"));
+      REQUIRE_THAT(libevdev_event_code_get_name(events[0]->type, events[0]->code), Equals("ABS_X"));
+      REQUIRE(events[0]->value == 0);
+
+      REQUIRE_THAT(libevdev_event_type_get_name(events[1]->type), Equals("EV_ABS"));
+      REQUIRE_THAT(libevdev_event_code_get_name(events[1]->type, events[1]->code), Equals("ABS_Y"));
+      REQUIRE(events[1]->value == -40);
+
+      REQUIRE_THAT(libevdev_event_type_get_name(events[2]->type), Equals("EV_ABS"));
+      REQUIRE_THAT(libevdev_event_code_get_name(events[2]->type, events[2]->code), Equals("ABS_Z"));
+      REQUIRE(events[2]->value == 0);
+
+      REQUIRE_THAT(libevdev_event_type_get_name(events[3]->type), Equals("EV_MSC"));
+      REQUIRE_THAT(libevdev_event_code_get_name(events[3]->type, events[3]->code), Equals("MSC_TIMESTAMP"));
     }
   }
 }

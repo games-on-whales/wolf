@@ -227,7 +227,7 @@ public:
     GYROSCOPE = 0x02
   };
 
-  void set_on_motion(const std::function<void(MOTION_TYPE type, int x, int y, int z)> &callback);
+  void set_motion(MOTION_TYPE type, float x, float y, float z);
 
   enum BATTERY_STATE : uint8_t {
     NOT_KNOWN = 0x00,
@@ -238,6 +238,8 @@ public:
     FULL = 0x05
   };
 
-  void set_on_battery(const std::function<void(BATTERY_STATE state, int percentage)> &callback);
+  void set_battery(BATTERY_STATE state, int percentage);
+
+  void set_on_led(const std::function<void(int r, int g, int b)> &callback);
 };
 } // namespace wolf::core::input

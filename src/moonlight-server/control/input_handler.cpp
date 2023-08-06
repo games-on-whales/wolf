@@ -31,6 +31,28 @@ std::shared_ptr<Joypad> create_new_joypad(const state::StreamSession &session,
     encrypt_and_send(plaintext, aes_key, *clients, session_id);
   });
 
+  if (capabilities & Joypad::ACCELEROMETER) {
+    // Request acceleromenter events from the client at 100 Hz
+    auto accelerometer_pkt = ControlMotionEventPacket{
+        .header{.type = MOTION_EVENT, .length = sizeof(ControlMotionEventPacket) - sizeof(ControlPacket)},
+        .controller_number = static_cast<uint16_t>(controller_number),
+        .reportrate = 100,
+        .type = Joypad::ACCELERATION};
+    std::string plaintext = {(char *)&accelerometer_pkt, sizeof(accelerometer_pkt)};
+    encrypt_and_send(plaintext, session.aes_key, connected_clients, session.session_id);
+  }
+
+  if (capabilities & Joypad::GYRO) {
+    // Request gyroscope events from the client at 100 Hz
+    auto gyro_pkt = ControlMotionEventPacket{
+        .header{.type = MOTION_EVENT, .length = sizeof(ControlMotionEventPacket) - sizeof(ControlPacket)},
+        .controller_number = static_cast<uint16_t>(controller_number),
+        .reportrate = 100,
+        .type = Joypad::GYROSCOPE};
+    std::string plaintext = {(char *)&gyro_pkt, sizeof(gyro_pkt)};
+    encrypt_and_send(plaintext, session.aes_key, connected_clients, session.session_id);
+  }
+
   session.joypads->update([&](state::JoypadList joypads) {
     logs::log(logs::debug, "[INPUT] Creating joypad {} of type: {}", controller_number, type);
     // TODO: trigger event in the event bus so that Docker can pick this up
@@ -213,9 +235,20 @@ void handle_input(const state::StreamSession &session,
     }
     break;
   }
-  case CONTROLLER_MOTION:
+  case CONTROLLER_MOTION: {
     logs::log(logs::trace, "[INPUT] Received input of type: CONTROLLER_MOTION");
+    auto motion_pkt = static_cast<CONTROLLER_MOTION_PACKET *>(pkt);
+    auto joypads = session.joypads->load();
+    std::shared_ptr<Joypad> selected_pad;
+    if (auto joypad = joypads->find(motion_pkt->controller_number)) {
+      selected_pad = std::move(*joypad);
+      selected_pad->set_motion(motion_pkt->motion_type,
+                               utils::from_netfloat(motion_pkt->x),
+                               utils::from_netfloat(motion_pkt->y),
+                               utils::from_netfloat(motion_pkt->z));
+    }
     break;
+  }
   case CONTROLLER_BATTERY:
     logs::log(logs::trace, "[INPUT] Received input of type: CONTROLLER_BATTERY");
     break;

@@ -2,6 +2,7 @@
 #include <array>
 #include <boost/endian/conversion.hpp>
 #include <core/api.hpp>
+#include <core/input.hpp>
 #include <crypto/crypto.hpp>
 #include <helpers/utils.hpp>
 #include <cstdint>
@@ -47,20 +48,6 @@ enum CONTROLLER_CAPABILITIES : uint8_t {
   GYRO = 0x20,
   BATTERY = 0x40,
   RGB_LED = 0x80
-};
-
-enum BATTERY_STATE : uint8_t {
-  NOT_KNOWN = 0x00,
-  NOT_PRESENT = 0x01,
-  DISCHARGING = 0x02,
-  CHARGHING = 0x03,
-  NOT_CHARGING = 0x04,
-  FULL = 0x05
-};
-
-enum MOTION_TYPE : uint8_t {
-  ACCELERATION = 0x01,
-  GYROSCOPE = 0x02
 };
 
 constexpr uint8_t BATTERY_PERCENTAGE_UNKNOWN = 0xFF;
@@ -220,7 +207,7 @@ struct CONTROLLER_TOUCH_PACKET : INPUT_PKT {
 
 struct CONTROLLER_MOTION_PACKET : INPUT_PKT {
   uint8_t controller_number;
-  MOTION_TYPE motion_type;
+  wolf::core::input::Joypad::MOTION_TYPE motion_type;
   uint8_t zero[2]; // Alignment/reserved
   utils::netfloat x;
   utils::netfloat y;
@@ -229,7 +216,7 @@ struct CONTROLLER_MOTION_PACKET : INPUT_PKT {
 
 struct CONTROLLER_BATTERY_PACKET : INPUT_PKT {
   uint8_t controller_number;
-  BATTERY_STATE battery_state;
+  wolf::core::input::Joypad::BATTERY_STATE battery_state;
   uint8_t battery_percentage;
   uint8_t zero[1]; // Alignment/reserved
 };

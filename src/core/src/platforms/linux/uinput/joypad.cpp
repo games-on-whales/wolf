@@ -34,12 +34,15 @@ struct JoypadState {
     std::map<int /* finger_id */, int /* MT_SLOT */> fingers;
   } trackpad_state;
 
+  libevdev_uinput_ptr motion_sensor = nullptr;
+  /* see: MSC_TIMESTAMP */
+  std::chrono::time_point<std::chrono::steady_clock> motion_sensor_startup_time = std::chrono::steady_clock::now();
+
   bool stop_listening_events = false;
   std::thread events_thread;
 
   std::optional<std::function<void(int low_freq, int high_freq)>> on_rumble = std::nullopt;
-  std::optional<std::function<void(Joypad::MOTION_TYPE type, int x, int y, int z)>> on_motion = std::nullopt;
-  std::optional<std::function<void(Joypad::BATTERY_STATE state, int percentage)>> on_battery = std::nullopt;
+  std::optional<std::function<void(int r, int g, int b)>> on_led = std::nullopt;
 };
 
 /**
@@ -81,6 +84,10 @@ std::vector<std::string> Joypad::get_nodes() const {
 
     auto additional_nodes = get_child_dev_nodes(joy);
     nodes.insert(nodes.end(), additional_nodes.begin(), additional_nodes.end());
+  }
+
+  if (auto motion_sensor = _state->motion_sensor.get()) {
+    nodes.emplace_back(libevdev_uinput_get_devnode(motion_sensor));
   }
 
   if (auto trackpad = _state->trackpad.get()) {
@@ -230,6 +237,83 @@ std::optional<libevdev_uinput *> create_trackpad() {
   }
 
   logs::log(logs::debug, "[INPUT] Created virtual controller touchpad {}", libevdev_uinput_get_devnode(uidev));
+
+  return uidev;
+}
+
+constexpr int ACCELERATION_MAX = 40;
+constexpr int ACCELERATION_MIN = -40;
+constexpr int GYRO_MAX = 180;
+constexpr int GYRO_MIN = -180;
+
+/**
+ * All values in here have been taken from a real PS5 gamepad using evemu-record
+ * See: https://www.kernel.org/doc/html/latest/input/event-codes.html#input-prop-accelerometer
+ */
+std::optional<libevdev_uinput *> create_motion_sensors() {
+  libevdev *dev = libevdev_new();
+  libevdev_uinput *uidev;
+
+  libevdev_set_uniq(dev, "Wolf gamepad motion sensors");
+  libevdev_set_name(dev, "Wolf gamepad (virtual) motion sensors");
+  libevdev_set_id_version(dev, 0xAB00);
+
+  libevdev_set_id_product(dev, 0xce6);
+  libevdev_set_id_vendor(dev, 0x54c);
+  libevdev_set_id_bustype(dev, BUS_USB);
+
+  /**
+   * This enables the device to be used as a motion sensor; from the kernel docs:
+   * Directional axes on this device (absolute and/or relative x, y, z) represent accelerometer data.
+   * Some devices also report gyroscope data, which devices can report through the rotational axes (absolute and/or
+   * relative rx, ry, rz).
+   */
+  libevdev_enable_property(dev, INPUT_PROP_ACCELEROMETER);
+
+  libevdev_enable_event_type(dev, EV_ABS);
+
+  constexpr int ACC_RES = 8192;
+  constexpr int GYRO_RES = 1024;
+  constexpr int FUZZ = 16;
+
+  // Acceleration
+  input_absinfo acc_abs_x{38, ACCELERATION_MIN, ACCELERATION_MAX, FUZZ, 0, ACC_RES};
+  libevdev_enable_event_code(dev, EV_ABS, ABS_X, &acc_abs_x);
+
+  input_absinfo acc_abs_y{8209, ACCELERATION_MIN, ACCELERATION_MAX, FUZZ, 0, ACC_RES};
+  libevdev_enable_event_code(dev, EV_ABS, ABS_Y, &acc_abs_y);
+
+  input_absinfo acc_abs_z{1025, ACCELERATION_MIN, ACCELERATION_MAX, FUZZ, 0, ACC_RES};
+  libevdev_enable_event_code(dev, EV_ABS, ABS_Z, &acc_abs_z);
+
+  // Gyro
+  input_absinfo gyro_abs_x{-186, GYRO_MIN, GYRO_MAX, FUZZ, 0, GYRO_RES};
+  libevdev_enable_event_code(dev, EV_ABS, ABS_RX, &gyro_abs_x);
+
+  input_absinfo gyro_abs_y{-124, GYRO_MIN, GYRO_MAX, FUZZ, 0, GYRO_RES};
+  libevdev_enable_event_code(dev, EV_ABS, ABS_RY, &gyro_abs_y);
+
+  input_absinfo gyro_abs_z{0, GYRO_MIN, GYRO_MAX, FUZZ, 0, GYRO_RES};
+  libevdev_enable_event_code(dev, EV_ABS, ABS_RZ, &gyro_abs_z);
+
+  /**
+   * From the kernel docs https://www.kernel.org/doc/html/latest/input/event-codes.html#ev-msc
+   * Used to report the number of microseconds since the last reset.
+   * This event should be coded as an uint32 value, which is allowed to wrap around with no special consequence.
+   * It is assumed that the time difference between two consecutive events is reliable on a reasonable time scale
+   * (hours). A reset to zero can happen, in which case the time since the last event is unknown. If the device does not
+   * provide this information, the driver must not provide it to user space.
+   */
+  libevdev_enable_event_type(dev, EV_MSC);
+  libevdev_enable_event_code(dev, EV_MSC, MSC_TIMESTAMP, nullptr);
+
+  auto err = libevdev_uinput_create_from_device(dev, LIBEVDEV_UINPUT_OPEN_MANAGED, &uidev);
+  if (err != 0) {
+    logs::log(logs::error, "Unable to create joypad motion sensor device, error code: {}", strerror(-err));
+    return {};
+  }
+
+  logs::log(logs::debug, "[INPUT] Created virtual controller motion sensor {}", libevdev_uinput_get_devnode(uidev));
 
   return uidev;
 }
@@ -466,6 +550,12 @@ Joypad::Joypad(Joypad::CONTROLLER_TYPE type, uint8_t capabilities) {
       this->_state->trackpad = {*trackpad, ::libevdev_uinput_destroy};
     }
   }
+
+  if (capabilities & Joypad::GYRO || capabilities & Joypad::ACCELEROMETER) {
+    if (auto ms = create_motion_sensors()) {
+      this->_state->motion_sensor = {*ms, ::libevdev_uinput_destroy};
+    }
+  }
 }
 
 Joypad::~Joypad() {
@@ -558,13 +648,46 @@ void Joypad::set_on_rumble(const std::function<void(int, int)> &callback) {
   this->_state->on_rumble = callback;
 }
 
-void Joypad::set_on_motion(const std::function<void(MOTION_TYPE, int, int, int)> &callback) {
-  this->_state->on_motion = callback;
+void Joypad::set_motion(MOTION_TYPE type, float x, float y, float z) {
+  if (auto motion_sensor = this->_state->motion_sensor.get()) {
+    switch (type) {
+    case GYROSCOPE: {
+      auto x_clamped = std::clamp((int)x, GYRO_MIN, GYRO_MAX);
+      auto y_clamped = std::clamp((int)y, GYRO_MIN, GYRO_MAX);
+      auto z_clamped = std::clamp((int)z, GYRO_MIN, GYRO_MAX);
+
+      libevdev_uinput_write_event(motion_sensor, EV_ABS, ABS_RX, x_clamped);
+      libevdev_uinput_write_event(motion_sensor, EV_ABS, ABS_RY, y_clamped);
+      libevdev_uinput_write_event(motion_sensor, EV_ABS, ABS_RZ, z_clamped);
+      break;
+    }
+    case ACCELERATION: {
+      auto x_clamped = std::clamp((int)x, ACCELERATION_MIN, ACCELERATION_MAX);
+      auto y_clamped = std::clamp((int)y, ACCELERATION_MIN, ACCELERATION_MAX);
+      auto z_clamped = std::clamp((int)z, ACCELERATION_MIN, ACCELERATION_MAX);
+
+      libevdev_uinput_write_event(motion_sensor, EV_ABS, ABS_X, x_clamped);
+      libevdev_uinput_write_event(motion_sensor, EV_ABS, ABS_Y, y_clamped);
+      libevdev_uinput_write_event(motion_sensor, EV_ABS, ABS_Z, z_clamped);
+      break;
+    }
+    }
+
+    auto time_since_last_reset = std::chrono::duration_cast<std::chrono::microseconds>(
+        std::chrono::steady_clock::now() - this->_state->motion_sensor_startup_time);
+    libevdev_uinput_write_event(motion_sensor, EV_MSC, MSC_TIMESTAMP, time_since_last_reset.count());
+
+    libevdev_uinput_write_event(motion_sensor, EV_SYN, SYN_REPORT, 0);
+  }
 };
 
-void Joypad::set_on_battery(const std::function<void(BATTERY_STATE, int)> &callback) {
-  this->_state->on_battery = callback;
+void Joypad::set_battery(BATTERY_STATE state, int percentage){
+
 };
+
+void Joypad::set_on_led(const std::function<void(int r, int g, int b)> &callback) {
+  this->_state->on_led = callback;
+}
 
 void Joypad::touchpad_place_finger(int finger_nr, float x, float y) {
   if (auto touchpad = this->_state->trackpad.get()) {
