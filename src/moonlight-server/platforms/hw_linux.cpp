@@ -130,6 +130,8 @@ std::vector<std::string> linked_devices(std::string_view gpu) {
         found_devices.emplace_back("/dev/nvidiactl");
       }
     }
+  } else {
+    logs::log(logs::warning, "{} doesn't have a primary node! Available nodes: {}", gpu, device->available_nodes);
   }
 
   return found_devices;
