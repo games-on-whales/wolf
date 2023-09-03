@@ -1,34 +1,34 @@
 /**
-* This is all based on libevdev
-*  - Here's a great introductory blog post:
-* https://web.archive.org/web/20200809000852/https://who-t.blogspot.com/2016/09/understanding-evdev.html/
-*  - Main docs: https://www.freedesktop.org/software/libevdev/doc/latest/index.html
-*  - Python docs are also of good quality: https://python-libevdev.readthedocs.io/en/latest/index.html
-*
-* You can debug your system using `evemu-describe`, `evemu-record` and `udevadm monitor`
-* (they can be installed using: `apt install -y evemu-tools`)
-*
-* For controllers there's a set of tools in the `joystick` package:
-* - ffcfstress  - force-feedback stress test
-* - ffmvforce   - force-feedback orientation test
-* - ffset       - force-feedback configuration tool
-* - fftest      - general force-feedback test
-* - jstest      - joystick test
-* - jscal       - joystick calibration tool
-*
-* For force feedback see: https://www.kernel.org/doc/html/latest/input/ff.html
-*/
+ * This is all based on libevdev
+ *  - Here's a great introductory blog post:
+ * https://web.archive.org/web/20200809000852/https://who-t.blogspot.com/2016/09/understanding-evdev.html/
+ *  - Main docs: https://www.freedesktop.org/software/libevdev/doc/latest/index.html
+ *  - Python docs are also of good quality: https://python-libevdev.readthedocs.io/en/latest/index.html
+ *
+ * You can debug your system using `evemu-describe`, `evemu-record` and `udevadm monitor`
+ * (they can be installed using: `apt install -y evemu-tools`)
+ *
+ * For controllers there's a set of tools in the `joystick` package:
+ * - ffcfstress  - force-feedback stress test
+ * - ffmvforce   - force-feedback orientation test
+ * - ffset       - force-feedback configuration tool
+ * - fftest      - general force-feedback test
+ * - jstest      - joystick test
+ * - jscal       - joystick calibration tool
+ *
+ * For force feedback see: https://www.kernel.org/doc/html/latest/input/ff.html
+ */
 
 #include <core/input.hpp>
 #include <immer/array.hpp>
 #include <immer/atom.hpp>
+#include <iomanip>
 #include <libevdev/libevdev-uinput.h>
 #include <libevdev/libevdev.h>
 #include <libudev.h>
 #include <memory>
 #include <optional>
 #include <string>
-#include <iomanip>
 
 namespace wolf::core::input {
 
