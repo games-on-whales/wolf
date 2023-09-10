@@ -175,7 +175,10 @@ void pair(const std::shared_ptr<typename SimpleWeb::Server<T>::Response> &respon
 
     auto is_paired = xml.template get<int>("root.paired");
     if (is_paired == 1) {
-      state::pair(state->config, state::PairedClient{.client_cert = client_cache.client_cert, .app_state_folder = std::to_string(std::hash<std::string>{}(client_cache.client_cert))});
+      state::pair(
+          state->config,
+          state::PairedClient{.client_cert = client_cache.client_cert,
+                              .app_state_folder = std::to_string(std::hash<std::string>{}(client_cache.client_cert))});
       logs::log(logs::info, "Succesfully paired {}", client_ip);
     } else {
       logs::log(logs::warning, "Failed pairing with {}", client_ip);
