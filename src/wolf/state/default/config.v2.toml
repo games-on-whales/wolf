@@ -203,7 +203,7 @@ height={height}, format=NV12, colorimetry={color_space}
 \
 """
 encoder_pipeline = """
-vah265enc aud=false b-frames=0 ref-frames=1 num-slices=0 bitrate={bitrate} !
+vah265enc aud=false b-frames=0 ref-frames=1 num-slices={slices_per_frame} bitrate={bitrate} !
 h265parse !
 video/x-h265, profile=main, stream-format=byte-stream
 \
@@ -294,7 +294,7 @@ height={height}, format=NV12, colorimetry={color_space}
 \
 """
 encoder_pipeline = """
-vah264enc aud=false b-frames=0 ref-frames=1 num-slices=0 bitrate={bitrate} !
+vah264enc aud=false b-frames=0 ref-frames=1 num-slices={slices_per_frame} bitrate={bitrate} !
 h264parse !
 video/x-h264, profile=main, stream-format=byte-stream
 \

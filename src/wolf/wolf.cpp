@@ -139,19 +139,29 @@ std::optional<AudioServer> setup_audio_server(const std::string &runtime_dir) {
   } else {
     logs::log(logs::info, "Starting PulseAudio docker container");
     docker::DockerAPI docker_api(utils::get_env("WOLF_DOCKER_SOCKET", "/var/run/docker.sock"));
-    auto container = docker_api.create(docker::Container{
-        .id = "",
-        .name = "WolfPulseAudio",
-        .image = utils::get_env("WOLF_PULSE_IMAGE", "ghcr.io/games-on-whales/pulseaudio:master"),
-        .status = docker::CREATED,
-        .ports = {},
-        .mounts = {docker::MountPoint{.source = runtime_dir, .destination = "/tmp/pulse/", .mode = "rw"}},
-        .env = {{"XDG_RUNTIME_DIR", runtime_dir}}});
+    auto container = docker_api.create(
+        docker::Container{
+            .id = "",
+            .name = "WolfPulseAudio",
+            .image = utils::get_env("WOLF_PULSE_IMAGE", "ghcr.io/games-on-whales/pulseaudio:master"),
+            .status = docker::CREATED,
+            .ports = {},
+            .mounts = {docker::MountPoint{.source = runtime_dir, .destination = "/tmp/pulse/", .mode = "rw"}},
+            .env = {{"XDG_RUNTIME_DIR", runtime_dir}}},
+        // The following is needed when using podman (or any container that uses SELINUX). This way we can access the
+        // socket that is created by PulseAudio from other containers (including this one).
+        R"({
+                  "HostConfig" : {
+                    "SecurityOpt" : ["label=disable"]
+                  }
+            })");
     if (container && docker_api.start_by_id(container.value().id)) {
       std::this_thread::sleep_for(1000ms); // TODO: configurable? Better way of knowing when ready?
       return {{.server = audio::connect(fmt::format("{}/pulse-socket", runtime_dir)), .container = container}};
     }
   }
+
+  logs::log(logs::warning, "Failed to connect to any PulseAudio server, audio will not be available!");
 
   return {};
 }
