@@ -53,6 +53,7 @@ struct PairedClient {
 
 struct PairSignal {
   std::string client_ip;
+  std::string host_ip;
   std::shared_ptr<boost::promise<std::string>> user_pin;
 };
 
@@ -143,9 +144,9 @@ struct Host {
   const X509 *server_cert;
   const EVP_PKEY *server_pkey;
 
-  std::string external_ip;
-  std::string internal_ip;
-  std::string mac_address;
+  // Network information can be manually set by users, if not, we'll automatically gather them
+  std::optional<std::string> internal_ip;
+  std::optional<std::string> mac_address;
 };
 
 /**

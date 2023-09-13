@@ -1,11 +1,14 @@
 #include "hw.hpp"
+#include <arpa/inet.h>
 #include <fcntl.h>
 #include <filesystem>
 #include <fmt/core.h>
 #include <fstream>
 #include <helpers/logger.hpp>
 #include <helpers/utils.hpp>
+#include <ifaddrs.h>
 #include <iostream>
+#include <netinet/in.h>
 #include <optional>
 #include <unistd.h>
 
@@ -164,4 +167,44 @@ GPU_VENDOR get_vendor(std::string_view gpu) {
 
   logs::log(logs::warning, "Unable to recognise GPU vendor: {}", vendor_name);
   return UNKNOWN;
+}
+
+std::string get_ip_address(ifaddrs *ifa) {
+  if (ifa->ifa_addr->sa_family == AF_INET) { // IP4
+    auto tmpAddrPtr = &((struct sockaddr_in *)ifa->ifa_addr)->sin_addr;
+    char addressBuffer[INET_ADDRSTRLEN];
+    inet_ntop(AF_INET, tmpAddrPtr, addressBuffer, INET_ADDRSTRLEN);
+    return addressBuffer;
+  } else if (ifa->ifa_addr->sa_family == AF_INET6) { // IP6
+    auto tmpAddrPtr = &((struct sockaddr_in6 *)ifa->ifa_addr)->sin6_addr;
+    char addressBuffer[INET6_ADDRSTRLEN];
+    inet_ntop(AF_INET6, tmpAddrPtr, addressBuffer, INET6_ADDRSTRLEN);
+    return addressBuffer;
+  }
+
+  return "0.0.0.0";
+}
+
+std::string get_mac_address(std::string_view local_ip) {
+  ifaddrs *ifaddrptr = nullptr;
+  getifaddrs(&ifaddrptr);
+  std::unique_ptr<ifaddrs, decltype(&freeifaddrs)> ifAddrStruct = {ifaddrptr, ::freeifaddrs};
+
+  for (auto ifa = ifAddrStruct.get(); ifa != NULL; ifa = ifa->ifa_next) {
+    if (ifa->ifa_addr && local_ip == get_ip_address(ifa)) {
+      std::ifstream mac_file(fmt::format("/sys/class/net/{}/address", ifa->ifa_name));
+      if (mac_file.is_open()) {
+        std::string mac_address;
+        std::getline(mac_file, mac_address);
+        return mac_address;
+      }
+    }
+  }
+
+  logs::log(logs::warning,
+            "Unable to get mac address of ip address: {}, you can override this by settings the env variables "
+            "WOLF_INTERNAL_MAC or WOLF_INTERNAL_IP",
+            local_ip);
+
+  return "00:00:00:00:00:00";
 }

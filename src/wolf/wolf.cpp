@@ -62,12 +62,16 @@ state::Host get_host_config(std::string_view pkey_filename, std::string_view cer
     x509::write_to_disk(server_pkey, pkey_filename, server_cert, cert_filename);
   }
 
-  // TODO: get network info from the host, this is used by Moonlight only for WOL AFAIK
-  auto external_ip = "";
-  auto internal_ip = "";
-  auto mac_address = "";
+  std::optional<std::string> internal_ip = std::nullopt;
+  if (auto override_ip = utils::get_env("WOLF_INTERNAL_IP")) {
+    internal_ip = override_ip;
+  }
+  std::optional<std::string> mac_address = std::nullopt;
+  if (auto override_mac = utils::get_env("WOLF_INTERNAL_MAC")) {
+    mac_address = override_mac;
+  }
 
-  return {getDisplayModes(), getAudioModes(), server_cert, server_pkey, external_ip, internal_ip, mac_address};
+  return {getDisplayModes(), getAudioModes(), server_cert, server_pkey, internal_ip, mac_address};
 }
 
 /**

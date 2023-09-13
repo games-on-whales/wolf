@@ -7,6 +7,7 @@
 #include <immer/vector_transient.hpp>
 #include <moonlight/control.hpp>
 #include <moonlight/protocol.hpp>
+#include <platforms/hw.hpp>
 #include <range/v3/view.hpp>
 #include <rest/helpers.hpp>
 #include <rest/rest.hpp>
@@ -39,6 +40,12 @@ void not_found(const std::shared_ptr<typename SimpleWeb::Server<T>::Response> &r
 }
 
 template <class T>
+std::string get_host_ip(const std::shared_ptr<typename SimpleWeb::Server<T>::Request> &request,
+                        const immer::box<state::AppState> &state) {
+  return state->host->internal_ip.value_or(request->local_endpoint().address().to_string());
+}
+
+template <class T>
 void serverinfo(const std::shared_ptr<typename SimpleWeb::Server<T>::Response> &response,
                 const std::shared_ptr<typename SimpleWeb::Server<T>::Request> &request,
                 const immer::box<state::AppState> &state) {
@@ -54,15 +61,16 @@ void serverinfo(const std::shared_ptr<typename SimpleWeb::Server<T>::Response> &
   bool is_busy = session.has_value();
   int app_id = session.has_value() ? std::stoi(session->app->base.id) : -1;
 
+  auto local_ip = get_host_ip<T>(request, state);
+
   auto xml = moonlight::serverinfo(is_busy,
                                    app_id,
                                    state::HTTPS_PORT,
                                    state::HTTP_PORT,
                                    cfg->uuid,
                                    cfg->hostname,
-                                   host->mac_address,
-                                   host->external_ip,
-                                   host->internal_ip,
+                                   state->host->mac_address.value_or(get_mac_address(local_ip)),
+                                   local_ip,
                                    host->display_modes,
                                    is_https,
                                    cfg->support_hevc);
@@ -94,7 +102,9 @@ void pair(const std::shared_ptr<typename SimpleWeb::Server<T>::Response> &respon
   if (client_id && salt && client_cert_str) {
     auto future_pin = std::make_shared<boost::promise<std::string>>();
     state->event_bus->fire_event( // Emit a signal and wait for the promise to be fulfilled
-        immer::box<state::PairSignal>(state::PairSignal{.client_ip = client_ip, .user_pin = future_pin}));
+        immer::box<state::PairSignal>(state::PairSignal{.client_ip = client_ip,
+                                                        .host_ip = get_host_ip<T>(request, state),
+                                                        .user_pin = future_pin}));
 
     future_pin->get_future().then(
         [state, salt, client_cert_str, cache_key, client_id, response](boost::future<std::string> fut_pin) {
@@ -270,7 +280,8 @@ void launch(const std::shared_ptr<typename SimpleWeb::Server<SimpleWeb::HTTPS>::
   state->running_sessions->update(
       [&new_session](const immer::vector<state::StreamSession> &ses_v) { return ses_v.push_back(new_session); });
 
-  auto xml = moonlight::launch_success(state->host->external_ip, std::to_string(state::RTSP_SETUP_PORT));
+  auto xml =
+      moonlight::launch_success(get_host_ip<SimpleWeb::HTTPS>(request, state), std::to_string(state::RTSP_SETUP_PORT));
   send_xml<SimpleWeb::HTTPS>(response, SimpleWeb::StatusCode::success_ok, xml);
 }
 
@@ -294,7 +305,7 @@ void resume(const std::shared_ptr<typename SimpleWeb::Server<SimpleWeb::HTTPS>::
   XML xml;
   xml.put("root.<xmlattr>.status_code", 200);
   xml.put("root.sessionUrl0",
-          "rtsp://"s + request->local_endpoint().address().to_string() + ':' + std::to_string(state::RTSP_SETUP_PORT));
+          "rtsp://"s + get_host_ip<SimpleWeb::HTTPS>(request, state) + ':' + std::to_string(state::RTSP_SETUP_PORT));
   xml.put("root.resume", 1);
   send_xml<SimpleWeb::HTTPS>(response, SimpleWeb::StatusCode::success_ok, xml);
 }

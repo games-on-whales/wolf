@@ -12,7 +12,6 @@ XML serverinfo(bool isServerBusy,
                const std::string &uuid,
                const std::string &hostname,
                const std::string &mac_address,
-               const std::string &external_ip,
                const std::string &local_ip,
                const immer::array<DisplayMode> &display_modes,
                int pair_status,
@@ -37,7 +36,6 @@ XML serverinfo(bool isServerBusy,
   resp.put("root.HttpsPort", https_port);
   resp.put("root.ExternalPort", http_port);
   resp.put("root.mac", mac_address);
-  resp.put("root.ExternalIP", external_ip);
   resp.put("root.LocalIP", local_ip);
 
   XML display_nodes;

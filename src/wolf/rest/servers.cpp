@@ -72,7 +72,7 @@ void startServer(HttpServer *server, const immer::box<state::AppState> state, in
       [pairing_atom](const immer::box<state::PairSignal> pair_sig) {
         pairing_atom->update([&pair_sig](auto m) {
           auto secret = crypto::str_to_hex(crypto::random(8));
-          logs::log(logs::info, "Insert pin at http://localhost:47989/pin/#{}", secret);
+          logs::log(logs::info, "Insert pin at http://{}:47989/pin/#{}", pair_sig->host_ip, secret);
           return m.set(secret, pair_sig);
         });
       });
