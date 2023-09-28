@@ -1,5 +1,6 @@
 #pragma once
 #include <boost/process.hpp>
+#include <core/input.hpp>
 #include <eventbus/event_bus.hpp>
 #include <immer/box.hpp>
 #include <memory>
@@ -7,7 +8,6 @@
 #include <string>
 #include <thread>
 #include <toml.hpp>
-#include <core/input.hpp>
 
 namespace process {
 

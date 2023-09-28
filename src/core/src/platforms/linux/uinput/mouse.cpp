@@ -26,14 +26,14 @@ std::vector<std::string> Mouse::get_nodes() const {
 std::vector<std::map<std::string, std::string>> Mouse::get_udev_events() const {
   std::vector<std::map<std::string, std::string>> events;
 
-  if(_state->mouse_rel.get()){
+  if (_state->mouse_rel.get()) {
     auto base = gen_udev_base_event(_state->mouse_rel);
     base["ID_INPUT_MOUSE"] = "1";
     base[".INPUT_CLASS"] = "mouse";
     events.emplace_back(std::move(base));
   }
 
-  if(_state->mouse_abs.get()){
+  if (_state->mouse_abs.get()) {
     auto base = gen_udev_base_event(_state->mouse_abs);
     base["ID_INPUT_TOUCHPAD"] = "1";
     base[".INPUT_CLASS"] = "mouse";

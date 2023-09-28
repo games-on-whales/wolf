@@ -116,7 +116,6 @@ public:
   std::vector<std::map<std::string, std::string>> get_udev_events() const override;
   std::vector<std::pair<std::string, std::vector<std::string>>> get_udev_hw_db_entries() const override;
 
-
   void press(short key_code);
 
   void release(short key_code);
@@ -178,7 +177,6 @@ public:
 
   std::vector<std::map<std::string, std::string>> get_udev_events() const override;
   std::vector<std::pair<std::string, std::vector<std::string>>> get_udev_hw_db_entries() const override;
-
 
   enum CONTROLLER_BTN : int {
     DPAD_UP = 0x0001,
