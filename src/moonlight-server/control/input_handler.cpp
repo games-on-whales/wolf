@@ -2,6 +2,7 @@
 #include <boost/locale.hpp>
 #include <control/input_handler.hpp>
 #include <helpers/logger.hpp>
+#include <immer/box.hpp>
 #include <moonlight/control.hpp>
 #include <string>
 
@@ -55,7 +56,10 @@ std::shared_ptr<Joypad> create_new_joypad(const state::StreamSession &session,
 
   session.joypads->update([&](state::JoypadList joypads) {
     logs::log(logs::debug, "[INPUT] Creating joypad {} of type: {}", controller_number, type);
-    // TODO: trigger event in the event bus so that Docker can pick this up
+
+    session.event_bus->fire_event(immer::box<state::HotPlugDeviceEvent>(
+        state::HotPlugDeviceEvent{.session_id = session.session_id, .device = new_pad}));
+
     if (auto old_controller = joypads.find(controller_number)) {
       logs::log(logs::debug, "[INPUT] Replacing previously plugged joypad");
       // TODO: should we do something with old_controller?

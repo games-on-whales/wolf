@@ -6,6 +6,7 @@
 #include <fmt/core.h>
 #include <helpers/logger.hpp>
 #include <helpers/utils.hpp>
+#include <platforms/hw.hpp>
 #include <range/v3/view.hpp>
 #include <state/data-structures.hpp>
 #include <sys/stat.h>
@@ -18,6 +19,7 @@ using namespace std::chrono_literals;
 using namespace ranges::views;
 using namespace utils;
 using namespace moonlight::control;
+using namespace wolf::core;
 
 class RunDocker : public state::Runner {
 public:
@@ -169,25 +171,33 @@ void RunDocker::run(std::size_t session_id,
           }
         });
 
+    auto hotplug_handler = this->ev_bus->register_handler<immer::box<state::HotPlugDeviceEvent>>(
+        [session_id, container_id, this](const immer::box<state::HotPlugDeviceEvent> &hotplug_ev) {
+          if (hotplug_ev->session_id == session_id) {
+            logs::log(logs::debug, "{} received hot-plug device event", session_id);
+            for (auto udev_ev : hotplug_ev->device->get_udev_events()) {
+              std::string cmd;
+              std::string udev_msg = base64_encode(map_to_string(udev_ev));
+              if (udev_ev.count("DEVNAME") == 0) {
+                cmd = fmt::format("fake-udev -m {}", udev_msg);
+              } else {
+                cmd = fmt::format("mknod {} c {} {} && chmod 777 {} && fake-udev -m {}",
+                                  udev_ev["DEVNAME"],
+                                  udev_ev["MAJOR"],
+                                  udev_ev["MINOR"],
+                                  udev_ev["DEVNAME"],
+                                  udev_msg);
+              }
+              logs::log(logs::debug, "[DOCKER] Executing command: {}", cmd);
+              docker_api.exec(container_id, {"/bin/bash", "-c", cmd}, "root");
+            }
+
+            // TODO: get_udev_hw_db_entries
+          }
+        });
+
     do {
       boost::this_thread::sleep_for(boost::chrono::milliseconds(500));
-      // TODO: on_new_device
-      //        struct stat buf {};
-      //        for (const auto &device : initial_devices) {
-      //          if (stat(device.c_str(), &buf)) {
-      //            logs::log(logs::warning, "Failed to stat {}: {}", device, strerror(errno));
-      //            continue;
-      //          }
-      //          if (!S_ISCHR(buf.st_mode)) {
-      //            logs::log(logs::warning, "Device {} is not a character device", device);
-      //            continue;
-      //          }
-      //          unsigned int dev_major = major(buf.st_rdev);
-      //          unsigned int dev_minor = minor(buf.st_rdev);
-      //          auto cmd = fmt::format("mknod {} c {} {} && chown 1000:1000 {}", device, dev_major, dev_minor,
-      //          device); logs::log(logs::debug, "[DOCKER] Executing command: {}", cmd); docker_api.exec(container_id,
-      //          {"/bin/bash", "-c", cmd});
-      //        }
     } while (docker_api.get_by_id(container_id)->status == RUNNING);
 
     logs::log(logs::debug, "[DOCKER] Container logs: \n{}", docker_api.get_logs(container_id));
@@ -200,6 +210,7 @@ void RunDocker::run(std::size_t session_id,
     }
     logs::log(logs::info, "Stopped container: {}", docker_container->name);
     terminate_handler.unregister();
+    hotplug_handler.unregister();
   }
 }
 

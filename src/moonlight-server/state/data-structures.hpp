@@ -178,6 +178,7 @@ struct StreamSession {
   moonlight::DisplayMode display_mode;
   AudioMode audio_mode;
 
+  std::shared_ptr<dp::event_bus> event_bus;
   std::shared_ptr<App> app;
   std::string app_state_folder;
 
@@ -194,6 +195,13 @@ struct StreamSession {
   std::shared_ptr<input::Keyboard> keyboard;
   std::shared_ptr<immer::atom<JoypadList>> joypads;
 };
+
+struct HotPlugDeviceEvent {
+  std::size_t session_id;
+  std::shared_ptr<input::VirtualDevice> device;
+};
+
+// TODO: unplug device event? Or should this be tied to the session?
 
 using SessionsAtoms = std::shared_ptr<immer::atom<immer::vector<StreamSession>>>;
 

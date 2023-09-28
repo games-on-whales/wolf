@@ -80,4 +80,35 @@ inline float from_netfloat(netfloat f) {
   return boost::endian::endian_load<float, sizeof(float), boost::endian::order::little>(f);
 }
 
+inline std::string base64_encode(const std::string &in) {
+  std::string out;
+
+  int val = 0, valb = -6;
+  for (unsigned char c : in) {
+    val = (val << 8) + c;
+    valb += 8;
+    while (valb >= 0) {
+      out.push_back("ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/"[(val >> valb) & 0x3F]);
+      valb -= 6;
+    }
+  }
+  if (valb > -6)
+    out.push_back(
+        "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/"[((val << 8) >> (valb + 8)) & 0x3F]);
+  while (out.size() % 4)
+    out.push_back('=');
+  return out;
+}
+
+inline std::string
+map_to_string(const std::map<std::string, std::string> &m, char val_separator = '=', char row_separator = '\0') {
+  std::stringstream ss;
+
+  for (auto it = m.cbegin(); it != m.cend(); it++) {
+    ss << it->first << val_separator << it->second << row_separator;
+  }
+
+  return ss.str();
+}
+
 } // namespace utils

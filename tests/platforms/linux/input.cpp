@@ -8,7 +8,9 @@
 #include <platforms/linux/uinput/uinput.hpp>
 #include <thread>
 
+using Catch::Matchers::ContainsSubstring;
 using Catch::Matchers::Equals;
+using Catch::Matchers::StartsWith;
 
 using namespace wolf::core::input;
 using namespace moonlight::control;
@@ -140,11 +142,30 @@ TEST_CASE("uinput - mouse", "UINPUT") {
     REQUIRE_THAT(libevdev_event_code_get_name(events[0]->type, events[0]->code), Equals("REL_HWHEEL_HI_RES"));
     REQUIRE(events[0]->value == scroll_amt);
   }
+
+  SECTION("UDEV") {
+    auto udev_events = mouse.get_udev_events();
+
+    REQUIRE(udev_events.size() == 2);
+
+    REQUIRE_THAT(udev_events[0]["ACTION"], Equals("add"));
+    REQUIRE_THAT(udev_events[0]["ID_INPUT_MOUSE"], Equals("1"));
+    REQUIRE_THAT(udev_events[0][".INPUT_CLASS"], Equals("mouse"));
+    REQUIRE_THAT(udev_events[0]["DEVNAME"], ContainsSubstring("/dev/input/"));
+    REQUIRE_THAT(udev_events[0]["DEVPATH"], StartsWith("/devices/virtual/input/input"));
+
+    REQUIRE_THAT(udev_events[1]["ACTION"], Equals("add"));
+    REQUIRE_THAT(udev_events[1]["ID_INPUT_TOUCHPAD"], Equals("1"));
+    REQUIRE_THAT(udev_events[1][".INPUT_CLASS"], Equals("mouse"));
+    REQUIRE_THAT(udev_events[1]["DEVNAME"], ContainsSubstring("/dev/input/"));
+    REQUIRE_THAT(udev_events[1]["DEVPATH"], StartsWith("/devices/virtual/input/input"));
+  }
 }
 
 TEST_CASE("uinput - joypad", "UINPUT") {
   SECTION("OLD Moonlight: create joypad on first packet arrival") {
-    auto session = state::StreamSession{.joypads = std::make_shared<immer::atom<state::JoypadList>>()};
+    auto session = state::StreamSession{.event_bus = std::make_shared<dp::event_bus>(),
+                                        .joypads = std::make_shared<immer::atom<state::JoypadList>>()};
     short controller_number = 1;
     auto c_pkt =
         pkts::CONTROLLER_MULTI_PACKET{.controller_number = controller_number, .button_flags = Joypad::RIGHT_STICK};
@@ -153,11 +174,12 @@ TEST_CASE("uinput - joypad", "UINPUT") {
     control::handle_input(session, {}, &c_pkt);
 
     REQUIRE(session.joypads->load()->size() == 1);
-    REQUIRE(session.joypads->load()->at(controller_number)->get_nodes().size() == 3);
+    REQUIRE(session.joypads->load()->at(controller_number)->get_nodes().size() == 2);
   }
 
   SECTION("NEW Moonlight: create joypad with CONTROLLER_ARRIVAL") {
-    auto session = state::StreamSession{.joypads = std::make_shared<immer::atom<state::JoypadList>>()};
+    auto session = state::StreamSession{.event_bus = std::make_shared<dp::event_bus>(),
+                                        .joypads = std::make_shared<immer::atom<state::JoypadList>>()};
     uint8_t controller_number = 1;
     auto c_pkt = pkts::CONTROLLER_ARRIVAL_PACKET{
         .controller_number = controller_number,
@@ -169,11 +191,11 @@ TEST_CASE("uinput - joypad", "UINPUT") {
 
     auto dev_nodes = session.joypads->load()->at(controller_number)->get_nodes();
     REQUIRE(session.joypads->load()->size() == 1);
-    REQUIRE(dev_nodes.size() == 5);
+    REQUIRE(dev_nodes.size() == 6);
 
     libevdev_ptr touch_rel_dev(libevdev_new(), ::libevdev_free);
-    // We know that the last node is the touchpad
-    link_devnode(touch_rel_dev.get(), dev_nodes.back());
+    // We know that the 3rd device is the touchpad
+    link_devnode(touch_rel_dev.get(), dev_nodes[2]);
 
     SECTION("Joypad touchpad") {
       { // Touch finger one
@@ -290,8 +312,8 @@ TEST_CASE("uinput - joypad", "UINPUT") {
     }
 
     libevdev_ptr motion_dev(libevdev_new(), ::libevdev_free);
-    // We know that the second to last node is the motion sensor
-    link_devnode(motion_dev.get(), dev_nodes.rbegin()[1]);
+    // We know that the last node is the motion sensor
+    link_devnode(motion_dev.get(), dev_nodes[4]);
     SECTION("Motion sensor") {
       auto motion_pkt = pkts::CONTROLLER_MOTION_PACKET{.controller_number = controller_number,
                                                        .motion_type = Joypad::ACCELERATION,
@@ -318,6 +340,46 @@ TEST_CASE("uinput - joypad", "UINPUT") {
 
       REQUIRE_THAT(libevdev_event_type_get_name(events[3]->type), Equals("EV_MSC"));
       REQUIRE_THAT(libevdev_event_code_get_name(events[3]->type, events[3]->code), Equals("MSC_TIMESTAMP"));
+    }
+
+    SECTION("UDEV") {
+      auto udev_events = session.joypads->load()->at(controller_number)->get_udev_events();
+
+      REQUIRE(udev_events.size() == 6);
+
+      REQUIRE_THAT(udev_events[0]["ACTION"], Equals("add"));
+      REQUIRE_THAT(udev_events[0]["ID_INPUT_JOYSTICK"], Equals("1"));
+      REQUIRE_THAT(udev_events[0][".INPUT_CLASS"], Equals("joystick"));
+      REQUIRE_THAT(udev_events[0]["DEVNAME"], ContainsSubstring("/dev/input/"));
+      REQUIRE_THAT(udev_events[0]["DEVPATH"], StartsWith("/devices/virtual/input/input"));
+
+      REQUIRE_THAT(udev_events[1]["ACTION"], Equals("add"));
+      REQUIRE_THAT(udev_events[1]["ID_INPUT_JOYSTICK"], Equals("1"));
+      REQUIRE_THAT(udev_events[1][".INPUT_CLASS"], Equals("joystick"));
+      REQUIRE_THAT(udev_events[1]["DEVNAME"], ContainsSubstring("/dev/input/"));
+      REQUIRE_THAT(udev_events[1]["DEVPATH"], StartsWith("/devices/virtual/input/input"));
+
+      REQUIRE_THAT(udev_events[2]["ACTION"], Equals("add"));
+      REQUIRE_THAT(udev_events[2]["ID_INPUT_TOUCHPAD"], Equals("1"));
+      REQUIRE_THAT(udev_events[2][".INPUT_CLASS"], Equals("mouse"));
+      REQUIRE_THAT(udev_events[2]["DEVNAME"], ContainsSubstring("/dev/input/"));
+      REQUIRE_THAT(udev_events[2]["DEVPATH"], StartsWith("/devices/virtual/input/input"));
+
+      REQUIRE_THAT(udev_events[3]["ACTION"], Equals("add"));
+      REQUIRE_THAT(udev_events[3]["ID_INPUT_TOUCHPAD"], Equals("1"));
+      REQUIRE_THAT(udev_events[3][".INPUT_CLASS"], Equals("mouse"));
+      REQUIRE_THAT(udev_events[3]["DEVNAME"], ContainsSubstring("/dev/input/"));
+      REQUIRE_THAT(udev_events[3]["DEVPATH"], StartsWith("/devices/virtual/input/input"));
+
+      REQUIRE_THAT(udev_events[4]["ACTION"], Equals("add"));
+      REQUIRE_THAT(udev_events[4]["ID_INPUT_ACCELEROMETER"], Equals("1"));
+      REQUIRE_THAT(udev_events[4]["DEVNAME"], ContainsSubstring("/dev/input/"));
+      REQUIRE_THAT(udev_events[4]["DEVPATH"], StartsWith("/devices/virtual/input/input"));
+
+      REQUIRE_THAT(udev_events[5]["ACTION"], Equals("add"));
+      REQUIRE_THAT(udev_events[5]["ID_INPUT_ACCELEROMETER"], Equals("1"));
+      REQUIRE_THAT(udev_events[5]["DEVNAME"], ContainsSubstring("/dev/input/"));
+      REQUIRE_THAT(udev_events[5]["DEVPATH"], StartsWith("/devices/virtual/input/input"));
     }
   }
 }

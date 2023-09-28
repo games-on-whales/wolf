@@ -26,6 +26,23 @@ std::vector<std::string> Keyboard::get_nodes() const {
   return nodes;
 }
 
+std::vector<std::map<std::string, std::string>> Keyboard::get_udev_events() const {
+  std::vector<std::map<std::string, std::string>> events;
+
+  if (_state->kb.get()) {
+    auto event = gen_udev_base_event(_state->kb);
+    event["ID_INPUT_KEYBOARD"] = "1";
+    event[".INPUT_CLASS"] = "keyboard";
+    events.emplace_back(event);
+  }
+
+  return events;
+}
+
+std::vector<std::pair<std::string, std::vector<std::string>>> Keyboard::get_udev_hw_db_entries() const {
+  return {};
+}
+
 static std::optional<libevdev_uinput *> create_keyboard(libevdev *dev) {
   libevdev_uinput *uidev;
 

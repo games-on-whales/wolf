@@ -80,21 +80,85 @@ std::vector<std::string> Joypad::get_nodes() const {
   std::vector<std::string> nodes;
 
   if (auto joy = _state->joy.get()) {
-    nodes.emplace_back(libevdev_uinput_get_devnode(joy));
-
     auto additional_nodes = get_child_dev_nodes(joy);
     nodes.insert(nodes.end(), additional_nodes.begin(), additional_nodes.end());
   }
 
-  if (auto motion_sensor = _state->motion_sensor.get()) {
-    nodes.emplace_back(libevdev_uinput_get_devnode(motion_sensor));
+  if (auto trackpad = _state->trackpad.get()) {
+    auto additional_nodes = get_child_dev_nodes(trackpad);
+    nodes.insert(nodes.end(), additional_nodes.begin(), additional_nodes.end());
   }
 
-  if (auto trackpad = _state->trackpad.get()) {
-    nodes.emplace_back(libevdev_uinput_get_devnode(trackpad));
+  if (auto motion_sensor = _state->motion_sensor.get()) {
+    auto additional_nodes = get_child_dev_nodes(motion_sensor);
+    nodes.insert(nodes.end(), additional_nodes.begin(), additional_nodes.end());
   }
 
   return nodes;
+}
+
+std::vector<std::map<std::string, std::string>> Joypad::get_udev_events() const {
+  std::vector<std::map<std::string, std::string>> events;
+
+  if (auto joy = _state->joy.get()) {
+    // Udev sends an additional event for the base /sys/ device
+    // I don't think it's used, so I've commented it for now
+    //    auto device_event = gen_udev_base_device_event(_state->joy);
+    //    device_event["ID_INPUT_JOYSTICK"] = "1";
+    //    device_event[".INPUT_CLASS"] = "joystick";
+    //    device_event["MODALIAS"] =
+    //    "input:b0003v054Cp0CE6eAB00-e0,1,3,15,k130,131,133,134,136,137,13A,13B,13C,13D,13E,ra0,"
+    //                               "1,2,3,4,5,10,11,mlsf50,51,52,57,5A,60,w";
+    //    device_event["FF"] = "104870000 0";
+    //    device_event["ABS"] = "3003f";
+    //    device_event["PROP"] = "0";
+    //    device_event["NAME"] = "\"Wolf PS5 (virtual) pad\"";
+    //    device_event["PRODUCT"] = "3/54c/ce6/ab00";
+    //    events.emplace_back(device_event);
+
+    // eventXY and jsX devices
+    for (const auto &devnode : get_child_dev_nodes(joy)) {
+      std::string syspath = libevdev_uinput_get_syspath(joy);
+      syspath.erase(0, 4); // Remove leading /sys/ from syspath TODO: what if it's not /sys/?
+      syspath.append("/" + std::filesystem::path(devnode).filename().string()); // Adds /jsX
+
+      auto event = gen_udev_base_event(devnode, syspath);
+      event["ID_INPUT_JOYSTICK"] = "1";
+      event[".INPUT_CLASS"] = "joystick";
+      events.emplace_back(event);
+    }
+  }
+
+  if (auto trackpad = _state->trackpad.get()) {
+    for (const auto &devnode : get_child_dev_nodes(trackpad)) {
+      std::string syspath = libevdev_uinput_get_syspath(trackpad);
+      syspath.erase(0, 4); // Remove leading /sys/ from syspath TODO: what if it's not /sys/?
+      syspath.append("/" + std::filesystem::path(devnode).filename().string()); // Adds /jsX
+
+      auto event = gen_udev_base_event(devnode, syspath);
+      event["ID_INPUT_TOUCHPAD"] = "1";
+      event[".INPUT_CLASS"] = "mouse";
+      events.emplace_back(event);
+    }
+  }
+
+  if (auto motion_sensor = _state->motion_sensor.get()) {
+    for (const auto &devnode : get_child_dev_nodes(motion_sensor)) {
+      std::string syspath = libevdev_uinput_get_syspath(motion_sensor);
+      syspath.erase(0, 4); // Remove leading /sys/ from syspath TODO: what if it's not /sys/?
+      syspath.append("/" + std::filesystem::path(devnode).filename().string()); // Adds /jsX
+
+      auto event = gen_udev_base_event(devnode, syspath);
+      event["ID_INPUT_ACCELEROMETER"] = "1";
+      events.emplace_back(event);
+    }
+  }
+
+  return events;
+}
+
+std::vector<std::pair<std::string, std::vector<std::string>>> Joypad::get_udev_hw_db_entries() const {
+  return {};
 }
 
 static void set_controller_type(libevdev *dev, Joypad::CONTROLLER_TYPE type) {

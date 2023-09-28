@@ -16,6 +16,10 @@ if (UNIX AND NOT APPLE)
     option(TEST_UINPUT "Enable uinput test" ON) # uinput doesn't work in GA
     if (TEST_UINPUT AND UNIX AND NOT APPLE)
         list(APPEND SRC_LIST "platforms/linux/input.cpp")
+        if (BUILD_FAKE_UDEV_CLI)
+            list(APPEND SRC_LIST "platforms/linux/fake-udev.cpp")
+            target_link_libraries(wolftests PRIVATE fake-udev::lib)
+        endif ()
     endif ()
 
     option(TEST_RUST_WAYLAND "Enable custom wayland test" ON)

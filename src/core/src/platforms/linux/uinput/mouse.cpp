@@ -23,6 +23,30 @@ std::vector<std::string> Mouse::get_nodes() const {
   return nodes;
 }
 
+std::vector<std::map<std::string, std::string>> Mouse::get_udev_events() const {
+  std::vector<std::map<std::string, std::string>> events;
+
+  if(_state->mouse_rel.get()){
+    auto base = gen_udev_base_event(_state->mouse_rel);
+    base["ID_INPUT_MOUSE"] = "1";
+    base[".INPUT_CLASS"] = "mouse";
+    events.emplace_back(std::move(base));
+  }
+
+  if(_state->mouse_abs.get()){
+    auto base = gen_udev_base_event(_state->mouse_abs);
+    base["ID_INPUT_TOUCHPAD"] = "1";
+    base[".INPUT_CLASS"] = "mouse";
+    events.emplace_back(std::move(base));
+  }
+
+  return events;
+}
+
+std::vector<std::pair<std::string, std::vector<std::string>>> Mouse::get_udev_hw_db_entries() const {
+  return {};
+}
+
 constexpr int ABS_MAX_WIDTH = 19200;
 constexpr int ABS_MAX_HEIGHT = 12000;
 

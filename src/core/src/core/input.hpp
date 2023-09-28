@@ -6,8 +6,10 @@
 #include <cstdint>
 #include <immer/array.hpp>
 #include <immer/box.hpp>
+#include <map>
 #include <optional>
 #include <thread>
+#include <vector>
 
 namespace wolf::core::input {
 
@@ -16,6 +18,10 @@ using namespace std::chrono_literals;
 class VirtualDevice {
 public:
   virtual std::vector<std::string> get_nodes() const = 0;
+
+  virtual std::vector<std::map<std::string, std::string>> get_udev_events() const = 0;
+  virtual std::vector<std::pair<std::string, std::vector<std::string>>> get_udev_hw_db_entries() const = 0;
+
   virtual ~VirtualDevice() = default;
 };
 
@@ -36,6 +42,9 @@ public:
   ~Mouse() override;
 
   std::vector<std::string> get_nodes() const override;
+
+  std::vector<std::map<std::string, std::string>> get_udev_events() const override;
+  std::vector<std::pair<std::string, std::vector<std::string>>> get_udev_hw_db_entries() const override;
 
   void move(int delta_x, int delta_y);
 
@@ -104,6 +113,10 @@ public:
 
   std::vector<std::string> get_nodes() const override;
 
+  std::vector<std::map<std::string, std::string>> get_udev_events() const override;
+  std::vector<std::pair<std::string, std::vector<std::string>>> get_udev_hw_db_entries() const override;
+
+
   void press(short key_code);
 
   void release(short key_code);
@@ -162,6 +175,10 @@ public:
   ~Joypad() override;
 
   std::vector<std::string> get_nodes() const override;
+
+  std::vector<std::map<std::string, std::string>> get_udev_events() const override;
+  std::vector<std::pair<std::string, std::vector<std::string>>> get_udev_hw_db_entries() const override;
+
 
   enum CONTROLLER_BTN : int {
     DPAD_UP = 0x0001,

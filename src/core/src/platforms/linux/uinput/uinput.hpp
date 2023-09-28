@@ -19,7 +19,10 @@
  * For force feedback see: https://www.kernel.org/doc/html/latest/input/ff.html
  */
 
+#include <chrono>
 #include <core/input.hpp>
+#include <filesystem>
+#include <helpers/logger.hpp>
 #include <immer/array.hpp>
 #include <immer/atom.hpp>
 #include <iomanip>
@@ -29,6 +32,8 @@
 #include <memory>
 #include <optional>
 #include <string>
+#include <sys/stat.h>
+#include <sys/sysmacros.h>
 
 namespace wolf::core::input {
 
@@ -66,6 +71,74 @@ static std::string to_hex(const std::basic_string<char32_t> &str) {
   std::string hex_unicode(ss.str());
   std::transform(hex_unicode.begin(), hex_unicode.end(), hex_unicode.begin(), ::toupper);
   return hex_unicode;
+}
+
+static std::map<std::string, std::string>
+gen_udev_base_event(const std::string &devnode, const std::string &syspath, const std::string &action = "add") {
+  // Get major:minor
+  struct stat buf {};
+  if (stat(devnode.c_str(), &buf) == -1) {
+    logs::log(logs::warning, "Unable to get stats of {}", devnode);
+    return {};
+  }
+
+  if (!S_ISCHR(buf.st_mode)) {
+    logs::log(logs::warning, "Device {} is not a character device", devnode);
+    return {};
+  }
+
+  auto dev_major = major(buf.st_rdev);
+  auto dev_minor = minor(buf.st_rdev);
+
+  // Current timestamp
+  auto now = std::chrono::system_clock::now();
+  auto timestamp = std::chrono::duration_cast<std::chrono::seconds>(now.time_since_epoch()).count();
+  return {
+      {"ACTION", action},
+      {"SEQNUM", "7"}, // We don't want to keep global state, let's hope it's not used
+      {"USEC_INITIALIZED", std::to_string(timestamp)},
+      {"SUBSYSTEM", "input"},
+      {"ID_INPUT", "1"},
+      {"ID_SERIAL", "noserial"},
+      {"TAGS", ":seat:uaccess:"},
+      {"CURRENT_TAGS", ":seat:uaccess:"},
+      {"DEVNAME", devnode},
+      {"DEVPATH", syspath},
+      {"MAJOR", std::to_string(dev_major)},
+      {"MINOR", std::to_string(dev_minor)},
+  };
+}
+
+static std::map<std::string, std::string> gen_udev_base_event(libevdev_uinput_ptr node,
+                                                              const std::string &action = "add") {
+
+  // Get paths
+  auto devnode = libevdev_uinput_get_devnode(node.get());
+  std::string syspath = libevdev_uinput_get_syspath(node.get());
+  syspath.erase(0, 4); // Remove leading /sys/ from syspath TODO: what if it's not /sys/?
+  syspath.append("/" + std::filesystem::path(devnode).filename().string()); // Adds /eventXY
+
+  return gen_udev_base_event(devnode, syspath, action);
+}
+
+static std::map<std::string, std::string> gen_udev_base_device_event(libevdev_uinput_ptr node,
+                                                                     const std::string &action = "add") {
+  std::string syspath = libevdev_uinput_get_syspath(node.get());
+  syspath.erase(0, 4); // Remove leading /sys/ from syspath TODO: what if it's not /sys/?
+  // Current timestamp
+  auto now = std::chrono::system_clock::now();
+  auto timestamp = std::chrono::duration_cast<std::chrono::seconds>(now.time_since_epoch()).count();
+  return {
+      {"ACTION", action},
+      {"SEQNUM", "7"}, // We don't want to keep global state, let's hope it's not used
+      {"USEC_INITIALIZED", std::to_string(timestamp)},
+      {"SUBSYSTEM", "input"},
+      {"ID_INPUT", "1"},
+      {"ID_SERIAL", "noserial"},
+      {"TAGS", ":seat:uaccess:"},
+      {"CURRENT_TAGS", ":seat:uaccess:"},
+      {"DEVPATH", syspath},
+  };
 }
 
 } // namespace wolf::core::input

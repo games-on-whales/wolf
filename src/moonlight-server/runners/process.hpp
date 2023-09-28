@@ -7,8 +7,11 @@
 #include <string>
 #include <thread>
 #include <toml.hpp>
+#include <core/input.hpp>
 
 namespace process {
+
+using namespace wolf::core;
 
 class RunProcess : public state::Runner {
 public:

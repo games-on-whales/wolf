@@ -55,6 +55,10 @@ include(TargetLinkLibrariesSystem)
 
 add_subdirectory(src/core)
 
+if (UNIX AND NOT APPLE)
+    add_subdirectory(src/fake-udev)
+endif ()
+
 option(BUILD_MOONLIGHT "Build Moonlight server" ON)
 if (BUILD_MOONLIGHT)
     add_subdirectory(src/moonlight-protocol)
