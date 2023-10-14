@@ -42,11 +42,14 @@ RUN --mount=type=cache,target=/cache/ccache \
     -DCMAKE_CXX_EXTENSIONS=OFF \
     -DBUILD_SHARED_LIBS=OFF \
     -DBoost_USE_STATIC_LIBS=ON \
+    -DBUILD_FAKE_UDEV_CLI=ON \
     -DBUILD_TESTING=OFF \
     -G Ninja && \
     ninja -C $CMAKE_BUILD_DIR wolf && \
-    # We have to copy out the built executable because this will only be available inside the buildkit cache
-    cp $CMAKE_BUILD_DIR/src/moonlight-server/wolf /wolf/wolf
+    ninja -C $CMAKE_BUILD_DIR fake-udev && \
+    # We have to copy out the built executables because this will only be available inside the buildkit cache
+    cp $CMAKE_BUILD_DIR/src/moonlight-server/wolf /wolf/wolf && \
+    cp $CMAKE_BUILD_DIR/src/fake-udev/fake-udev /wolf/fake-udev
 
 ########################################################
 FROM $BASE_IMAGE AS runner
@@ -72,13 +75,15 @@ RUN apt-get update -y && \
     && rm -rf /var/lib/apt/lists/*
 
 ENV GST_PLUGIN_PATH=/usr/local/lib/x86_64-linux-gnu/gstreamer-1.0/
-COPY --from=wolf-builder /wolf/wolf /wolf/wolf
 
 WORKDIR /wolf
 
 ARG WOLF_CFG_FOLDER=/wolf/cfg
 ENV WOLF_CFG_FOLDER=$WOLF_CFG_FOLDER
 RUN mkdir $WOLF_CFG_FOLDER
+
+COPY --from=wolf-builder /wolf/wolf /wolf/wolf
+COPY --from=wolf-builder /wolf/fake-udev /wolf/fake-udev
 
 ENV XDG_RUNTIME_DIR=/tmp/sockets \
     WOLF_LOG_LEVEL=INFO \
@@ -92,6 +97,7 @@ ENV XDG_RUNTIME_DIR=/tmp/sockets \
     RUST_BACKTRACE=full \
     NVIDIA_DRIVER_VOLUME_NAME=nvidia-driver-vol \
     HOST_APPS_STATE_FOLDER=/etc/wolf \
+    WOLF_DOCKER_FAKE_UDEV_PATH=/etc/wolf/fake-udev \
     GST_DEBUG=2 \
     PUID=0 \
     PGID=0 \
