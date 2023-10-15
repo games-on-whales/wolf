@@ -22,10 +22,14 @@ namespace state {
 using namespace std::chrono_literals;
 using namespace wolf::core;
 namespace ba = boost::asio;
+using devices_atom_queue = immer::atom<immer::vector<std::shared_ptr<input::VirtualDevice>>>;
+
 
 struct Runner {
 
   virtual void run(std::size_t session_id,
+                   std::string_view app_state_folder,
+                   std::shared_ptr<devices_atom_queue> plugged_devices_queue,
                    const immer::array<std::string> &virtual_inputs,
                    const immer::array<std::pair<std::string, std::string>> &paths,
                    const immer::map<std::string, std::string> &env_variables) = 0;

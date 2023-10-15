@@ -20,7 +20,8 @@ public:
   virtual std::vector<std::string> get_nodes() const = 0;
 
   virtual std::vector<std::map<std::string, std::string>> get_udev_events() const = 0;
-  virtual std::vector<std::pair<std::string, std::vector<std::string>>> get_udev_hw_db_entries() const = 0;
+  virtual std::vector<std::pair<std::string, /* filename */ std::vector<std::string> /* file rows */>>
+  get_udev_hw_db_entries() const = 0;
 
   virtual ~VirtualDevice() = default;
 };

@@ -9,8 +9,6 @@
 #include <platforms/hw.hpp>
 #include <range/v3/view.hpp>
 #include <state/data-structures.hpp>
-#include <sys/stat.h>
-#include <sys/sysmacros.h>
 #include <utility>
 
 namespace wolf::core::docker {
@@ -91,6 +89,8 @@ public:
   }
 
   void run(std::size_t session_id,
+           std::string_view app_state_folder,
+           std::shared_ptr<state::devices_atom_queue> plugged_devices_queue,
            const immer::array<std::string> &virtual_inputs,
            const immer::array<std::pair<std::string, std::string>> &paths,
            const immer::map<std::string, std::string> &env_variables) override;
@@ -123,7 +123,19 @@ protected:
   docker::DockerAPI docker_api;
 };
 
+void create_udev_hw_files(std::filesystem::path base_hw_db_path, std::shared_ptr<input::VirtualDevice> device) {
+  for (const auto &[filename, content] : device->get_udev_hw_db_entries()) {
+    auto host_file_path = (base_hw_db_path / filename).string();
+    logs::log(logs::debug, "[DOCKER] Writing hwdb file: {}", host_file_path);
+    std::ofstream host_file(host_file_path);
+    host_file << utils::join(content, "\n");
+    host_file.close();
+  }
+}
+
 void RunDocker::run(std::size_t session_id,
+                    std::string_view app_state_folder,
+                    std::shared_ptr<state::devices_atom_queue> plugged_devices_queue,
                     const immer::array<std::string> &virtual_inputs,
                     const immer::array<std::pair<std::string, std::string>> &paths,
                     const immer::map<std::string, std::string> &env_variables) {
@@ -148,6 +160,25 @@ void RunDocker::run(std::size_t session_id,
     mounts.insert(mounts.end(), MountPoint{.source = path.first, .destination = path.second, .mode = "rw"});
   }
 
+  // Fake udev
+  auto udev_base_path = std::filesystem::path(app_state_folder) / "udev";
+  auto hw_db_path = udev_base_path / "data";
+  auto fake_udev_cli_path = std::string(utils::get_env("WOLF_DOCKER_FAKE_UDEV_PATH"));
+  bool use_fake_udev = !fake_udev_cli_path.empty();
+  if (use_fake_udev) {
+    std::filesystem::create_directories(hw_db_path);
+
+    // Check if /run/udev/control exists
+    auto udev_ctrl_path = udev_base_path / "control";
+    if (!std::filesystem::exists(udev_ctrl_path)) {
+      if (auto control_file = std::ofstream(udev_ctrl_path)) {
+        control_file.close();
+        std::filesystem::permissions(udev_ctrl_path, std::filesystem::perms::all); // set 777
+      }
+    }
+    mounts.push_back(MountPoint{.source = udev_base_path.string(), .destination = "/run/udev/", .mode = "rw"});
+    mounts.push_back(MountPoint{.source = fake_udev_cli_path, .destination = "/usr/bin/fake-udev", .mode = "ro"});
+  }
   Container new_container = {.id = "",
                              .name = fmt::format("{}_{}", this->container.name, session_id),
                              .image = this->container.image,
@@ -171,32 +202,35 @@ void RunDocker::run(std::size_t session_id,
           }
         });
 
-    auto hotplug_handler = this->ev_bus->register_handler<immer::box<state::HotPlugDeviceEvent>>(
-        [session_id, container_id, this](const immer::box<state::HotPlugDeviceEvent> &hotplug_ev) {
-          if (hotplug_ev->session_id == session_id) {
-            logs::log(logs::debug, "{} received hot-plug device event", session_id);
-            for (auto udev_ev : hotplug_ev->device->get_udev_events()) {
-              std::string cmd;
-              std::string udev_msg = base64_encode(map_to_string(udev_ev));
-              if (udev_ev.count("DEVNAME") == 0) {
-                cmd = fmt::format("fake-udev -m {}", udev_msg);
-              } else {
-                cmd = fmt::format("mknod {} c {} {} && chmod 777 {} && fake-udev -m {}",
-                                  udev_ev["DEVNAME"],
-                                  udev_ev["MAJOR"],
-                                  udev_ev["MINOR"],
-                                  udev_ev["DEVNAME"],
-                                  udev_msg);
-              }
-              logs::log(logs::debug, "[DOCKER] Executing command: {}", cmd);
-              docker_api.exec(container_id, {"/bin/bash", "-c", cmd}, "root");
-            }
-
-            // TODO: get_udev_hw_db_entries
-          }
-        });
-
     do {
+      // Plug all devices that are waiting in the queue
+      plugged_devices_queue->update([this, container_id, use_fake_udev, hw_db_path](const auto devices) {
+        for (const auto device : devices) {
+          if (use_fake_udev) {
+            create_udev_hw_files(hw_db_path, device);
+          }
+
+          for (auto udev_ev : device->get_udev_events()) {
+            std::string cmd;
+            std::string udev_msg = base64_encode(map_to_string(udev_ev));
+            if (udev_ev.count("DEVNAME") == 0) {
+              cmd = fmt::format("fake-udev -m {}", udev_msg);
+            } else {
+              cmd = fmt::format("mknod {} c {} {} && chmod 777 {} && fake-udev -m {}",
+                                udev_ev["DEVNAME"],
+                                udev_ev["MAJOR"],
+                                udev_ev["MINOR"],
+                                udev_ev["DEVNAME"],
+                                udev_msg);
+            }
+            logs::log(logs::debug, "[DOCKER] Executing command: {}", cmd);
+            docker_api.exec(container_id, {"/bin/bash", "-c", cmd}, "root");
+          }
+        }
+
+        // Remove all devices that we have plugged
+        return immer::vector<std::shared_ptr<input::VirtualDevice>>{};
+      });
       boost::this_thread::sleep_for(boost::chrono::milliseconds(500));
     } while (docker_api.get_by_id(container_id)->status == RUNNING);
 
@@ -209,8 +243,8 @@ void RunDocker::run(std::size_t session_id,
       }
     }
     logs::log(logs::info, "Stopped container: {}", docker_container->name);
+    std::filesystem::remove_all(udev_base_path);
     terminate_handler.unregister();
-    hotplug_handler.unregister();
   }
 }
 

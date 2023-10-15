@@ -1,4 +1,8 @@
 #include <fake-udev/fake-udev.hpp>
+#include <filesystem>
+#include <fstream>
+#include <sys/stat.h>
+#include <unistd.h>
 
 constexpr int UDEV_EVENT_MODE = 2;
 int main(int argc, char *argv[]) {

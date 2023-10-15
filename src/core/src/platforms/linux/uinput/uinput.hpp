@@ -73,9 +73,7 @@ static std::string to_hex(const std::basic_string<char32_t> &str) {
   return hex_unicode;
 }
 
-static std::map<std::string, std::string>
-gen_udev_base_event(const std::string &devnode, const std::string &syspath, const std::string &action = "add") {
-  // Get major:minor
+static std::pair<unsigned int, unsigned int> get_major_minor(const std::string &devnode) {
   struct stat buf {};
   if (stat(devnode.c_str(), &buf) == -1) {
     logs::log(logs::warning, "Unable to get stats of {}", devnode);
@@ -87,8 +85,19 @@ gen_udev_base_event(const std::string &devnode, const std::string &syspath, cons
     return {};
   }
 
-  auto dev_major = major(buf.st_rdev);
-  auto dev_minor = minor(buf.st_rdev);
+  return {major(buf.st_rdev), minor(buf.st_rdev)};
+}
+
+static std::string gen_udev_hw_db_filename(libevdev_uinput_ptr node){
+  auto [dev_major, dev_minor] = get_major_minor(libevdev_uinput_get_devnode(node.get()));
+  auto filename = fmt::format("c{}:{}", dev_major, dev_minor);
+  return filename;
+}
+
+static std::map<std::string, std::string>
+gen_udev_base_event(const std::string &devnode, const std::string &syspath, const std::string &action = "add") {
+  // Get major:minor
+  auto [dev_major, dev_minor] = get_major_minor(devnode);
 
   // Current timestamp
   auto now = std::chrono::system_clock::now();

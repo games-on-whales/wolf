@@ -176,16 +176,24 @@ std::optional<AudioServer> setup_audio_server(const std::string &runtime_dir) {
   return {};
 }
 
+using session_devices = immer::map<std::size_t /* session_id */, std::shared_ptr<state::devices_atom_queue>>;
+
 auto setup_sessions_handlers(const immer::box<state::AppState> &app_state,
                              const std::string &runtime_dir,
                              const std::optional<AudioServer> &audio_server) {
   immer::vector_transient<immer::box<dp::handler_registration>> handlers;
 
-  auto wayland_sessions =
-      std::make_shared<immer::atom<immer::map<std::size_t, boost::shared_future<virtual_display::wl_state_ptr>>>>();
+  auto wayland_sessions = std::make_shared<
+      immer::atom<immer::map<std::size_t /* session_id */, boost::shared_future<virtual_display::wl_state_ptr>>>>();
+
+  /*
+   * A queue of devices that are waiting to be plugged, mapped by session_id
+   * This way we can accumulate devices here until the docker container is up and running
+   */
+  auto plugged_devices_queue = std::make_shared<immer::atom<session_devices>>();
 
   handlers.push_back(app_state->event_bus->register_handler<immer::box<StopStreamEvent>>(
-      [&app_state, wayland_sessions](const immer::box<StopStreamEvent> &ev) {
+      [&app_state, wayland_sessions, plugged_devices_queue](const immer::box<StopStreamEvent> &ev) {
         // Remove session from app state so that HTTP/S applist gets updated
         app_state->running_sessions->update([&ev](const immer::vector<state::StreamSession> &ses_v) {
           return remove_session(ses_v, {.session_id = ev->session_id});
@@ -195,6 +203,23 @@ auto setup_sessions_handlers(const immer::box<state::AppState> &app_state,
         // this will effectively destroy the virtual Wayland session
         logs::log(logs::debug, "Deleting WaylandSession {}", ev->session_id);
         wayland_sessions->update([=](const auto map) { return map.erase(ev->session_id); });
+        plugged_devices_queue->update([=](const auto map) { return map.erase(ev->session_id); });
+      }));
+
+  handlers.push_back(app_state->event_bus->register_handler<immer::box<state::HotPlugDeviceEvent>>(
+      [plugged_devices_queue](const immer::box<state::HotPlugDeviceEvent> &hotplug_ev) {
+        plugged_devices_queue->update([=](const session_devices map) {
+          logs::log(logs::debug, "{} received hot-plug device event", hotplug_ev->session_id);
+
+          if (auto session_devices_queue = map.find(hotplug_ev->session_id)) {
+            session_devices_queue->get()->update(
+                [=](const auto queue) { return queue.push_back({hotplug_ev->device}); });
+          } else {
+            logs::log(logs::warning, "Unable to find plugged_devices_queue for session {}", hotplug_ev->session_id);
+          }
+
+          return map;
+        });
       }));
 
   // Run process and our custom wayland as soon as a new StreamSession is created
@@ -289,8 +314,19 @@ auto setup_sessions_handlers(const immer::box<state::AppState> &app_state,
             mounted_paths.push_back({utils::get_env("NVIDIA_DRIVER_VOLUME_NAME", "nvidia-driver-vol"), "/usr/nvidia"});
           }
 
+          /* Initialise plugged device queue with mouse and keyboard */
+          plugged_devices_queue->update([=](const session_devices map) {
+            immer::vector<std::shared_ptr<input::VirtualDevice>> devices({session->mouse, session->keyboard});
+            state::devices_atom_queue devices_atom = {devices};
+            return map.set(session->session_id, std::make_shared<state::devices_atom_queue>(devices));
+          });
+          std::shared_ptr<state::devices_atom_queue> session_devices_queue =
+              *plugged_devices_queue->load()->find(session->session_id);
+
           /* Finally run the app, this will stop here until over */
           session->app->runner->run(session->session_id,
+                                    session->app_state_folder,
+                                    session_devices_queue,
                                     all_devices.persistent(),
                                     mounted_paths.persistent(),
                                     full_env.persistent());

@@ -40,7 +40,15 @@ std::vector<std::map<std::string, std::string>> Keyboard::get_udev_events() cons
 }
 
 std::vector<std::pair<std::string, std::vector<std::string>>> Keyboard::get_udev_hw_db_entries() const {
-  return {};
+  std::vector<std::pair<std::string, std::vector<std::string>>> result;
+
+  if (_state->kb.get()) {
+    // TODO: E:XKBMODEL=pc105 E:XKBLAYOUT=gb
+    result.push_back({gen_udev_hw_db_filename(_state->kb),
+                      {"E:ID_INPUT=1", "E:ID_INPUT_KEY=1", "E:ID_INPUT_KEYBOARD=1", "E:ID_SERIAL=noserial", "V:1"}});
+  }
+
+  return result;
 }
 
 static std::optional<libevdev_uinput *> create_keyboard(libevdev *dev) {

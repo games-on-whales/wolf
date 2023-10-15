@@ -44,7 +44,19 @@ std::vector<std::map<std::string, std::string>> Mouse::get_udev_events() const {
 }
 
 std::vector<std::pair<std::string, std::vector<std::string>>> Mouse::get_udev_hw_db_entries() const {
-  return {};
+  std::vector<std::pair<std::string, std::vector<std::string>>> result;
+
+  if (_state->mouse_rel.get()) {
+    result.push_back({gen_udev_hw_db_filename(_state->mouse_rel),
+                      {"E:ID_INPUT=1", "E:ID_INPUT_MOUSE=1", "E:ID_SERIAL=noserial", "V:1"}});
+  }
+
+  if (_state->mouse_abs.get()) {
+    result.push_back({gen_udev_hw_db_filename(_state->mouse_abs),
+                      {"E:ID_INPUT=1", "E:ID_INPUT_TOUCHPAD=1", "E:ID_SERIAL=noserial", "V:1"}});
+  }
+
+  return result;
 }
 
 constexpr int ABS_MAX_WIDTH = 19200;

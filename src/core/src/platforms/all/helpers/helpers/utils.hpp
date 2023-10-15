@@ -62,8 +62,8 @@ inline const char *get_env(const char *tag, const char *def = nullptr) noexcept 
 /**
  * Join a list of strings into a single string with separator in between elements
  */
-template <class T> inline std::string join(const std::vector<T> &vec, std::string_view separator) {
-  return vec | views::join(separator);
+inline std::string join(const std::vector<std::string> &vec, std::string_view separator) {
+  return vec  | view::join(separator) | to<std::string>();
 }
 
 /**

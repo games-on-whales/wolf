@@ -101,21 +101,6 @@ std::vector<std::map<std::string, std::string>> Joypad::get_udev_events() const 
   std::vector<std::map<std::string, std::string>> events;
 
   if (auto joy = _state->joy.get()) {
-    // Udev sends an additional event for the base /sys/ device
-    // I don't think it's used, so I've commented it for now
-    //    auto device_event = gen_udev_base_device_event(_state->joy);
-    //    device_event["ID_INPUT_JOYSTICK"] = "1";
-    //    device_event[".INPUT_CLASS"] = "joystick";
-    //    device_event["MODALIAS"] =
-    //    "input:b0003v054Cp0CE6eAB00-e0,1,3,15,k130,131,133,134,136,137,13A,13B,13C,13D,13E,ra0,"
-    //                               "1,2,3,4,5,10,11,mlsf50,51,52,57,5A,60,w";
-    //    device_event["FF"] = "104870000 0";
-    //    device_event["ABS"] = "3003f";
-    //    device_event["PROP"] = "0";
-    //    device_event["NAME"] = "\"Wolf PS5 (virtual) pad\"";
-    //    device_event["PRODUCT"] = "3/54c/ce6/ab00";
-    //    events.emplace_back(device_event);
-
     // eventXY and jsX devices
     for (const auto &devnode : get_child_dev_nodes(joy)) {
       std::string syspath = libevdev_uinput_get_syspath(joy);
@@ -158,7 +143,45 @@ std::vector<std::map<std::string, std::string>> Joypad::get_udev_events() const 
 }
 
 std::vector<std::pair<std::string, std::vector<std::string>>> Joypad::get_udev_hw_db_entries() const {
-  return {};
+  std::vector<std::pair<std::string, std::vector<std::string>>> result;
+
+  if (_state->joy.get()) {
+    result.push_back({gen_udev_hw_db_filename(_state->joy),
+                      {"E:ID_INPUT=1",
+                       "E:ID_INPUT_JOYSTICK=1",
+                       "E:ID_BUS=usb",
+                       "G:seat",
+                       "G:uaccess",
+                       "Q:seat",
+                       "Q:uaccess",
+                       "V:1"}});
+  }
+
+  if (_state->trackpad.get()) {
+    result.push_back({gen_udev_hw_db_filename(_state->trackpad),
+                      {"E:ID_INPUT=1",
+                       "E:ID_INPUT_TOUCHPAD=1",
+                       "E:ID_BUS=usb",
+                       "G:seat",
+                       "G:uaccess",
+                       "Q:seat",
+                       "Q:uaccess",
+                       "V:1"}});
+  }
+
+  if (_state->motion_sensor.get()) {
+    result.push_back({gen_udev_hw_db_filename(_state->motion_sensor),
+                      {"E:ID_INPUT=1",
+                       "E:ID_INPUT_ACCELEROMETER=1",
+                       "E:ID_BUS=usb",
+                       "G:seat",
+                       "G:uaccess",
+                       "Q:seat",
+                       "Q:uaccess",
+                       "V:1"}});
+  }
+
+  return result;
 }
 
 static void set_controller_type(libevdev *dev, Joypad::CONTROLLER_TYPE type) {
