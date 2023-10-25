@@ -107,19 +107,20 @@ public:
           auto total_bytes_transferred = self->prev_read_bytes_ + bytes_transferred;
           full_raw_msg.resize(total_bytes_transferred);
 
-          auto msg = rtsp::parse(full_raw_msg);
-          if (msg) {
-            for (const auto &option : msg.value().options) {
-              if ("Content-length"sv == option.first) {
-                int total_length = std::stoi(option.second);
-                if (total_bytes_transferred < total_length) { // TODO: should we check msg.payloadLength instead?
-                  self->prev_read_ = full_raw_msg;
-                  self->prev_read_bytes_ += bytes_transferred;
-                  return self->receive_message(on_msg_read);
-                }
-              }
+          auto content_length_pos = full_raw_msg.find("Content-length: ");
+          if (content_length_pos != std::string::npos) {
+            content_length_pos += 16; //"Content-length: "sv.size();
+            auto content_lenght_end = full_raw_msg.find("\r\n", content_length_pos);
+            auto total_length_str = full_raw_msg.substr(content_length_pos, content_lenght_end - content_length_pos);
+            auto total_length = std::stoi(total_length_str);
+            if (total_bytes_transferred < total_length) { // TODO: should we check msg.payloadLength instead?
+              self->prev_read_ = full_raw_msg;
+              self->prev_read_bytes_ += bytes_transferred;
+              return self->receive_message(on_msg_read);
             }
           }
+
+          auto msg = rtsp::parse(full_raw_msg);
           self->prev_read_ = "";
           self->prev_read_bytes_ = 0;
           on_msg_read(msg);

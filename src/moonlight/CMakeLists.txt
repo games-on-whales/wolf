@@ -69,7 +69,7 @@ target_link_libraries_system(moonlight PUBLIC range-v3::range-v3)
 FetchContent_Declare(
         peglib
         GIT_REPOSITORY https://github.com/yhirose/cpp-peglib.git
-        GIT_TAG v1.8.2)
+        GIT_TAG v1.8.5)
 
 FetchContent_GetProperties(peglib)
 if (NOT peglib_POPULATED)

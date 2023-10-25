@@ -1,4 +1,5 @@
 #pragma once
+#include <helpers/logger.hpp>
 #include <map>
 #include <optional>
 #include <peglib.h>
@@ -163,6 +164,10 @@ std::optional<RTSP_PACKET> parse(std::string_view msg) {
   };
   parser["PAYLOADKEY"] = [](const peg::SemanticValues &vs) { return vs.token_to_string(); };
   parser["PAYLOADVAL"] = [](const peg::SemanticValues &vs) { return vs.token_to_string(); };
+
+  parser.set_logger([msg](size_t line, size_t col, const std::string &error_msg, const std::string &rule) {
+    logs::log(logs::warning, "RTSP - {}:{}: {}\n{}", line, col, error_msg, msg);
+  });
 
   parser.enable_packrat_parsing();
   if (!parser.parse(msg)) { // If this fails we have passed a packet that doesn't conform to the grammar
