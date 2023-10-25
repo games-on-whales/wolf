@@ -88,7 +88,7 @@ static std::pair<unsigned int, unsigned int> get_major_minor(const std::string &
   return {major(buf.st_rdev), minor(buf.st_rdev)};
 }
 
-static std::string gen_udev_hw_db_filename(libevdev_uinput_ptr node){
+static std::string gen_udev_hw_db_filename(libevdev_uinput_ptr node) {
   auto [dev_major, dev_minor] = get_major_minor(libevdev_uinput_get_devnode(node.get()));
   auto filename = fmt::format("c{}:{}", dev_major, dev_minor);
   return filename;

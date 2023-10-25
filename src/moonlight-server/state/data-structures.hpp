@@ -24,7 +24,6 @@ using namespace wolf::core;
 namespace ba = boost::asio;
 using devices_atom_queue = immer::atom<immer::vector<std::shared_ptr<input::VirtualDevice>>>;
 
-
 struct Runner {
 
   virtual void run(std::size_t session_id,
