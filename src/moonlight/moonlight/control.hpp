@@ -2,6 +2,7 @@
 #include <array>
 #include <boost/endian/conversion.hpp>
 #include <crypto/crypto.hpp>
+#include <cstdint>
 #include <memory>
 
 namespace moonlight::control {
