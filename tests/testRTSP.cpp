@@ -160,9 +160,8 @@ TEST_CASE("Custom Parser", "[RTSP]") {
     }
 
     SECTION("Incomplete packet") {
-      // This can happen when we have a single packet that has been split in multiple packets
-      // We need to be at least able to decode the Content-length so that we can ask for another packet
-      auto payload = "ANNOUNCE streamid=control/13/0 RTSP/1.0\n"
+      // We no longer try to parse an incomplete packet, we still want to be robust to those cases
+      auto payload = u8"ANNOUNCE streamid=control/13/0 RTSP/1.0\n"
                      "CSeq: 6\n"
                      "X-GS-ClientVersion: 14\n"
                      "Host: 192.168.1.227\n"
@@ -180,7 +179,8 @@ TEST_CASE("Custom Parser", "[RTSP]") {
                      "a=x-nv-video[0].rateControlMode:4 \n"
                      "a=x-nv-video[0].timeoutLengthMs:7000 \n"
                      "a=x-nv-video[0].framesWithInvalidRefThreshold:0 \n"
-                     "a"s;
+                     "a\n\n\n\n"
+                     "💩🚽"; // We can now eat up all the extra rubbish at the end
       auto parsed = rtsp::parse(payload).value();
       REQUIRE_THAT(parsed.options["Content-length"], Equals("1347"));
       // Round trip

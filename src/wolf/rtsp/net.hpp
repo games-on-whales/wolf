@@ -107,13 +107,16 @@ public:
           auto total_bytes_transferred = self->prev_read_bytes_ + bytes_transferred;
           full_raw_msg.resize(total_bytes_transferred);
 
+          // We should be able to rtsp::parse() even when getting a partial message
+          // Since we had a few issues with this approach in the past now I'm manually reading the "Content-length"
+          // It's ugly, but it shouldn't be slower than parsing the whole message.
           auto content_length_pos = full_raw_msg.find("Content-length: ");
           if (content_length_pos != std::string::npos) {
             content_length_pos += 16; //"Content-length: "sv.size();
             auto content_lenght_end = full_raw_msg.find("\r\n", content_length_pos);
             auto total_length_str = full_raw_msg.substr(content_length_pos, content_lenght_end - content_length_pos);
             auto total_length = std::stoi(total_length_str);
-            if (total_bytes_transferred < total_length) { // TODO: should we check msg.payloadLength instead?
+            if (total_bytes_transferred < total_length) {
               self->prev_read_ = full_raw_msg;
               self->prev_read_bytes_ += bytes_transferred;
               return self->receive_message(on_msg_read);
