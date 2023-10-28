@@ -163,10 +163,11 @@ toml::value v2_to_v3(const toml::value &v2, const std::string &source) {
   auto v3 = toml::parse<toml::preserve_comments>(source);
   v3["uuid"] = v2.at("uuid").as_string();
   v3["config_version"] = 3;
-  v3["gstreamer"]["video"]["default_sink"] = "rtpmoonlightpay_video name=moonlight_pay\n"
-                                       "payload_size={payload_size} fec_percentage={fec_percentage} "
-                                       "min_required_fec_packets={min_required_fec_packets} !\n"
-                                       "udpsink bind-port={host_port} host={client_ip} port={client_port} sync=true";
+  v3["gstreamer"]["video"]["default_sink"] =
+      "rtpmoonlightpay_video name=moonlight_pay\n"
+      "payload_size={payload_size} fec_percentage={fec_percentage} "
+      "min_required_fec_packets={min_required_fec_packets} !\n"
+      "udpsink bind-port={host_port} host={client_ip} port={client_port} sync=true";
   v3["gstreamer"]["audio"]["default_sink"] =
       "rtpmoonlightpay_audio name=moonlight_pay packet_duration={packet_duration} encrypt={encrypt}\n"
       "aes_key=\"{aes_key}\" aes_iv=\"{aes_iv}\"  !\n"
