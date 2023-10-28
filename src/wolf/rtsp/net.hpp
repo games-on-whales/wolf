@@ -39,6 +39,23 @@ public:
   }
 
   /**
+   * Cleanly closing the socket, see: https://stackoverflow.com/questions/1993216/boostasio-cleanly-disconnecting
+   *
+   * Moonlight detects you're done writing the message by waiting for the TCP FIN that is generated when you gracefully
+   * close your socket. It looks like Boost's default behavior for close() is that it performs an abortive close
+   * which drops any outstanding data and sends a RST to the remote host if there's any unacked data remaining
+   * in the send buffer.
+   * So effectively, it's a race condition whether the client gets all the data and acks first or the socket is
+   * closed and a RST packet is sent (which causes the ECONNRESET error).
+   *
+   * - @cgutman
+   */
+  void close() {
+    socket_.shutdown(boost::asio::ip::tcp::socket::shutdown_both);
+    socket_.close();
+  }
+
+  /**
    * Will start the following (async) chain:
    *  1- wait for a message
    *  2- once received, parse it
@@ -53,13 +70,14 @@ public:
         auto session = get_session_by_ip(self->stream_sessions->load(), user_ip);
         if (session) {
           auto response = commands::message_handler(parsed_msg.value(), session.value(), *self->event_bus);
-          self->send_message(response, [](auto bytes) {});
+          self->send_message(response, [self](auto bytes) { self->close(); });
         } else {
           logs::log(logs::warning, "[RTSP] received packet from unrecognised client: {}", user_ip);
+          self->close();
         }
       } else {
         logs::log(logs::error, "[RTSP] error parsing message");
-        self->send_message((rtsp::commands::error_msg(400, "BAD REQUEST")), [](auto bytes) {});
+        self->send_message((rtsp::commands::error_msg(400, "BAD REQUEST")), [self](auto bytes) { self->close(); });
       }
     });
   }
