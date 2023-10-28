@@ -159,6 +159,22 @@ toml::value v1_to_v2(const toml::value &v1, const std::string &source) {
   return v2;
 }
 
+toml::value v2_to_v3(const toml::value &v2, const std::string &source) {
+  auto v3 = toml::parse<toml::preserve_comments>(source);
+  v3["uuid"] = v2.at("uuid").as_string();
+  v3["config_version"] = 3;
+  v3["gstreamer"]["video"]["default_sink"] = "rtpmoonlightpay_video name=moonlight_pay\n"
+                                       "payload_size={payload_size} fec_percentage={fec_percentage} "
+                                       "min_required_fec_packets={min_required_fec_packets} !\n"
+                                       "udpsink bind-port={host_port} host={client_ip} port={client_port} sync=true";
+  v3["gstreamer"]["audio"]["default_sink"] =
+      "rtpmoonlightpay_audio name=moonlight_pay packet_duration={packet_duration} encrypt={encrypt}\n"
+      "aes_key=\"{aes_key}\" aes_iv=\"{aes_iv}\"  !\n"
+      "udpsink bind-port={host_port} host={client_ip} port={client_port} sync=true";
+  write(v3, source);
+  return v3;
+}
+
 Config load_or_default(const std::string &source, const std::shared_ptr<dp::event_bus> &ev_bus) {
   if (!file_exist(source)) {
     logs::log(logs::warning, "Unable to open config file: {}, creating one using defaults", source);
@@ -166,10 +182,17 @@ Config load_or_default(const std::string &source, const std::shared_ptr<dp::even
   }
 
   auto cfg = toml::parse<toml::preserve_comments>(source);
-  auto version = toml::find_or(cfg, "config_version", 1);
+  auto version = toml::find_or(cfg, "config_version", 2);
   if (version <= 1) {
     logs::log(logs::warning, "Found old config file, migrating to newer version");
     cfg = v1_to_v2(cfg, source);
+    version = 2;
+  }
+
+  if (version <= 2) {
+    logs::log(logs::warning, "Found old config file, migrating to newer version");
+    cfg = v2_to_v3(cfg, source);
+    version = 3;
   }
 
   std::string uuid;

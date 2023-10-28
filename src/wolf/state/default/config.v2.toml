@@ -3,7 +3,7 @@ hostname = "Wolf"
 # Set to false if this host doesn't support HEVC
 support_hevc = true
 # The version of this config file
-config_version = 2
+config_version = 3
 
 
 # A list of paired clients that will be allowed to stream
@@ -151,7 +151,7 @@ default_source = "appsrc name=wolf_wayland_source is-live=true block=false forma
 default_sink = """
 rtpmoonlightpay_video name=moonlight_pay
 payload_size={payload_size} fec_percentage={fec_percentage} min_required_fec_packets={min_required_fec_packets} !
-udpsink host={client_ip} port={client_port} sync=true
+udpsink bind-port={host_port} host={client_ip} port={client_port} sync=true
 \
 """
 
@@ -358,7 +358,7 @@ max-payload-size=1400
 default_sink = """
 rtpmoonlightpay_audio name=moonlight_pay packet_duration={packet_duration} encrypt={encrypt}
 aes_key="{aes_key}" aes_iv="{aes_iv}"  !
-udpsink host={client_ip} port={client_port} sync=true
+udpsink bind-port={host_port} host={client_ip} port={client_port} sync=true
 \
 """
 

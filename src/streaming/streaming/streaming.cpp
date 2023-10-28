@@ -308,7 +308,8 @@ void start_streaming_video(const immer::box<state::VideoSession> &video_session,
                               fmt::arg("min_required_fec_packets", video_session->min_required_fec_packets),
                               fmt::arg("slices_per_frame", video_session->slices_per_frame),
                               fmt::arg("color_space", color_space),
-                              fmt::arg("color_range", color_range));
+                              fmt::arg("color_range", color_range),
+                              fmt::arg("host_port", video_session->port));
   logs::log(logs::debug, "Starting video pipeline: {}", pipeline);
 
   auto appsrc_state = custom_src::setup_app_src(video_session, std::move(wl_ptr));
@@ -387,7 +388,8 @@ void start_streaming_audio(const immer::box<state::AudioSession> &audio_session,
                               fmt::arg("aes_iv", audio_session->aes_iv),
                               fmt::arg("encrypt", audio_session->encrypt_audio),
                               fmt::arg("client_port", client_port),
-                              fmt::arg("client_ip", audio_session->client_ip));
+                              fmt::arg("client_ip", audio_session->client_ip),
+                              fmt::arg("host_port", audio_session->port));
   logs::log(logs::debug, "Starting audio pipeline: {}", pipeline);
 
   run_pipeline(pipeline, audio_session->session_id, event_bus, [audio_session](auto pipeline) {

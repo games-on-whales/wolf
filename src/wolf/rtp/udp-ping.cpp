@@ -14,6 +14,8 @@ public:
              unsigned short port,
              const std::function<void(unsigned short /* client_port */, const std::string & /* client_ip */)> &callback)
       : socket_(io_context, udp::endpoint(udp::v4(), port)), callback(callback) {
+    // We have to enable this because we'll bind additional sockets as udpsink in the audio/video pipelines
+    socket_.set_option(udp::socket::reuse_address(true));
     start_receive();
   }
 
