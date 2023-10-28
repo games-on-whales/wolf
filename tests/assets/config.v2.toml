@@ -5,7 +5,7 @@ uuid = "0000-1111-2222-3333"
 # Set to false if this host doesn't support HEVC
 support_hevc = true
 # The version of this config file
-config_version = 2
+config_version = 3
 
 
 # A list of paired clients that will be allowed to stream
