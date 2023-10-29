@@ -151,7 +151,7 @@ std::optional<AudioServer> setup_audio_server(const std::string &runtime_dir) {
             .status = docker::CREATED,
             .ports = {},
             .mounts = {docker::MountPoint{.source = runtime_dir, .destination = "/tmp/pulse/", .mode = "rw"}},
-            .env = {{"XDG_RUNTIME_DIR", runtime_dir}}},
+            .env = {"XDG_RUNTIME_DIR=/tmp/pulse/"}},
         // The following is needed when using podman (or any container that uses SELINUX). This way we can access the
         // socket that is created by PulseAudio from other containers (including this one).
         R"({
@@ -227,11 +227,8 @@ auto setup_sessions_handlers(const immer::box<state::AppState> &app_state,
           auto audio_server_name = audio_server ? audio::get_server_name(audio_server->server) : "";
           full_env.set("PULSE_SINK", pulse_sink_name);
           full_env.set("PULSE_SOURCE", pulse_sink_name + ".monitor");
-
-          if (audio_server->container) {
-            full_env.set("PULSE_SERVER", audio_server_name);
-            mounted_paths.push_back({audio_server_name, audio_server_name});
-          }
+          full_env.set("PULSE_SERVER", audio_server_name);
+          mounted_paths.push_back({audio_server_name, audio_server_name});
 
           auto render_node = session->app->render_node;
 
