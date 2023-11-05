@@ -51,6 +51,7 @@ public:
    * - @cgutman
    */
   void close() {
+    logs::log(logs::trace, "[RTSP] closing socket");
     socket_.shutdown(boost::asio::ip::tcp::socket::shutdown_both);
     socket_.close();
   }
@@ -69,7 +70,7 @@ public:
         auto user_ip = self->socket().remote_endpoint().address().to_string();
         auto session = get_session_by_ip(self->stream_sessions->load(), user_ip);
         if (session) {
-          auto response = commands::message_handler(parsed_msg.value(), session.value(), *self->event_bus);
+          auto response = commands::message_handler(parsed_msg.value(), session.value(), self->event_bus);
           self->send_message(response, [self](auto bytes) { self->close(); });
         } else {
           logs::log(logs::warning, "[RTSP] received packet from unrecognised client: {}", user_ip);

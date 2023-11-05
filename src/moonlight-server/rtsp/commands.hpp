@@ -108,7 +108,7 @@ std::pair<std::string, std::optional<int>> parse_arg_line(const std::pair<std::s
 }
 
 RTSP_PACKET
-announce(const RTSP_PACKET &req, const state::StreamSession &session, dp::event_bus &event_bus) {
+announce(const RTSP_PACKET &req, const state::StreamSession &session, std::shared_ptr<dp::event_bus> event_bus) {
 
   auto args = req.payloads //
               | views::filter([](const std::pair<std::string, std::string> &line) {
@@ -159,7 +159,7 @@ announce(const RTSP_PACKET &req, const state::StreamSession &session, dp::event_
       .color_space = state::ColorSpace(csc >> 1),
 
       .client_ip = session.ip};
-  event_bus.fire_event(immer::box<state::VideoSession>(video));
+  event_bus->fire_event(immer::box<state::VideoSession>(video));
 
   // Audio session
   state::AudioSession audio = {.gst_pipeline = session.app->opus_gst_pipeline,
@@ -175,13 +175,13 @@ announce(const RTSP_PACKET &req, const state::StreamSession &session, dp::event_
 
                                .packet_duration = args["x-nv-aqos.packetDuration"].value(),
                                .channels = args["x-nv-audio.surround.numChannels"].value()};
-  event_bus.fire_event(immer::box<state::AudioSession>(audio));
+  event_bus->fire_event(immer::box<state::AudioSession>(audio));
 
   return ok_msg(req.seq_number);
 }
 
 RTSP_PACKET
-message_handler(const RTSP_PACKET &req, const state::StreamSession &session, dp::event_bus &event_bus) {
+message_handler(const RTSP_PACKET &req, const state::StreamSession &session, std::shared_ptr<dp::event_bus> event_bus) {
   auto cmd = req.request.cmd;
   logs::log(logs::debug, "[RTSP] received command {}", cmd);
 

@@ -356,8 +356,23 @@ auto setup_sessions_handlers(const immer::box<state::AppState> &app_state,
                 }
               });
 
+          std::shared_ptr<std::atomic_bool> cancel_job = std::make_shared<std::atomic<bool>>(false);
+          auto cancel_event = app_state->event_bus->register_handler<immer::box<state::VideoSession>>(
+              [=](const immer::box<state::VideoSession> &new_sess) {
+                if (new_sess->session_id == sess->session_id) {
+                  // A new VideoSession has been queued whilst we still haven't received a PING
+                  *cancel_job = true;
+                }
+              });
+
+          logs::log(logs::debug, "Video session {}, waiting for PING...", sess->session_id);
           auto client_port = port_fut.get();
+          cancel_event.unregister();
           ev_handler.unregister(); // We'll keep receiving PING requests, but we only want the first one
+
+          if (*cancel_job) {
+            return;
+          }
 
           virtual_display::wl_state_ptr wl_state;
           if (auto wayland_promise = wayland_sessions->load()->find(sess->session_id)) {
@@ -379,8 +394,24 @@ auto setup_sessions_handlers(const immer::box<state::AppState> &app_state,
                   pp.get().set_value(ping_ev->client_port);
                 }
               });
+
+          std::shared_ptr<std::atomic_bool> cancel_job = std::make_shared<std::atomic<bool>>(false);
+          auto cancel_event = app_state->event_bus->register_handler<immer::box<state::AudioSession>>(
+              [=](const immer::box<state::AudioSession> &new_sess) {
+                if (new_sess->session_id == sess->session_id) {
+                  // A new AudioSession has been queued whilst we still haven't received a PING
+                  *cancel_job = true;
+                }
+              });
+
+          logs::log(logs::debug, "Audio session {}, waiting for PING...", sess->session_id);
           auto client_port = port_fut.get();
+          cancel_event.unregister();
           ev_handler.unregister(); // We'll keep receiving PING requests, but we only want the first one
+
+          if (*cancel_job) {
+            return;
+          }
 
           auto audio_server_name = audio_server ? audio::get_server_name(audio_server->server)
                                                 : std::optional<std::string>();

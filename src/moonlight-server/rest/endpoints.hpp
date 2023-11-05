@@ -266,13 +266,7 @@ create_run_session(const std::shared_ptr<typename SimpleWeb::Server<SimpleWeb::H
 
                               // client info
                               .session_id = get_client_id(current_client),
-                              .ip = get_client_ip<SimpleWeb::HTTPS>(request),
-
-                              // virtual devices
-                              .mouse = std::make_shared<input::Mouse>(),
-                              .keyboard = std::make_shared<input::Keyboard>(),
-                              // joypads will be created on-demand in the Control stream
-                              .joypads = std::make_shared<immer::atom<state::JoypadList>>()};
+                              .ip = get_client_ip<SimpleWeb::HTTPS>(request)};
 }
 
 void launch(const std::shared_ptr<typename SimpleWeb::Server<SimpleWeb::HTTPS>::Response> &response,
@@ -284,6 +278,11 @@ void launch(const std::shared_ptr<typename SimpleWeb::Server<SimpleWeb::HTTPS>::
   SimpleWeb::CaseInsensitiveMultimap headers = request->parse_query_string();
   auto app = state::get_app_by_id(state->config, get_header(headers, "appid").value());
   auto new_session = create_run_session(request, current_client, state->event_bus, app);
+  // virtual devices
+  new_session.mouse = std::make_shared<input::Mouse>();
+  new_session.keyboard = std::make_shared<input::Keyboard>();
+  // joypads will be created on-demand in the Control stream
+  new_session.joypads = std::make_shared<immer::atom<state::JoypadList>>();
   state->event_bus->fire_event(immer::box<state::StreamSession>(new_session));
   state->running_sessions->update(
       [&new_session](const immer::vector<state::StreamSession> &ses_v) { return ses_v.push_back(new_session); });
@@ -303,6 +302,10 @@ void resume(const std::shared_ptr<typename SimpleWeb::Server<SimpleWeb::HTTPS>::
   auto old_session = get_session_by_ip(state->running_sessions->load(), client_ip);
   if (old_session) {
     auto new_session = create_run_session(request, current_client, state->event_bus, *old_session->app);
+    // Carry over the old session devices, they'll be already plugged into the container
+    new_session.mouse = std::move(old_session->mouse);
+    new_session.keyboard = std::move(old_session->keyboard);
+    new_session.joypads = std::move(old_session->joypads);
     state->running_sessions->update([&old_session, &new_session](const immer::vector<state::StreamSession> ses_v) {
       return remove_session(ses_v, old_session.value()).push_back(new_session);
     });

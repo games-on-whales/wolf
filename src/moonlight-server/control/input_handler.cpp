@@ -178,11 +178,19 @@ void handle_input(const state::StreamSession &session,
      */
   case CONTROLLER_ARRIVAL: {
     auto new_controller = static_cast<CONTROLLER_ARRIVAL_PACKET *>(pkt);
-    create_new_joypad(session,
-                      connected_clients,
-                      new_controller->controller_number,
-                      (Joypad::CONTROLLER_TYPE)new_controller->controller_type,
-                      new_controller->capabilities);
+    auto joypads = session.joypads->load();
+    if (joypads->find(new_controller->controller_number)) {
+      // TODO: should we replace it instead?
+      logs::log(logs::debug,
+                "[INPUT] Received CONTROLLER_ARRIVAL for controller {} which is already present; skipping...",
+                new_controller->controller_number);
+    } else {
+      create_new_joypad(session,
+                        connected_clients,
+                        new_controller->controller_number,
+                        (Joypad::CONTROLLER_TYPE)new_controller->controller_type,
+                        new_controller->capabilities);
+    }
     break;
   }
   case CONTROLLER_MULTI: {
