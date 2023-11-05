@@ -167,7 +167,6 @@ TEST_CASE("Mocked serverinfo", "[MoonlightProtocol]") {
                              cfg.uuid,
                              cfg.hostname,
                              "AA:BB:CC:DD",
-                             "192.168.99.1",
                              "192.168.1.1",
                              displayModes,
                              true,
@@ -186,12 +185,12 @@ TEST_CASE("Mocked serverinfo", "[MoonlightProtocol]") {
             "<HttpsPort>0</HttpsPort>"
             "<ExternalPort>1</ExternalPort>"
             "<mac>AA:BB:CC:DD</mac>"
-            "<ExternalIP>192.168.99.1</ExternalIP>"
             "<LocalIP>192.168.1.1</LocalIP>"
             "<SupportedDisplayMode>"
             "<DisplayMode><Width>1920</Width><Height>1080</Height><RefreshRate>60</RefreshRate></DisplayMode>"
             "<DisplayMode><Width>1024</Width><Height>768</Height><RefreshRate>30</RefreshRate></DisplayMode>"
-            "</SupportedDisplayMode><PairStatus>1</PairStatus>"
+            "</SupportedDisplayMode>"
+            "<PairStatus>1</PairStatus>"
             "<currentgame>0</currentgame>"
             "<state>SUNSHINE_SERVER_BUSY</state>"
             "</root>");
