@@ -138,6 +138,7 @@ struct UTF8_TEXT_PACKET : INPUT_PKT {
 struct CONTROLLER_MULTI_PACKET : INPUT_PKT {
   short header_b;
   short controller_number;
+  /* A bitfield with bits set for each controller present. */
   short active_gamepad_mask;
   short mid_b;
   short button_flags;

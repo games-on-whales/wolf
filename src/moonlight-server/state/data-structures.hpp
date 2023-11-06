@@ -199,7 +199,12 @@ struct StreamSession {
   std::shared_ptr<immer::atom<JoypadList>> joypads;
 };
 
-struct HotPlugDeviceEvent {
+struct PlugDeviceEvent {
+  std::size_t session_id;
+  std::shared_ptr<input::VirtualDevice> device;
+};
+
+struct UnplugDeviceEvent {
   std::size_t session_id;
   std::shared_ptr<input::VirtualDevice> device;
 };

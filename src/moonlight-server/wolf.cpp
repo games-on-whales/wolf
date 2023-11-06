@@ -206,8 +206,8 @@ auto setup_sessions_handlers(const immer::box<state::AppState> &app_state,
         plugged_devices_queue->update([=](const auto map) { return map.erase(ev->session_id); });
       }));
 
-  handlers.push_back(app_state->event_bus->register_handler<immer::box<state::HotPlugDeviceEvent>>(
-      [plugged_devices_queue](const immer::box<state::HotPlugDeviceEvent> &hotplug_ev) {
+  handlers.push_back(app_state->event_bus->register_handler<immer::box<state::PlugDeviceEvent>>(
+      [plugged_devices_queue](const immer::box<state::PlugDeviceEvent> &hotplug_ev) {
         plugged_devices_queue->update([=](const session_devices map) {
           logs::log(logs::debug, "{} received hot-plug device event", hotplug_ev->session_id);
 

@@ -57,13 +57,8 @@ std::shared_ptr<Joypad> create_new_joypad(const state::StreamSession &session,
   session.joypads->update([&](state::JoypadList joypads) {
     logs::log(logs::debug, "[INPUT] Creating joypad {} of type: {}", controller_number, type);
 
-    session.event_bus->fire_event(immer::box<state::HotPlugDeviceEvent>(
-        state::HotPlugDeviceEvent{.session_id = session.session_id, .device = new_pad}));
-
-    if (auto old_controller = joypads.find(controller_number)) {
-      logs::log(logs::debug, "[INPUT] Replacing previously plugged joypad");
-      // TODO: should we do something with old_controller?
-    }
+    session.event_bus->fire_event(immer::box<state::PlugDeviceEvent>(
+        state::PlugDeviceEvent{.session_id = session.session_id, .device = new_pad}));
     return joypads.set(controller_number, new_pad);
   });
   return new_pad;
@@ -200,6 +195,17 @@ void handle_input(const state::StreamSession &session,
     std::shared_ptr<Joypad> selected_pad;
     if (auto joypad = joypads->find(controller_pkt->controller_number)) {
       selected_pad = std::move(*joypad);
+
+      // Check if Moonlight is sending the final packet for this pad
+      if (!(controller_pkt->active_gamepad_mask & (1 << controller_pkt->controller_number))) {
+        logs::log(logs::debug, "Removing joypad {}", controller_pkt->controller_number);
+        // Send the event downstream, Docker will pick it up and remove the device
+        session.event_bus->fire_event(immer::box<state::UnplugDeviceEvent>(
+            state::UnplugDeviceEvent{.session_id = session.session_id, .device = selected_pad}));
+        // Remove the joypad, this will delete the last reference
+        session.joypads->update(
+            [&](state::JoypadList joypads) { return joypads.erase(controller_pkt->controller_number); });
+      }
     } else {
       // Old Moonlight versions don't support CONTROLLER_ARRIVAL, we create a default pad when it's first mentioned
       selected_pad = create_new_joypad(session,
