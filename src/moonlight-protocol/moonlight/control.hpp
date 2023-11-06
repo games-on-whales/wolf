@@ -4,8 +4,8 @@
 #include <core/api.hpp>
 #include <core/input.hpp>
 #include <crypto/crypto.hpp>
-#include <helpers/utils.hpp>
 #include <cstdint>
+#include <helpers/utils.hpp>
 #include <memory>
 
 namespace moonlight::control {
@@ -75,6 +75,7 @@ enum CONTROLLER_BTN : unsigned int {
   TOUCHPAD_FLAG = 0x100000, // Touchpad buttons on Sony controllers
   MISC_FLAG = 0x200000,     // Share/Mic/Capture/Mute buttons on various controllers
 
+  /* This follows the XBOX controller layout */
   A = 0x1000,
   B = 0x2000,
   X = 0x4000,

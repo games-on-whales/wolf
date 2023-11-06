@@ -9,10 +9,16 @@
 namespace wolf::core::input {
 
 struct JoypadState {
+  Joypad::CONTROLLER_TYPE type;
+
   libevdev_uinput_ptr joy = nullptr;
   int currently_pressed_btns = 0;
 
   libevdev_uinput_ptr trackpad = nullptr;
+
+  // We have to keep around if triggers are moving so that we can properly control BTN_TR2/BTN_TL2
+  bool tr_moving = false;
+  bool tl_moving = false;
 
   /**
    * Multi touch protocol type B is stateful; see: https://docs.kernel.org/input/multi-touch-protocol.html
@@ -44,6 +50,10 @@ struct JoypadState {
   std::optional<std::function<void(int low_freq, int high_freq)>> on_rumble = std::nullopt;
   std::optional<std::function<void(int r, int g, int b)>> on_led = std::nullopt;
 };
+
+static bool TR_TL_enabled(Joypad::CONTROLLER_TYPE type) {
+  return type == Joypad::CONTROLLER_TYPE::PS; // Seems that this is required only for PS controllers
+}
 
 /**
  * Joypads will also have one `/dev/input/js*` device as child, we want to expose that as well
@@ -192,7 +202,8 @@ static void set_controller_type(libevdev *dev, Joypad::CONTROLLER_TYPE type) {
     // https://github.com/torvalds/linux/blob/master/drivers/input/joystick/xpad.c#L147
     libevdev_set_name(dev, "Wolf X-Box One (virtual) pad");
     libevdev_set_id_vendor(dev, 0x045E);
-    libevdev_set_id_product(dev, 0x02D1);
+    libevdev_set_id_product(dev, 0x02EA);
+    libevdev_set_id_version(dev, 0x0408);
     break;
   case Joypad::PS:
     // Sony PS5 controller
@@ -200,6 +211,7 @@ static void set_controller_type(libevdev *dev, Joypad::CONTROLLER_TYPE type) {
     libevdev_set_name(dev, "Wolf PS5 (virtual) pad");
     libevdev_set_id_vendor(dev, 0x054c);
     libevdev_set_id_product(dev, 0x0ce6);
+    libevdev_set_id_version(dev, 0x8111);
     break;
   case Joypad::NINTENDO:
     // Nintendo switch pro controller
@@ -207,6 +219,7 @@ static void set_controller_type(libevdev *dev, Joypad::CONTROLLER_TYPE type) {
     libevdev_set_name(dev, "Wolf Nintendo (virtual) pad");
     libevdev_set_id_vendor(dev, 0x057e);
     libevdev_set_id_product(dev, 0x2009);
+    libevdev_set_id_version(dev, 0xAB00);
     break;
   }
 }
@@ -217,7 +230,6 @@ std::optional<libevdev_uinput *> create_controller(Joypad::CONTROLLER_TYPE type,
 
   libevdev_set_uniq(dev, "Wolf gamepad");
   set_controller_type(dev, type);
-  libevdev_set_id_version(dev, 0xAB00);
   libevdev_set_id_bustype(dev, BUS_USB);
 
   libevdev_enable_event_type(dev, EV_KEY);
@@ -229,6 +241,10 @@ std::optional<libevdev_uinput *> create_controller(Joypad::CONTROLLER_TYPE type,
   libevdev_enable_event_code(dev, EV_KEY, BTN_THUMBR, nullptr);
   libevdev_enable_event_code(dev, EV_KEY, BTN_TR, nullptr);
   libevdev_enable_event_code(dev, EV_KEY, BTN_TL, nullptr);
+  if (TR_TL_enabled(type)) {
+    libevdev_enable_event_code(dev, EV_KEY, BTN_TR2, nullptr);
+    libevdev_enable_event_code(dev, EV_KEY, BTN_TL2, nullptr);
+  }
   libevdev_enable_event_code(dev, EV_KEY, BTN_SELECT, nullptr);
   libevdev_enable_event_code(dev, EV_KEY, BTN_MODE, nullptr);
   libevdev_enable_event_code(dev, EV_KEY, BTN_START, nullptr);
@@ -622,7 +638,7 @@ static void event_listener(const std::shared_ptr<JoypadState> &state) {
 }
 
 Joypad::Joypad(Joypad::CONTROLLER_TYPE type, uint8_t capabilities) {
-  this->_state = std::make_shared<JoypadState>(JoypadState{});
+  this->_state = std::make_shared<JoypadState>(JoypadState{.type = type});
 
   if (auto joy_el = create_controller(type, capabilities)) {
     this->_state->joy = {*joy_el, ::libevdev_uinput_destroy};
@@ -690,10 +706,14 @@ void Joypad::set_pressed_buttons(int newly_pressed) {
         libevdev_uinput_write_event(controller, EV_KEY, BTN_SOUTH, bf_new & A ? 1 : 0);
       if (B & bf_changed)
         libevdev_uinput_write_event(controller, EV_KEY, BTN_EAST, bf_new & B ? 1 : 0);
-      if (X & bf_changed)
-        libevdev_uinput_write_event(controller, EV_KEY, BTN_NORTH, bf_new & X ? 1 : 0);
-      if (Y & bf_changed)
-        libevdev_uinput_write_event(controller, EV_KEY, BTN_WEST, bf_new & Y ? 1 : 0);
+      if (X & bf_changed) {
+        auto btn_code = this->_state->type == PS ? BTN_WEST : BTN_NORTH;
+        libevdev_uinput_write_event(controller, EV_KEY, btn_code, bf_new & X ? 1 : 0);
+      }
+      if (Y & bf_changed) {
+        auto btn_code = this->_state->type == PS ? BTN_NORTH : BTN_WEST;
+        libevdev_uinput_write_event(controller, EV_KEY, btn_code, bf_new & Y ? 1 : 0);
+      }
 
       if (TOUCHPAD_FLAG & bf_changed) {
         if (auto touchpad = this->_state->trackpad.get()) {
@@ -724,8 +744,27 @@ void Joypad::set_stick(Joypad::STICK_POSITION stick_type, short x, short y) {
 
 void Joypad::set_triggers(unsigned char left, unsigned char right) {
   if (auto controller = this->_state->joy.get()) {
-    libevdev_uinput_write_event(controller, EV_ABS, ABS_Z, left);
-    libevdev_uinput_write_event(controller, EV_ABS, ABS_RZ, right);
+    if (left > 0) {
+      if (!this->_state->tl_moving && TR_TL_enabled(this->_state->type)) { // first time moving left trigger
+        libevdev_uinput_write_event(controller, EV_ABS, BTN_TL2, 1);
+        this->_state->tl_moving = true;
+      }
+      libevdev_uinput_write_event(controller, EV_ABS, ABS_Z, left);
+    } else if (this->_state->tl_moving && TR_TL_enabled(this->_state->type)) { // returning to the idle position
+      libevdev_uinput_write_event(controller, EV_ABS, BTN_TL2, 0);
+      this->_state->tl_moving = false;
+    }
+
+    if (right > 0) {
+      if (!this->_state->tr_moving && TR_TL_enabled(this->_state->type)) { // first time moving right trigger
+        libevdev_uinput_write_event(controller, EV_ABS, BTN_TR2, 1);
+        this->_state->tr_moving = true;
+      }
+      libevdev_uinput_write_event(controller, EV_ABS, ABS_RZ, right);
+    } else if (this->_state->tr_moving && TR_TL_enabled(this->_state->type)) { // returning to the idle position
+      libevdev_uinput_write_event(controller, EV_ABS, BTN_TR2, 0);
+      this->_state->tr_moving = false;
+    }
 
     libevdev_uinput_write_event(controller, EV_SYN, SYN_REPORT, 0);
   }
