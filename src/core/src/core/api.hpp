@@ -2,6 +2,7 @@
 #include <boost/endian/conversion.hpp>
 #include <string>
 #include <utility>
+#include <cstdint>
 
 namespace wolf::core::api {
 
