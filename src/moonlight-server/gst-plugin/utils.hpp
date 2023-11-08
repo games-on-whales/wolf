@@ -3,11 +3,11 @@
 #include <array>
 #include <boost/endian/conversion.hpp>
 #include <crypto/crypto.hpp>
+#include <cstdint>
 #include <gst/base/gstbasetransform.h>
 #include <gst/gst.h>
 #include <moonlight/fec.hpp>
 #include <vector>
-#include <cstdint>
 
 static void gst_buffer_copy_into(GstBuffer *buf, unsigned char *destination) {
   auto size = gst_buffer_get_size(buf);
