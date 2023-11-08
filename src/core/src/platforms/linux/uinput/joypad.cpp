@@ -107,6 +107,12 @@ std::vector<std::string> Joypad::get_nodes() const {
   return nodes;
 }
 
+/**
+ * This needs to be the same for all the virtual devices in order for SDL to match gyro with the joypad
+ * see: https://github.com/libsdl-org/SDL/blob/7cc3e94eb22f2ee76742bfb4c101757fcb70c4b7/src/joystick/linux/SDL_sysjoystick.c#L1446
+ */
+static constexpr std::string_view UNIQ_ID = "00:11:22:33:44:55";
+
 std::vector<std::map<std::string, std::string>> Joypad::get_udev_events() const {
   std::vector<std::map<std::string, std::string>> events;
 
@@ -120,6 +126,7 @@ std::vector<std::map<std::string, std::string>> Joypad::get_udev_events() const 
       auto event = gen_udev_base_event(devnode, syspath);
       event["ID_INPUT_JOYSTICK"] = "1";
       event[".INPUT_CLASS"] = "joystick";
+      event["UNIQ"] = UNIQ_ID;
       events.emplace_back(event);
     }
   }
@@ -133,6 +140,7 @@ std::vector<std::map<std::string, std::string>> Joypad::get_udev_events() const 
       auto event = gen_udev_base_event(devnode, syspath);
       event["ID_INPUT_TOUCHPAD"] = "1";
       event[".INPUT_CLASS"] = "mouse";
+      event["UNIQ"] = UNIQ_ID;
       events.emplace_back(event);
     }
   }
@@ -145,6 +153,11 @@ std::vector<std::map<std::string, std::string>> Joypad::get_udev_events() const 
 
       auto event = gen_udev_base_event(devnode, syspath);
       event["ID_INPUT_ACCELEROMETER"] = "1";
+      event["ID_INPUT_WIDTH_MM"] = "8";
+      event["ID_INPUT_HEIGHT_MM"] = "8";
+      event["UNIQ"] = UNIQ_ID;
+      event["IIO_SENSOR_PROXY_TYPE"] = "input-accel";
+      event["SYSTEMD_WANTS"] = "iio-sensor-proxy.service";
       events.emplace_back(event);
     }
   }
@@ -228,7 +241,8 @@ std::optional<libevdev_uinput *> create_controller(Joypad::CONTROLLER_TYPE type,
   libevdev *dev = libevdev_new();
   libevdev_uinput *uidev;
 
-  libevdev_set_uniq(dev, "Wolf gamepad");
+
+  libevdev_set_uniq(dev, UNIQ_ID.data());
   set_controller_type(dev, type);
   libevdev_set_id_bustype(dev, BUS_USB);
 
@@ -288,8 +302,8 @@ std::optional<libevdev_uinput *> create_controller(Joypad::CONTROLLER_TYPE type,
   return uidev;
 }
 
-constexpr int TOUCH_MAX_X = 1919;
-constexpr int TOUCH_MAX_Y = 1079;
+static constexpr int TOUCH_MAX_X = 1920;
+static constexpr int TOUCH_MAX_Y = 1080;
 
 /**
  * All values in here have been taken from a real PS5 gamepad using evemu-record
@@ -299,7 +313,7 @@ std::optional<libevdev_uinput *> create_trackpad() {
   libevdev *dev = libevdev_new();
   libevdev_uinput *uidev;
 
-  libevdev_set_uniq(dev, "Wolf gamepad touchpad");
+  libevdev_set_uniq(dev, UNIQ_ID.data());
   libevdev_set_name(dev, "Wolf gamepad (virtual) touchpad");
   libevdev_set_id_version(dev, 0xAB00);
 
@@ -344,10 +358,13 @@ std::optional<libevdev_uinput *> create_trackpad() {
   return uidev;
 }
 
-constexpr int ACCELERATION_MAX = 40;
-constexpr int ACCELERATION_MIN = -40;
-constexpr int GYRO_MAX = 180;
-constexpr int GYRO_MIN = -180;
+/**
+ * see: https://github.com/torvalds/linux/blob/305230142ae0637213bf6e04f6d9f10bbcb74af8/drivers/hid/hid-playstation.c#L139-L144
+ */
+static constexpr int DS_ACC_RES_PER_G = 8192;
+static constexpr int DS_ACC_RANGE = (4 * DS_ACC_RES_PER_G);
+static constexpr int DS_GYRO_RES_PER_DEG_S = 1024;
+static constexpr int DS_GYRO_RANGE = (2048 * DS_GYRO_RES_PER_DEG_S);
 
 /**
  * All values in here have been taken from a real PS5 gamepad using evemu-record
@@ -357,12 +374,11 @@ std::optional<libevdev_uinput *> create_motion_sensors() {
   libevdev *dev = libevdev_new();
   libevdev_uinput *uidev;
 
-  libevdev_set_uniq(dev, "Wolf gamepad motion sensors");
+  libevdev_set_uniq(dev, UNIQ_ID.data());
   libevdev_set_name(dev, "Wolf gamepad (virtual) motion sensors");
-  libevdev_set_id_version(dev, 0xAB00);
-
   libevdev_set_id_product(dev, 0xce6);
   libevdev_set_id_vendor(dev, 0x54c);
+  libevdev_set_id_version(dev, 0x8111);
   libevdev_set_id_bustype(dev, BUS_USB);
 
   /**
@@ -375,28 +391,26 @@ std::optional<libevdev_uinput *> create_motion_sensors() {
 
   libevdev_enable_event_type(dev, EV_ABS);
 
-  constexpr int ACC_RES = 8192;
-  constexpr int GYRO_RES = 1024;
   constexpr int FUZZ = 16;
 
   // Acceleration
-  input_absinfo acc_abs_x{38, ACCELERATION_MIN, ACCELERATION_MAX, FUZZ, 0, ACC_RES};
+  input_absinfo acc_abs_x{38, -DS_ACC_RANGE, DS_ACC_RANGE, FUZZ, 0, DS_ACC_RES_PER_G};
   libevdev_enable_event_code(dev, EV_ABS, ABS_X, &acc_abs_x);
 
-  input_absinfo acc_abs_y{8209, ACCELERATION_MIN, ACCELERATION_MAX, FUZZ, 0, ACC_RES};
+  input_absinfo acc_abs_y{8209, -DS_ACC_RANGE, DS_ACC_RANGE, FUZZ, 0, DS_ACC_RES_PER_G};
   libevdev_enable_event_code(dev, EV_ABS, ABS_Y, &acc_abs_y);
 
-  input_absinfo acc_abs_z{1025, ACCELERATION_MIN, ACCELERATION_MAX, FUZZ, 0, ACC_RES};
+  input_absinfo acc_abs_z{1025, -DS_ACC_RANGE, DS_ACC_RANGE, FUZZ, 0, DS_ACC_RES_PER_G};
   libevdev_enable_event_code(dev, EV_ABS, ABS_Z, &acc_abs_z);
 
   // Gyro
-  input_absinfo gyro_abs_x{-186, GYRO_MIN, GYRO_MAX, FUZZ, 0, GYRO_RES};
+  input_absinfo gyro_abs_x{-186, -DS_GYRO_RANGE, DS_GYRO_RANGE, FUZZ, 0, DS_GYRO_RES_PER_DEG_S};
   libevdev_enable_event_code(dev, EV_ABS, ABS_RX, &gyro_abs_x);
 
-  input_absinfo gyro_abs_y{-124, GYRO_MIN, GYRO_MAX, FUZZ, 0, GYRO_RES};
+  input_absinfo gyro_abs_y{-124, -DS_GYRO_RANGE, DS_GYRO_RANGE, FUZZ, 0, DS_GYRO_RES_PER_DEG_S};
   libevdev_enable_event_code(dev, EV_ABS, ABS_RY, &gyro_abs_y);
 
-  input_absinfo gyro_abs_z{0, GYRO_MIN, GYRO_MAX, FUZZ, 0, GYRO_RES};
+  input_absinfo gyro_abs_z{0, -DS_GYRO_RANGE, DS_GYRO_RANGE, FUZZ, 0, DS_GYRO_RES_PER_DEG_S};
   libevdev_enable_event_code(dev, EV_ABS, ABS_RZ, &gyro_abs_z);
 
   /**
@@ -778,9 +792,9 @@ void Joypad::set_motion(MOTION_TYPE type, float x, float y, float z) {
   if (auto motion_sensor = this->_state->motion_sensor.get()) {
     switch (type) {
     case GYROSCOPE: {
-      auto x_clamped = std::clamp((int)x, GYRO_MIN, GYRO_MAX);
-      auto y_clamped = std::clamp((int)y, GYRO_MIN, GYRO_MAX);
-      auto z_clamped = std::clamp((int)z, GYRO_MIN, GYRO_MAX);
+      auto x_clamped = std::clamp((int)x, -DS_GYRO_RANGE, DS_GYRO_RANGE);
+      auto y_clamped = std::clamp((int)y, -DS_GYRO_RANGE, DS_GYRO_RANGE);
+      auto z_clamped = std::clamp((int)z, -DS_GYRO_RANGE, DS_GYRO_RANGE);
 
       libevdev_uinput_write_event(motion_sensor, EV_ABS, ABS_RX, x_clamped);
       libevdev_uinput_write_event(motion_sensor, EV_ABS, ABS_RY, y_clamped);
@@ -788,9 +802,9 @@ void Joypad::set_motion(MOTION_TYPE type, float x, float y, float z) {
       break;
     }
     case ACCELERATION: {
-      auto x_clamped = std::clamp((int)x, ACCELERATION_MIN, ACCELERATION_MAX);
-      auto y_clamped = std::clamp((int)y, ACCELERATION_MIN, ACCELERATION_MAX);
-      auto z_clamped = std::clamp((int)z, ACCELERATION_MIN, ACCELERATION_MAX);
+      auto x_clamped = std::clamp((int)x, -DS_ACC_RANGE, DS_ACC_RANGE);
+      auto y_clamped = std::clamp((int)y, -DS_ACC_RANGE, DS_ACC_RANGE);
+      auto z_clamped = std::clamp((int)z, -DS_ACC_RANGE, DS_ACC_RANGE);
 
       libevdev_uinput_write_event(motion_sensor, EV_ABS, ABS_X, x_clamped);
       libevdev_uinput_write_event(motion_sensor, EV_ABS, ABS_Y, y_clamped);

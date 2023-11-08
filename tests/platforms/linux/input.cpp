@@ -332,7 +332,7 @@ TEST_CASE("uinput - joypad", "UINPUT") {
 
       REQUIRE_THAT(libevdev_event_type_get_name(events[1]->type), Equals("EV_ABS"));
       REQUIRE_THAT(libevdev_event_code_get_name(events[1]->type, events[1]->code), Equals("ABS_Y"));
-      REQUIRE(events[1]->value == -40);
+      REQUIRE(events[1]->value == -32768); //DS_ACC_RANGE
 
       REQUIRE_THAT(libevdev_event_type_get_name(events[2]->type), Equals("EV_ABS"));
       REQUIRE_THAT(libevdev_event_code_get_name(events[2]->type, events[2]->code), Equals("ABS_Z"));

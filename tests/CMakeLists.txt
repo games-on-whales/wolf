@@ -14,7 +14,7 @@ file(GLOB SRC_LIST SRCS *.cpp)
 
 if (UNIX AND NOT APPLE)
     option(TEST_UINPUT "Enable uinput test" ON) # uinput doesn't work in GA
-    if (TEST_UINPUT AND UNIX AND NOT APPLE)
+    if (TEST_UINPUT)
         list(APPEND SRC_LIST "platforms/linux/input.cpp")
         if (BUILD_FAKE_UDEV_CLI)
             list(APPEND SRC_LIST "platforms/linux/fake-udev.cpp")
@@ -23,13 +23,21 @@ if (UNIX AND NOT APPLE)
     endif ()
 
     option(TEST_RUST_WAYLAND "Enable custom wayland test" ON)
-    if (TEST_RUST_WAYLAND AND UNIX AND NOT APPLE)
+    if (TEST_RUST_WAYLAND)
         list(APPEND SRC_LIST "platforms/linux/wayland-display.cpp")
     endif ()
 
     option(TEST_NVIDIA "Enable Nvidia tests" ON)
     if (TEST_NVIDIA)
         list(APPEND SRC_LIST "platforms/linux/nvidia.cpp")
+    endif ()
+
+    option(TEST_SDL "Enabled SDL tests" OFF) # TODO: SDL does pick up my joypad but it doesn't detect gyro/acceleration
+    if (TEST_SDL)
+        find_package(SDL2 REQUIRED)
+        target_include_directories(wolftests PRIVATE ${SDL2_INCLUDE_DIRS})
+        target_link_libraries(wolftests PRIVATE SDL2::SDL2)
+        list(APPEND SRC_LIST "platforms/linux/sdl-test-joypad.cpp")
     endif ()
 endif ()
 
