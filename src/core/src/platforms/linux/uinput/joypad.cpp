@@ -109,7 +109,8 @@ std::vector<std::string> Joypad::get_nodes() const {
 
 /**
  * This needs to be the same for all the virtual devices in order for SDL to match gyro with the joypad
- * see: https://github.com/libsdl-org/SDL/blob/7cc3e94eb22f2ee76742bfb4c101757fcb70c4b7/src/joystick/linux/SDL_sysjoystick.c#L1446
+ * see:
+ * https://github.com/libsdl-org/SDL/blob/7cc3e94eb22f2ee76742bfb4c101757fcb70c4b7/src/joystick/linux/SDL_sysjoystick.c#L1446
  */
 static constexpr std::string_view UNIQ_ID = "00:11:22:33:44:55";
 
@@ -241,7 +242,6 @@ std::optional<libevdev_uinput *> create_controller(Joypad::CONTROLLER_TYPE type,
   libevdev *dev = libevdev_new();
   libevdev_uinput *uidev;
 
-
   libevdev_set_uniq(dev, UNIQ_ID.data());
   set_controller_type(dev, type);
   libevdev_set_id_bustype(dev, BUS_USB);
@@ -359,7 +359,8 @@ std::optional<libevdev_uinput *> create_trackpad() {
 }
 
 /**
- * see: https://github.com/torvalds/linux/blob/305230142ae0637213bf6e04f6d9f10bbcb74af8/drivers/hid/hid-playstation.c#L139-L144
+ * see:
+ * https://github.com/torvalds/linux/blob/305230142ae0637213bf6e04f6d9f10bbcb74af8/drivers/hid/hid-playstation.c#L139-L144
  */
 static constexpr int DS_ACC_RES_PER_G = 8192;
 static constexpr int DS_ACC_RANGE = (4 * DS_ACC_RES_PER_G);
