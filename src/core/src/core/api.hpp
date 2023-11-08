@@ -1,8 +1,8 @@
 #pragma once
 #include <boost/endian/conversion.hpp>
+#include <cstdint>
 #include <string>
 #include <utility>
-#include <cstdint>
 
 namespace wolf::core::api {
 
