@@ -11,20 +11,17 @@ In order to decrypt you'll have to use the keys that are exchanged during the `H
 
 https://en.wikipedia.org/wiki/Galois/Counter_Mode[AES GCM] not only provides confidentiality by encrypting the message but, by using the GCM TAG, it also guarantees that no one has tampered the original payload.
 
-.The format of encrypted packets in bytes
-[packetdiag,format=svg,align="center"]
+.The format of encrypted packets (bytes)
+[bytefield,format=svg,align="center"]
 ....
-{
-  colwidth = 8
-  node_height = 50
-  node_width = 70
+include::diagrams/bytefield-shared.edn[]
+(draw-input-header)
 
-  0-1: Type
-  2-3: Len
-  4-7: Seq
-  8-23: AES GCM TAG
-  24-31: encrypted payload
-}
+(draw-box "Seq" {:span 4})
+(draw-box "GCM TAG" {:span 8})
+(draw-box "GCM TAG" [{:span 8} :box-below])
+(draw-gap "Payload" {:gap 10})
+(draw-bottom)
 ....
 
 [%autowidth.stretch]
@@ -69,14 +66,93 @@ The first two bytes of the decrypted payload represent the *type* of the message
 * LOSS_STATS (`0x0201`)
 * FRAME_STATS (`0x0204`)
 * xref:protocols:input-data.adoc[INPUT_DATA] (`0x0206`)
-* RUMBLE_DATA (`0x010b`)
 * TERMINATION (`0x0100`)
 * PERIODIC_PING (`0x0200`)
 * IDR_FRAME (`0x0302`)
+* HDR_MODE (`0x010e`)
+* xref:_rumble_data[RUMBLE_DATA] (`0x010b`)
+* xref:_rumble_triggers[RUMBLE_TRIGGERS] (`0x5500`)
+* xref:_motion_event[MOTION_EVENT] (`0x5501`)
+* xref:_rgb_led[RGB_LED] (`0x5502`)
 
-The next two bytes indicate the size of the decrypted payload.  The format of the remaining data depends on the message type.
+The next two bytes indicate the size of the decrypted payload.
+The format of the remaining data depends on the message type.
 
-[WARNING,caption=TODO]
-====
-Add details of all the message types
-====
+== Server events
+
+The following events are originating from the server and will be sent to Moonlight clients.
+
+=== Rumble data
+
+A simple schema for a controller number and low/high frequencies
+
+.The payload for a Rumble packet (bytes)
+[bytefield,format=svg,align="center"]
+....
+include::diagrams/bytefield-shared.edn[]
+(draw-input-header 0x010b)
+
+(draw-box "unused" {:span 4})
+(draw-box "ctrl #" {:span 2})
+(draw-box "low freq" {:span 2})
+(draw-box "high freq" {:span 2})
+....
+
+=== Rumble Triggers
+
+#icon:bullhorn[] new in Moonlight 5.0.0#
+
+A simple schema for a controller number and left/right values
+
+.The payload for a Trigger packet (bytes)
+[bytefield,format=svg,align="center"]
+....
+include::diagrams/bytefield-shared.edn[]
+(draw-input-header 0x5500)
+
+(draw-box "ctrl #" {:span 2})
+(draw-box "left" {:span 2})
+(draw-box "right" {:span 2})
+....
+
+=== Motion Event
+
+#icon:bullhorn[] new in Moonlight 5.0.0#
+
+This is used to signal to Moonlight clients to start sending motion events (Gyro or Acceleration) to the server. +
+By default Moonlight disables these events in order to save bandwith.
+
+.The payload for a Motion packet (bytes)
+[bytefield,format=svg,align="center"]
+....
+include::diagrams/bytefield-shared.edn[]
+(draw-input-header 0x5501)
+
+(draw-box "ctrl #" {:span 2})
+(draw-box "rate" {:span 2})
+(draw-box "type" {:span 1})
+....
+
+Type could be:
+
+* ACCELERATION (`0x01`)
+* GYROSCOPE (`0x02`)
+
+=== RGB LED
+
+#icon:bullhorn[] new in Moonlight 5.0.0#
+
+This is used to control the color of the LED of supported controllers. +
+An example of this is when setting the LED color in Steam, the server has to send this event all the way to the Moonlight client.
+
+.The payload for a LED packet (bytes)
+[bytefield,format=svg,align="center"]
+....
+include::diagrams/bytefield-shared.edn[]
+(draw-input-header 0x5502)
+
+(draw-box "ctrl #" {:span 2})
+(draw-box "R" {:span 1})
+(draw-box "G" {:span 1})
+(draw-box "B" {:span 1})
+....

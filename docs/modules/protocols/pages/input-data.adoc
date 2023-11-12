@@ -6,21 +6,9 @@ Moonlight will send all user inputs via the xref:protocols:control-specs.adoc[co
 .General format of an `INPUT_DATA` message
 [bytefield,format=svg,align="center"]
 ....
-(defn draw-group-label-header
-  [span label]
-  (draw-box (text label [:math {:font-size 12}]) {:span span :borders nil :height 14}))
+include::diagrams/bytefield-shared.edn[]
+(draw-input-header 0x0206)
 
-(defn draw-input-header
-  []
-  (draw-column-headers)
-  (draw-group-label-header 4 "Header")
-  (draw-group-label-header 12 "Payload")
-  (next-row 18))
-
-(draw-input-header)
-
-(draw-box 0x0206 [:box-first {:span 2}])
-(draw-box "length" [:box-related {:span 2}])
 (draw-box "input size" [:box-first {:span 4}])
 (draw-box "input type" [:box-related {:span 4}])
 (draw-box "data" {:span 2 :borders #{:left :top :bottom}})
@@ -29,9 +17,8 @@ Moonlight will send all user inputs via the xref:protocols:control-specs.adoc[co
 ....
 
 The first 4 bytes (big endian) following the header of a packet of type
-`INPUT_DATA` indicate the size of the message, which varies depending on the
-input type.  The next 4 bytes (little endian) specify the input type, which
-can be any of the values in the following table.
+`INPUT_DATA` indicate the size of the message, which varies depending on the input type.
+The next 4 bytes (little endian) specify the input type, which can be any of the values in the following table.
 
 |===
 |Input type name|Value
@@ -60,8 +47,32 @@ can be any of the values in the following table.
 |MOUSE_HSCROLL
 |`0x55000001`
 
+|TOUCH
+|`0x55000002`
+
+|PEN
+|`0x55000003`
+
 |CONTROLLER_MULTI
 |`0x0000000C`
+
+|CONTROLLER_ARRIVAL
+|`0x55000004`
+
+|CONTROLLER_TOUCH
+|`0x55000005`
+
+|CONTROLLER_MOTION
+|`0x55000006`
+
+|CONTROLLER_BATTERY
+|`0x55000007`
+
+|HAPTICS
+|`0x0000000D`
+
+|UTF8_TEXT
+|`0x00000017`
 
 |===
 
@@ -72,28 +83,18 @@ Moonlight will send mouse relative coordinates when the option "Optimize mouse f
 .The full format of a `MOUSE_MOVE_REL` packet
 [bytefield,format=svg,align="center"]
 ....
-(defn draw-group-label-header
-  [span label]
-  (draw-box (text label [:math {:font-size 12}]) {:span span :borders nil :height 14}))
+include::diagrams/bytefield-shared.edn[]
+(draw-input-header 0x0206)
 
-(defn draw-input-header
-  []
-  (draw-column-headers)
-  (draw-group-label-header 4 "Header")
-  (draw-group-label-header 12 "Payload")
-  (next-row 18))
-
-(draw-input-header)
 (draw-row-header "format")
-(draw-box 0x0206 [:box-first {:span 2}])
-(draw-box 0xc [:box-related {:span 2}])
 (draw-box 0x8 [:box-first {:span 4}])
 (draw-box 0x7 [:box-related {:span 4}])
 (draw-box "delta X" [:box-related {:span 2}])
 (draw-box "delta Y" [:box-related {:span 2}])
 (next-row)
+
 (draw-row-header "network")
-(draw-boxes [0x6 0x2 0xC 0x0 0x0 0x0 0x0 0x8 0x7 0x0 0x0 0x0 0xFF 0xFF 0x0 0x0])
+(draw-related-boxes [0x6 0x2 0xC 0x0 0x0 0x0 0x0 0x8 0x7 0x0 0x0 0x0 0xFF 0xFF 0x0 0x0])
 ....
 
 `Delta X` and `Delta Y` defines the relative movement that the mouse must perform.
@@ -108,32 +109,21 @@ Moonlight will send mouse absolute coordinates when the option "Optimize mouse f
 .The full format of a `MOUSE_MOVE_ABS` packet
 [bytefield,format=svg,align="center"]
 ....
-(defn draw-group-label-header
-  [span label]
-  (draw-box (text label [:math {:font-size 12}]) {:span span :borders nil :height 14}))
+include::diagrams/bytefield-shared.edn[]
+(draw-input-header 0x0206)
 
-(defn draw-input-header
-  []
-  (draw-column-headers)
-  (draw-group-label-header 4 "Header")
-  (draw-group-label-header 12 "Payload")
-  (next-row 18))
-
-(draw-input-header)
 (draw-row-header "format")
-(draw-box 0x0206 [:box-first {:span 2}])
-(draw-box 0x12 [:box-related {:span 2}])
 (draw-box 0xe [:box-first {:span 4}])
 (draw-box 0x5 [:box-related {:span 4}])
 (draw-box "X" [:box-related {:span 2}])
 (draw-box "Y" [:box-last {:span 2}])
-(draw-boxes [nil nil])
+(draw-related-boxes [nil nil])
 (draw-box "width" [:box-related {:span 2}])
 (draw-box "height" [:box-last {:span 2}])
 (next-row)
-(next-row)
+
 (draw-row-header "network")
-(draw-boxes [0x06 0x02 0x12 0x00 0x00 0x00 0x00 0x0E 0x05 0x00 0x00 0x00 0x05 0xB8 0x02 0x10 0x00 0x00 0x07 0x7F 0x04 0x37
+(draw-related-boxes [0x06 0x02 0x12 0x00 0x00 0x00 0x00 0x0E 0x05 0x00 0x00 0x00 0x05 0xB8 0x02 0x10 0x00 0x00 0x07 0x7F 0x04 0x37
 ])
 ....
 
@@ -150,28 +140,16 @@ In order to define an absolute position Moonlight will send both:
 .The full format of a `MOUSE_BUTTON_DOWN` or `MOUSE_BUTTON_UP` packet
 [bytefield,format=svg,align="center"]
 ....
-(defn draw-group-label-header
-  [span label]
-  (draw-box (text label [:math {:font-size 12}]) {:span span :borders nil :height 14}))
-
-(defn draw-input-header
-  []
-  (draw-column-headers)
-  (draw-group-label-header 4 "Header")
-  (draw-group-label-header 9 "Payload")
-  (next-row 18))
-
-(draw-input-header)
+include::diagrams/bytefield-shared.edn[]
+(draw-input-header 0x0206)
 (draw-row-header "format")
-(draw-box 0x0206 [:box-first {:span 2}])
-(draw-box 0x9 [:box-related {:span 2}])
+
 (draw-box 0x5 [:box-first {:span 4}])
 (draw-box "action" [:box-related {:span 4}])
 (draw-box "btn" [:box-last])
 (next-row)
-(next-row)
 (draw-row-header "network")
-(draw-boxes [0x06 0x02 0x09 0x00 0x00 0x00 0x00 0x05 0x08 0x00 0x00 0x00 0x01])
+(draw-related-boxes [0x06 0x02 0x09 0x00 0x00 0x00 0x00 0x05 0x08 0x00 0x00 0x00 0x01])
 ....
 
 `Action` can have the following values:
@@ -212,21 +190,10 @@ In order to define an absolute position Moonlight will send both:
 .The full format of a `KEY_DOWN` or `KEY_UP` packet
 [bytefield,format=svg,align="center"]
 ....
-(defn draw-group-label-header
-  [span label]
-  (draw-box (text label [:math {:font-size 12}]) {:span span :borders nil :height 14}))
+include::diagrams/bytefield-shared.edn[]
+(draw-input-header 0x0206)
 
-(defn draw-input-header
-  []
-  (draw-column-headers)
-  (draw-group-label-header 4 "Header")
-  (draw-group-label-header 9 "Payload")
-  (next-row 18))
-
-(draw-input-header)
 (draw-row-header "format")
-(draw-box 0x0206 [:box-first {:span 2}])
-(draw-box 0xe [:box-related {:span 2}])
 (draw-box 0xa [:box-first {:span 4}])
 (draw-box "action" [:box-related {:span 4}])
 (draw-box "flags" [:box-related])
@@ -234,9 +201,9 @@ In order to define an absolute position Moonlight will send both:
 (draw-box "mod" [:box-last])
 (draw-box 0 [{:span 2}])
 (next-row)
-(next-row)
+
 (draw-row-header "network")
-(draw-boxes [0x06 0x02 0x0E 0x00 0x00 0x00 0x00 0x0A 0x03 0x00 0x00 0x00 0x00 0xA4 0x80 0x04 0x00 0x00
+(draw-related-boxes [0x06 0x02 0x0E 0x00 0x00 0x00 0x00 0x0A 0x03 0x00 0x00 0x00 0x00 0xA4 0x80 0x04 0x00 0x00
 ])
 ....
 
@@ -619,30 +586,18 @@ What's `modifiers`?
 .The full format of a `MOUSE_SCROLL` packet
 [bytefield,format=svg,align="center"]
 ....
-(defn draw-group-label-header
-  [span label]
-  (draw-box (text label [:math {:font-size 12}]) {:span span :borders nil :height 14}))
-
-(defn draw-input-header
-  []
-  (draw-column-headers)
-  (draw-group-label-header 4 "Header")
-  (draw-group-label-header 9 "Payload")
-  (next-row 18))
-
-(draw-input-header)
+include::diagrams/bytefield-shared.edn[]
+(draw-input-header 0x0206)
 (draw-row-header "format")
-(draw-box 0x0206 [:box-first {:span 2}])
-(draw-box 0xe [:box-related {:span 2}])
 (draw-box 0xa [:box-first {:span 4}])
 (draw-box 0xa [:box-related {:span 4}])
 (draw-box (text "amount" [:math] [:sub 1]) [:box-related {:span 2}])
 (draw-box (text "amount" [:math] [:sub 2]) [:box-related {:span 2}])
 (draw-box 0 [{:span 2}])
 (next-row)
-(next-row)
+
 (draw-row-header "network")
-(draw-boxes [0x06 0x02 0x0E 0x00 0x00 0x00 0x00 0x0A 0x0A 0x00 0x00 0x00 0xFF 0x88 0xFF 0x88 0x00 0x00
+(draw-related-boxes [0x06 0x02 0x0E 0x00 0x00 0x00 0x00 0x0A 0x0A 0x00 0x00 0x00 0xFF 0x88 0xFF 0x88 0x00 0x00
 ])
 ....
 
@@ -658,21 +613,11 @@ What's `amount 2`?
 .The full format of a `MOUSE_HSCROLL` packet
 [bytefield,format=svg,align="center"]
 ....
-(defn draw-group-label-header
-  [span label]
-  (draw-box (text label [:math {:font-size 12}]) {:span span :borders nil :height 14}))
+include::diagrams/bytefield-shared.edn[]
 
-(defn draw-input-header
-  []
-  (draw-column-headers)
-  (draw-group-label-header 4 "Header")
-  (draw-group-label-header 9 "Payload")
-  (next-row 18))
 
-(draw-input-header)
+(draw-input-header 0x0206)
 (draw-row-header "format")
-(draw-box 0x0206 [:box-first {:span 2}])
-(draw-box 0xa [:box-related {:span 2}])
 (draw-box 0x6 [:box-first {:span 4}])
 (draw-box 0x55000001 [:box-related {:span 4}])
 (draw-box "amount" [:box-last {:span 2}])
@@ -683,26 +628,117 @@ What's `amount 2`?
 ])
 ....
 
-== Controller multi
+== Touch
 
-.The full format of a `CONTROLLER_MULTI` packet
+#icon:bullhorn[] new in Moonlight 5.0.0#
+
+== Pen
+
+#icon:bullhorn[] new in Moonlight 5.0.0#
+
+== Controller
+
+=== Controller arrival
+
+#icon:bullhorn[] new in Moonlight 5.0.0#
+
+Sent when a new connector has been plugged, it'll specify the supported capabilities and the specific type of controller to be emulated.
+
+.The full format of a `CONTROLLER_ARRIVAL` packet
 [bytefield,format=svg,align="center"]
 ....
-(defn draw-group-label-header
-  [span label]
-  (draw-box (text label [:math {:font-size 12}]) {:span span :borders nil :height 14}))
+include::diagrams/bytefield-shared.edn[]
+(draw-input-header 0x0206)
+(draw-box "ctrl #" {:span 1})
+(draw-box "type" {:span 1})
+(draw-box "cap" {:span 1})
+(draw-box "button flags" {:span 4})
+....
 
-(defn draw-input-header
-  []
-  (draw-column-headers)
-  (draw-group-label-header 4 "Header")
-  (draw-group-label-header 9 "Payload")
-  (next-row 18))
+Where controller type can be:
 
-(draw-input-header)
+|===
+|Moonlight code |Description
+
+|Unknown
+|0x00
+
+|XBOX
+|0x01
+
+|PS
+|0x02
+
+|Nintendo
+|0x03
+|===
+
+And the capabilities is a bitfield with the followings options:
+
+|===
+|Moonlight code |Description
+
+|Analog triggers
+|0x01
+
+|Rumble
+|0x02
+
+|Trigger Rumble
+|0x04
+
+|Touchpad
+|0x08
+
+|Accelerometer
+|0x10
+
+|Gyro
+|0x20
+
+|Battery
+|0x40
+
+|RGB LED
+|0x80
+|===
+
+=== Controller multi
+
+IMPORTANT: Since Moonlight 5.0.0 the format has been slightly changed (without breaking the legacy format)
+
+.The legacy format of a `CONTROLLER_MULTI` packet
+[bytefield,format=svg,align="center"]
+....
+include::diagrams/bytefield-shared.edn[]
+(draw-input-header 0x0206)
 (draw-row-header "format")
-(draw-box 0x0206 [:box-first {:span 2}])
-(draw-box 0x22 [:box-related {:span 2}])
+(draw-box nil [:box-first {:span 2}])
+(draw-box "ctrl #" [:box-first {:span 2}])
+(draw-box "active mask" [:box-first {:span 2}])
+(draw-box nil [:box-first {:span 2}])
+(draw-box "btn flags" [:box-first {:span 2}])
+(draw-box "LT" [:box-first {:span 1}])
+(draw-box "RT" [:box-first {:span 1}])
+(draw-box "Left X" [:box-first {:span 2}])
+(draw-box "Left Y" [:box-first {:span 2}])
+(draw-box "Right X" [:box-first {:span 2}])
+(draw-box "Right Y" [:box-first {:span 2}])
+(draw-box nil [:box-first {:span 2}])
+(draw-box "btn flags 2" [:box-first {:span 2}])
+(draw-box nil [:box-first {:span 2}])
+....
+
+.Legacy format
+[%collapsible]
+====
+
+.The legacy format of a `CONTROLLER_MULTI` packet
+[bytefield,format=svg,align="center"]
+....
+include::diagrams/bytefield-shared.edn[]
+(draw-input-header 0x0206)
+(draw-row-header "format")
 (draw-box 0x1e [:box-first {:span 4}])
 (draw-box 0xc [:box-related {:span 4}])
 (draw-box 0x1a [:box-related {:span 2}])
@@ -718,21 +754,37 @@ What's `amount 2`?
 (draw-box "right Y" [:box-last {:span 2}])
 (draw-box 0x9c [:box-first {:span 4}])
 (draw-box 0x55 [:box-last {:span 2}])
+(next-row)
 
-(next-row)
-(next-row)
 (draw-row-header "network")
-(draw-boxes [0x06 0x02 0x22 0x00 0x00 0x00 0x00 0x1E 0x0C 0x00 0x00 0x00 0x1A 0x00 0x00 0x00 0x01 0x00 0x14 0x00 0x00 0x00 0x00 0x00 0x00 0x00 0x00 0x00 0x00 0x00 0x98 0xFF 0x9C 0x00 0x00 0x00 0x55 0x00
+(draw-related-boxes [0x06 0x02 0x22 0x00 0x00 0x00 0x00 0x1E 0x0C 0x00 0x00 0x00 0x1A 0x00 0x00 0x00 0x01 0x00 0x14 0x00 0x00 0x00 0x00 0x00 0x00 0x00 0x00 0x00 0x00 0x00 0x98 0xFF 0x9C 0x00 0x00 0x00 0x55 0x00
 ])
 ....
 
-`LT` and `RT` refer to the left and right triggers, respectively. `Left X` and
-the following fields refer to the values of the left and right sticks.
+====
 
+`LT` and `RT` refer to the left and right triggers, respectively. `Left X` and the following fields refer to the values of the left and right sticks.
 
-=== Button flags
+==== Active mask
 
-The `buttons` element encodes the currently pressed buttons in the joypad.
+The active mask represent a bitfield with bits set for each controller present.
+If you combine this with the `ctrl #` (controller number) you can detect when a controller has been *unplugged*.
+
+[NOTE,caption=EXAMPLE]
+====
+An active mask of `0x0` and a controller number of `0x1` means that the first controller has been unplugged.
+====
+
+==== Button flags
+
+The `buttons` element encodes the currently pressed buttons in the joypad. +
+
+In order to get the new added buttons you have to combine `btn flags` and `btn flags 2` so that
+
+[source,c]
+....
+(button_flags | (button_flags2 << 16))
+....
 
 |===
 |Button type | Flag (HEX)
@@ -781,6 +833,28 @@ The `buttons` element encodes the currently pressed buttons in the joypad.
 
 |Y
 | 0x8000
+
+|SPECIAL_FLAG
+| 0x0400
+
+|PADDLE 1
+| 0x010000
+
+|PADDLE 2
+| 0x020000
+
+|PADDLE 3
+| 0x040000
+
+|PADDLE 4
+| 0x080000
+
+|Touchpad
+| 0x100000
+
+|MISC
+| 0x200000
+
 |===
 
 If more than one button is being pressed at the same time `button_flag` will contain the sum of both values.
@@ -827,4 +901,15 @@ If more than one button is being pressed at the same time `button_flag` will con
 }
 ....
 
-== Controller
+
+=== Controller Touch
+
+#icon:bullhorn[] new in Moonlight 5.0.0#
+
+=== Controller Motion
+
+#icon:bullhorn[] new in Moonlight 5.0.0#
+
+=== Controller Battery
+
+#icon:bullhorn[] new in Moonlight 5.0.0#

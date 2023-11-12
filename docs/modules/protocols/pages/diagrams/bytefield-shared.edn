@@ -1,0 +1,16 @@
+(defattrs :bg-aqua {:fill "#add8e6"})
+
+(defn draw-group-label-header
+  [span label]
+  (draw-box (text label [:math {:font-size 12}]) {:span span :borders nil :height 14}))
+
+(defn draw-input-header
+  ([]
+    (draw-input-header "Type"))
+  ([type]
+    (draw-column-headers)
+    (draw-group-label-header 4 "Header")
+    (draw-group-label-header 12 "Payload")
+    (next-row 18)
+    (draw-box type [{:span 2} :bg-aqua])
+    (draw-box "Len" [{:span 2} :bg-aqua])))
