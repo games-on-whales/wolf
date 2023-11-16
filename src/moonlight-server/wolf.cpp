@@ -472,24 +472,6 @@ int main(int argc, char *argv[]) {
     control::run_control(state::CONTROL_PORT, sessions, ev_bus);
   }).detach();
 
-  // Video RTP Ping
-  std::thread([local_state]() {
-    rtp::wait_for_ping(state::VIDEO_PING_PORT, [=](unsigned short client_port, const std::string &client_ip) {
-      logs::log(logs::trace, "[PING] video from {}:{}", client_ip, client_port);
-      auto ev = state::RTPVideoPingEvent{.client_ip = client_ip, .client_port = client_port};
-      local_state->event_bus->fire_event(immer::box<state::RTPVideoPingEvent>(ev));
-    });
-  }).detach();
-
-  // Audio RTP Ping
-  std::thread([local_state]() {
-    rtp::wait_for_ping(state::AUDIO_PING_PORT, [=](unsigned short client_port, const std::string &client_ip) {
-      logs::log(logs::trace, "[PING] audio from {}:{}", client_ip, client_port);
-      auto ev = state::RTPAudioPingEvent{.client_ip = client_ip, .client_port = client_port};
-      local_state->event_bus->fire_event(immer::box<state::RTPAudioPingEvent>(ev));
-    });
-  }).detach();
-
   auto audio_server = setup_audio_server(runtime_dir);
   auto sess_handlers = setup_sessions_handlers(local_state, runtime_dir, audio_server);
 

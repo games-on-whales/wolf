@@ -70,7 +70,8 @@ public:
         auto user_ip = self->socket().remote_endpoint().address().to_string();
         auto session = get_session_by_ip(self->stream_sessions->load(), user_ip);
         if (session) {
-          auto response = commands::message_handler(parsed_msg.value(), session.value(), self->event_bus);
+          auto session_idx = self->stream_sessions->load()->size() - 1;
+          auto response = commands::message_handler(parsed_msg.value(), session.value(), self->event_bus, session_idx);
           self->send_message(response, [self](auto bytes) { self->close(); });
         } else {
           logs::log(logs::warning, "[RTSP] received packet from unrecognised client: {}", user_ip);
