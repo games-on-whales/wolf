@@ -36,8 +36,8 @@ private:
 
       logs::log(logs::trace, "[RTP] Received ping from {}:{}", client_ip, client_port);
       callback(client_port, client_ip);
-
-      start_receive();
+      // Once we get a ping there's no need to keep the socket up and running
+      // instead of calling start_receive() again we'll just let this thread die of a fast death
     }
   }
 
@@ -51,14 +51,18 @@ void wait_for_ping(
     unsigned short port,
     const std::function<void(unsigned short /* client_port */, const std::string & /* client_ip */)> &callback) {
   try {
-    boost::asio::io_context io_context;
-    udp_server server(io_context, port, callback);
+    auto io_context = std::make_shared<boost::asio::io_context>();
+    auto server = std::make_shared<udp_server>(*io_context, port, callback);
 
     logs::log(logs::info, "RTP server started on port: {}", port);
 
-    io_context.run();
+    /* This thread will die after receiving a single ping TODO: timeout? */
+    std::thread([io_context, server, port]() {
+      io_context->run();
+      logs::log(logs::debug, "RTP server on port: {} stopped", port);
+    }).detach();
   } catch (std::exception &e) {
-    logs::log(logs::warning, "[RTP] Unable to start RTP server: {}", e.what());
+    logs::log(logs::warning, "[RTP] Unable to start RTP server on {}: {}", port, e.what());
   }
 }
 
