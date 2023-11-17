@@ -2,7 +2,6 @@
 
 #include "streaming/data-structures.hpp"
 #include <chrono>
-#include <core/api.hpp>
 #include <helpers/logger.hpp>
 #include <helpers/utils.hpp>
 #include <rtsp/parser.hpp>
@@ -16,7 +15,6 @@ using namespace ranges;
 using namespace std::string_literals;
 using namespace std::chrono_literals;
 using namespace rtsp;
-using namespace wolf::core::api;
 
 RTSP_PACKET error_msg(unsigned short status_code, std::string_view error_msg, int sequence_number = 0) {
   return {.type = RESPONSE,
