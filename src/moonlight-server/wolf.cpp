@@ -149,6 +149,12 @@ std::optional<AudioServer> setup_audio_server(const std::string &runtime_dir) {
   } else {
     logs::log(logs::info, "Starting PulseAudio docker container");
     docker::DockerAPI docker_api(utils::get_env("WOLF_DOCKER_SOCKET", "/var/run/docker.sock"));
+    auto pulse_socket = fmt::format("{}/pulse-socket", runtime_dir);
+
+    /* Cleanup old leftovers, Pulse will fail to start otherwise */
+    std::filesystem::remove(pulse_socket);
+    std::filesystem::remove_all(fmt::format("{}/pulse", runtime_dir));
+
     auto container = docker_api.create(
         docker::Container{
             .id = "",
@@ -157,7 +163,7 @@ std::optional<AudioServer> setup_audio_server(const std::string &runtime_dir) {
             .status = docker::CREATED,
             .ports = {},
             .mounts = {docker::MountPoint{.source = runtime_dir, .destination = "/tmp/pulse/", .mode = "rw"}},
-            .env = {"XDG_RUNTIME_DIR=/tmp/pulse/"}},
+            .env = {"XDG_RUNTIME_DIR=/tmp/pulse/", "UNAME=retro", "UID=1000", "GID=1000"}},
         // The following is needed when using podman (or any container that uses SELINUX). This way we can access the
         // socket that is created by PulseAudio from other containers (including this one).
         R"({
