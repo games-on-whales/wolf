@@ -1,4 +1,4 @@
-ARG BASE_IMAGE=ghcr.io/games-on-whales/gstreamer:1.22.0
+ARG BASE_IMAGE=ghcr.io/games-on-whales/gstreamer:1.22.7
 ########################################################
 FROM $BASE_IMAGE AS wolf-builder
 
@@ -95,7 +95,6 @@ ENV XDG_RUNTIME_DIR=/tmp/sockets \
     WOLF_STOP_CONTAINER_ON_EXIT=TRUE \
     WOLF_DOCKER_SOCKET=/var/run/docker.sock \
     RUST_BACKTRACE=full \
-    NVIDIA_DRIVER_VOLUME_NAME=nvidia-driver-vol \
     HOST_APPS_STATE_FOLDER=/etc/wolf \
     WOLF_DOCKER_FAKE_UDEV_PATH=/etc/wolf/fake-udev \
     GST_DEBUG=2 \
@@ -109,14 +108,14 @@ VOLUME $WOLF_CFG_FOLDER
 EXPOSE 47984/tcp
 # HTTP
 EXPOSE 47989/tcp
-# Video
-EXPOSE 47998/udp
 # Control
 EXPOSE 47999/udp
-# Audio
-EXPOSE 48000/udp
 # RTSP
 EXPOSE 48010/tcp
+# Video (up to 10 users)
+EXPOSE 48100-48110/udp
+# Audio (up to 10 users)
+EXPOSE 48200-48210/udp
 
 LABEL org.opencontainers.image.source="https://github.com/games-on-whales/wolf/"
 LABEL org.opencontainers.image.description="Wolf: stream virtual desktops and games in Docker"

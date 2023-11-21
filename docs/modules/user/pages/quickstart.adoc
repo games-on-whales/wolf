@@ -57,11 +57,127 @@ services:
 ....
 
 --
-Nvidia::
+Nvidia (Container Toolkit)::
 +
 --
 
-Unfortunately on Nvidia things are a little bit more complex:
+Unfortunately, on Nvidia, things are a little bit more complex:
+
+* Your driver version must be `>= 530.30.02`
+* Make sure to install https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/latest/install-guide.html[NVIDIA Container Toolkit]
+
+We also have to make sure that the `nvidia-drm` module has been loaded and that is loaded with the flag `modeset=1`.
+
+[source,bash]
+....
+sudo cat /sys/module/nvidia_drm/parameters/modeset
+Y
+....
+
+.I get `N` or the file is not present, how do I set the flag?
+[%collapsible]
+====
+
+If using Grub, the easiest way to make the change persistent is to add `nvidia-drm.modeset=1` to the `GRUB_CMDLINE_LINUX_DEFAULT` line in `/etc/default/grub` ex:
+
+....
+GRUB_CMDLINE_LINUX_DEFAULT="quiet nvidia-drm.modeset=1"
+....
+
+Then `sudo update-grub` and *reboot*.
+
+For more options or details, you can see https://wiki.archlinux.org/title/Kernel_parameters[ArchWiki: Kernel parameters]
+
+====
+
+Docker CLI:
+
+[source,bash]
+....
+docker run \
+    --rm \
+    --name wolf \
+    --network=host \
+    -e WOLF_LOG_LEVEL=DEBUG \
+    -e XDG_RUNTIME_DIR=/tmp/sockets \
+    -v /tmp/sockets:/tmp/sockets:rw \
+    -e HOST_APPS_STATE_FOLDER=/etc/wolf \
+    -v /etc/wolf/wolf:/wolf/cfg \
+    -v /var/run/docker.sock:/var/run/docker.sock:rw \
+    --gpus=all \
+    --device-cgroup-rule "c 13:* rmw" \
+    --device /dev/dri/ \
+    --device /dev/uinput \
+    -v /dev/shm:/dev/shm:rw \
+    -v /dev/input:/dev/input:rw \
+    -v /run/udev:/run/udev:rw \
+    -v /etc/wolf/ensure-groups:/opt/gow/ensure-groups:rw \
+   wolf/wolf:test
+....
+
+Docker compose:
+
+[source,yaml]
+....
+version: "3.8"
+services:
+  wolf:
+    image: ghcr.io/games-on-whales/wolf:stable
+    environment:
+      - XDG_RUNTIME_DIR=/tmp/sockets
+      - HOST_APPS_STATE_FOLDER=/etc/wolf
+    volumes:
+      - /etc/wolf/wolf:/wolf/cfg
+      - /tmp/sockets:/tmp/sockets:rw
+      - /var/run/docker.sock:/var/run/docker.sock:rw
+      - /dev/shm:/dev/shm:rw
+      - /dev/input:/dev/input:rw
+    devices:
+      - /dev/dri
+      - /dev/uinput
+    device_cgroup_rules:
+      - 'c 13:* rmw'
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+    network_mode: host
+    restart: unless-stopped
+....
+
+You can check if the driver is loaded by issuing `nvidia-smi` inside the container:
+[source,bash]
+....
+docker exec -it wolf nvidia-smi
++---------------------------------------------------------------------------------------+
+| NVIDIA-SMI 530.30.02              Driver Version: 530.30.02    CUDA Version: 12.1     |
+|-----------------------------------------+----------------------+----------------------+
+| GPU  Name                  Persistence-M| Bus-Id        Disp.A | Volatile Uncorr. ECC |
+| Fan  Temp  Perf            Pwr:Usage/Cap|         Memory-Usage | GPU-Util  Compute M. |
+|                                         |                      |               MIG M. |
+|=========================================+======================+======================|
+|   0  NVIDIA GeForce RTX 3070         On | 00000000:0A:00.0 Off |                  N/A |
+|  0%   47C    P8               16W / 220W|    416MiB /  8192MiB |      0%      Default |
+|                                         |                      |                  N/A |
++-----------------------------------------+----------------------+----------------------+
+
++---------------------------------------------------------------------------------------+
+| Processes:                                                                            |
+|  GPU   GI   CI        PID   Type   Process name                            GPU Memory |
+|        ID   ID                                                             Usage      |
+|=======================================================================================|
++---------------------------------------------------------------------------------------+
+....
+
+--
+Nvidia (Manual)::
++
+--
+
+Unfortunately, on Nvidia, things are a little bit more complex:
 
 * Your driver version must be `>= 530.30.02`
 * `--gpus` and the Nvidia Docker Toolkit seems to not work (to be investigated)
@@ -94,7 +210,7 @@ docker volume ls | grep nvidia-driver
 local     nvidia-driver-vol
 ....
 
-One last final check: we have to make sure that the `nvidia-drm` module has been loaded and make sure that the module is loaded with the flag `modeset=1`.
+One last final check: we have to make sure that the `nvidia-drm` module has been loaded and that the module is loaded with the flag `modeset=1`.
 
 [source,bash]
 ....
@@ -231,12 +347,18 @@ To keep things simple the scripts above defaulted to `network:host`; that's not 
 
 [source,dockerfile]
 ....
-EXPOSE 47984/tcp # HTTPS
-EXPOSE 47989/tcp # HTTP
-EXPOSE 47998/udp # Video
-EXPOSE 47999/udp # Control
-EXPOSE 48000/udp # Audio
-EXPOSE 48010/tcp # RTSP
+# HTTPS
+EXPOSE 47984/tcp
+# HTTP
+EXPOSE 47989/tcp
+# Control
+EXPOSE 47999/udp
+# RTSP
+EXPOSE 48010/tcp
+# Video (up to 10 users)
+EXPOSE 48100-48110/udp
+# Audio (up to 10 users)
+EXPOSE 48200-48210/udp
 ....
 ====
 

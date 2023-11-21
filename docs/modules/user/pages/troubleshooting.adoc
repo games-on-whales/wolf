@@ -81,9 +81,9 @@ The following ports need to be available in order for Wolf to work:
 
 * 47984/tcp - HTTPS
 * 47989/tcp - HTTP
-* 47998/udp - Video
 * 47999/udp - Control
-* 48000/udp - Audio
+* 48100/udp - Video
+* 48200/udp - Audio
 * 48010/tcp - RTSP
 
 == Unable to recognise GPU vendor

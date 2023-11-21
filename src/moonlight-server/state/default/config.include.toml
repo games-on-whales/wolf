@@ -31,7 +31,14 @@ base_create_json = """
 {
   "HostConfig": {
     "IpcMode": "host",
-    "Privileged": false
+    "Privileged": false,
+    "DeviceRequests": [{
+      "Driver": "",
+      "Count": -1,
+      "DeviceIDs": null,
+      "Capabilities": [["gpu"]],
+      "Options": {}
+    }]
   }
 }
 \
@@ -45,9 +52,7 @@ start_virtual_compositor = true
 type = "docker"
 name = "WolfRetroarch"
 image = "ghcr.io/games-on-whales/retroarch:edge"
-mounts = [
-  "/run/udev:/run/udev:ro"
-]
+mounts = []
 env = [
   "RUN_GAMESCOPE=true",
   "GOW_REQUIRED_DEVICES=/dev/uinput /dev/input/event* /dev/dri/* /dev/nvidia*",
@@ -60,7 +65,14 @@ base_create_json = """
   "HostConfig": {
     "IpcMode": "host",
     "CapAdd": ["SYS_ADMIN", "SYS_NICE"],
-    "Privileged": false
+    "Privileged": false,
+    "DeviceRequests": [{
+      "Driver": "",
+      "Count": -1,
+      "DeviceIDs": null,
+      "Capabilities": [["gpu"]],
+      "Options": {}
+    }]
   }
 }
 \
@@ -74,9 +86,7 @@ start_virtual_compositor = true
 type = "docker"
 name = "WolfSteam"
 image = "ghcr.io/games-on-whales/steam:edge"
-mounts = [
-  "/run/udev:/run/udev:ro"
-]
+mounts = []
 env = [
   "PROTON_LOG=1",
   "RUN_GAMESCOPE=true",
@@ -90,7 +100,14 @@ base_create_json = """
   "HostConfig": {
     "IpcMode": "host",
     "CapAdd": ["SYS_ADMIN", "SYS_NICE"],
-    "Privileged": false
+    "Privileged": false,
+    "DeviceRequests": [{
+      "Driver": "",
+      "Count": -1,
+      "DeviceIDs": null,
+      "Capabilities": [["gpu"]],
+      "Options": {}
+    }]
   }
 }
 \
@@ -104,9 +121,7 @@ start_virtual_compositor = true
 type = "docker"
 name = "WolfES-DE"
 image = "ghcr.io/games-on-whales/es-de:edge"
-mounts = [
-  "/run/udev:/run/udev:ro"
-]
+mounts = []
 env = [
   "RUN_GAMESCOPE=true",
   "GOW_REQUIRED_DEVICES=/dev/uinput /dev/input/event* /dev/dri/* /dev/nvidia*",
@@ -119,7 +134,14 @@ base_create_json = """
   "HostConfig": {
     "IpcMode": "host",
     "CapAdd": ["SYS_ADMIN", "SYS_NICE"],
-    "Privileged": false
+    "Privileged": false,
+    "DeviceRequests": [{
+      "Driver": "",
+      "Count": -1,
+      "DeviceIDs": null,
+      "Capabilities": [["gpu"]],
+      "Options": {}
+    }]
   }
 }
 \

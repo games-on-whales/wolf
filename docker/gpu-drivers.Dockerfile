@@ -16,19 +16,33 @@ RUN apt-get update -y && \
     $REQUIRED_PACKAGES && \
     rm -rf /var/lib/apt/lists/*
 
-# Adding missing libnvrtc.so for Nvidia
-RUN --mount=type=cache,target=/var/cache/apt \
-    apt-get update -y && \
-    apt-get install -y wget gnupg2 && \
-    apt-key del 7fa2af80 && \
-    wget https://developer.download.nvidia.com/compute/cuda/repos/ubuntu2204/x86_64/cuda-keyring_1.0-1_all.deb && \
-    dpkg -i cuda-keyring_1.0-1_all.deb && \
-    rm cuda-keyring_1.0-1_all.deb && \
-    apt-get update -y && \
-    apt-get install -y cuda-nvrtc-dev-12-0 && \
-    echo "/usr/local/cuda-12.0/targets/x86_64-linux/lib/" > /etc/ld.so.conf.d/cuda.conf && \
-    apt-get remove --purge -y --autoremove wget gnupg2 && \
+# Adding missing libnvrtc.so and libnvrtc-bulletins.so for Nvidia
+# https://developer.download.nvidia.com/compute/cuda/redist/cuda_nvrtc/LICENSE.txt
+RUN <<_ADD_NVRTC
+    #!/bin/bash
+    set -e
+
+    #Extra deps
+    apt-get update -y
+    apt-get install -y unzip curl
+
+    cd /tmp
+    curl -fsSL -o nvidia_cuda_nvrtc_linux_x86_64.whl "https://developer.download.nvidia.com/compute/redist/nvidia-cuda-nvrtc/nvidia_cuda_nvrtc-11.0.221-cp36-cp36m-linux_x86_64.whl"
+    unzip -joq -d ./nvrtc nvidia_cuda_nvrtc_linux_x86_64.whl
+    cd nvrtc
+    chmod 755 libnvrtc*
+    find . -maxdepth 1 -type f -name "*libnvrtc.so.*" -exec sh -c 'ln -snf $(basename {}) libnvrtc.so' \;
+    mkdir -p /usr/local/nvidia/lib
+    mv -f libnvrtc* /usr/local/nvidia/lib
+    rm -rf /tmp/*
+
+    echo "/usr/local/nvidia/lib" >> /etc/ld.so.conf.d/nvidia.conf
+    echo "/usr/local/nvidia/lib64" >> /etc/ld.so.conf.d/nvidia.conf
+
+    # Cleanup
+    apt-get remove -y --purge unzip curl
     rm -rf /var/lib/apt/lists/*
+_ADD_NVRTC
 
 LABEL org.opencontainers.image.source="https://github.com/games-on-whales/wolf/"
 LABEL org.opencontainers.image.description="A base image with all the required GPU drivers"

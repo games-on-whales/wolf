@@ -317,7 +317,12 @@ auto setup_sessions_handlers(const immer::box<state::AppState> &app_state,
 
           /* nvidia needs some extra paths */
           if (get_vendor(render_node) == NVIDIA) {
-            mounted_paths.push_back({utils::get_env("NVIDIA_DRIVER_VOLUME_NAME", "nvidia-driver-vol"), "/usr/nvidia"});
+            if (auto driver_volume = utils::get_env("NVIDIA_DRIVER_VOLUME_NAME")) {
+              logs::log(logs::info, "Mounting nvidia driver {}:/usr/nvidia", driver_volume);
+              mounted_paths.push_back({driver_volume, "/usr/nvidia"});
+            } else {
+              logs::log(logs::info, "NVIDIA_DRIVER_VOLUME_NAME not set, assuming nvidia driver toolkit is installed..");
+            }
           }
 
           /* Initialise plugged device queue with mouse and keyboard */
