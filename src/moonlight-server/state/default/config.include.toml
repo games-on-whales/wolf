@@ -55,7 +55,7 @@ image = "ghcr.io/games-on-whales/retroarch:edge"
 mounts = []
 env = [
   "RUN_GAMESCOPE=true",
-  "GOW_REQUIRED_DEVICES=/dev/uinput /dev/input/event* /dev/dri/* /dev/nvidia*",
+  "GOW_REQUIRED_DEVICES=/dev/input/event* /dev/dri/* /dev/nvidia*",
 ]
 devices = [
 ]
@@ -90,7 +90,7 @@ mounts = []
 env = [
   "PROTON_LOG=1",
   "RUN_GAMESCOPE=true",
-  "GOW_REQUIRED_DEVICES=/dev/uinput /dev/input/event* /dev/dri/* /dev/nvidia*",
+  "GOW_REQUIRED_DEVICES=/dev/input/event* /dev/dri/* /dev/nvidia*",
 ]
 devices = [
 ]
@@ -124,7 +124,7 @@ image = "ghcr.io/games-on-whales/es-de:edge"
 mounts = []
 env = [
   "RUN_GAMESCOPE=true",
-  "GOW_REQUIRED_DEVICES=/dev/uinput /dev/input/event* /dev/dri/* /dev/nvidia*",
+  "GOW_REQUIRED_DEVICES=/dev/input/event* /dev/dri/* /dev/nvidia*",
 ]
 devices = [
 ]

@@ -26,9 +26,20 @@ RUN apt-get update -y && \
     libpci-dev \
     && rm -rf /var/lib/apt/lists/*
 
-## Install Rust in order to build our custom compositor (the build will be done inside Cmake)
-RUN curl https://sh.rustup.rs -sSf | sh -s -- -y
-ENV PATH="/root/.cargo/bin:${PATH}"
+## Install Rust in order to build our custom compositor
+RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
+ENV PATH="$HOME/.cargo/bin:${PATH}"
+
+WORKDIR /tmp/
+RUN <<_GST_WAYLAND_DISPLAY
+    #!/bin/bash
+    set -e
+
+    git clone https://github.com/games-on-whales/gst-wayland-display
+    cd gst-wayland-display
+    cargo install cargo-c
+    cargo cinstall --prefix=/usr/local
+_GST_WAYLAND_DISPLAY
 
 COPY . /wolf/
 WORKDIR /wolf
@@ -75,6 +86,9 @@ RUN apt-get update -y && \
     && rm -rf /var/lib/apt/lists/*
 
 ENV GST_PLUGIN_PATH=/usr/local/lib/x86_64-linux-gnu/gstreamer-1.0/
+# Copying out our custom compositor from the build stage
+COPY --from=wolf-builder /usr/local/lib/gstreamer-1.0/* $GST_PLUGIN_PATH
+COPY --from=wolf-builder /usr/local/lib/liblibgstwaylanddisplay* /usr/local/lib/
 
 WORKDIR /wolf
 

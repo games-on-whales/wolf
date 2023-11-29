@@ -13,12 +13,11 @@ target_link_libraries(wolf_core PUBLIC wolf::docker)
 file(GLOB CORE_HEADERS CONFIGURE_DEPENDS src/core/*.hpp)
 set(CORE_SRC "")
 
+find_package(PkgConfig)
 option(LINK_RUST_WAYLAND "Link to our custom Rust wayland compositor" ON)
 if (LINK_RUST_WAYLAND AND UNIX AND NOT APPLE)
-    # Adapted from: https://github.com/Devolutions/CMakeRust/
-    enable_language(Rust)
-    include(CMakeCargo)
-    add_subdirectory(rust/gst-wayland-display)
+    pkg_check_modules(libgstwaylanddisplay REQUIRED IMPORTED_TARGET libgstwaylanddisplay)
+    target_link_libraries(wolf_core PUBLIC PkgConfig::libgstwaylanddisplay)
 endif ()
 
 FetchContent_Declare(
@@ -35,8 +34,7 @@ FetchContent_MakeAvailable(immer)
 target_link_libraries_system(wolf_core PUBLIC immer)
 unset(FPHSA_NAME_MISMATCHED)
 
-find_package(PkgConfig)
-pkg_check_modules(GSTREAMER REQUIRED IMPORTED_TARGET gstreamer-1.0 gstreamer-base-1.0 gstreamer-app-1.0)
+pkg_check_modules(GSTREAMER REQUIRED IMPORTED_TARGET gstreamer-1.0 gstreamer-base-1.0 gstreamer-app-1.0 gstreamer-video-1.0)
 pkg_check_modules(GLIB2 REQUIRED IMPORTED_TARGET glib-2.0)
 
 if (NOT (GSTREAMER_FOUND))
@@ -55,7 +53,6 @@ if (UNIX AND NOT APPLE)
     target_link_libraries(wolf_core PUBLIC wolf::uinput)
 
     if (LINK_RUST_WAYLAND)
-        target_link_libraries_system(wolf_core PUBLIC gstwaylanddisplay)
         list(APPEND CORE_SRC src/platforms/linux/virtual-display/wayland-display.cpp)
     else ()
         message(WARNING "Missing virtual display implementation for this platform")

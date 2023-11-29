@@ -112,7 +112,7 @@ docker run \
     -v /dev/input:/dev/input:rw \
     -v /run/udev:/run/udev:rw \
     -v /etc/wolf/ensure-groups:/opt/gow/ensure-groups:rw \
-   wolf/wolf:test
+   ghcr.io/games-on-whales/wolf:stable
 ....
 
 Docker compose:

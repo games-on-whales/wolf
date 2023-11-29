@@ -4,13 +4,13 @@
 #include <immer/vector_transient.hpp>
 
 extern "C" {
-#include <waylanddisplay.h>
+#include <libgstwaylanddisplay/libgstwaylanddisplay.h>
 }
 
 namespace wolf::core::virtual_display {
 
 struct WaylandState {
-  WaylandDisplay display{};
+  WaylandDisplay *display{};
   immer::vector<std::string> env{};
   immer::vector<std::string> graphic_devices{};
 };
