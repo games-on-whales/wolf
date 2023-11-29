@@ -41,6 +41,13 @@ jobs:
         with:
           rust-version: stable
 
+      - name: Setup gst-wayland-display
+        run: |
+          git clone https://github.com/games-on-whales/gst-wayland-display
+          cd gst-wayland-display
+          cargo install cargo-c
+          cargo cinstall --prefix=/usr/local
+
       - name: Configure build
         working-directory: ${{runner.workspace}}
         run: |
@@ -116,6 +123,13 @@ jobs:
         uses: ATiltedTree/setup-rust@v1
         with:
           rust-version: stable
+
+      - name: Setup gst-wayland-display
+        run: |
+          git clone https://github.com/games-on-whales/gst-wayland-display
+          cd gst-wayland-display
+          cargo install cargo-c
+          cargo cinstall --prefix=/usr/local
 
       - name: Configure build
         working-directory: ${{runner.workspace}}
