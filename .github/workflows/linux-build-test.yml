@@ -129,7 +129,8 @@ jobs:
           git clone https://github.com/games-on-whales/gst-wayland-display
           cd gst-wayland-display
           cargo install cargo-c
-          sudo cargo cinstall -p c-bindings --prefix=/usr/local
+          cargo cinstall -p c-bindings --prefix=/usr/local --destdir=temp
+          sudo cp -r temp/usr/local/* /usr/local/
 
       - name: Configure build
         working-directory: ${{runner.workspace}}
