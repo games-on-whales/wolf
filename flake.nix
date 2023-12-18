@@ -24,17 +24,17 @@
         hash = "sha256-buIaXxoJSTbqzsnxpd33BUCQtTGmdd10j1ArQd5rink=";
       };
       fmtlib_src = pkgs.fetchFromGitHub {
-           owner = "fmtlib";
-           repo = "fmt";
-           rev = "9.1.0";
-           hash = "sha256-rP6ymyRc7LnKxUXwPpzhHOQvpJkpnRFOt2ctvUNlYI0=";
-         };
+        owner = "fmtlib";
+        repo = "fmt";
+        rev = "9.1.0";
+        hash = "sha256-rP6ymyRc7LnKxUXwPpzhHOQvpJkpnRFOt2ctvUNlYI0=";
+      };
       range_src = pkgs.fetchFromGitHub {
-          owner = "ericniebler";
-          repo = "range-v3";
-          rev = "0.12.0";
-          hash = "sha256-bRSX91+ROqG1C3nB9HSQaKgLzOHEFy9mrD2WW3PRBWU=";
-        };
+        owner = "ericniebler";
+        repo = "range-v3";
+        rev = "0.12.0";
+        hash = "sha256-bRSX91+ROqG1C3nB9HSQaKgLzOHEFy9mrD2WW3PRBWU=";
+      };
       enet_src = pkgs.fetchFromGitHub {
         owner = "cgutman";
         repo = "enet";
@@ -53,12 +53,12 @@
         rev = "v1.8.5";
         hash = "sha256-GeQQGJtxyoLAXrzplHbf2BORtRoTWrU08TWjjq7YqqE=";
       };
-        toml_src = pkgs.fetchFromGitHub {
-          owner = "ToruNiina";
-          repo = "toml11";
-          rev = "v3.7.1";
-          hash = "sha256-HnhXBvIjo1JXhp+hUQvjs83t5IBVbNN6o3ZGhB4WESQ=";
-        };
+      toml_src = pkgs.fetchFromGitHub {
+        owner = "ToruNiina";
+        repo = "toml11";
+        rev = "v3.7.1";
+        hash = "sha256-HnhXBvIjo1JXhp+hUQvjs83t5IBVbNN6o3ZGhB4WESQ=";
+      };
       simplewebserver_src = pkgs.fetchFromGitLab {
         owner = "eidheim";
         repo = "Simple-Web-Server";
@@ -83,14 +83,12 @@
         # url = "https://gstreamer.freedesktop.org/src/${pname}/${pname}-${version}.tar.xz";
         # hash = "sha256-AeQsY1Kga9+kRW5ksGq32YxcSHolVXx2FVRjHL2mQhc=";
         # };
-          depsBuildBuild =   with pkgs; [
-    pkg-config
-  ];
-  strictDeps =true;
+        depsBuildBuild = with pkgs; [ pkg-config ];
+        strictDeps = true;
         nativeBuildInputs = with pkgs; [
           meson
           ninja
-          /* cmake */
+          # cmake
           pkg-config
           gettext
           bison
@@ -102,91 +100,90 @@
           wayland-protocols
           libopus
           bash-completion
-          /* boost175 */
+          # boost175
           libcap
           gobject-introspection
           nasm # needed
-                  qt6.qtbase
-                  qt6.qttools
-                  /* qt6.wrapQtAppsHook */
+          qt6.qtbase
+          qt6.qttools
+          # qt6.wrapQtAppsHook
         ];
-          postPatch = ''
-    patchShebangs \
-      subprojects/gstreamer/gst/parse/get_flex_version.py \
-      gst/parse/gen_grammar.py.in \
-      gst/parse/gen_lex.py.in \
-      libs/gst/helpers/ptp_helper_post_install.sh \
-      subprojects/gstreamer/scripts/extract-release-date-from-doap-file.py \
-subprojects/gst-plugins-base/scripts/meson-pkg-config-file-fixup.py \
-subprojects/gst-plugins-base/scripts/extract-release-date-from-doap-file.py \
-subprojects/gst-plugins-good/scripts/extract-release-date-from-doap-file.py
-  '';
+        postPatch = ''
+              patchShebangs \
+                subprojects/gstreamer/gst/parse/get_flex_version.py \
+                gst/parse/gen_grammar.py.in \
+                gst/parse/gen_lex.py.in \
+                libs/gst/helpers/ptp_helper_post_install.sh \
+                subprojects/gstreamer/scripts/extract-release-date-from-doap-file.py \
+          subprojects/gst-plugins-base/scripts/meson-pkg-config-file-fixup.py \
+          subprojects/gst-plugins-base/scripts/extract-release-date-from-doap-file.py \
+          subprojects/gst-plugins-good/scripts/extract-release-date-from-doap-file.py
+        '';
 
-  dontWrapQtApps = true;
-  preConfigure = ''
-  ls -la
-  '';
+        dontWrapQtApps = true;
+        preConfigure = ''
+          ls -la
+        '';
 
         buildInputs = with pkgs; [
-          /* flex */
-          /* bison */
-          /* python3 */
-          /* bash-completion */
-          /* wayland */
-          /* wayland-protocols */
-          /* libcap */
-          /* zxing # is needed */
-          /* zbar # is needed */
-          /* libraspberrypi */
+          # flex
+          # bison
+          # python3
+          # bash-completion
+          # wayland
+          # wayland-protocols
+          # libcap
+          # zxing # is needed
+          # zbar # is needed
+          # libraspberrypi
           libdrm
           libgudev
-          /* libva */
+          # libva
           libtheora
           alsa-lib
           cdparanoia
-          /* libintl */
-          /* libcap */
+          # libintl
+          # libcap
           graphene
           libunwind
           elfutils
           gmp
           gsl
-          /* gobject-introspection */
-          /* xorg.libXext */
+          # gobject-introspection
+          # xorg.libXext
           xorg.libX11
           xorg.libXi
           xorg.libXv
-          /* xorg.libXfixes */
+          # xorg.libXfixes
           xorg.libXdamage
           aalib
           libxml2
           flac
-              gdk-pixbuf
-              gtk3
-              libjack2
-              lame
-              twolame
-              libcaca
-              libdv
-              mpg123
-              libraw1394
-                  qt6.qtbase
-    qt6.qtdeclarative
-    qt6.qtwayland
-    libshout
-    taglib
-    libvpx
-    wavpack
+          gdk-pixbuf
+          gtk3
+          libjack2
+          lame
+          twolame
+          libcaca
+          libdv
+          mpg123
+          libraw1394
+          qt6.qtbase
+          qt6.qtdeclarative
+          qt6.qtwayland
+          libshout
+          taglib
+          libvpx
+          wavpack
 
-          /**/
-          /* #test */
-          /* lcms */
-          /* cairo */
-          /* x264 */
-          /* x265 */
-          /* libaom */
-          /* libwebp */
-          /* resvg */
+          # #test
+          # lcms
+          # cairo
+          # x264
+          # x265
+          # libaom
+          # libwebp
+          # resvg
           libGL
           libvisual
           libv4l
@@ -199,9 +196,7 @@ subprojects/gst-plugins-good/scripts/extract-release-date-from-doap-file.py
           tremor
           pango
         ];
-          propagatedBuildInputs = [
-    pkgs.glib
-  ];
+        propagatedBuildInputs = [ pkgs.glib ];
 
         mesonFlags = [
           "--buildtype=release"
@@ -232,16 +227,16 @@ subprojects/gst-plugins-good/scripts/extract-release-date-from-doap-file.py
           "-Dgst-plugin-bad:nvcodec=enabled"
           "-Dvaapi=enabled"
           "-Dgstreamer:dbghelp=disabled" # not needed as we already provide libunwind and libdw, and dbghelp is a fallback to those
-    "-Dgst-plugins-good:rpicamsrc=disabled"
-    /* "-Dgst-plugins-good:rpi-lib-dir=${pkgs.libraspberrypi}/lib" */
-    /* "-Dgst-plugins-good:rpi-header-dir=${pkgs.libraspberrypi}/lib" */
-    ];
+          "-Dgst-plugins-good:rpicamsrc=disabled"
+          # "-Dgst-plugins-good:rpi-lib-dir=${pkgs.libraspberrypi}/lib"
+          # "-Dgst-plugins-good:rpi-header-dir=${pkgs.libraspberrypi}/lib"
+        ];
 
-        /* ]++ (if raspiCameraSupport then [ */
-    /* "-Drpi-lib-dir=${libraspberrypi}/lib" */
-  /* ] else [ */
-    /* "-Drpicamsrc=disabled" */
-  /* ]); */
+        # ]++ (if raspiCameraSupport then [
+        # "-Drpi-lib-dir=${libraspberrypi}/lib"
+        # ] else [
+        # "-Drpicamsrc=disabled"
+        # ]);
         # sourceRoot = ".";
         # postPatch = ''
         # export HOME=$(mktemp -d)
@@ -295,7 +290,8 @@ subprojects/gst-plugins-good/scripts/extract-release-date-from-doap-file.py
 
           udev
         ];
-        cargoLockFile = builtins.toFile "cargo.lock" (builtins.readFile "${src}/Cargo.lock");
+        cargoLockFile =
+          builtins.toFile "cargo.lock" (builtins.readFile "${src}/Cargo.lock");
         cargoLock = {
           lockFile = cargoLockFile;
           outputHashes = {
@@ -332,7 +328,7 @@ subprojects/gst-plugins-good/scripts/extract-release-date-from-doap-file.py
         pname = "wolf";
         version = "1.0";
         src = self;
-        patches = [];
+        patches = [ ];
 
         nativeBuildInputs = with pkgs; [ cmake pkg-config ninja ];
 
