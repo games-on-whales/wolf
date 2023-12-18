@@ -65,12 +65,10 @@
           rev = "bdb1057";
           hash = "sha256-C9i/CyQG9QsDqIx75FbgiKp2b/POigUw71vh+rXAdyg=";
         };
-        gstreamer-wolf = import ./nix/gstreamer.nix { inherit pkgs; };
         gst-wayland-display =
           import ./nix/gst-wayland-display.nix { inherit pkgs; };
       };
     in {
-      packages.x86_64-linux.gst = deps.gstreamer-wolf;
       packages.x86_64-linux.gwd = deps.gst-wayland-display;
       packages.x86_64-linux.default =
         import ./nix/wolf.nix { inherit pkgs self deps; };
