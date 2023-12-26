@@ -5,7 +5,7 @@ pkgs.stdenv.mkDerivation {
   src = self;
   patches = [ ];
 
-  nativeBuildInputs = with pkgs; [ cmake pkg-config ninja ];
+  nativeBuildInputs = with pkgs; [ cmake pkg-config ninja wrapGAppsHook];
 
   buildInputs = with pkgs; [
     deps.gst-wayland-display
