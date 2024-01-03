@@ -21,7 +21,8 @@ RUN <<_GSTREAMER_INSTALL
         flex libx265-dev libopus-dev nasm libzxingcore-dev libzbar-dev libdrm-dev libva-dev \
         libmfx-dev libvpl-dev libmfx-tools libunwind8 libcap2-bin liborc-0.4-dev \
         libx11-dev libxfixes-dev libxdamage-dev libwayland-dev libpulse-dev libglib2.0-dev \
-        libopenjp2-7-dev liblcms2-dev libcairo2-dev libcairo-gobject2 libwebp7 librsvg2-dev libudev-dev
+        libopenjp2-7-dev liblcms2-dev libcairo2-dev libcairo-gobject2 libwebp7 librsvg2-dev libaom-dev \
+        libharfbuzz-dev libpango1.0-dev libudev-dev
         "
     apt-get update -y
     apt-get install -y --no-install-recommends $DEV_PACKAGES
