@@ -52,7 +52,7 @@ struct JoypadState {
 };
 
 static bool TR_TL_enabled(Joypad::CONTROLLER_TYPE type) {
-  return type == Joypad::CONTROLLER_TYPE::PS; // Seems that this is required only for PS controllers
+  return type == Joypad::CONTROLLER_TYPE::PS || type == Joypad::CONTROLLER_TYPE::NINTENDO;
 }
 
 /**
@@ -258,6 +258,10 @@ std::optional<libevdev_uinput *> create_controller(Joypad::CONTROLLER_TYPE type,
   if (TR_TL_enabled(type)) {
     libevdev_enable_event_code(dev, EV_KEY, BTN_TR2, nullptr);
     libevdev_enable_event_code(dev, EV_KEY, BTN_TL2, nullptr);
+  }
+  if (type == Joypad::NINTENDO) {
+    libevdev_enable_event_code(dev, EV_KEY, BTN_Z, nullptr); // Capture btn
+    // TODO: implement this using the MISC_FLAG
   }
   libevdev_enable_event_code(dev, EV_KEY, BTN_SELECT, nullptr);
   libevdev_enable_event_code(dev, EV_KEY, BTN_MODE, nullptr);
