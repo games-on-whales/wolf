@@ -233,7 +233,7 @@ static void set_controller_type(libevdev *dev, Joypad::CONTROLLER_TYPE type) {
     libevdev_set_name(dev, "Wolf Nintendo (virtual) pad");
     libevdev_set_id_vendor(dev, 0x057e);
     libevdev_set_id_product(dev, 0x2009);
-    libevdev_set_id_version(dev, 0xAB00);
+    libevdev_set_id_version(dev, 0x8111);
     break;
   }
 }
@@ -274,6 +274,10 @@ std::optional<libevdev_uinput *> create_controller(Joypad::CONTROLLER_TYPE type,
   libevdev_enable_event_code(dev, EV_ABS, ABS_HAT0X, &dpad);
 
   input_absinfo stick{0, -32768, 32767, 16, 128, 0};
+  if (type == Joypad::NINTENDO) { // see: https://github.com/games-on-whales/wolf/issues/56
+    stick.fuzz = 250;
+    stick.flat = 500;
+  }
   libevdev_enable_event_code(dev, EV_ABS, ABS_X, &stick);
   libevdev_enable_event_code(dev, EV_ABS, ABS_RX, &stick);
   libevdev_enable_event_code(dev, EV_ABS, ABS_Y, &stick);
@@ -722,9 +726,15 @@ void Joypad::set_pressed_buttons(int newly_pressed) {
       if (HOME & bf_changed)
         libevdev_uinput_write_event(controller, EV_KEY, BTN_MODE, bf_new & HOME ? 1 : 0);
       if (A & bf_changed)
-        libevdev_uinput_write_event(controller, EV_KEY, BTN_SOUTH, bf_new & A ? 1 : 0);
+        libevdev_uinput_write_event(controller,
+                                    EV_KEY,
+                                    this->_state->type == NINTENDO ? BTN_EAST : BTN_SOUTH,
+                                    bf_new & A ? 1 : 0);
       if (B & bf_changed)
-        libevdev_uinput_write_event(controller, EV_KEY, BTN_EAST, bf_new & B ? 1 : 0);
+        libevdev_uinput_write_event(controller,
+                                    EV_KEY,
+                                    this->_state->type == NINTENDO ? BTN_SOUTH : BTN_EAST,
+                                    bf_new & B ? 1 : 0);
       if (X & bf_changed) {
         auto btn_code = this->_state->type == PS ? BTN_WEST : BTN_NORTH;
         libevdev_uinput_write_event(controller, EV_KEY, btn_code, bf_new & X ? 1 : 0);
