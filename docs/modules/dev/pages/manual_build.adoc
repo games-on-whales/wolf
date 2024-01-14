@@ -1,35 +1,158 @@
-= Manual build
+= Dev environment setup
+
+This has been tested on Debian 12, you should adjust the setup based on your distro of choice.
+
+== Install Nvidia driver + cuda
+
+(*Only needed on Nvidia hosts*)
+
+Please refer to https://wiki.debian.org/NvidiaGraphicsDrivers[NvidiaGraphicsDrivers] for how to install the proprietary Nvidia drivers on your system.
+
+You also have to install Cuda, you can follow the https://developer.nvidia.com/cuda-downloads[official instructions].
+
+== Wolf dependencies
+
+=== Build Gstreamer
+
+We prefer to build Gstreamer from scratch and place it in a separate folder so that it doesn't interfere with your system-installed version (if any).
+This will make sure that you end up with all the required plugins.
 
 .Build dependencies
 [source,bash]
 ....
-apt install -y git ninja-build cmake clang libboost-locale-dev libboost-thread-dev libboost-filesystem-dev libboost-log-dev libboost-stacktrace-dev libssl-dev libgstreamer1.0-dev  libgstreamer-plugins-base1.0-dev libevdev-dev libdrm-dev libpci-dev libinput-dev libxkbcommon-dev libgbm-dev libpulse-dev libcurl4-openssl-dev
+apt install -y build-essential ninja-build gcc meson cmake ccache bison equivs \
+	ca-certificates git libllvm15 \
+	flex libx265-dev libopus-dev nasm libzxingcore-dev libzbar-dev libdrm-dev libva-dev \
+	libmfx-dev libvpl-dev libmfx-tools libunwind8 libcap2-bin \
+	libx11-dev libxfixes-dev libxdamage-dev libwayland-dev libpulse-dev libglib2.0-dev \
+	libopenjp2-7-dev liblcms2-dev libcairo2-dev libcairo-gobject2 libwebp7 librsvg2-dev libaom-dev \
+	libharfbuzz-dev libpango1.0-dev
 ....
 
-Install Rust following the https://www.rust-lang.org/tools/install[official docs] or avoid building our custom compositor by passing `-DLINK_RUST_WAYLAND=OFF` to cmake.
+.Build gstreamer
+[source,bash]
+....
+git clone -b 1.22.7 --depth=1 https://gitlab.freedesktop.org/gstreamer/gstreamer.git
+cd gstreamer
+# Setup a place where we'll put the libraries
+mkdir -p $HOME/gstreamer/include -p $HOME/gstreamer/usr/local/include
+meson setup --prefix=$HOME/gstreamer \
+	--buildtype=release \
+	--strip \
+	-Dgst-full-libraries=app,video \
+	-Dorc=disabled \
+	-Dgpl=enabled  \
+	-Dbase=enabled \
+	-Dgood=enabled  \
+	-Dugly=enabled \
+	-Drs=disabled \
+	-Dtls=disabled \
+	-Dgst-examples=disabled \
+	-Dlibav=disabled \
+	-Dtests=disabled \
+	-Dexamples=disabled \
+	-Ddoc=disabled \
+	-Dpython=disabled \
+	-Drtsp_server=disabled \
+	-Dqt5=disabled \
+	-Dbad=enabled \
+	-Dgst-plugins-good:soup=disabled \
+	-Dgst-plugins-good:ximagesrc=enabled \
+	-Dgst-plugins-good:pulse=enabled \
+	-Dgst-plugins-bad:x265=enabled  \
+	-Dgst-plugins-bad:qsv=enabled \
+	-Dgst-plugins-bad:aom=enabled \
+	-Dgst-plugin-bad:nvcodec=enabled  \
+	-Dvaapi=enabled \
+	-Dgstreamer-vaapi:x11=disabled \
+	build
+meson compile -C build
+meson install -C build
+....
+
+This will install libraries and include files under `~/gstreamer`, in order for Wolf to pick this up during builing we have to setup the following env variables (you can add them at the end of `~/.bash_rc` for example)
+
+.Custom env
+[source,bash]
+....
+export PATH="$HOME/gstreamer/usr/local/bin:$PATH"
+export LIBRARY_PATH="$LIBRARY_PATH:$HOME/gstreamer/usr/local/lib/x86_64-linux-gnu/"
+export LD_LIBRARY_PATH="$LD_LIBRARY_PATH:$HOME/gstreamer/lib/x86_64-linux-gnu/"
+export LDFLAGS="$LDFLAGS -L$HOME/gstreamer/usr/local/lib/x86_64-linux-gnu/"
+export CFLAGS="$CFLAGS -I$HOME/gstreamer/usr/local/include"
+export PKG_CONFIG_PATH="$PKG_CONFIG_PATH:$HOME/gstreamer/usr/local/lib/x86_64-linux-gnu/pkgconfig/"
+....
+
+You can now check that the `nvcodec` plugin correctly works (only on Nvidia hosts)
+
+[source,bash]
+....
+GST_DEBUG=4 gst-inspect-1.0 nvcodec
+....
+
+Adding `GST_DEBUG` helps debugging possible issues with this.
+
+=== Build gst-wayland-display
+
+Install Rust following the https://www.rust-lang.org/tools/install[official docs].
+
+[source,bash]
+....
+git clone https://github.com/games-on-whales/gst-wayland-display
+cd gst-wayland-display
+cargo install cargo-c
+mkdir $HOME/gst-wayland-display
+cargo cinstall --prefix=$HOME/gst-wayland-display
+....
+
+Like we have done for Gstreamer we are going to install this in a different directory: `$HOME/gst-wayland-display` in order to keep things clean.
+
+.Custom env
+[source,bash]
+....
+export LIBRARY_PATH="$LIBRARY_PATH:$HOME/gst-wayland-display/lib/"
+export LD_LIBRARY_PATH="$LD_LIBRARY_PATH:$HOME/gst-wayland-display/lib/"
+export LDFLAGS="$LDFLAGS -L$HOME/gst-wayland-display/lib"
+export CFLAGS="$CFLAGS -I$HOME/gst-wayland-display/include"
+export PKG_CONFIG_PATH="$PKG_CONFIG_PATH:$HOME/gst-wayland-display/lib/pkgconfig/"
+....
+
+=== Install Wolf deps
+
+.Build dependencies
+[source,bash]
+....
+apt-get install -y --no-install-recommends \
+    curl \
+    ca-certificates \
+    ninja-build \
+    cmake \
+    pkg-config \
+    ccache \
+    git \
+    clang \
+    libboost-thread-dev libboost-locale-dev libboost-filesystem-dev libboost-log-dev libboost-stacktrace-dev \
+    libwayland-dev libwayland-server0 libinput-dev libxkbcommon-dev libgbm-dev \
+    libcurl4-openssl-dev \
+    libssl-dev \
+    libevdev-dev \
+    libpulse-dev \
+    libunwind-dev \
+    libudev-dev \
+    libdrm-dev \
+    libpci-dev \
+....
+
+== Compile Wolf
 
 .Compile
 [source,bash]
 ....
-cmake -Bbuild -DCMAKE_BUILD_TYPE=Release -DCMAKE_CXX_STANDARD=17 -DCMAKE_CXX_EXTENSIONS=OFF -G Ninja
+cmake -Bbuild -DCMAKE_C_FLAGS=$CFLAGS -DCMAKE_BUILD_TYPE=Release -DCMAKE_CXX_STANDARD=17 -DCMAKE_CXX_EXTENSIONS=OFF -G Ninja
 ninja -C build
 ....
 
-If compilations completes correctly you can already start Wolf; in order to successfully streaming you'll probably need to install some Gstreamer plugins first:
-
-.Install gstreamer plugins
-[source,bash]
-....
-apt install -y gstreamer1.0-plugins-base gstreamer1.0-plugins-good gstreamer1.0-plugins-ugly gstreamer1.0-plugins-bad
-....
-
-[WARNING]
-====
-Based on your system you'll also need some specific plugins in order to enable HW acceleration.
-For Intel/AMD you'll need https://gstreamer.freedesktop.org/documentation/vaapi/index.html?gi-language=c[`vaapi`]; Nvidia instead will need https://gstreamer.freedesktop.org/documentation/nvcodec/index.html?gi-language=c[`nvcodec`].
-
-If your package manager doesn't include them you can build them from scratch by following the instructions used in our https://github.com/games-on-whales/wolf/blob/stable/gstreamer.Dockerfile[gstreamer.Dockerfile]
-====
+If compilation completes correctly, you can finally start Wolf
 
 .Run!
 [source,bash]

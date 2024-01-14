@@ -306,6 +306,13 @@ Depending on your system you might also need to initialise the `nvidia-uvm` devi
 
 [source,bash]
 ....
+sudo nvidia-container-cli --load-kmods info
+....
+
+Or if that fails:
+
+[source,bash]
+....
 #!/bin/bash
 ## Script to initialize nvidia device nodes.
 ## https://docs.nvidia.com/cuda/cuda-installation-guide-linux/index.html#runfile-verifications
