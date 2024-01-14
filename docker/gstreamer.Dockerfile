@@ -94,5 +94,5 @@ LABEL org.opencontainers.image.source="https://github.com/games-on-whales/wolf/"
 LABEL org.opencontainers.image.description="GStreamer: https://gstreamer.freedesktop.org/"
 
 
-ENTRYPOINT ["/bin/bash"]
+ENTRYPOINT []
 CMD ["/usr/local/bin/gst-inspect-1.0"]
