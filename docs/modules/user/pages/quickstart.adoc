@@ -72,7 +72,7 @@ First, let's build an additional docker image that will contain the Nvidia drive
 
 [source,bash]
 ....
-curl https://raw.githubusercontent.com/games-on-whales/gow/master/images/nvidia-driver/Dockerfile | docker build -t gow/nvidia-driver:latest -f - --build-arg NV_VERSION=$(cat /sys/module/nvidia/version) .
+docker build -t gow/nvidia-driver:latest --build-arg NV_VERSION=$(cat /sys/module/nvidia/version) -f images/nvidia-driver/Dockerfile github.com/games-on-whales/gow#master
 ....
 
 This will create `gow/nvidia-driver:latest` locally.
