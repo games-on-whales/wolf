@@ -330,7 +330,6 @@ auto setup_sessions_handlers(const immer::box<state::AppState> &app_state,
               [pp = std::ref(port_promise), sess](const immer::box<state::RTPVideoPingEvent> &ping_ev) {
                 if (ping_ev->client_ip == sess->client_ip) {
                   pp.get().set_value(ping_ev->client_port);
-                  pp.get().set_value(0);
                 }
               });
 
