@@ -1,11 +1,11 @@
 #include <boost/asio.hpp>
 #include <boost/filesystem.hpp>
-#include <cpptrace/cpptrace.hpp>
 #include <chrono>
 #include <control/control.hpp>
 #include <core/audio.hpp>
 #include <core/docker.hpp>
 #include <core/virtual-display.hpp>
+#include <cpptrace/cpptrace.hpp>
 #include <csignal>
 #include <filesystem>
 #include <fstream>
