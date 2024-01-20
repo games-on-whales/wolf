@@ -50,39 +50,28 @@ FetchContent_MakeAvailable(enet)
 target_link_libraries_system(wolf_runner PUBLIC enet)
 unset(CMAKE_PROJECT_INCLUDE_BEFORE)
 
+# Stacktrace
+FetchContent_Declare(
+        cpptrace
+        GIT_REPOSITORY https://github.com/jeremy-rifkin/cpptrace.git
+        GIT_TAG        v0.3.1
+)
+FetchContent_MakeAvailable(cpptrace)
+
 ##############################
 
 find_package(Threads REQUIRED)
 find_package(OpenSSL REQUIRED)
 
-find_package(Boost
-        REQUIRED COMPONENTS
-        log
-        stacktrace_basic)
+find_package(Boost REQUIRED COMPONENTS log)
 include_directories(${Boost_INCLUDE_DIRS})
-
-### Boost stacktrace exception handling
-# adapted from https://github.com/jschueller/boost-stacktrace-example/blob/master/CMakeLists.txt
-# also see: https://www.boost.org/doc/libs/develop/doc/html/stacktrace/configuration_and_build.html
-find_library(BOOST_STACKTRACE_BACKTRACE_LIBRARY NAMES boost_stacktrace_backtrace)
-if (UNIX)
-    message(STATUS "Using Boost::stacktrace/addr2line")
-    add_definitions(-D_GNU_SOURCE=1)
-    target_compile_definitions(wolf_runner PRIVATE BOOST_STACKTRACE_USE_ADDR2LINE)
-    target_link_libraries(wolf_runner PRIVATE dl)
-elseif (MINGW AND BOOST_STACKTRACE_BACKTRACE_LIBRARY)
-    message(STATUS "Using Boost::stacktrace/backtrace")
-    target_compile_definitions(wolf_runner PRIVATE BOOST_STACKTRACE_USE_BACKTRACE)
-    target_link_libraries(wolf_runner PRIVATE boost_stacktrace_backtrace backtrace)
-else ()
-    message(STATUS "Using Boost::stacktrace/basic")
-endif ()
 
 target_link_libraries(
         wolf_runner PUBLIC
         wolf::moonlight
         wolf::helpers
         wolf::core
+        cpptrace::cpptrace
         ${Boost_LIBRARIES}
         ${CMAKE_DL_LIBS}
         ${CMAKE_THREAD_LIBS_INIT})
@@ -112,7 +101,7 @@ if (UNIX AND NOT APPLE)
                 PkgConfig::LIBDRM
                 PkgConfig::LIBPCI
         )
-    else()
+    else ()
         message(WARNING "Missing libdrm or libpci, automatic GPU recognition will not work with this build.")
         list(APPEND SRC_LIST platforms/hw_unknown.cpp)
     endif ()
@@ -147,5 +136,5 @@ target_compile_features(wolf_runner PUBLIC cxx_std_17)
 add_executable(wolf wolf.cpp)
 target_link_libraries(wolf wolf::runner
         #-static # enable to statically link all libraries
-        )
+)
 target_compile_features(wolf PRIVATE cxx_std_17)

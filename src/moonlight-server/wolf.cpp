@@ -1,6 +1,6 @@
 #include <boost/asio.hpp>
 #include <boost/filesystem.hpp>
-#include <boost/stacktrace.hpp>
+#include <cpptrace/cpptrace.hpp>
 #include <chrono>
 #include <control/control.hpp>
 #include <core/audio.hpp>
@@ -96,40 +96,6 @@ auto initialize(std::string_view config_file, std::string_view pkey_filename, st
       .event_bus = event_bus,
       .running_sessions = std::make_shared<immer::atom<immer::vector<state::StreamSession>>>()};
   return immer::box<state::AppState>(state);
-}
-
-static std::string backtrace_file_src() {
-  return fmt::format("{}/backtrace.dump", utils::get_env("WOLF_CFG_FOLDER", "."));
-}
-
-static void shutdown_handler(int signum) {
-  logs::log(logs::info, "Received interrupt signal {}, clean exit", signum);
-  if (signum == SIGABRT || signum == SIGSEGV) {
-    logs::log(logs::error, "Runtime error, dumping stacktrace to {}", backtrace_file_src());
-    boost::stacktrace::safe_dump_to(backtrace_file_src().c_str());
-  }
-
-  logs::log(logs::info, "See ya!");
-  exit(signum);
-}
-
-/**
- * @brief: if an exception was raised we should have created a dump file, here we can pretty print it
- */
-void check_exceptions() {
-  if (boost::filesystem::exists(backtrace_file_src())) {
-    std::ifstream ifs(backtrace_file_src());
-
-    auto st = boost::stacktrace::stacktrace::from_dump(ifs);
-    logs::log(logs::error, "Previous run crashed: \n{}", to_string(st));
-
-    // cleaning up
-    ifs.close();
-    auto now = std::chrono::system_clock::now();
-    boost::filesystem::rename(
-        backtrace_file_src(),
-        fmt::format("{}/backtrace.{:%Y-%m-%d-%H-%M-%S}.dump", utils::get_env("WOLF_CFG_FOLDER", "."), now));
-  }
 }
 
 struct AudioServer {
@@ -364,6 +330,7 @@ auto setup_sessions_handlers(const immer::box<state::AppState> &app_state,
               [pp = std::ref(port_promise), sess](const immer::box<state::RTPVideoPingEvent> &ping_ev) {
                 if (ping_ev->client_ip == sess->client_ip) {
                   pp.get().set_value(ping_ev->client_port);
+                  pp.get().set_value(0);
                 }
               });
 
@@ -436,18 +403,18 @@ auto setup_sessions_handlers(const immer::box<state::AppState> &app_state,
   return handlers.persistent();
 }
 
+static void terminate_handler() {
+  cpptrace::generate_trace().print();
+  std::abort();
+}
+
 /**
  * @brief here's where the magic starts
  */
 int main(int argc, char *argv[]) {
   logs::init(logs::parse_level(utils::get_env("WOLF_LOG_LEVEL", "INFO")));
   // Exception and termination handling
-  check_exceptions();
-  std::signal(SIGINT, shutdown_handler);
-  std::signal(SIGTERM, shutdown_handler);
-  std::signal(SIGQUIT, shutdown_handler);
-  std::signal(SIGSEGV, shutdown_handler);
-  std::signal(SIGABRT, shutdown_handler);
+  std::set_terminate(terminate_handler);
 
   streaming::init(); // Need to initialise gstreamer once
   control::init();   // Need to initialise enet once
