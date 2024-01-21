@@ -54,8 +54,15 @@ unset(CMAKE_PROJECT_INCLUDE_BEFORE)
 FetchContent_Declare(
         cpptrace
         GIT_REPOSITORY https://github.com/jeremy-rifkin/cpptrace.git
-        GIT_TAG        v0.3.1
+        GIT_TAG 448c325
 )
+find_package(PkgConfig)
+pkg_check_modules(LIBUNWIND QUIET libunwind)
+if(LIBUNWIND_FOUND)
+    set(CPPTRACE_UNWIND_WITH_LIBUNWIND ON)
+else ()
+    message(WARNING "Missing libunwind, stacktraces will not be available.")
+endif ()
 FetchContent_MakeAvailable(cpptrace)
 
 ##############################

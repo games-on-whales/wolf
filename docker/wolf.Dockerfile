@@ -76,6 +76,7 @@ RUN apt-get update -y && \
     libcurl4 \
     libdrm2 \
     libpci3 \
+    libunwind8 \
     && rm -rf /var/lib/apt/lists/*
 
 # gst-plugin-wayland runtime dependencies

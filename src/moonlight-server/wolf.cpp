@@ -5,8 +5,8 @@
 #include <core/audio.hpp>
 #include <core/docker.hpp>
 #include <core/virtual-display.hpp>
-#include <cpptrace/cpptrace.hpp>
 #include <csignal>
+#include <exceptions/exceptions.h>
 #include <filesystem>
 #include <fstream>
 #include <gst-plugin/video.hpp>
@@ -402,9 +402,38 @@ auto setup_sessions_handlers(const immer::box<state::AppState> &app_state,
   return handlers.persistent();
 }
 
-static void terminate_handler() {
-  cpptrace::generate_trace().print();
-  std::abort();
+static std::string backtrace_file_src() {
+  return fmt::format("{}/backtrace.dump", utils::get_env("WOLF_CFG_FOLDER", "."));
+}
+
+static void shutdown_handler(int signum) {
+  logs::log(logs::info, "Received interrupt signal {}, clean exit", signum);
+  if (signum == SIGABRT || signum == SIGSEGV) {
+    auto stack_file = backtrace_file_src();
+    logs::log(logs::error, "Runtime error, dumping stacktrace to {}", stack_file);
+    std::ofstream fs(stack_file);
+    safe_dump_stacktrace_to(fs);
+    fs.close();
+  }
+
+  logs::log(logs::info, "See ya!");
+  exit(signum);
+}
+
+/**
+ * @brief: if an exception was raised we should have created a dump file, here we can pretty print it
+ */
+static void check_exceptions() {
+  auto stack_file = backtrace_file_src();
+  if (boost::filesystem::exists(stack_file)) {
+    std::ifstream ifs(stack_file);
+    load_stacktrace_from(ifs)->resolve().print();
+    ifs.close();
+    auto now = std::chrono::system_clock::now();
+    boost::filesystem::rename(
+        stack_file,
+        fmt::format("{}/backtrace.{:%Y-%m-%d-%H-%M-%S}.dump", utils::get_env("WOLF_CFG_FOLDER", "."), now));
+  }
 }
 
 /**
@@ -413,7 +442,13 @@ static void terminate_handler() {
 int main(int argc, char *argv[]) {
   logs::init(logs::parse_level(utils::get_env("WOLF_LOG_LEVEL", "INFO")));
   // Exception and termination handling
-  std::set_terminate(terminate_handler);
+  std::signal(SIGINT, shutdown_handler);
+  std::signal(SIGTERM, shutdown_handler);
+  std::signal(SIGQUIT, shutdown_handler);
+  std::signal(SIGSEGV, shutdown_handler);
+  std::signal(SIGABRT, shutdown_handler);
+  std::set_terminate([]() { shutdown_handler(SIGABRT); });
+  check_exceptions();
 
   streaming::init(); // Need to initialise gstreamer once
   control::init();   // Need to initialise enet once
