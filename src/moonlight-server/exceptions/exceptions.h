@@ -33,7 +33,7 @@ static void safe_dump_stacktrace_to(const std::string &file_name) {
 static std::unique_ptr<cpptrace::object_trace> load_stacktrace_from(const std::string &file_name) {
   cpptrace::object_trace trace{};
   std::size_t count;
-  int fd = open(file_name.c_str(), O_RDONLY | O_CREAT | O_DSYNC);
+  int fd = open(file_name.c_str(), O_RDONLY);
   if (fd <= 0) {
     logs::log(logs::warning, "Unable to open stacktrace file {}", file_name);
     return {};
