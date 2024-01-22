@@ -422,7 +422,9 @@ static void shutdown_handler(int signum) {
 static void check_exceptions() {
   auto stack_file = backtrace_file_src();
   if (boost::filesystem::exists(stack_file)) {
-    load_stacktrace_from(stack_file)->resolve().print();
+    if (auto object_trace = load_stacktrace_from(stack_file)) {
+      object_trace->resolve().print();
+    }
     auto now = std::chrono::system_clock::now();
     boost::filesystem::rename(
         stack_file,

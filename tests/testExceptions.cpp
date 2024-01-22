@@ -7,10 +7,8 @@ using Catch::Matchers::Equals;
 
 TEST_CASE("Exceptions", "[Exceptions]") {
   safe_dump_stacktrace_to("stacktrace.txt");
+  auto stacktrace = load_stacktrace_from("stacktrace.txt")->resolve();
 
-  auto trace = load_stacktrace_from("stacktrace.txt");
-
-  auto stacktrace = trace->resolve();
   REQUIRE(stacktrace.frames.size() > 0);
   stacktrace.print(std::cout, false);
 

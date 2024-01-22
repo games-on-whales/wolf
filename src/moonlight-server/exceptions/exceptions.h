@@ -16,7 +16,7 @@ static void safe_dump_stacktrace_to(const std::string &file_name) {
   cpptrace::frame_ptr buffer[N];
   std::size_t count = cpptrace::safe_generate_raw_trace(buffer, N);
   if (count > 0) {
-    int fd = open(file_name.c_str(), O_WRONLY | O_CREAT | O_DSYNC);
+    int fd = open(file_name.c_str(), O_WRONLY | O_CREAT | O_DSYNC, 0666);
     if (fd <= 0) {
       return;
     }
