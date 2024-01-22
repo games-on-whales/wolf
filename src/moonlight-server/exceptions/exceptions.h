@@ -1,39 +1,47 @@
+/**
+ * Implements safe stacktrace dumping and loading.
+ *
+ * Only uses async-signal-safe functions for dumping the stacktrace; read here for more info:
+ * https://man7.org/linux/man-pages/man7/signal-safety.7.html
+ */
 #pragma once
 
 #include <cpptrace/cpptrace.hpp>
+#include <fcntl.h>
 #include <helpers/logger.hpp>
-#include <istream>
-#include <ostream>
+#include <unistd.h>
 
-static void safe_dump_stacktrace_to(std::ostream &out) {
+static void safe_dump_stacktrace_to(const std::string &file_name) {
   constexpr std::size_t N = 100;
   cpptrace::frame_ptr buffer[N];
   std::size_t count = cpptrace::safe_generate_raw_trace(buffer, N);
   if (count > 0) {
-    out << count << '\n';
+    int fd = open(file_name.c_str(), O_WRONLY | O_CREAT | O_DSYNC);
+    if (fd <= 0) {
+      return;
+    }
+    write(fd, reinterpret_cast<char *>(&count), sizeof(count));
     for (std::size_t i = 0; i < count; i++) {
       cpptrace::safe_object_frame frame{};
       cpptrace::get_safe_object_frame(buffer[i], &frame);
-      out << frame.address_relative_to_object_start << ' ' << frame.raw_address << ' ';
-      out.write(frame.object_path, sizeof(frame.object_path));
-      out << '\n';
+      write(fd, &frame, sizeof(frame));
     }
+    close(fd);
   }
 }
 
-static std::unique_ptr<cpptrace::object_trace> load_stacktrace_from(std::istream &in) {
+static std::unique_ptr<cpptrace::object_trace> load_stacktrace_from(const std::string &file_name) {
   cpptrace::object_trace trace{};
   std::size_t count;
-  in >> count;
-  in.ignore(); // ignore newline
+  int fd = open(file_name.c_str(), O_RDONLY | O_CREAT | O_DSYNC);
+  if (fd <= 0) {
+    logs::log(logs::warning, "Unable to open stacktrace file {}", file_name);
+    return {};
+  }
+  read(fd, reinterpret_cast<char *>(&count), sizeof(count));
   for (std::size_t i = 0; i < count; i++) {
     cpptrace::safe_object_frame frame{};
-    in >> frame.address_relative_to_object_start;
-    in.ignore(); // ignore space
-    in >> frame.raw_address;
-    in.ignore(); // ignore space
-    in.read(frame.object_path, sizeof(frame.object_path));
-    in.ignore(); // ignore newline
+    read(fd, &frame, sizeof(frame));
     try {
       trace.frames.push_back(frame.resolve());
     } catch (std::exception &ex) {

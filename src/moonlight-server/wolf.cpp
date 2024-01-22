@@ -8,7 +8,6 @@
 #include <csignal>
 #include <exceptions/exceptions.h>
 #include <filesystem>
-#include <fstream>
 #include <gst-plugin/video.hpp>
 #include <immer/array.hpp>
 #include <immer/array_transient.hpp>
@@ -403,20 +402,17 @@ auto setup_sessions_handlers(const immer::box<state::AppState> &app_state,
 }
 
 static std::string backtrace_file_src() {
-  return fmt::format("{}/backtrace.dump", utils::get_env("WOLF_CFG_FOLDER", "."));
+  return std::string(utils::get_env("WOLF_CFG_FOLDER", ".")) + "/backtrace.dump"s;
 }
 
+/**
+ * Keep this as small as possible, make sure to only use async-signal-safe functions
+ */
 static void shutdown_handler(int signum) {
-  logs::log(logs::info, "Received interrupt signal {}, clean exit", signum);
   if (signum == SIGABRT || signum == SIGSEGV) {
     auto stack_file = backtrace_file_src();
-    logs::log(logs::error, "Runtime error, dumping stacktrace to {}", stack_file);
-    std::ofstream fs(stack_file);
-    safe_dump_stacktrace_to(fs);
-    fs.close();
+    safe_dump_stacktrace_to(stack_file);
   }
-
-  logs::log(logs::info, "See ya!");
   exit(signum);
 }
 
@@ -426,9 +422,7 @@ static void shutdown_handler(int signum) {
 static void check_exceptions() {
   auto stack_file = backtrace_file_src();
   if (boost::filesystem::exists(stack_file)) {
-    std::ifstream ifs(stack_file);
-    load_stacktrace_from(ifs)->resolve().print();
-    ifs.close();
+    load_stacktrace_from(stack_file)->resolve().print();
     auto now = std::chrono::system_clock::now();
     boost::filesystem::rename(
         stack_file,
