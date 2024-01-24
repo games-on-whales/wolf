@@ -290,6 +290,10 @@ auto setup_sessions_handlers(const immer::box<state::AppState> &app_state,
             }
           }
 
+          if (get_vendor(render_node) == INTEL) {
+            full_env.set("INTEL_DEBUG", "norbc"); // see: https://github.com/games-on-whales/wolf/issues/50
+          }
+
           /* Initialise plugged device queue with mouse and keyboard */
           plugged_devices_queue->update([=](const session_devices map) {
             immer::vector<std::shared_ptr<input::VirtualDevice>> devices({session->mouse, session->keyboard});
