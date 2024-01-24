@@ -102,6 +102,14 @@ jobs:
     steps:
       - uses: actions/checkout@v3
 
+      # We use SDL to test out joypad virtualization
+      - uses: libsdl-org/setup-sdl@main
+        id: sdl
+        with:
+          install-linux-dependencies: true
+          version: 2-latest
+          version-sdl-image: 2-latest
+
       - name: Prepare environment
         # ubuntu-latest breaks without libunwind-dev,
         # see: https://github.com/actions/runner-images/issues/6399#issuecomment-1286050292
@@ -120,8 +128,7 @@ jobs:
               libudev-dev \
               libdrm-dev \
               libpci-dev \
-              libunwind-dev \
-              libsdl2-dev
+              libunwind-dev
               ${{ join(matrix.other_pkgs, ' ') }}
 
       - name: Setup Rust
@@ -157,6 +164,7 @@ jobs:
                 -DLINK_RUST_WAYLAND=ON \
                 -DTEST_RUST_WAYLAND=OFF \
                 -DTEST_NVIDIA=OFF \
+                -DTEST_SDL=OFF \
                 -G Ninja
 
       - name: Build tests + lib
