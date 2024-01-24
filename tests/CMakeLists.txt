@@ -10,7 +10,13 @@ FetchContent_MakeAvailable(Catch2)
 # Tests need to be added as executables first
 add_executable(wolftests main.cpp)
 
-file(GLOB SRC_LIST SRCS *.cpp)
+set(SRC_LIST
+        main.cpp
+        testControl.cpp
+        testCrypto.cpp
+        testGSTPlugin.cpp
+        testMoonlight.cpp
+        testRTSP.cpp)
 
 if (UNIX AND NOT APPLE)
     option(TEST_UINPUT "Enable uinput test" ON) # uinput doesn't work in GA
@@ -44,6 +50,11 @@ endif ()
 option(TEST_DOCKER "Enable docker tests" ON)
 if (TEST_DOCKER)
     list(APPEND SRC_LIST "docker/testDocker.cpp")
+endif ()
+
+option(TEST_EXCEPTIONS "Enable exceptions tests" ON)
+if (TEST_EXCEPTIONS)
+    list(APPEND SRC_LIST testExceptions.cpp)
 endif ()
 
 target_sources(wolftests PRIVATE ${SRC_LIST})
