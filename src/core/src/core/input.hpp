@@ -222,8 +222,8 @@ public:
   void set_triggers(unsigned char left, unsigned char right);
 
   enum STICK_POSITION {
-    R2,
-    L2
+    RS,
+    LS
   };
 
   void set_stick(STICK_POSITION stick_type, short x, short y);

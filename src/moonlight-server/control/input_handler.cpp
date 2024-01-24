@@ -215,8 +215,8 @@ void handle_input(const state::StreamSession &session,
                                        Joypad::ANALOG_TRIGGERS | Joypad::RUMBLE);
     }
     selected_pad->set_pressed_buttons(controller_pkt->button_flags | (controller_pkt->buttonFlags2 << 16));
-    selected_pad->set_stick(Joypad::L2, controller_pkt->left_stick_x, controller_pkt->left_stick_y);
-    selected_pad->set_stick(Joypad::R2, controller_pkt->right_stick_x, controller_pkt->right_stick_y);
+    selected_pad->set_stick(Joypad::LS, controller_pkt->left_stick_x, controller_pkt->left_stick_y);
+    selected_pad->set_stick(Joypad::RS, controller_pkt->right_stick_x, controller_pkt->right_stick_y);
     selected_pad->set_triggers(controller_pkt->left_trigger, controller_pkt->right_trigger);
     break;
   }

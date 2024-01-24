@@ -759,7 +759,7 @@ void Joypad::set_pressed_buttons(int newly_pressed) {
 
 void Joypad::set_stick(Joypad::STICK_POSITION stick_type, short x, short y) {
   if (auto controller = this->_state->joy.get()) {
-    if (stick_type == L2) {
+    if (stick_type == LS) {
       libevdev_uinput_write_event(controller, EV_ABS, ABS_X, x);
       libevdev_uinput_write_event(controller, EV_ABS, ABS_Y, -y);
     } else {

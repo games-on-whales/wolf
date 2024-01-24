@@ -35,7 +35,8 @@ jobs:
               libudev-dev \
               libdrm-dev \
               libpci-dev \
-              libunwind-dev
+              libunwind-dev \
+              libsdl2-dev
 
       - name: Setup Rust
         uses: ATiltedTree/setup-rust@v1
@@ -120,6 +121,7 @@ jobs:
               libdrm-dev \
               libpci-dev \
               libunwind-dev \
+              libsdl2-dev
               ${{ join(matrix.other_pkgs, ' ') }}
 
       - name: Setup Rust
