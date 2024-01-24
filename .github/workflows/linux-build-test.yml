@@ -120,7 +120,8 @@ jobs:
               libudev-dev \
               libdrm-dev \
               libpci-dev \
-              libunwind-dev
+              libunwind-dev \
+              libsdl2-dev \
               ${{ join(matrix.other_pkgs, ' ') }}
 
       - name: Setup Rust
@@ -156,7 +157,7 @@ jobs:
                 -DLINK_RUST_WAYLAND=ON \
                 -DTEST_RUST_WAYLAND=OFF \
                 -DTEST_NVIDIA=OFF \
-                -DTEST_SDL=OFF \
+                -DTEST_SDL=ON \
                 -G Ninja
 
       - name: Build tests + lib
