@@ -35,8 +35,7 @@ jobs:
               libudev-dev \
               libdrm-dev \
               libpci-dev \
-              libunwind-dev \
-              libsdl2-dev
+              libunwind-dev
 
       - name: Setup Rust
         uses: ATiltedTree/setup-rust@v1
@@ -64,6 +63,7 @@ jobs:
                 -DTEST_RUST_WAYLAND=OFF \
                 -DTEST_NVIDIA=OFF \
                 -DTEST_EXCEPTIONS=OFF \
+                -DTEST_SDL=OFF \
                 -DCARGO_TARGET_BUILD=aarch64-unknown-linux-gnu \
                 -G Ninja
 
@@ -101,14 +101,6 @@ jobs:
 
     steps:
       - uses: actions/checkout@v3
-
-      # We use SDL to test out joypad virtualization
-      - uses: libsdl-org/setup-sdl@main
-        id: sdl
-        with:
-          install-linux-dependencies: true
-          version: 2-latest
-          version-sdl-image: 2-latest
 
       - name: Prepare environment
         # ubuntu-latest breaks without libunwind-dev,
