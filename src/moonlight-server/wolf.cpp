@@ -329,11 +329,14 @@ auto setup_sessions_handlers(const immer::box<state::AppState> &app_state,
         std::thread([=]() {
           boost::promise<unsigned short> port_promise;
           auto port_fut = port_promise.get_future();
+          std::once_flag called;
           auto ev_handler = app_state->event_bus->register_handler<immer::box<state::RTPVideoPingEvent>>(
-              [pp = std::ref(port_promise), sess](const immer::box<state::RTPVideoPingEvent> &ping_ev) {
-                if (ping_ev->client_ip == sess->client_ip) {
-                  pp.get().set_value(ping_ev->client_port);
-                }
+              [pp = std::ref(port_promise), &called, sess](const immer::box<state::RTPVideoPingEvent> &ping_ev) {
+                std::call_once(called, [=]() { // We'll keep receiving PING requests, but we only want the first one
+                  if (ping_ev->client_ip == sess->client_ip) {
+                    pp.get().set_value(ping_ev->client_port); // This throws when set multiple times
+                  }
+                });
               });
 
           std::shared_ptr<std::atomic_bool> cancel_job = std::make_shared<std::atomic<bool>>(false);
@@ -346,9 +349,9 @@ auto setup_sessions_handlers(const immer::box<state::AppState> &app_state,
               });
 
           logs::log(logs::debug, "Video session {}, waiting for PING...", sess->session_id);
-          auto client_port = port_fut.get();
+          auto client_port = port_fut.get(); // Stop here until we get a PING
           cancel_event.unregister();
-          ev_handler.unregister(); // We'll keep receiving PING requests, but we only want the first one
+          ev_handler.unregister();
 
           if (*cancel_job) {
             return;
@@ -368,11 +371,14 @@ auto setup_sessions_handlers(const immer::box<state::AppState> &app_state,
         std::thread([=]() {
           boost::promise<unsigned short> port_promise;
           auto port_fut = port_promise.get_future();
+          std::once_flag called;
           auto ev_handler = app_state->event_bus->register_handler<immer::box<state::RTPAudioPingEvent>>(
-              [pp = std::ref(port_promise), sess](const immer::box<state::RTPAudioPingEvent> &ping_ev) {
-                if (ping_ev->client_ip == sess->client_ip) {
-                  pp.get().set_value(ping_ev->client_port);
-                }
+              [pp = std::ref(port_promise), &called, sess](const immer::box<state::RTPAudioPingEvent> &ping_ev) {
+                std::call_once(called, [=]() { // We'll keep receiving PING requests, but we only want the first one
+                  if (ping_ev->client_ip == sess->client_ip) {
+                    pp.get().set_value(ping_ev->client_port); // This throws when set multiple times
+                  }
+                });
               });
 
           std::shared_ptr<std::atomic_bool> cancel_job = std::make_shared<std::atomic<bool>>(false);
@@ -385,9 +391,9 @@ auto setup_sessions_handlers(const immer::box<state::AppState> &app_state,
               });
 
           logs::log(logs::debug, "Audio session {}, waiting for PING...", sess->session_id);
-          auto client_port = port_fut.get();
+          auto client_port = port_fut.get(); // Stop here until we get a PING
           cancel_event.unregister();
-          ev_handler.unregister(); // We'll keep receiving PING requests, but we only want the first one
+          ev_handler.unregister();
 
           if (*cancel_job) {
             return;
