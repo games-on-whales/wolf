@@ -779,9 +779,12 @@ void Joypad::set_triggers(unsigned char left, unsigned char right) {
         this->_state->tl_moving = true;
       }
       libevdev_uinput_write_event(controller, EV_ABS, ABS_Z, left);
-    } else if (this->_state->tl_moving && TR_TL_enabled(this->_state->type)) { // returning to the idle position
-      libevdev_uinput_write_event(controller, EV_ABS, BTN_TL2, 0);
-      this->_state->tl_moving = false;
+    } else {
+      if (this->_state->tl_moving && TR_TL_enabled(this->_state->type)) { // returning to the idle position
+        libevdev_uinput_write_event(controller, EV_ABS, BTN_TL2, 0);
+        this->_state->tl_moving = false;
+      }
+      libevdev_uinput_write_event(controller, EV_ABS, ABS_Z, left);
     }
 
     if (right > 0) {
@@ -790,9 +793,12 @@ void Joypad::set_triggers(unsigned char left, unsigned char right) {
         this->_state->tr_moving = true;
       }
       libevdev_uinput_write_event(controller, EV_ABS, ABS_RZ, right);
-    } else if (this->_state->tr_moving && TR_TL_enabled(this->_state->type)) { // returning to the idle position
-      libevdev_uinput_write_event(controller, EV_ABS, BTN_TR2, 0);
-      this->_state->tr_moving = false;
+    } else {
+      if (this->_state->tr_moving && TR_TL_enabled(this->_state->type)) { // returning to the idle position
+        libevdev_uinput_write_event(controller, EV_ABS, BTN_TR2, 0);
+        this->_state->tr_moving = false;
+      }
+      libevdev_uinput_write_event(controller, EV_ABS, ABS_RZ, right);
     }
 
     libevdev_uinput_write_event(controller, EV_SYN, SYN_REPORT, 0);
