@@ -219,7 +219,7 @@ public:
    */
   void set_pressed_buttons(int newly_pressed);
 
-  void set_triggers(unsigned char left, unsigned char right);
+  void set_triggers(int16_t left, int16_t right);
 
   enum STICK_POSITION {
     RS,

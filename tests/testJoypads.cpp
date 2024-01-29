@@ -1,15 +1,41 @@
 #include "catch2/catch_all.hpp"
 #include <core/input.hpp>
+#include <helpers/logger.hpp>
 #include <SDL.h>
 
 using Catch::Matchers::Equals;
 using namespace wolf::core::input;
 
 void flush_sdl_events() {
+  SDL_JoystickUpdate();
   SDL_Event event;
   while (SDL_PollEvent(&event) != 0) {
+    switch (event.type) {
+    case SDL_CONTROLLERDEVICEADDED:
+      logs::log(logs::info, "SDL_CONTROLLERDEVICEADDED {}", SDL_GameControllerNameForIndex(event.cdevice.which));
+      break;
+    case SDL_CONTROLLERDEVICEREMOVED:
+      logs::log(logs::info, "SDL_CONTROLLERDEVICEREMOVED {}", event.cdevice.which);
+      break;
+    case SDL_CONTROLLERDEVICEREMAPPED:
+      logs::log(logs::info, "SDL_CONTROLLERDEVICEREMAPPED {}", SDL_GameControllerNameForIndex(event.cdevice.which));
+      break;
+    }
   }
 }
+
+class SDLTestsFixture {
+public:
+  SDLTestsFixture() {
+    SDL_Init(SDL_INIT_GAMECONTROLLER | SDL_INIT_JOYSTICK | SDL_INIT_SENSOR);
+    SDL_LogSetAllPriority(SDL_LOG_PRIORITY_VERBOSE);
+    SDL_GameControllerEventState(SDL_ENABLE);
+  }
+
+  ~SDLTestsFixture() {
+    SDL_Quit();
+  }
+};
 
 #define SDL_TEST_BUTTON(JOYPAD_BTN, SDL_BTN)                                                                           \
   REQUIRE(SDL_GameControllerGetButton(gc, SDL_BTN) == 0);                                                              \
@@ -17,18 +43,15 @@ void flush_sdl_events() {
   flush_sdl_events();                                                                                                  \
   REQUIRE(SDL_GameControllerGetButton(gc, SDL_BTN) == 1);
 
-TEST_CASE("PS Joypad", "[SDL]") {
+TEST_CASE_METHOD(SDLTestsFixture, "PS Joypad", "[SDL]") {
   // Create the controller
-  auto joypad = Joypad(
-      Joypad::PS,
-      Joypad::RUMBLE | Joypad::ANALOG_TRIGGERS | Joypad::ACCELEROMETER | Joypad::GYRO | Joypad::TOUCHPAD);
+  auto joypad = Joypad(Joypad::PS, Joypad::RUMBLE | Joypad::ANALOG_TRIGGERS);
 
-  SDL_LogSetAllPriority(SDL_LOG_PRIORITY_VERBOSE);
+  std::this_thread::sleep_for(150ms);
 
-  SDL_Init(SDL_INIT_GAMECONTROLLER | SDL_INIT_SENSOR);
-  SDL_JoystickEventState(SDL_ENABLE);
   SDL_SetHint(SDL_HINT_JOYSTICK_HIDAPI_PS4_RUMBLE, "1");
   SDL_SetHint(SDL_HINT_JOYSTICK_HIDAPI_PS5, "1");
+  flush_sdl_events();
   // Initializing the controller
   SDL_GameController *gc = SDL_GameControllerOpen(0);
   if (gc == nullptr) {
@@ -94,10 +117,15 @@ TEST_CASE("PS Joypad", "[SDL]") {
     REQUIRE(SDL_GameControllerGetAxis(gc, SDL_CONTROLLER_AXIS_RIGHTX) == 1000);
     REQUIRE(SDL_GameControllerGetAxis(gc, SDL_CONTROLLER_AXIS_RIGHTY) == -2000);
 
-    joypad.set_triggers((unsigned char)1000, (unsigned char)2000);
+    joypad.set_triggers(10, 20);
     flush_sdl_events();
-    REQUIRE(SDL_GameControllerGetAxis(gc, SDL_CONTROLLER_AXIS_TRIGGERLEFT) == 29811);
-    REQUIRE(SDL_GameControllerGetAxis(gc, SDL_CONTROLLER_AXIS_TRIGGERRIGHT) == 26727);
+    REQUIRE(SDL_GameControllerGetAxis(gc, SDL_CONTROLLER_AXIS_TRIGGERLEFT) == 1284);
+    REQUIRE(SDL_GameControllerGetAxis(gc, SDL_CONTROLLER_AXIS_TRIGGERRIGHT) == 2569);
+
+    joypad.set_triggers(0, 0);
+    flush_sdl_events();
+    REQUIRE(SDL_GameControllerGetAxis(gc, SDL_CONTROLLER_AXIS_TRIGGERLEFT) == 0);
+    REQUIRE(SDL_GameControllerGetAxis(gc, SDL_CONTROLLER_AXIS_TRIGGERRIGHT) == 0);
   }
 
   // TODO: fixme
@@ -113,19 +141,16 @@ TEST_CASE("PS Joypad", "[SDL]") {
   //    }
   //  }
   SDL_GameControllerClose(gc);
-  SDL_Quit();
 }
 
-TEST_CASE("XBOX Joypad", "[SDL]") {
+TEST_CASE_METHOD(SDLTestsFixture, "XBOX Joypad", "[SDL]") {
   // Create the controller
   auto joypad = Joypad(Joypad::XBOX, Joypad::RUMBLE | Joypad::ANALOG_TRIGGERS);
 
-  SDL_LogSetAllPriority(SDL_LOG_PRIORITY_VERBOSE);
-
-  SDL_Init(SDL_INIT_GAMECONTROLLER);
-  SDL_JoystickEventState(SDL_ENABLE);
+  std::this_thread::sleep_for(150ms);
 
   // Initializing the controller
+  flush_sdl_events();
   SDL_GameController *gc = SDL_GameControllerOpen(0);
   if (gc == nullptr) {
     WARN(SDL_GetError());
@@ -188,26 +213,28 @@ TEST_CASE("XBOX Joypad", "[SDL]") {
     REQUIRE(SDL_GameControllerGetAxis(gc, SDL_CONTROLLER_AXIS_RIGHTX) == 1000);
     REQUIRE(SDL_GameControllerGetAxis(gc, SDL_CONTROLLER_AXIS_RIGHTY) == -2000);
 
-    joypad.set_triggers((unsigned char)1000, (unsigned char)2000);
+    joypad.set_triggers(10, 20);
     flush_sdl_events();
-    REQUIRE(SDL_GameControllerGetAxis(gc, SDL_CONTROLLER_AXIS_TRIGGERLEFT) == 29811);
-    REQUIRE(SDL_GameControllerGetAxis(gc, SDL_CONTROLLER_AXIS_TRIGGERRIGHT) == 26727);
+    REQUIRE(SDL_GameControllerGetAxis(gc, SDL_CONTROLLER_AXIS_TRIGGERLEFT) == 1284);
+    REQUIRE(SDL_GameControllerGetAxis(gc, SDL_CONTROLLER_AXIS_TRIGGERRIGHT) == 2569);
+
+    joypad.set_triggers(0, 0);
+    flush_sdl_events();
+    REQUIRE(SDL_GameControllerGetAxis(gc, SDL_CONTROLLER_AXIS_TRIGGERLEFT) == 0);
+    REQUIRE(SDL_GameControllerGetAxis(gc, SDL_CONTROLLER_AXIS_TRIGGERRIGHT) == 0);
   }
 
   SDL_GameControllerClose(gc);
-  SDL_Quit();
 }
 
-TEST_CASE("Nintendo Joypad", "[SDL]") {
+TEST_CASE_METHOD(SDLTestsFixture, "Nintendo Joypad", "[SDL]") {
   // Create the controller
-  auto joypad = Joypad(Joypad::NINTENDO, Joypad::RUMBLE | Joypad::ANALOG_TRIGGERS);
+  auto joypad = Joypad(Joypad::NINTENDO, Joypad::RUMBLE);
 
-  SDL_LogSetAllPriority(SDL_LOG_PRIORITY_VERBOSE);
-
-  SDL_Init(SDL_INIT_GAMECONTROLLER);
-  SDL_JoystickEventState(SDL_ENABLE);
+  std::this_thread::sleep_for(150ms);
 
   // Initializing the controller
+  flush_sdl_events();
   SDL_GameController *gc = SDL_GameControllerOpen(0);
   if (gc == nullptr) {
     WARN(SDL_GetError());
@@ -268,16 +295,19 @@ TEST_CASE("Nintendo Joypad", "[SDL]") {
 
     joypad.set_stick(Joypad::RS, 1000, 2000);
     flush_sdl_events();
-    REQUIRE(SDL_GameControllerGetAxis(gc, SDL_CONTROLLER_AXIS_RIGHTX) == -32768); // TODO: WTF??
-    REQUIRE(SDL_GameControllerGetAxis(gc, SDL_CONTROLLER_AXIS_RIGHTY) == 1000);
+    REQUIRE(SDL_GameControllerGetAxis(gc, SDL_CONTROLLER_AXIS_RIGHTX) == 1000);
+    REQUIRE(SDL_GameControllerGetAxis(gc, SDL_CONTROLLER_AXIS_RIGHTY) == -2000);
 
-    // TODO: fix this
-    //    joypad.set_triggers((unsigned char)1000, (unsigned char)2000);
-    //    flush_sdl_events();
-    //    REQUIRE(SDL_GameControllerGetAxis(gc, SDL_CONTROLLER_AXIS_TRIGGERLEFT) == 29811);
-    //    REQUIRE(SDL_GameControllerGetAxis(gc, SDL_CONTROLLER_AXIS_TRIGGERRIGHT) == 26727);
+    joypad.set_triggers(10, 20);
+    flush_sdl_events();
+    REQUIRE(SDL_GameControllerGetAxis(gc, SDL_CONTROLLER_AXIS_TRIGGERLEFT) == 32767);
+    REQUIRE(SDL_GameControllerGetAxis(gc, SDL_CONTROLLER_AXIS_TRIGGERRIGHT) == 32767);
+
+    joypad.set_triggers(0, 0);
+    flush_sdl_events();
+    REQUIRE(SDL_GameControllerGetAxis(gc, SDL_CONTROLLER_AXIS_TRIGGERLEFT) == 0);
+    REQUIRE(SDL_GameControllerGetAxis(gc, SDL_CONTROLLER_AXIS_TRIGGERRIGHT) == 0);
   }
 
   SDL_GameControllerClose(gc);
-  SDL_Quit();
 }

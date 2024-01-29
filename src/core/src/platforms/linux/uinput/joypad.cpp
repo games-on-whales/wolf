@@ -283,7 +283,7 @@ std::optional<libevdev_uinput *> create_controller(Joypad::CONTROLLER_TYPE type,
   libevdev_enable_event_code(dev, EV_ABS, ABS_Y, &stick);
   libevdev_enable_event_code(dev, EV_ABS, ABS_RY, &stick);
 
-  if (capabilities & Joypad::ANALOG_TRIGGERS) {
+  if (capabilities & Joypad::ANALOG_TRIGGERS && type != Joypad::NINTENDO) { // On Nintendo L2/R2 are just buttons!
     input_absinfo trigger{0, 0, 255, 0, 0, 0};
     libevdev_enable_event_code(dev, EV_ABS, ABS_Z, &trigger);
     libevdev_enable_event_code(dev, EV_ABS, ABS_RZ, &trigger);
@@ -771,37 +771,46 @@ void Joypad::set_stick(Joypad::STICK_POSITION stick_type, short x, short y) {
   }
 }
 
-void Joypad::set_triggers(unsigned char left, unsigned char right) {
+void Joypad::set_triggers(int16_t left, int16_t right) {
   if (auto controller = this->_state->joy.get()) {
-    if (left > 0) {
-      if (!this->_state->tl_moving && TR_TL_enabled(this->_state->type)) { // first time moving left trigger
-        libevdev_uinput_write_event(controller, EV_ABS, BTN_TL2, 1);
-        this->_state->tl_moving = true;
-      }
-      libevdev_uinput_write_event(controller, EV_ABS, ABS_Z, left);
-    } else {
-      if (this->_state->tl_moving && TR_TL_enabled(this->_state->type)) { // returning to the idle position
-        libevdev_uinput_write_event(controller, EV_ABS, BTN_TL2, 0);
-        this->_state->tl_moving = false;
-      }
-      libevdev_uinput_write_event(controller, EV_ABS, ABS_Z, left);
-    }
+    if (this->_state->type == NINTENDO) {
+      // Nintendo ZL and ZR are just buttons (EV_KEY)
+      libevdev_uinput_write_event(controller, EV_KEY, BTN_TL2, left > 0 ? 1 : 0);
+      libevdev_uinput_write_event(controller, EV_SYN, SYN_REPORT, 0);
 
-    if (right > 0) {
-      if (!this->_state->tr_moving && TR_TL_enabled(this->_state->type)) { // first time moving right trigger
-        libevdev_uinput_write_event(controller, EV_ABS, BTN_TR2, 1);
-        this->_state->tr_moving = true;
-      }
-      libevdev_uinput_write_event(controller, EV_ABS, ABS_RZ, right);
+      libevdev_uinput_write_event(controller, EV_KEY, BTN_TR2, right > 0 ? 1 : 0);
+      libevdev_uinput_write_event(controller, EV_SYN, SYN_REPORT, 0);
     } else {
-      if (this->_state->tr_moving && TR_TL_enabled(this->_state->type)) { // returning to the idle position
-        libevdev_uinput_write_event(controller, EV_ABS, BTN_TR2, 0);
-        this->_state->tr_moving = false;
+      if (left > 0) {
+        if (!this->_state->tl_moving && TR_TL_enabled(this->_state->type)) { // first time moving left trigger
+          libevdev_uinput_write_event(controller, EV_ABS, BTN_TL2, 1);
+          this->_state->tl_moving = true;
+        }
+        libevdev_uinput_write_event(controller, EV_ABS, ABS_Z, left);
+      } else {
+        if (this->_state->tl_moving && TR_TL_enabled(this->_state->type)) { // returning to the idle position
+          libevdev_uinput_write_event(controller, EV_ABS, BTN_TL2, 0);
+          this->_state->tl_moving = false;
+        }
+        libevdev_uinput_write_event(controller, EV_ABS, ABS_Z, left);
       }
-      libevdev_uinput_write_event(controller, EV_ABS, ABS_RZ, right);
-    }
 
-    libevdev_uinput_write_event(controller, EV_SYN, SYN_REPORT, 0);
+      if (right > 0) {
+        if (!this->_state->tr_moving && TR_TL_enabled(this->_state->type)) { // first time moving right trigger
+          libevdev_uinput_write_event(controller, EV_ABS, BTN_TR2, 1);
+          this->_state->tr_moving = true;
+        }
+        libevdev_uinput_write_event(controller, EV_ABS, ABS_RZ, right);
+      } else {
+        if (this->_state->tr_moving && TR_TL_enabled(this->_state->type)) { // returning to the idle position
+          libevdev_uinput_write_event(controller, EV_ABS, BTN_TR2, 0);
+          this->_state->tr_moving = false;
+        }
+        libevdev_uinput_write_event(controller, EV_ABS, ABS_RZ, right);
+      }
+
+      libevdev_uinput_write_event(controller, EV_SYN, SYN_REPORT, 0);
+    }
   }
 }
 
