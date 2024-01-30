@@ -43,16 +43,67 @@ public:
   flush_sdl_events();                                                                                                  \
   REQUIRE(SDL_GameControllerGetButton(gc, SDL_BTN) == 1);
 
+void test_buttons(SDL_GameController *gc, Joypad &joypad) {
+  SDL_TEST_BUTTON(Joypad::DPAD_UP, SDL_CONTROLLER_BUTTON_DPAD_UP);
+  SDL_TEST_BUTTON(Joypad::DPAD_DOWN, SDL_CONTROLLER_BUTTON_DPAD_DOWN);
+  SDL_TEST_BUTTON(Joypad::DPAD_LEFT, SDL_CONTROLLER_BUTTON_DPAD_LEFT);
+  SDL_TEST_BUTTON(Joypad::DPAD_RIGHT, SDL_CONTROLLER_BUTTON_DPAD_RIGHT);
+
+  SDL_TEST_BUTTON(Joypad::HOME, SDL_CONTROLLER_BUTTON_GUIDE);
+  SDL_TEST_BUTTON(Joypad::START, SDL_CONTROLLER_BUTTON_START);
+  SDL_TEST_BUTTON(Joypad::BACK, SDL_CONTROLLER_BUTTON_BACK);
+
+  SDL_TEST_BUTTON(Joypad::LEFT_STICK, SDL_CONTROLLER_BUTTON_LEFTSTICK);
+  SDL_TEST_BUTTON(Joypad::RIGHT_STICK, SDL_CONTROLLER_BUTTON_RIGHTSTICK);
+  SDL_TEST_BUTTON(Joypad::LEFT_BUTTON, SDL_CONTROLLER_BUTTON_LEFTSHOULDER);
+  SDL_TEST_BUTTON(Joypad::RIGHT_BUTTON, SDL_CONTROLLER_BUTTON_RIGHTSHOULDER);
+
+  SDL_TEST_BUTTON(Joypad::A, SDL_CONTROLLER_BUTTON_A);
+  SDL_TEST_BUTTON(Joypad::B, SDL_CONTROLLER_BUTTON_B);
+  SDL_TEST_BUTTON(Joypad::X, SDL_CONTROLLER_BUTTON_X);
+  SDL_TEST_BUTTON(Joypad::Y, SDL_CONTROLLER_BUTTON_Y);
+
+  // All together
+  joypad.set_pressed_buttons(0);
+  flush_sdl_events();
+  REQUIRE(SDL_GameControllerGetButton(gc, SDL_CONTROLLER_BUTTON_A) == 0);
+  REQUIRE(SDL_GameControllerGetButton(gc, SDL_CONTROLLER_BUTTON_B) == 0);
+  REQUIRE(SDL_GameControllerGetButton(gc, SDL_CONTROLLER_BUTTON_X) == 0);
+  REQUIRE(SDL_GameControllerGetButton(gc, SDL_CONTROLLER_BUTTON_Y) == 0);
+  joypad.set_pressed_buttons(Joypad::A | Joypad::B | Joypad::X | Joypad::Y);
+  flush_sdl_events();
+  REQUIRE(SDL_GameControllerGetButton(gc, SDL_CONTROLLER_BUTTON_A) == 1);
+  REQUIRE(SDL_GameControllerGetButton(gc, SDL_CONTROLLER_BUTTON_B) == 1);
+  REQUIRE(SDL_GameControllerGetButton(gc, SDL_CONTROLLER_BUTTON_X) == 1);
+  REQUIRE(SDL_GameControllerGetButton(gc, SDL_CONTROLLER_BUTTON_Y) == 1);
+}
+
+void test_rumble(SDL_GameController *gc, Joypad &joypad) {
+  // Checking for basic capability
+  REQUIRE(SDL_GameControllerHasRumble(gc));
+
+  auto rumble_data = std::make_shared<std::pair<int, int>>();
+  joypad.set_on_rumble([rumble_data](int low_freq, int high_freq) {
+    rumble_data->first = low_freq;
+    rumble_data->second = high_freq;
+  });
+
+  // When debugging this, bear in mind that SDL will send max duration here
+  // https://github.com/libsdl-org/SDL/blob/da8fc70a83cf6b76d5ea75c39928a7961bd163d3/src/joystick/linux/SDL_sysjoystick.c#L1628
+  SDL_GameControllerRumble(gc, 100, 200, 100);
+  std::this_thread::sleep_for(30ms); // wait for the effect to be picked up
+  REQUIRE(rumble_data->first == 200);
+  REQUIRE(rumble_data->second == 100);
+}
+
 TEST_CASE_METHOD(SDLTestsFixture, "PS Joypad", "[SDL]") {
   // Create the controller
   auto joypad = Joypad(Joypad::PS, Joypad::RUMBLE | Joypad::ANALOG_TRIGGERS);
 
   std::this_thread::sleep_for(150ms);
 
-  SDL_SetHint(SDL_HINT_JOYSTICK_HIDAPI_PS4_RUMBLE, "1");
-  SDL_SetHint(SDL_HINT_JOYSTICK_HIDAPI_PS5, "1");
-  flush_sdl_events();
   // Initializing the controller
+  flush_sdl_events();
   SDL_GameController *gc = SDL_GameControllerOpen(0);
   if (gc == nullptr) {
     WARN(SDL_GetError());
@@ -61,43 +112,8 @@ TEST_CASE_METHOD(SDLTestsFixture, "PS Joypad", "[SDL]") {
 
   REQUIRE(SDL_GameControllerGetType(gc) == SDL_CONTROLLER_TYPE_PS5);
 
-  // Checking for basic joypad capabilities
-  REQUIRE(SDL_GameControllerHasRumble(gc));
-
-  { // Buttons
-    SDL_TEST_BUTTON(Joypad::DPAD_UP, SDL_CONTROLLER_BUTTON_DPAD_UP);
-    SDL_TEST_BUTTON(Joypad::DPAD_DOWN, SDL_CONTROLLER_BUTTON_DPAD_DOWN);
-    SDL_TEST_BUTTON(Joypad::DPAD_LEFT, SDL_CONTROLLER_BUTTON_DPAD_LEFT);
-    SDL_TEST_BUTTON(Joypad::DPAD_RIGHT, SDL_CONTROLLER_BUTTON_DPAD_RIGHT);
-
-    SDL_TEST_BUTTON(Joypad::HOME, SDL_CONTROLLER_BUTTON_GUIDE);
-    SDL_TEST_BUTTON(Joypad::START, SDL_CONTROLLER_BUTTON_START);
-    SDL_TEST_BUTTON(Joypad::BACK, SDL_CONTROLLER_BUTTON_BACK);
-
-    SDL_TEST_BUTTON(Joypad::LEFT_STICK, SDL_CONTROLLER_BUTTON_LEFTSTICK);
-    SDL_TEST_BUTTON(Joypad::RIGHT_STICK, SDL_CONTROLLER_BUTTON_RIGHTSTICK);
-    SDL_TEST_BUTTON(Joypad::LEFT_BUTTON, SDL_CONTROLLER_BUTTON_LEFTSHOULDER);
-    SDL_TEST_BUTTON(Joypad::RIGHT_BUTTON, SDL_CONTROLLER_BUTTON_RIGHTSHOULDER);
-
-    SDL_TEST_BUTTON(Joypad::A, SDL_CONTROLLER_BUTTON_A);
-    SDL_TEST_BUTTON(Joypad::B, SDL_CONTROLLER_BUTTON_B);
-    SDL_TEST_BUTTON(Joypad::X, SDL_CONTROLLER_BUTTON_X);
-    SDL_TEST_BUTTON(Joypad::Y, SDL_CONTROLLER_BUTTON_Y);
-
-    // All together
-    joypad.set_pressed_buttons(0);
-    flush_sdl_events();
-    REQUIRE(SDL_GameControllerGetButton(gc, SDL_CONTROLLER_BUTTON_A) == 0);
-    REQUIRE(SDL_GameControllerGetButton(gc, SDL_CONTROLLER_BUTTON_B) == 0);
-    REQUIRE(SDL_GameControllerGetButton(gc, SDL_CONTROLLER_BUTTON_X) == 0);
-    REQUIRE(SDL_GameControllerGetButton(gc, SDL_CONTROLLER_BUTTON_Y) == 0);
-    joypad.set_pressed_buttons(Joypad::A | Joypad::B | Joypad::X | Joypad::Y);
-    flush_sdl_events();
-    REQUIRE(SDL_GameControllerGetButton(gc, SDL_CONTROLLER_BUTTON_A) == 1);
-    REQUIRE(SDL_GameControllerGetButton(gc, SDL_CONTROLLER_BUTTON_B) == 1);
-    REQUIRE(SDL_GameControllerGetButton(gc, SDL_CONTROLLER_BUTTON_X) == 1);
-    REQUIRE(SDL_GameControllerGetButton(gc, SDL_CONTROLLER_BUTTON_Y) == 1);
-  }
+  test_buttons(gc, joypad);
+  test_rumble(gc, joypad);
 
   { // Sticks
     REQUIRE(SDL_GameControllerHasAxis(gc, SDL_CONTROLLER_AXIS_LEFTX));
@@ -129,6 +145,8 @@ TEST_CASE_METHOD(SDLTestsFixture, "PS Joypad", "[SDL]") {
   }
 
   // TODO: fixme
+  //  SDL_SetHint(SDL_HINT_JOYSTICK_HIDAPI_PS4_RUMBLE, "1");
+  //  SDL_SetHint(SDL_HINT_JOYSTICK_HIDAPI_PS5, "1");
   //  { // Additional sensors
   //    // Check if the controller has sensors
   //    REQUIRE(SDL_GameControllerHasSensor(gc, SDL_SENSOR_GYRO));
@@ -160,40 +178,8 @@ TEST_CASE_METHOD(SDLTestsFixture, "XBOX Joypad", "[SDL]") {
   // Checking for basic joypad capabilities
   REQUIRE(SDL_GameControllerHasRumble(gc));
 
-  { // Buttons
-    SDL_TEST_BUTTON(Joypad::DPAD_UP, SDL_CONTROLLER_BUTTON_DPAD_UP);
-    SDL_TEST_BUTTON(Joypad::DPAD_DOWN, SDL_CONTROLLER_BUTTON_DPAD_DOWN);
-    SDL_TEST_BUTTON(Joypad::DPAD_LEFT, SDL_CONTROLLER_BUTTON_DPAD_LEFT);
-    SDL_TEST_BUTTON(Joypad::DPAD_RIGHT, SDL_CONTROLLER_BUTTON_DPAD_RIGHT);
-
-    SDL_TEST_BUTTON(Joypad::HOME, SDL_CONTROLLER_BUTTON_GUIDE);
-    SDL_TEST_BUTTON(Joypad::START, SDL_CONTROLLER_BUTTON_START);
-    SDL_TEST_BUTTON(Joypad::BACK, SDL_CONTROLLER_BUTTON_BACK);
-
-    SDL_TEST_BUTTON(Joypad::LEFT_STICK, SDL_CONTROLLER_BUTTON_LEFTSTICK);
-    SDL_TEST_BUTTON(Joypad::RIGHT_STICK, SDL_CONTROLLER_BUTTON_RIGHTSTICK);
-    SDL_TEST_BUTTON(Joypad::LEFT_BUTTON, SDL_CONTROLLER_BUTTON_LEFTSHOULDER);
-    SDL_TEST_BUTTON(Joypad::RIGHT_BUTTON, SDL_CONTROLLER_BUTTON_RIGHTSHOULDER);
-
-    SDL_TEST_BUTTON(Joypad::A, SDL_CONTROLLER_BUTTON_A);
-    SDL_TEST_BUTTON(Joypad::B, SDL_CONTROLLER_BUTTON_B);
-    SDL_TEST_BUTTON(Joypad::X, SDL_CONTROLLER_BUTTON_X);
-    SDL_TEST_BUTTON(Joypad::Y, SDL_CONTROLLER_BUTTON_Y);
-
-    // All together
-    joypad.set_pressed_buttons(0);
-    flush_sdl_events();
-    REQUIRE(SDL_GameControllerGetButton(gc, SDL_CONTROLLER_BUTTON_A) == 0);
-    REQUIRE(SDL_GameControllerGetButton(gc, SDL_CONTROLLER_BUTTON_B) == 0);
-    REQUIRE(SDL_GameControllerGetButton(gc, SDL_CONTROLLER_BUTTON_X) == 0);
-    REQUIRE(SDL_GameControllerGetButton(gc, SDL_CONTROLLER_BUTTON_Y) == 0);
-    joypad.set_pressed_buttons(Joypad::A | Joypad::B | Joypad::X | Joypad::Y);
-    flush_sdl_events();
-    REQUIRE(SDL_GameControllerGetButton(gc, SDL_CONTROLLER_BUTTON_A) == 1);
-    REQUIRE(SDL_GameControllerGetButton(gc, SDL_CONTROLLER_BUTTON_B) == 1);
-    REQUIRE(SDL_GameControllerGetButton(gc, SDL_CONTROLLER_BUTTON_X) == 1);
-    REQUIRE(SDL_GameControllerGetButton(gc, SDL_CONTROLLER_BUTTON_Y) == 1);
-  }
+  test_buttons(gc, joypad);
+  test_rumble(gc, joypad);
 
   { // Sticks
     REQUIRE(SDL_GameControllerHasAxis(gc, SDL_CONTROLLER_AXIS_LEFTX));
@@ -242,43 +228,8 @@ TEST_CASE_METHOD(SDLTestsFixture, "Nintendo Joypad", "[SDL]") {
   REQUIRE(gc);
   REQUIRE(SDL_GameControllerGetType(gc) == SDL_CONTROLLER_TYPE_NINTENDO_SWITCH_PRO);
 
-  // Checking for basic joypad capabilities
-  REQUIRE(SDL_GameControllerHasRumble(gc));
-
-  { // Buttons
-    SDL_TEST_BUTTON(Joypad::DPAD_UP, SDL_CONTROLLER_BUTTON_DPAD_UP);
-    SDL_TEST_BUTTON(Joypad::DPAD_DOWN, SDL_CONTROLLER_BUTTON_DPAD_DOWN);
-    SDL_TEST_BUTTON(Joypad::DPAD_LEFT, SDL_CONTROLLER_BUTTON_DPAD_LEFT);
-    SDL_TEST_BUTTON(Joypad::DPAD_RIGHT, SDL_CONTROLLER_BUTTON_DPAD_RIGHT);
-
-    SDL_TEST_BUTTON(Joypad::HOME, SDL_CONTROLLER_BUTTON_GUIDE);
-    SDL_TEST_BUTTON(Joypad::START, SDL_CONTROLLER_BUTTON_START);
-    SDL_TEST_BUTTON(Joypad::BACK, SDL_CONTROLLER_BUTTON_BACK);
-
-    SDL_TEST_BUTTON(Joypad::LEFT_STICK, SDL_CONTROLLER_BUTTON_LEFTSTICK);
-    SDL_TEST_BUTTON(Joypad::RIGHT_STICK, SDL_CONTROLLER_BUTTON_RIGHTSTICK);
-    SDL_TEST_BUTTON(Joypad::LEFT_BUTTON, SDL_CONTROLLER_BUTTON_LEFTSHOULDER);
-    SDL_TEST_BUTTON(Joypad::RIGHT_BUTTON, SDL_CONTROLLER_BUTTON_RIGHTSHOULDER);
-
-    SDL_TEST_BUTTON(Joypad::A, SDL_CONTROLLER_BUTTON_A);
-    SDL_TEST_BUTTON(Joypad::B, SDL_CONTROLLER_BUTTON_B);
-    SDL_TEST_BUTTON(Joypad::X, SDL_CONTROLLER_BUTTON_X);
-    SDL_TEST_BUTTON(Joypad::Y, SDL_CONTROLLER_BUTTON_Y);
-
-    // All together
-    joypad.set_pressed_buttons(0);
-    flush_sdl_events();
-    REQUIRE(SDL_GameControllerGetButton(gc, SDL_CONTROLLER_BUTTON_A) == 0);
-    REQUIRE(SDL_GameControllerGetButton(gc, SDL_CONTROLLER_BUTTON_B) == 0);
-    REQUIRE(SDL_GameControllerGetButton(gc, SDL_CONTROLLER_BUTTON_X) == 0);
-    REQUIRE(SDL_GameControllerGetButton(gc, SDL_CONTROLLER_BUTTON_Y) == 0);
-    joypad.set_pressed_buttons(Joypad::A | Joypad::B | Joypad::X | Joypad::Y);
-    flush_sdl_events();
-    REQUIRE(SDL_GameControllerGetButton(gc, SDL_CONTROLLER_BUTTON_A) == 1);
-    REQUIRE(SDL_GameControllerGetButton(gc, SDL_CONTROLLER_BUTTON_B) == 1);
-    REQUIRE(SDL_GameControllerGetButton(gc, SDL_CONTROLLER_BUTTON_X) == 1);
-    REQUIRE(SDL_GameControllerGetButton(gc, SDL_CONTROLLER_BUTTON_Y) == 1);
-  }
+  test_buttons(gc, joypad);
+  test_rumble(gc, joypad);
 
   { // Sticks
     REQUIRE(SDL_GameControllerHasAxis(gc, SDL_CONTROLLER_AXIS_LEFTX));
@@ -298,6 +249,7 @@ TEST_CASE_METHOD(SDLTestsFixture, "Nintendo Joypad", "[SDL]") {
     REQUIRE(SDL_GameControllerGetAxis(gc, SDL_CONTROLLER_AXIS_RIGHTX) == 1000);
     REQUIRE(SDL_GameControllerGetAxis(gc, SDL_CONTROLLER_AXIS_RIGHTY) == -2000);
 
+    // Nintendo ONLY: triggers are buttons, so it can only be MAX or 0
     joypad.set_triggers(10, 20);
     flush_sdl_events();
     REQUIRE(SDL_GameControllerGetAxis(gc, SDL_CONTROLLER_AXIS_TRIGGERLEFT) == 32767);

@@ -503,8 +503,9 @@ static std::pair<std::uint32_t, std::uint32_t> simulate_rumble(const ActiveRumbl
 }
 
 static ActiveRumbleEffect create_rumble_effect(int effect_id, int effect_gain, const ff_effect &effect) {
-  auto delay = std::chrono::milliseconds{effect.replay.delay};
-  auto length = std::chrono::milliseconds{effect.replay.length};
+  // All duration values are expressed in ms. Values above 32767 ms (0x7fff) should not be used
+  auto delay = std::chrono::milliseconds{std::clamp(effect.replay.delay, (__u16)0, (__u16)32767)};
+  auto length = std::chrono::milliseconds{std::clamp(effect.replay.length, (__u16)0, (__u16)32767)};
   auto now = std::chrono::steady_clock::now();
   ActiveRumbleEffect r_effect{.effect_id = effect_id,
                               .start_point = now + delay,
@@ -589,7 +590,7 @@ static void event_listener(const std::shared_ptr<JoypadState> &state) {
   };
 
   while (!state->stop_listening_events) {
-    std::this_thread::sleep_for(50ms); // TODO: configurable?
+    std::this_thread::sleep_for(20ms); // TODO: configurable?
 
     int effect_gain = 1;
 
