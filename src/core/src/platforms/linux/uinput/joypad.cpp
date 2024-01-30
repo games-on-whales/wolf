@@ -261,7 +261,6 @@ std::optional<libevdev_uinput *> create_controller(Joypad::CONTROLLER_TYPE type,
   }
   if (type == Joypad::NINTENDO) {
     libevdev_enable_event_code(dev, EV_KEY, BTN_Z, nullptr); // Capture btn
-    // TODO: implement this using the MISC_FLAG
   }
   libevdev_enable_event_code(dev, EV_KEY, BTN_SELECT, nullptr);
   libevdev_enable_event_code(dev, EV_KEY, BTN_MODE, nullptr);
@@ -726,6 +725,10 @@ void Joypad::set_pressed_buttons(int newly_pressed) {
         libevdev_uinput_write_event(controller, EV_KEY, BTN_TR, bf_new & RIGHT_BUTTON ? 1 : 0);
       if (HOME & bf_changed)
         libevdev_uinput_write_event(controller, EV_KEY, BTN_MODE, bf_new & HOME ? 1 : 0);
+      if (MISC_FLAG & bf_changed && this->_state->type == NINTENDO) {
+        // Capture button
+        libevdev_uinput_write_event(controller, EV_KEY, BTN_Z, bf_new & MISC_FLAG ? 1 : 0);
+      }
       if (A & bf_changed)
         libevdev_uinput_write_event(controller,
                                     EV_KEY,

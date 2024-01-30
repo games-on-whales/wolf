@@ -63,13 +63,15 @@ void test_buttons(SDL_GameController *gc, Joypad &joypad) {
   SDL_TEST_BUTTON(Joypad::X, SDL_CONTROLLER_BUTTON_X);
   SDL_TEST_BUTTON(Joypad::Y, SDL_CONTROLLER_BUTTON_Y);
 
-  // All together
+  // Release all buttons
   joypad.set_pressed_buttons(0);
   flush_sdl_events();
   REQUIRE(SDL_GameControllerGetButton(gc, SDL_CONTROLLER_BUTTON_A) == 0);
   REQUIRE(SDL_GameControllerGetButton(gc, SDL_CONTROLLER_BUTTON_B) == 0);
   REQUIRE(SDL_GameControllerGetButton(gc, SDL_CONTROLLER_BUTTON_X) == 0);
   REQUIRE(SDL_GameControllerGetButton(gc, SDL_CONTROLLER_BUTTON_Y) == 0);
+
+  // Press some of them together
   joypad.set_pressed_buttons(Joypad::A | Joypad::B | Joypad::X | Joypad::Y);
   flush_sdl_events();
   REQUIRE(SDL_GameControllerGetButton(gc, SDL_CONTROLLER_BUTTON_A) == 1);
@@ -230,6 +232,8 @@ TEST_CASE_METHOD(SDLTestsFixture, "Nintendo Joypad", "[SDL]") {
 
   test_buttons(gc, joypad);
   test_rumble(gc, joypad);
+
+  SDL_TEST_BUTTON(Joypad::MISC_FLAG, SDL_CONTROLLER_BUTTON_MISC1);
 
   { // Sticks
     REQUIRE(SDL_GameControllerHasAxis(gc, SDL_CONTROLLER_AXIS_LEFTX));
