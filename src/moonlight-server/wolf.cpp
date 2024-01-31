@@ -1,5 +1,4 @@
 #include <boost/asio.hpp>
-#include <boost/filesystem.hpp>
 #include <chrono>
 #include <control/control.hpp>
 #include <core/audio.hpp>
@@ -411,51 +410,10 @@ auto setup_sessions_handlers(const immer::box<state::AppState> &app_state,
   return handlers.persistent();
 }
 
-static std::string backtrace_file_src() {
-  return std::string(utils::get_env("WOLF_CFG_FOLDER", ".")) + "/backtrace.dump"s;
-}
-
-/**
- * Keep this as small as possible, make sure to only use async-signal-safe functions
- */
-static void shutdown_handler(int signum) {
-  if (signum == SIGABRT || signum == SIGSEGV) {
-    auto stack_file = backtrace_file_src();
-    safe_dump_stacktrace_to(stack_file);
-  }
-  exit(signum);
-}
-
-/**
- * @brief: if an exception was raised we should have created a dump file, here we can pretty print it
- */
-static void check_exceptions() {
-  auto stack_file = backtrace_file_src();
-  if (boost::filesystem::exists(stack_file)) {
-    if (auto object_trace = load_stacktrace_from(stack_file)) {
-      object_trace->resolve().print();
-    }
-    auto now = std::chrono::system_clock::now();
-    boost::filesystem::rename(
-        stack_file,
-        fmt::format("{}/backtrace.{:%Y-%m-%d-%H-%M-%S}.dump", utils::get_env("WOLF_CFG_FOLDER", "."), now));
-  }
-}
-
 /**
  * @brief here's where the magic starts
  */
-int main(int argc, char *argv[]) {
-  logs::init(logs::parse_level(utils::get_env("WOLF_LOG_LEVEL", "INFO")));
-  // Exception and termination handling
-  std::signal(SIGINT, shutdown_handler);
-  std::signal(SIGTERM, shutdown_handler);
-  std::signal(SIGQUIT, shutdown_handler);
-  std::signal(SIGSEGV, shutdown_handler);
-  std::signal(SIGABRT, shutdown_handler);
-  std::set_terminate([]() { shutdown_handler(SIGABRT); });
-  check_exceptions();
-
+void run() {
   streaming::init(); // Need to initialise gstreamer once
   control::init();   // Need to initialise enet once
   docker::init();    // Need to initialise libcurl once
@@ -498,4 +456,20 @@ int main(int argc, char *argv[]) {
   for (const auto &handler : sess_handlers) {
     handler->unregister();
   }
+}
+
+int main(int argc, char *argv[]) try {
+  logs::init(logs::parse_level(utils::get_env("WOLF_LOG_LEVEL", "INFO")));
+  // Exception and termination handling
+  std::signal(SIGINT, shutdown_handler);
+  std::signal(SIGTERM, shutdown_handler);
+  std::signal(SIGQUIT, shutdown_handler);
+  std::signal(SIGSEGV, shutdown_handler);
+  std::signal(SIGABRT, shutdown_handler);
+  std::set_terminate(on_terminate);
+  check_exceptions();
+
+  run(); // Main loop
+} catch (...) {
+  on_terminate();
 }

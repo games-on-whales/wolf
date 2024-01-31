@@ -14,7 +14,7 @@ struct netlink_connection {
   sockaddr_nl sa = {};
 };
 
-bool connect(netlink_connection &conn, int domain, int type, int protocol, unsigned int groups) {
+static bool connect(netlink_connection &conn, int domain, int type, int protocol, unsigned int groups) {
   int sock = socket(domain, type, protocol);
   if (sock < 0) {
     std::cout << "Could not connect to netlink socket:" << strerror(errno) << std::endl;
@@ -32,7 +32,7 @@ bool connect(netlink_connection &conn, int domain, int type, int protocol, unsig
   return true;
 }
 
-bool send_msgs(netlink_connection &conn, const std::vector<std::string /* raw payload */> &msgs) {
+static bool send_msgs(netlink_connection &conn, const std::vector<std::string /* raw payload */> &msgs) {
   iovec iov[msgs.size()];
   for (int i = 0; i < msgs.size(); ++i) {
     iov[i] = iovec{.iov_base = (char *)msgs[i].data(), .iov_len = msgs[i].size()};
@@ -53,7 +53,7 @@ bool send_msgs(netlink_connection &conn, const std::vector<std::string /* raw pa
   }
 }
 
-void cleanup(netlink_connection &conn) {
+static void cleanup(netlink_connection &conn) {
   if (conn.fd >= 0) {
     close(conn.fd);
   }
@@ -110,7 +110,7 @@ static uint32_t string_hash32(const std::string &str) {
   return MurmurHash2(str.c_str(), str.length(), 0);
 }
 
-std::string make_udev_header(const std::string &full_opts, const std::string &subsystem, const std::string &devtype) {
+static std::string make_udev_header(const std::string &full_opts, const std::string &subsystem, const std::string &devtype) {
   monitor_netlink_header header{
       .magic = htobe32(UDEV_MONITOR_MAGIC),
       .header_size = sizeof header,
