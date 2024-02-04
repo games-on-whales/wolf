@@ -342,8 +342,20 @@ bool DockerAPI::exec(std::string_view id, const std::vector<std::string_view> &c
       json_payload = json::serialize(post_params);
       raw_msg = req(conn.value().get(), POST, api_url, json_payload);
       if (raw_msg && raw_msg->first == 200) {
-        // Exec request completed, return
-        return true;
+        auto console = raw_msg->second;
+        // Exec request completed, inspect the results
+        api_url = fmt::format("http://localhost/{}/exec/{}/json", DOCKER_API_VERSION, exec_id);
+        raw_msg = req(conn.value().get(), GET, api_url);
+        if (raw_msg && raw_msg->first == 200) {
+          json = parse(raw_msg->second);
+          auto exit_code = json.at("ExitCode").as_int64();
+          if (exit_code != 0) {
+            logs::log(logs::warning, "Docker exec failed ({}), {}", exit_code, console);
+            return false;
+          } else {
+            return true;
+          }
+        }
       }
     }
 

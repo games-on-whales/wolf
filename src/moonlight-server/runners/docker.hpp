@@ -163,9 +163,10 @@ void RunDocker::run(std::size_t session_id,
   // Fake udev
   auto udev_base_path = std::filesystem::path(app_state_folder) / "udev";
   auto hw_db_path = udev_base_path / "data";
-  auto fake_udev_cli_path = std::string(utils::get_env("WOLF_DOCKER_FAKE_UDEV_PATH"));
-  bool use_fake_udev = !fake_udev_cli_path.empty();
+  auto fake_udev_cli_path = std::string(utils::get_env("WOLF_DOCKER_FAKE_UDEV_PATH", ""));
+  bool use_fake_udev = !fake_udev_cli_path.empty() || std::filesystem::exists(fake_udev_cli_path);
   if (use_fake_udev) {
+    logs::log(logs::debug, "[DOCKER] Using fake-udev, creating {}", hw_db_path.string());
     std::filesystem::create_directories(hw_db_path);
 
     // Check if /run/udev/control exists
@@ -178,6 +179,10 @@ void RunDocker::run(std::size_t session_id,
     }
     mounts.push_back(MountPoint{.source = udev_base_path.string(), .destination = "/run/udev/", .mode = "rw"});
     mounts.push_back(MountPoint{.source = fake_udev_cli_path, .destination = "/usr/bin/fake-udev", .mode = "ro"});
+  } else {
+    logs::log(logs::warning,
+              "[DOCKER] Unable to use fake-udev, check the env variable WOLF_DOCKER_FAKE_UDEV_PATH and the file at {}",
+              fake_udev_cli_path);
   }
   Container new_container = {.id = "",
                              .name = fmt::format("{}_{}", this->container.name, session_id),
@@ -233,7 +238,7 @@ void RunDocker::run(std::size_t session_id,
             if (udev_ev.count("DEVNAME") == 0) {
               cmd = fmt::format("fake-udev -m {}", udev_msg);
             } else {
-              cmd = fmt::format("mknod {} c {} {} && chmod 777 {} && fake-udev -m {}",
+              cmd = fmt::format("mkdir -p /dev/input && mknod {} c {} {} && chmod 777 {} && fake-udev -m {}",
                                 udev_ev["DEVNAME"],
                                 udev_ev["MAJOR"],
                                 udev_ev["MINOR"],
