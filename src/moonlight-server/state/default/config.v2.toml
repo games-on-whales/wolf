@@ -90,7 +90,7 @@ base_create_json = """
   "HostConfig": {
     "IpcMode": "host",
     "CapAdd": ["SYS_ADMIN", "SYS_NICE", "SYS_PTRACE", "NET_RAW", "MKNOD", "NET_ADMIN"],
-    "SecurityOpt": ["seccomp=unconfined"],
+    "SecurityOpt": ["seccomp=unconfined", "apparmor=unconfined"],
     "Privileged": false,
     "DeviceCgroupRules": ["c 13:* rmw"]
   }
