@@ -3,6 +3,8 @@ R"for_c++_include(
 hostname = "Wolf"
 # Set to false if this host doesn't support HEVC
 support_hevc = true
+# Set to true if this host supports AV1 (EXPERIMENTAL)
+support_av1 = false
 # The version of this config file
 config_version = 3
 
@@ -22,7 +24,7 @@ image = "ghcr.io/games-on-whales/firefox:edge"
 mounts = []
 env = [
   "MOZ_ENABLE_WAYLAND=1",
-  "GOW_REQUIRED_DEVICES=/dev/uinput /dev/input/event* /dev/dri/* /dev/nvidia*",
+  "GOW_REQUIRED_DEVICES=/dev/input/* /dev/dri/* /dev/nvidia*",
 ]
 devices = [
 ]
@@ -32,13 +34,8 @@ base_create_json = """
   "HostConfig": {
     "IpcMode": "host",
     "Privileged": false,
-    "DeviceRequests": [{
-      "Driver": "",
-      "Count": -1,
-      "DeviceIDs": null,
-      "Capabilities": [["gpu"]],
-      "Options": {}
-    }]
+    "CapAdd": ["NET_RAW", "MKNOD", "NET_ADMIN"],
+    "DeviceCgroupRules": ["c 13:* rmw"]
   }
 }
 \
@@ -55,7 +52,7 @@ image = "ghcr.io/games-on-whales/retroarch:edge"
 mounts = []
 env = [
   "RUN_GAMESCOPE=true",
-  "GOW_REQUIRED_DEVICES=/dev/input/event* /dev/dri/* /dev/nvidia*",
+  "GOW_REQUIRED_DEVICES=/dev/input/* /dev/dri/* /dev/nvidia*",
 ]
 devices = [
 ]
@@ -64,15 +61,9 @@ base_create_json = """
 {
   "HostConfig": {
     "IpcMode": "host",
-    "CapAdd": ["SYS_ADMIN", "SYS_NICE"],
+    "CapAdd": ["NET_RAW", "MKNOD", "NET_ADMIN", "SYS_ADMIN", "SYS_NICE"],
     "Privileged": false,
-    "DeviceRequests": [{
-      "Driver": "",
-      "Count": -1,
-      "DeviceIDs": null,
-      "Capabilities": [["gpu"]],
-      "Options": {}
-    }]
+    "DeviceCgroupRules": ["c 13:* rmw"]
   }
 }
 \
@@ -90,7 +81,7 @@ mounts = []
 env = [
   "PROTON_LOG=1",
   "RUN_GAMESCOPE=true",
-  "GOW_REQUIRED_DEVICES=/dev/input/event* /dev/dri/* /dev/nvidia*",
+  "GOW_REQUIRED_DEVICES=/dev/input/* /dev/dri/* /dev/nvidia*",
 ]
 devices = [
 ]
@@ -99,15 +90,10 @@ base_create_json = """
 {
   "HostConfig": {
     "IpcMode": "host",
-    "CapAdd": ["SYS_ADMIN", "SYS_NICE"],
+    "CapAdd": ["SYS_ADMIN", "SYS_NICE", "SYS_PTRACE", "NET_RAW", "MKNOD", "NET_ADMIN"],
+    "SecurityOpt": ["seccomp=unconfined"],
     "Privileged": false,
-    "DeviceRequests": [{
-      "Driver": "",
-      "Count": -1,
-      "DeviceIDs": null,
-      "Capabilities": [["gpu"]],
-      "Options": {}
-    }]
+    "DeviceCgroupRules": ["c 13:* rmw"]
   }
 }
 \
@@ -133,15 +119,9 @@ base_create_json = """
 {
   "HostConfig": {
     "IpcMode": "host",
-    "CapAdd": ["SYS_ADMIN", "SYS_NICE"],
+    "CapAdd": ["NET_RAW", "MKNOD", "NET_ADMIN", "SYS_ADMIN", "SYS_NICE"],
     "Privileged": false,
-    "DeviceRequests": [{
-      "Driver": "",
-      "Count": -1,
-      "DeviceIDs": null,
-      "Capabilities": [["gpu"]],
-      "Options": {}
-    }]
+    "DeviceCgroupRules": ["c 13:* rmw"]
   }
 }
 \
@@ -393,8 +373,8 @@ pulsesrc device="{sink_name}" server="{server_name}"
 default_audio_params = "audio/x-raw, channels={channels}"
 
 default_opus_encoder = """
-opusenc bitrate={bitrate} bitrate-type=cbr frame-size={packet_duration} bandwidth=fullband audio-type=generic
-max-payload-size=1400
+opusenc bitrate={bitrate} bitrate-type=constrained-vbr frame-size={packet_duration} bandwidth=fullband
+audio-type=restricted-lowdelay max-payload-size=1400
 \
 """
 
