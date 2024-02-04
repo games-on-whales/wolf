@@ -7,6 +7,7 @@
 constexpr int UDEV_EVENT_MODE = 2;
 int main(int argc, char *argv[]) {
   InputParser input(argc, argv);
+  int rc = -1;
 
   if (input.cmdOptionExists("-h") || input.cmdOptionExists("--help")) {
     std::cout << "Usage: fake-udev -m <base64 encoded message> [options]" << std::endl;
@@ -51,15 +52,16 @@ int main(int argc, char *argv[]) {
     netlink_connection conn{};
     if (connect(conn, domain, type, protocol, groups)) {
       auto header = make_udev_header(msg, udev_subsystem, udev_devtype);
-      if (send_msgs(conn, {header, msg}))
+      if (send_msgs(conn, {header, msg})) {
         std::cout << "Message sent" << std::endl;
+        rc = 0;
+      }
     }
 
     cleanup(conn);
-    return 0;
   } else {
     std::cout << "No messages to send, have you forgot to pass -m ?" << std::endl;
   }
 
-  return -1;
+  return rc;
 }
