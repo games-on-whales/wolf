@@ -110,7 +110,8 @@ static uint32_t string_hash32(const std::string &str) {
   return MurmurHash2(str.c_str(), str.length(), 0);
 }
 
-static std::string make_udev_header(const std::string &full_opts, const std::string &subsystem, const std::string &devtype) {
+static std::string
+make_udev_header(const std::string &full_opts, const std::string &subsystem, const std::string &devtype) {
   monitor_netlink_header header{
       .magic = htobe32(UDEV_MONITOR_MAGIC),
       .header_size = sizeof header,
