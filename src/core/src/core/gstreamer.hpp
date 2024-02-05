@@ -1,6 +1,5 @@
 #pragma once
 
-#include <core/api.hpp>
 #include <eventbus/event_bus.hpp>
 #include <gst/gst.h>
 #include <helpers/logger.hpp>
@@ -8,8 +7,6 @@
 #include <immer/box.hpp>
 
 namespace wolf::core::gstreamer {
-
-using namespace wolf::core::api;
 
 using gst_element_ptr = std::shared_ptr<GstElement>;
 using gst_main_loop_ptr = std::shared_ptr<GMainLoop>;
@@ -35,12 +32,10 @@ static void pipeline_eos_handler(GstBus *bus, GstMessage *message, gpointer data
 
 static bool
 run_pipeline(const std::string &pipeline_desc,
-             std::size_t session_id,
-             const std::shared_ptr<dp::event_bus> &event_bus,
-             const std::function<immer::array<immer::box<dp::handler_registration>>(GstElement *)> &on_pipeline_ready) {
+             const std::function<immer::array<immer::box<dp::handler_registration>>(gst_element_ptr /* pipeline */, gst_main_loop_ptr /* main_loop */)> &on_pipeline_ready) {
   GError *error = nullptr;
-  gst_element_ptr pipeline(gst_parse_launch(pipeline_desc.c_str(), &error), [session_id](const auto &pipeline) {
-    logs::log(logs::trace, "~pipeline {}", session_id);
+  gst_element_ptr pipeline(gst_parse_launch(pipeline_desc.c_str(), &error), [](const auto &pipeline) {
+    logs::log(logs::trace, "~pipeline");
     gst_object_unref(pipeline);
   });
 
@@ -81,39 +76,10 @@ run_pipeline(const std::string &pipeline_desc,
                                     "pipeline-start");
 
   /* Let the calling thread set extra things */
-  auto handlers = on_pipeline_ready(pipeline.get());
-
-  auto pause_handler = event_bus->register_handler<immer::box<PauseStreamEvent>>(
-      [session_id, loop](const immer::box<PauseStreamEvent> &ev) {
-        if (ev->session_id == session_id) {
-          logs::log(logs::debug, "[GSTREAMER] Pausing pipeline: {}", session_id);
-
-          /**
-           * Unfortunately here we can't just pause the pipeline,
-           * when a pipeline will be resumed there are a lot of breaking changes like:
-           *  - Client IP:PORT
-           *  - AES key and IV for encrypted payloads
-           *  - Client resolution, framerate, and encoding
-           *
-           *  The only solution is to kill the pipeline and re-create it again when a resume happens
-           */
-
-          g_main_loop_quit(loop.get());
-        }
-      });
-
-  auto stop_handler = event_bus->register_handler<immer::box<StopStreamEvent>>(
-      [session_id, loop](const immer::box<StopStreamEvent> &ev) {
-        if (ev->session_id == session_id) {
-          logs::log(logs::debug, "[GSTREAMER] Stopping pipeline: {}", session_id);
-          g_main_loop_quit(loop.get());
-        }
-      });
+  auto handlers = on_pipeline_ready(pipeline, loop);
 
   /* The main loop will be run until someone calls g_main_loop_quit() */
   g_main_loop_run(loop.get());
-
-  logs::log(logs::debug, "[GSTREAMER] Ending pipeline: {}", session_id);
 
   /* Out of the main loop, clean up nicely */
   gst_element_set_state(pipeline.get(), GST_STATE_PAUSED);
@@ -123,8 +89,6 @@ run_pipeline(const std::string &pipeline_desc,
   for (const auto &handler : handlers) {
     handler->unregister();
   }
-  pause_handler.unregister();
-  stop_handler.unregister();
 
   return true;
 }

@@ -1,5 +1,6 @@
 #pragma once
 
+#include <control/control.hpp>
 #include <crypto/crypto.hpp>
 #include <filesystem>
 #include <functional>
@@ -17,7 +18,7 @@
 
 namespace endpoints {
 
-using namespace moonlight::control;
+using namespace control;
 using namespace wolf::core;
 
 static std::size_t get_client_id(const state::PairedClient &current_client) {

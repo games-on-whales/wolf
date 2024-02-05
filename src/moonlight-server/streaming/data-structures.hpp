@@ -1,8 +1,8 @@
 #pragma once
 
 #include <chrono>
-#include <core/api.hpp>
 #include <core/input.hpp>
+#include <core/virtual-display.hpp>
 #include <eventbus/event_bus.hpp>
 #include <gst/gst.h>
 #include <immer/array.hpp>
@@ -27,7 +27,7 @@ enum ColorSpace : int {
  * A VideoSession is created after the param exchange over RTSP
  */
 struct VideoSession {
-  wolf::core::api::DisplayMode display_mode;
+  wolf::core::virtual_display::DisplayMode display_mode;
   std::string gst_pipeline;
 
   // A unique ID that identifies this session

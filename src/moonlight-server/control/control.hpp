@@ -6,8 +6,32 @@
 #include <range/v3/view.hpp>
 #include <state/data-structures.hpp>
 #include <thread>
+#include <moonlight/control.hpp>
 
 namespace control {
+
+/**
+ * Events received in the ControlSession will be fired up in the event_bus
+ */
+struct ControlEvent {
+  // A unique ID that identifies this session
+  std::size_t session_id;
+
+  moonlight::control::pkts::PACKET_TYPE type;
+  std::string_view raw_packet;
+};
+
+struct PauseStreamEvent {
+  std::size_t session_id;
+};
+
+struct ResumeStreamEvent {
+  std::size_t session_id;
+};
+
+struct StopStreamEvent {
+  std::size_t session_id;
+};
 
 using namespace std::chrono_literals;
 

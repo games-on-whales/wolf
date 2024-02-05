@@ -1,4 +1,5 @@
 #include <boost/asio/io_service.hpp>
+#include <control/control.hpp>
 #include <future>
 #include <helpers/logger.hpp>
 #include <immer/atom.hpp>
@@ -7,7 +8,7 @@
 
 namespace process {
 
-using namespace moonlight::control;
+using namespace control;
 
 void RunProcess::run(std::size_t session_id,
                      std::string_view app_state_folder,

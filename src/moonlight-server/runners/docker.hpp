@@ -1,6 +1,7 @@
 #pragma once
 #include <boost/thread/thread.hpp>
 #include <chrono>
+#include <control/control.hpp>
 #include <core/docker.hpp>
 #include <docker/formatters.hpp>
 #include <fmt/core.h>
@@ -16,7 +17,7 @@ namespace wolf::core::docker {
 using namespace std::chrono_literals;
 using namespace ranges::views;
 using namespace utils;
-using namespace moonlight::control;
+using namespace control;
 using namespace wolf::core;
 
 class RunDocker : public state::Runner {

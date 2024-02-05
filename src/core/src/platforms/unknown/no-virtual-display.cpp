@@ -1,6 +1,6 @@
 #include <core/virtual-display.hpp>
 
-namespace streaming {
+namespace wolf::core::virtual_display {
 
 struct WaylandState {};
 
@@ -10,7 +10,7 @@ std::shared_ptr<WaylandState> create_wayland_display(const immer::array<std::str
 }
 
 std::unique_ptr<GstCaps, decltype(&gst_caps_unref)> set_resolution(WaylandState &w_state,
-                                                                   const moonlight::DisplayMode &display_mode,
+                                                                   const DisplayMode &display_mode,
                                                                    const std::optional<gst_element_ptr> &app_src) {
   return {nullptr, gst_caps_unref};
 }

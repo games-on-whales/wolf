@@ -1,7 +1,6 @@
 #pragma once
 #include <array>
 #include <boost/endian/conversion.hpp>
-#include <core/api.hpp>
 #include <core/input.hpp>
 #include <crypto/crypto.hpp>
 #include <cstdint>
@@ -11,6 +10,24 @@
 namespace moonlight::control {
 
 namespace pkts {
+
+enum PACKET_TYPE : std::uint16_t {
+  START_A = boost::endian::little_to_native(0x0305),
+  START_B = boost::endian::little_to_native(0x0307),
+  INVALIDATE_REF_FRAMES = boost::endian::little_to_native(0x0301),
+  LOSS_STATS = boost::endian::little_to_native(0x0201),
+  FRAME_STATS = boost::endian::little_to_native(0x0204),
+  INPUT_DATA = boost::endian::little_to_native(0x0206),
+  TERMINATION = boost::endian::little_to_native(0x0109),
+  PERIODIC_PING = boost::endian::little_to_native(0x0200),
+  IDR_FRAME = boost::endian::little_to_native(0x0302),
+  ENCRYPTED = boost::endian::little_to_native(0x0001),
+  HDR_MODE = boost::endian::little_to_native(0x010e),
+  RUMBLE_DATA = boost::endian::little_to_native(0x010b),
+  RUMBLE_TRIGGERS = boost::endian::little_to_native(0x5500),
+  MOTION_EVENT = boost::endian::little_to_native(0x5501),
+  RGB_LED_EVENT = boost::endian::little_to_native(0x5502),
+};
 
 enum INPUT_TYPE : int {
   MOUSE_MOVE_REL = boost::endian::native_to_little(0x00000007),
@@ -227,19 +244,17 @@ struct CONTROLLER_BATTERY_PACKET : INPUT_PKT {
 
 } // namespace pkts
 
-using namespace wolf::core::api;
-
 static constexpr int GCM_TAG_SIZE = 16;
 static constexpr int MAX_PAYLOAD_SIZE = 128;
 static constexpr std::uint32_t TERMINATE_REASON_GRACEFULL = boost::endian::native_to_big(0x80030023);
 
 struct ControlPacket {
-  PACKET_TYPE type;
+  pkts::PACKET_TYPE type;
   std::uint16_t length; // The length of the REST of the packet, EXCLUDING size of type and length
 };
 
 struct ControlTerminatePacket {
-  ControlPacket header = {.type = TERMINATION, .length = sizeof(std::uint32_t)};
+  ControlPacket header = {.type = pkts::TERMINATION, .length = sizeof(std::uint32_t)};
   std::uint32_t reason = TERMINATE_REASON_GRACEFULL;
 };
 
@@ -335,7 +350,7 @@ encrypt_packet(std::string_view gcm_key, std::uint32_t seq, std::string_view pay
 
   std::uint16_t size = sizeof(seq) + GCM_TAG_SIZE + encrypted_str.length();
   ControlEncryptedPacket encrypted_pkt = {
-      .header = {.type = ENCRYPTED, .length = boost::endian::native_to_little(size)},
+      .header = {.type = pkts::ENCRYPTED, .length = boost::endian::native_to_little(size)},
       .seq = boost::endian::native_to_little(seq)};
 
   std::copy(gcm_tag.begin(), gcm_tag.end(), encrypted_pkt.gcm_tag);
@@ -344,38 +359,38 @@ encrypt_packet(std::string_view gcm_key, std::uint32_t seq, std::string_view pay
   return std::make_unique<ControlEncryptedPacket>(encrypted_pkt);
 }
 
-static constexpr const char *packet_type_to_str(PACKET_TYPE p) noexcept {
+static constexpr const char *packet_type_to_str(pkts::PACKET_TYPE p) noexcept {
   switch (p) {
-  case START_A:
+  case pkts::START_A:
     return "START_A";
-  case START_B:
+  case pkts::START_B:
     return "START_B";
-  case INVALIDATE_REF_FRAMES:
+  case pkts::INVALIDATE_REF_FRAMES:
     return "INVALIDATE_REF_FRAMES";
-  case LOSS_STATS:
+  case pkts::LOSS_STATS:
     return "LOSS_STATS";
-  case FRAME_STATS:
+  case pkts::FRAME_STATS:
     return "FRAME_STATS";
-  case INPUT_DATA:
+  case pkts::INPUT_DATA:
     return "INPUT_DATA";
-  case RUMBLE_DATA:
+  case pkts::RUMBLE_DATA:
     return "RUMBLE_DATA";
-  case TERMINATION:
+  case pkts::TERMINATION:
     return "TERMINATION";
-  case PERIODIC_PING:
+  case pkts::PERIODIC_PING:
     return "PERIODIC_PING";
-  case IDR_FRAME:
+  case pkts::IDR_FRAME:
     return "IDR_FRAME";
-  case ENCRYPTED:
+  case pkts::ENCRYPTED:
     return "ENCRYPTED";
-  case HDR_MODE:
+  case pkts::HDR_MODE:
     return "HDR_MODE";
-  case RUMBLE_TRIGGERS:
+  case pkts::RUMBLE_TRIGGERS:
     return "RUMBLE_TRIGGERS";
-  case MOTION_EVENT:
+  case pkts::MOTION_EVENT:
     return "MOTION_EVENT";
-  case RGB_LED:
-    return "RGB_LED";
+  case pkts::RGB_LED_EVENT:
+    return "RGB_LED_EVENT";
   }
   return "Unrecognised";
 }

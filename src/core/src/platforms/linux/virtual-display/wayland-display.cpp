@@ -49,9 +49,8 @@ wl_state_ptr create_wayland_display(const immer::array<std::string> &input_devic
   return {wl_state, &destroy};
 }
 
-std::unique_ptr<GstCaps, decltype(&gst_caps_unref)> set_resolution(WaylandState &w_state,
-                                                                   const wolf::core::api::DisplayMode &display_mode,
-                                                                   const std::optional<gst_element_ptr> &app_src) {
+std::unique_ptr<GstCaps, decltype(&gst_caps_unref)>
+set_resolution(WaylandState &w_state, const DisplayMode &display_mode, const std::optional<gst_element_ptr> &app_src) {
   /* clang-format off */
   auto caps = gst_caps_new_simple("video/x-raw",
                                   "width", G_TYPE_INT, display_mode.width,

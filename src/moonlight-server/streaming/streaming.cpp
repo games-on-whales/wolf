@@ -1,8 +1,6 @@
-#include <boost/asio.hpp>
-#include <core/api.hpp>
+#include <control/control.hpp>
 #include <core/gstreamer.hpp>
 #include <functional>
-#include <gst-plugin/gstrtpmoonlightpay_video.hpp>
 #include <gst-plugin/video.hpp>
 #include <gstreamer-1.0/gst/app/gstappsink.h>
 #include <gstreamer-1.0/gst/app/gstappsrc.h>
@@ -77,65 +75,7 @@ static void app_src_enough_data(GstElement *pipeline, guint size, GstAppDataStat
 }
 } // namespace custom_src
 
-namespace custom_sink {
-
-namespace ba = boost::asio;
-using namespace ba::ip;
-
-struct AppSinkState {
-  gst_rtp_moonlight_pay_video *rtpmoonlightpay;
-  std::unique_ptr<udp::socket> socket;
-};
-
-std::shared_ptr<AppSinkState> setup_app_sink(const immer::box<state::VideoSession> &video_session,
-                                             unsigned short client_port) {
-  auto rtpmoonlightpay = (gst_rtp_moonlight_pay_video *)g_object_new(gst_TYPE_rtp_moonlight_pay_video, nullptr);
-  rtpmoonlightpay->payload_size = video_session->packet_size;
-  rtpmoonlightpay->fec_percentage = video_session->fec_percentage;
-  rtpmoonlightpay->min_required_fec_packets = video_session->min_required_fec_packets;
-
-  ba::io_context io_context;
-  auto socket_ptr = std::make_unique<udp::socket>(io_context);
-  auto endpoint = udp::endpoint(address::from_string(video_session->client_ip), client_port);
-  socket_ptr->connect(endpoint);
-
-  return std::shared_ptr<AppSinkState>(
-      new AppSinkState{.rtpmoonlightpay = rtpmoonlightpay, .socket = std::move(socket_ptr)},
-      [](const auto &state) {
-        logs::log(logs::trace, "~AppSinkState");
-        gst_object_unref(state->rtpmoonlightpay);
-        state->socket->shutdown(udp::socket::shutdown_send);
-      });
-}
-
-static GstFlowReturn sink_got_data(GstElement *sink, AppSinkState *state) {
-  GstSample *sample;
-  GstMapInfo data_info;
-
-  g_signal_emit_by_name(sink, "pull-sample", &sample); // retrieve the buffer
-  if (sample) {
-    auto packets = gst_moonlight_video::split_into_rtp(state->rtpmoonlightpay, gst_sample_get_buffer(sample));
-    auto nr_packets = gst_buffer_list_length(packets);
-    for (int i = 0; i < nr_packets; i++) { // TODO: use boost BufferSequence instead?
-      auto packet = gst_buffer_list_get(packets, i);
-      gst_buffer_map(packet, &data_info, GST_MAP_READ);
-
-      boost::system::error_code ec;
-      state->socket->send(ba::buffer(data_info.data, data_info.size), 0, ec);
-      if (ec) { // TODO: should we return GST_FLOW_ERROR?
-        logs::log(logs::debug, "[GStreamer] Error while sending buffer: {}", ec.message());
-      }
-
-      gst_buffer_unmap(packet, &data_info);
-    }
-
-    gst_sample_unref(sample);
-    return GST_FLOW_OK;
-  }
-
-  return GST_FLOW_ERROR;
-}
-} // namespace custom_sink
+using namespace wolf::core::gstreamer;
 
 /**
  * Start VIDEO pipeline
@@ -176,50 +116,76 @@ void start_streaming_video(const immer::box<state::VideoSession> &video_session,
   logs::log(logs::debug, "Starting video pipeline: {}", pipeline);
 
   auto appsrc_state = custom_src::setup_app_src(video_session, std::move(wl_ptr));
-  auto appsink_state = custom_sink::setup_app_sink(video_session, client_port);
 
-  wolf::core::gstreamer::run_pipeline(
-      pipeline,
-      video_session->session_id,
-      event_bus,
-      [video_session, event_bus, appsrc_state, appsink_state](auto pipeline) {
-        if (auto app_src_el = gst_bin_get_by_name(GST_BIN(pipeline), "wolf_wayland_source")) {
-          logs::log(logs::debug, "Setting up wolf_wayland_source");
-          g_assert(GST_IS_APP_SRC(app_src_el));
+  run_pipeline(pipeline, [video_session, event_bus, appsrc_state](auto pipeline, auto loop) {
+    if (auto app_src_el = gst_bin_get_by_name(GST_BIN(pipeline.get()), "wolf_wayland_source")) {
+      logs::log(logs::debug, "Setting up wolf_wayland_source");
+      g_assert(GST_IS_APP_SRC(app_src_el));
 
-          auto app_src_ptr = wolf::core::gstreamer::gst_element_ptr(app_src_el, ::gst_object_unref);
+      auto app_src_ptr = wolf::core::gstreamer::gst_element_ptr(app_src_el, ::gst_object_unref);
 
-          auto caps = set_resolution(*appsrc_state->wayland_state, video_session->display_mode, app_src_ptr);
-          g_object_set(app_src_ptr.get(), "caps", caps.get(), NULL);
+      auto caps = set_resolution(*appsrc_state->wayland_state, video_session->display_mode, app_src_ptr);
+      g_object_set(app_src_ptr.get(), "caps", caps.get(), NULL);
 
-          /* Adapted from the tutorial at:
-           * https://gstreamer.freedesktop.org/documentation/tutorials/basic/short-cutting-the-pipeline.html?gi-language=c*/
-          g_signal_connect(app_src_el, "need-data", G_CALLBACK(custom_src::app_src_need_data), appsrc_state.get());
-          g_signal_connect(app_src_el, "enough-data", G_CALLBACK(custom_src::app_src_enough_data), appsrc_state.get());
-          appsrc_state->app_src = std::move(app_src_ptr);
-        }
+      /* Adapted from the tutorial at:
+       * https://gstreamer.freedesktop.org/documentation/tutorials/basic/short-cutting-the-pipeline.html?gi-language=c*/
+      g_signal_connect(app_src_el, "need-data", G_CALLBACK(custom_src::app_src_need_data), appsrc_state.get());
+      g_signal_connect(app_src_el, "enough-data", G_CALLBACK(custom_src::app_src_enough_data), appsrc_state.get());
+      appsrc_state->app_src = std::move(app_src_ptr);
+    }
 
-        /*
-         * The force IDR event will be triggered by the control stream.
-         * We have to pass this back into the gstreamer pipeline
-         * in order to force the encoder to produce a new IDR packet
-         */
-        auto idr_handler = event_bus->register_handler<immer::box<wolf::core::api::ControlEvent>>(
-            [sess_id = video_session->session_id, pipeline](const immer::box<wolf::core::api::ControlEvent> &ctrl_ev) {
-              if (ctrl_ev->session_id == sess_id) {
-                if (ctrl_ev->type == wolf::core::api::IDR_FRAME) {
-                  logs::log(logs::debug, "[GSTREAMER] Forcing IDR");
-                  // Force IDR event, see: https://github.com/centricular/gstwebrtc-demos/issues/186
-                  // https://gstreamer.freedesktop.org/documentation/additional/design/keyframe-force.html?gi-language=c
-                  wolf::core::gstreamer::send_message(
-                      pipeline,
-                      gst_structure_new("GstForceKeyUnit", "all-headers", G_TYPE_BOOLEAN, TRUE, NULL));
-                }
-              }
-            });
+    /*
+     * The force IDR event will be triggered by the control stream.
+     * We have to pass this back into the gstreamer pipeline
+     * in order to force the encoder to produce a new IDR packet
+     */
+    auto idr_handler = event_bus->register_handler<immer::box<control::ControlEvent>>(
+        [sess_id = video_session->session_id, pipeline](const immer::box<control::ControlEvent> &ctrl_ev) {
+          if (ctrl_ev->session_id == sess_id) {
+            if (ctrl_ev->type == moonlight::control::pkts::IDR_FRAME) {
+              logs::log(logs::debug, "[GSTREAMER] Forcing IDR");
+              // Force IDR event, see: https://github.com/centricular/gstwebrtc-demos/issues/186
+              // https://gstreamer.freedesktop.org/documentation/additional/design/keyframe-force.html?gi-language=c
+              wolf::core::gstreamer::send_message(
+                  pipeline.get(),
+                  gst_structure_new("GstForceKeyUnit", "all-headers", G_TYPE_BOOLEAN, TRUE, NULL));
+            }
+          }
+        });
 
-        return immer::array<immer::box<dp::handler_registration>>{std::move(idr_handler)};
-      });
+    auto pause_handler = event_bus->register_handler<immer::box<control::PauseStreamEvent>>(
+        [sess_id = video_session->session_id, loop](const immer::box<control::PauseStreamEvent> &ev) {
+          if (ev->session_id == sess_id) {
+            logs::log(logs::debug, "[GSTREAMER] Pausing pipeline: {}", sess_id);
+
+            /**
+             * Unfortunately here we can't just pause the pipeline,
+             * when a pipeline will be resumed there are a lot of breaking changes
+             * like:
+             *  - Client IP:PORT
+             *  - AES key and IV for encrypted payloads
+             *  - Client resolution, framerate, and encoding
+             *
+             *  The only solution is to kill the pipeline and re-create it again
+             * when a resume happens
+             */
+
+            g_main_loop_quit(loop.get());
+          }
+        });
+
+    auto stop_handler = event_bus->register_handler<immer::box<control::StopStreamEvent>>(
+        [sess_id = video_session->session_id, loop](const immer::box<control::StopStreamEvent> &ev) {
+          if (ev->session_id == sess_id) {
+            logs::log(logs::debug, "[GSTREAMER] Stopping pipeline: {}", sess_id);
+            g_main_loop_quit(loop.get());
+          }
+        });
+
+    return immer::array<immer::box<dp::handler_registration>>{std::move(idr_handler),
+                                                              std::move(pause_handler),
+                                                              std::move(stop_handler)};
+  });
 }
 
 /**
@@ -244,8 +210,37 @@ void start_streaming_audio(const immer::box<state::AudioSession> &audio_session,
                               fmt::arg("host_port", audio_session->port));
   logs::log(logs::debug, "Starting audio pipeline: {}", pipeline);
 
-  wolf::core::gstreamer::run_pipeline(pipeline, audio_session->session_id, event_bus, [audio_session](auto pipeline) {
-    return immer::array<immer::box<dp::handler_registration>>{};
+  run_pipeline(pipeline, [session_id = audio_session->session_id, event_bus](auto pipeline, auto loop) {
+    auto pause_handler = event_bus->register_handler<immer::box<control::PauseStreamEvent>>(
+        [session_id, loop](const immer::box<control::PauseStreamEvent> &ev) {
+          if (ev->session_id == session_id) {
+            logs::log(logs::debug, "[GSTREAMER] Pausing pipeline: {}", session_id);
+
+            /**
+             * Unfortunately here we can't just pause the pipeline,
+             * when a pipeline will be resumed there are a lot of breaking changes
+             * like:
+             *  - Client IP:PORT
+             *  - AES key and IV for encrypted payloads
+             *  - Client resolution, framerate, and encoding
+             *
+             *  The only solution is to kill the pipeline and re-create it again
+             * when a resume happens
+             */
+
+            g_main_loop_quit(loop.get());
+          }
+        });
+
+    auto stop_handler = event_bus->register_handler<immer::box<control::StopStreamEvent>>(
+        [session_id, loop](const immer::box<control::StopStreamEvent> &ev) {
+          if (ev->session_id == session_id) {
+            logs::log(logs::debug, "[GSTREAMER] Stopping pipeline: {}", session_id);
+            g_main_loop_quit(loop.get());
+          }
+        });
+
+    return immer::array<immer::box<dp::handler_registration>>{std::move(pause_handler), std::move(stop_handler)};
   });
 }
 
