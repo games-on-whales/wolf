@@ -42,10 +42,10 @@ flowchart LR
  A[audiotestsrc] --> B[audioconvert] --> C[audiorate] --> D[opusenc] --> E[rtpmoonlightpay_audio] --> F[udpsink]
 ....
 
-This flow is general enough to enable us to use the same plugin for both H.264 and HEVC (and any other encoder that will be supported in future).
+This flow is general enough to enable us to use the same plugin for H.264, HEVC and AV1 (and any other encoder that will be supported in future).
 Downstream, it's also trivial to switch between UDP/TCP or even a complete different delivery method if needed.
 
-We decided to split between audio and video because they have different RTP packet structure, (non overlapping) properties, different FEC encoding and different encryption requirements but the basic flow is the same for both plugins.
+We decided to split between audio and video because they have different RTP packet structure, non overlapping properties, different FEC encoding and different encryption requirements but the basic flow is the same for both plugins.
 
 Given that this is a direct transformation from one input buffer to another output buffer we decided to use https://gstreamer.freedesktop.org/documentation/base/gstbasetransform.html?gi-language=c[GstBaseTransform] as the base class.
 This will implement some boilerplate code for us so that we can focus on the main https://gstreamer.freedesktop.org/documentation/base/gstbasetransform.html?gi-language=c#GstBaseTransformClass::transform[`_transform`] virtual method implementation.
@@ -59,7 +59,7 @@ I suggest you to get a bit familiar with it before diving into the code; http://
 
 Following the official docs at https://gstreamer.freedesktop.org/documentation/plugin-development/basics/boiler.html?gi-language=c[Plugin Write's Guide] we started off with the https://github.com/GStreamer/gst-plugins-bad/blob/ca8068c6d793d7aaa6f2e2cc6324fdedfe2f33fa/tools/gst-element-maker[official bash script] that creates the boilerplate code from the selected base class; namely:
 
-* https://github.com/games-on-whales/wolf/blob/HEAD/src/streaming/streaming/gst-plugin/gstrtpmoonlightpay_video.hpp[gstrtpmoonlightpay_video.hpp] and https://github.com/games-on-whales/wolf/blob/HEAD/src/streaming/streaming/gst-plugin/gstrtpmoonlightpay_video.cpp[gstrtpmoonlightpay_video.cpp] contain all the boilerplate code needed to setup a plugin, property definitions, etc.
-** https://github.com/games-on-whales/wolf/blob/HEAD/src/streaming/streaming/gst-plugin/gstrtpmoonlightpay_audio.hpp[gstrtpmoonlightpay_audio.hpp] and https://github.com/games-on-whales/wolf/blob/HEAD/src/streaming/streaming/gst-plugin/gstrtpmoonlightpay_audio.cpp[gstrtpmoonlightpay_audio.cpp] for audio.
-* https://github.com/games-on-whales/wolf/blob/HEAD/src/streaming/streaming/gst-plugin/video.hpp[video.hpp] contains all the functions that turns a linear buffer of data into a list of correctly formed RTP packets.
-** https://github.com/games-on-whales/wolf/blob/HEAD/src/streaming/streaming/gst-plugin/audio.hpp[audio.hpp] same for audio
+* https://github.com/games-on-whales/wolf/blob/HEAD/src/moonlight-server/gst-plugin/gstrtpmoonlightpay_video.hpp[gstrtpmoonlightpay_video.hpp] and https://github.com/games-on-whales/wolf/blob/HEAD/src/moonlight-server/gst-plugin/gstrtpmoonlightpay_video.cpp[gstrtpmoonlightpay_video.cpp] contain all the boilerplate code needed to setup a plugin, property definitions, etc.
+** https://github.com/games-on-whales/wolf/blob/HEAD/src/moonlight-server/gst-plugin/gstrtpmoonlightpay_audio.hpp[gstrtpmoonlightpay_audio.hpp] and https://github.com/games-on-whales/wolf/blob/HEAD/src/moonlight-server/gst-plugin/gstrtpmoonlightpay_audio.cpp[gstrtpmoonlightpay_audio.cpp] for audio.
+* https://github.com/games-on-whales/wolf/blob/HEAD/src/moonlight-server/gst-plugin/video.hpp[video.hpp] contains all the functions that turns a linear buffer of data into a list of correctly formed RTP packets.
+** https://github.com/games-on-whales/wolf/blob/HEAD/src/moonlight-server/gst-plugin/audio.hpp[audio.hpp] same for audio

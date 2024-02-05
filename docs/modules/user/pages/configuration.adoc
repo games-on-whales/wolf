@@ -52,7 +52,7 @@ Wolf is configured via a TOML config file and some additional optional ENV varia
 |The default render node used for virtual desktops; see: <<_multiple_gpu>>
 
 |WOLF_DOCKER_FAKE_UDEV_PATH
-|/etc/wolf/fake-udev
+|$HOST_APPS_STATE_FOLDER/fake-udev
 |The path on the host for the fake-udev CLI tool
 |===
 

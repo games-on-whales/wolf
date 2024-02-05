@@ -3,8 +3,8 @@
 == Overview
 
 Here we start with a question:
-[NOTE.think,caption=⁇]
 
+[NOTE.think,caption=⁇]
 ====
 How can we securely authenticate an untrusted client over an insecure network?
 ====

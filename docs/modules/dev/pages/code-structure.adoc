@@ -13,47 +13,39 @@ We are also trying to isolate the Moonlight protocol from the actual implementat
 
 == Modules
 
-=== src/crypto
+=== src/core
 
-The crypto module depends on OpenSSL and provides an interface (https://github.com/games-on-whales/wolf/blob/HEAD/src/crypto/crypto/crypto.hpp[crypto.hpp]) to all the crypto related methods that are used by the other modules.
+High-level utilities and re-usable libraries, not strictly tied to Moonlight or Wolf:
 
-=== src/input
+* https://github.com/games-on-whales/wolf/blob/HEAD/src/core/src/core/docker.hpp[docker.hpp]: using libcurl and boost json to interrogate the Docker socket and provide an easy to use interface to most methods.
+* https://github.com/games-on-whales/wolf/blob/HEAD/src/core/src/core/input.hpp[input.hpp]: an easy to use virtual input device library; supports mouse, keyboard, joypads and more!
+* https://github.com/games-on-whales/wolf/blob/HEAD/src/core/src/core/virtual-display.hpp[virtual-display.hpp]: a simple abstraction on top of https://github.com/games-on-whales/gst-wayland-display[games-on-whales/gst-wayland-display] in order to create and control virtual desktops.
+* https://github.com/games-on-whales/wolf/blob/HEAD/src/core/src/core/audio.hpp[audio.hpp]: virtual audio library
 
-Here are the methods that will deal with a Moonlight input event (ex: Keyboard, Mouse, Joypad). +
-The code here will be platform specific with a default failover of `noop`.
-In Linux we used `uinput` and https://www.freedesktop.org/wiki/Software/libevdev/[libevdev].
+=== src/fake-udev
 
-=== src/moonlight
+A little CLI tool that enables us to generate udev events.
+You can read more about the rationale behind it in xref:dev:fake-udev.adoc[].
+
+=== src/moonlight-protocol
 
 Here we define core Moonlight functions in order to create the foundation for a platform-agnostic portable library.
 It currently hosts the followings:
 
-* HTTP/S protocol interface: https://github.com/games-on-whales/wolf/blob/HEAD/src/moonlight/moonlight/protocol.hpp[protocol.hpp]
-* Reed Solomon FEC header https://github.com/games-on-whales/wolf/blob/HEAD/src/moonlight/moonlight/fec.hpp[fec.hpp]
+* HTTP/S protocol interface: https://github.com/games-on-whales/wolf/blob/HEAD/src/moonlight-protocol/moonlight/protocol.hpp[protocol.hpp]
+* Control protocol packet format https://github.com/games-on-whales/wolf/blob/HEAD/src/moonlight-protocol/moonlight/control.hpp[control.hpp]
+* Reed Solomon FEC header https://github.com/games-on-whales/wolf/blob/HEAD/src/moonlight-protocol/moonlight/fec.hpp[fec.hpp]
 ** Based on top of https://github.com/sleepybishop/nanors[sleepybishop/nanors]
-* RTSP message parser https://github.com/games-on-whales/wolf/blob/HEAD/src/moonlight/rtsp/parser.hpp[parser.hpp]
+* RTSP message parser https://github.com/games-on-whales/wolf/blob/HEAD/src/moonlight-protocol/rtsp/parser.hpp[parser.hpp]
 ** Built using https://github.com/yhirose/cpp-peglib[yhirose/cpp-peglib] by writing a formal PEG (Parsing Expression Grammars) definition for all messages
 
-=== src/streaming
+=== src/moonlight-server
 
-This module implements a https://gstreamer.freedesktop.org/[gstreamer] plugin in order to encode video/audio streams into the Moonlight RDP format. +
-You can read more about our implementation in the dedicated xref:gstreamer.adoc[gstreamer page].
-
-=== src/wolf
-
-The wolf module defines the glue code that wraps everything together into the final executable binary.
-It uses the following dependencies:
-
-* https://www.boost.org/[Boost]: mainly used for: logging, stacktrace, Asio (the basic building block of all network code in Wolf: HTTP/S, RTP, RTSP)
-* https://github.com/cgutman/enet[cgutman/enet] custom fork of https://github.com/lsalzman/enet[lsalzman/enet] used to run the Control stream over UDP.
-* https://github.com/arximboldi/immer[arximboldi/immer]: persistent and immutable data structures; used mainly for data that needs to be shared across threads/logical modules.
-* https://github.com/DeveloperPaul123/eventbus[DeveloperPaul123/eventbus]: used to decouple functional modules by sending (immutable) data as events to different parts of the app.
-* https://github.com/ericniebler/range-v3[ericniebler/range-v3]: modern ranges for C++
-* https://gitlab.com/eidheim/Simple-Web-Server[eidheim/Simple-Web-Server]: a simple abstraction on top of Boost Asio, used to expose the HTTP/S API
-* https://github.com/ToruNiina/toml11[ToruNiina/toml11]: used to read/write the TOML configuration file
-* https://github.com/fmtlib/fmt[fmtlib/fmt]: string formatting library
+This is where the final Wolf executable will be built, contains all the additional code and logic required to run the full Moonlight server.
 
 === tests
 
 Unit tests will live under `tests/` and are written using the https://github.com/catchorg/Catch2[Catch2] framework. +
 We are implementing unit tests for most of the methods and (where possible) also mocking packets/requests seen during real Moonlight sessions.
+
+Some of them are platform/HW specific; they are all enabled by default, you should disable them based on your platform. Checkout the options in the https://github.com/games-on-whales/wolf/blob/HEAD/tests/CMakeLists.txt[tests/CMakeLists.txt]

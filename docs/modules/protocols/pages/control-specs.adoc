@@ -1,3 +1,5 @@
+:includedir: ./diagrams
+
 = Control specifications
 
 == Overview
@@ -14,7 +16,7 @@ https://en.wikipedia.org/wiki/Galois/Counter_Mode[AES GCM] not only provides con
 .The format of encrypted packets (bytes)
 [bytefield,format=svg,align="center"]
 ....
-include::diagrams/bytefield-shared.edn[]
+include::{includedir}/bytefield-shared.edn[]
 (draw-input-header)
 
 (draw-box "Seq" {:span 4})
@@ -89,7 +91,7 @@ A simple schema for a controller number and low/high frequencies
 .The payload for a Rumble packet (bytes)
 [bytefield,format=svg,align="center"]
 ....
-include::diagrams/bytefield-shared.edn[]
+include::{includedir}/bytefield-shared.edn[]
 (draw-input-header 0x010b)
 
 (draw-box "unused" {:span 4})
@@ -107,7 +109,7 @@ A simple schema for a controller number and left/right values
 .The payload for a Trigger packet (bytes)
 [bytefield,format=svg,align="center"]
 ....
-include::diagrams/bytefield-shared.edn[]
+include::{includedir}/bytefield-shared.edn[]
 (draw-input-header 0x5500)
 
 (draw-box "ctrl #" {:span 2})
@@ -125,7 +127,7 @@ By default Moonlight disables these events in order to save bandwith.
 .The payload for a Motion packet (bytes)
 [bytefield,format=svg,align="center"]
 ....
-include::diagrams/bytefield-shared.edn[]
+include::{includedir}/bytefield-shared.edn[]
 (draw-input-header 0x5501)
 
 (draw-box "ctrl #" {:span 2})
@@ -148,7 +150,7 @@ An example of this is when setting the LED color in Steam, the server has to sen
 .The payload for a LED packet (bytes)
 [bytefield,format=svg,align="center"]
 ....
-include::diagrams/bytefield-shared.edn[]
+include::{includedir}/bytefield-shared.edn[]
 (draw-input-header 0x5502)
 
 (draw-box "ctrl #" {:span 2})

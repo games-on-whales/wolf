@@ -1,4 +1,6 @@
 :experimental:
+:includedir: ./diagrams
+
 = Input Data
 
 Moonlight will send all user inputs via the xref:protocols:control-specs.adoc[control stream].
@@ -6,7 +8,7 @@ Moonlight will send all user inputs via the xref:protocols:control-specs.adoc[co
 .General format of an `INPUT_DATA` message
 [bytefield,format=svg,align="center"]
 ....
-include::diagrams/bytefield-shared.edn[]
+include::{includedir}/bytefield-shared.edn[]
 (draw-input-header 0x0206)
 
 (draw-box "input size" [:box-first {:span 4}])
@@ -83,7 +85,7 @@ Moonlight will send mouse relative coordinates when the option "Optimize mouse f
 .The full format of a `MOUSE_MOVE_REL` packet
 [bytefield,format=svg,align="center"]
 ....
-include::diagrams/bytefield-shared.edn[]
+include::{includedir}/bytefield-shared.edn[]
 (draw-input-header 0x0206)
 
 (draw-row-header "format")
@@ -109,7 +111,7 @@ Moonlight will send mouse absolute coordinates when the option "Optimize mouse f
 .The full format of a `MOUSE_MOVE_ABS` packet
 [bytefield,format=svg,align="center"]
 ....
-include::diagrams/bytefield-shared.edn[]
+include::{includedir}/bytefield-shared.edn[]
 (draw-input-header 0x0206)
 
 (draw-row-header "format")
@@ -140,7 +142,7 @@ In order to define an absolute position Moonlight will send both:
 .The full format of a `MOUSE_BUTTON_DOWN` or `MOUSE_BUTTON_UP` packet
 [bytefield,format=svg,align="center"]
 ....
-include::diagrams/bytefield-shared.edn[]
+include::{includedir}/bytefield-shared.edn[]
 (draw-input-header 0x0206)
 (draw-row-header "format")
 
@@ -190,7 +192,7 @@ include::diagrams/bytefield-shared.edn[]
 .The full format of a `KEY_DOWN` or `KEY_UP` packet
 [bytefield,format=svg,align="center"]
 ....
-include::diagrams/bytefield-shared.edn[]
+include::{includedir}/bytefield-shared.edn[]
 (draw-input-header 0x0206)
 
 (draw-row-header "format")
@@ -586,7 +588,7 @@ What's `modifiers`?
 .The full format of a `MOUSE_SCROLL` packet
 [bytefield,format=svg,align="center"]
 ....
-include::diagrams/bytefield-shared.edn[]
+include::{includedir}/bytefield-shared.edn[]
 (draw-input-header 0x0206)
 (draw-row-header "format")
 (draw-box 0xa [:box-first {:span 4}])
@@ -613,7 +615,7 @@ What's `amount 2`?
 .The full format of a `MOUSE_HSCROLL` packet
 [bytefield,format=svg,align="center"]
 ....
-include::diagrams/bytefield-shared.edn[]
+include::{includedir}/bytefield-shared.edn[]
 
 
 (draw-input-header 0x0206)
@@ -647,7 +649,7 @@ Sent when a new connector has been plugged, it'll specify the supported capabili
 .The full format of a `CONTROLLER_ARRIVAL` packet
 [bytefield,format=svg,align="center"]
 ....
-include::diagrams/bytefield-shared.edn[]
+include::{includedir}/bytefield-shared.edn[]
 (draw-input-header 0x0206)
 (draw-box "ctrl #" {:span 1})
 (draw-box "type" {:span 1})
@@ -710,7 +712,7 @@ IMPORTANT: Since Moonlight 5.0.0 the format has been slightly changed (without b
 .The legacy format of a `CONTROLLER_MULTI` packet
 [bytefield,format=svg,align="center"]
 ....
-include::diagrams/bytefield-shared.edn[]
+include::{includedir}/bytefield-shared.edn[]
 (draw-input-header 0x0206)
 (draw-row-header "format")
 (draw-box nil [:box-first {:span 2}])
@@ -736,7 +738,7 @@ include::diagrams/bytefield-shared.edn[]
 .The legacy format of a `CONTROLLER_MULTI` packet
 [bytefield,format=svg,align="center"]
 ....
-include::diagrams/bytefield-shared.edn[]
+include::{includedir}/bytefield-shared.edn[]
 (draw-input-header 0x0206)
 (draw-row-header "format")
 (draw-box 0x1e [:box-first {:span 4}])
