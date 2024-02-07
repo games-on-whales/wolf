@@ -191,7 +191,7 @@ TEST_CASE("uinput - joypad", "UINPUT") {
 
     auto dev_nodes = session.joypads->load()->at(controller_number)->get_nodes();
     REQUIRE(session.joypads->load()->size() == 1);
-    REQUIRE(dev_nodes.size() == 6);
+    REQUIRE(dev_nodes.size() == 5);
 
     libevdev_ptr touch_rel_dev(libevdev_new(), ::libevdev_free);
     // We know that the 3rd device is the touchpad
@@ -208,19 +208,23 @@ TEST_CASE("uinput - joypad", "UINPUT") {
 
         control::handle_input(session, {}, &touch_packet);
         auto events = fetch_events(touch_rel_dev);
-        REQUIRE(events.size() == 3); // TODO: why there are no ABS_X and ABS_Y?
+        REQUIRE(events.size() == 4); // TODO: why there are no ABS_X and ABS_Y?
 
         REQUIRE_THAT(libevdev_event_type_get_name(events[0]->type), Equals("EV_ABS"));
-        REQUIRE_THAT(libevdev_event_code_get_name(events[0]->type, events[0]->code), Equals("ABS_MT_TRACKING_ID"));
-        REQUIRE(events[0]->value == 0);
+        REQUIRE_THAT(libevdev_event_code_get_name(events[0]->type, events[0]->code), Equals("ABS_MT_SLOT"));
+        REQUIRE(events[0]->value == 1);
 
-        REQUIRE_THAT(libevdev_event_type_get_name(events[1]->type), Equals("EV_KEY"));
-        REQUIRE_THAT(libevdev_event_code_get_name(events[1]->type, events[1]->code), Equals("BTN_TOOL_FINGER"));
+        REQUIRE_THAT(libevdev_event_type_get_name(events[1]->type), Equals("EV_ABS"));
+        REQUIRE_THAT(libevdev_event_code_get_name(events[1]->type, events[1]->code), Equals("ABS_MT_TRACKING_ID"));
         REQUIRE(events[1]->value == 1);
 
         REQUIRE_THAT(libevdev_event_type_get_name(events[2]->type), Equals("EV_KEY"));
-        REQUIRE_THAT(libevdev_event_code_get_name(events[2]->type, events[2]->code), Equals("BTN_TOUCH"));
+        REQUIRE_THAT(libevdev_event_code_get_name(events[2]->type, events[2]->code), Equals("BTN_TOOL_FINGER"));
         REQUIRE(events[2]->value == 1);
+
+        REQUIRE_THAT(libevdev_event_type_get_name(events[3]->type), Equals("EV_KEY"));
+        REQUIRE_THAT(libevdev_event_code_get_name(events[3]->type, events[3]->code), Equals("BTN_TOUCH"));
+        REQUIRE(events[3]->value == 1);
       }
 
       { // Touch finger 2
@@ -237,11 +241,11 @@ TEST_CASE("uinput - joypad", "UINPUT") {
 
         REQUIRE_THAT(libevdev_event_type_get_name(events[0]->type), Equals("EV_ABS"));
         REQUIRE_THAT(libevdev_event_code_get_name(events[0]->type, events[0]->code), Equals("ABS_MT_SLOT"));
-        REQUIRE(events[0]->value == 1);
+        REQUIRE(events[0]->value == 2);
 
         REQUIRE_THAT(libevdev_event_type_get_name(events[1]->type), Equals("EV_ABS"));
         REQUIRE_THAT(libevdev_event_code_get_name(events[1]->type, events[1]->code), Equals("ABS_MT_TRACKING_ID"));
-        REQUIRE(events[1]->value == 1);
+        REQUIRE(events[1]->value == 2);
 
         REQUIRE_THAT(libevdev_event_type_get_name(events[2]->type), Equals("EV_KEY"));
         REQUIRE_THAT(libevdev_event_code_get_name(events[2]->type, events[2]->code), Equals("BTN_TOOL_FINGER"));
@@ -266,7 +270,7 @@ TEST_CASE("uinput - joypad", "UINPUT") {
 
         REQUIRE_THAT(libevdev_event_type_get_name(events[0]->type), Equals("EV_ABS"));
         REQUIRE_THAT(libevdev_event_code_get_name(events[0]->type, events[0]->code), Equals("ABS_MT_SLOT"));
-        REQUIRE(events[0]->value == 0);
+        REQUIRE(events[0]->value == 1);
 
         REQUIRE_THAT(libevdev_event_type_get_name(events[1]->type), Equals("EV_ABS"));
         REQUIRE_THAT(libevdev_event_code_get_name(events[1]->type, events[1]->code), Equals("ABS_MT_TRACKING_ID"));
@@ -295,7 +299,7 @@ TEST_CASE("uinput - joypad", "UINPUT") {
 
         REQUIRE_THAT(libevdev_event_type_get_name(events[0]->type), Equals("EV_ABS"));
         REQUIRE_THAT(libevdev_event_code_get_name(events[0]->type, events[0]->code), Equals("ABS_MT_SLOT"));
-        REQUIRE(events[0]->value == 1);
+        REQUIRE(events[0]->value == 2);
 
         REQUIRE_THAT(libevdev_event_type_get_name(events[1]->type), Equals("EV_ABS"));
         REQUIRE_THAT(libevdev_event_code_get_name(events[1]->type, events[1]->code), Equals("ABS_MT_TRACKING_ID"));
@@ -313,7 +317,7 @@ TEST_CASE("uinput - joypad", "UINPUT") {
 
     libevdev_ptr motion_dev(libevdev_new(), ::libevdev_free);
     // We know that the last node is the motion sensor
-    link_devnode(motion_dev.get(), dev_nodes[4]);
+    link_devnode(motion_dev.get(), dev_nodes[3]);
     SECTION("Motion sensor") {
       auto motion_pkt = pkts::CONTROLLER_MOTION_PACKET{.controller_number = controller_number,
                                                        .motion_type = Joypad::ACCELERATION,
@@ -345,7 +349,7 @@ TEST_CASE("uinput - joypad", "UINPUT") {
     SECTION("UDEV") {
       auto udev_events = session.joypads->load()->at(controller_number)->get_udev_events();
 
-      REQUIRE(udev_events.size() == 6);
+      REQUIRE(udev_events.size() == 5);
 
       REQUIRE_THAT(udev_events[0]["ACTION"], Equals("add"));
       REQUIRE_THAT(udev_events[0]["ID_INPUT_JOYSTICK"], Equals("1"));
@@ -366,8 +370,7 @@ TEST_CASE("uinput - joypad", "UINPUT") {
       REQUIRE_THAT(udev_events[2]["DEVPATH"], StartsWith("/devices/virtual/input/input"));
 
       REQUIRE_THAT(udev_events[3]["ACTION"], Equals("add"));
-      REQUIRE_THAT(udev_events[3]["ID_INPUT_TOUCHPAD"], Equals("1"));
-      REQUIRE_THAT(udev_events[3][".INPUT_CLASS"], Equals("mouse"));
+      REQUIRE_THAT(udev_events[3]["ID_INPUT_ACCELEROMETER"], Equals("1"));
       REQUIRE_THAT(udev_events[3]["DEVNAME"], ContainsSubstring("/dev/input/"));
       REQUIRE_THAT(udev_events[3]["DEVPATH"], StartsWith("/devices/virtual/input/input"));
 
@@ -375,11 +378,6 @@ TEST_CASE("uinput - joypad", "UINPUT") {
       REQUIRE_THAT(udev_events[4]["ID_INPUT_ACCELEROMETER"], Equals("1"));
       REQUIRE_THAT(udev_events[4]["DEVNAME"], ContainsSubstring("/dev/input/"));
       REQUIRE_THAT(udev_events[4]["DEVPATH"], StartsWith("/devices/virtual/input/input"));
-
-      REQUIRE_THAT(udev_events[5]["ACTION"], Equals("add"));
-      REQUIRE_THAT(udev_events[5]["ID_INPUT_ACCELEROMETER"], Equals("1"));
-      REQUIRE_THAT(udev_events[5]["DEVNAME"], ContainsSubstring("/dev/input/"));
-      REQUIRE_THAT(udev_events[5]["DEVPATH"], StartsWith("/devices/virtual/input/input"));
     }
   }
 }

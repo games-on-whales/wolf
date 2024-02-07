@@ -1,6 +1,7 @@
 #include "catch2/catch_all.hpp"
 
 #include <core/input.hpp>
+#include <helpers/logger.hpp>
 #include <libinput.h>
 #include <linux/input-event-codes.h>
 #include <memory>
@@ -28,8 +29,22 @@ const static struct libinput_interface interface = {
     .close_restricted = close_restricted,
 };
 
+static void LogHandler(libinput __attribute__((unused)) * libinput,
+                       libinput_log_priority priority,
+                       const char *format,
+                       va_list args) {
+  if (priority == LIBINPUT_LOG_PRIORITY_DEBUG) {
+    char buf[512];
+    int n = vsnprintf(buf, sizeof(buf), format, args);
+    if (n > 0)
+      logs::log(logs::debug, "libinput: {}", buf);
+  }
+}
+
 std::shared_ptr<libinput> create_libinput_context(const std::vector<std::string> &nodes) {
   auto li = libinput_path_create_context(&interface, NULL);
+  libinput_log_set_handler(li, LogHandler);
+  libinput_log_set_priority(li, LIBINPUT_LOG_PRIORITY_DEBUG);
   for (const auto &node : nodes) {
     libinput_path_add_device(li, node.c_str());
   }
@@ -183,5 +198,47 @@ TEST_CASE("virtual mouse absolue", "[LIBINPUT]") {
                  WithinRel(TARGET_HEIGHT, 0.5f));
     REQUIRE_THAT(libinput_event_pointer_get_absolute_x_transformed(p_event, TARGET_WIDTH),
                  WithinRel(TARGET_WIDTH, 0.5f));
+  }
+}
+
+TEST_CASE("virtual trackpad", "[LIBINPUT]") {
+  auto trackpad = Trackpad();
+  auto li = create_libinput_context(trackpad.get_nodes());
+  auto event = get_event(li);
+  REQUIRE(libinput_event_get_type(event.get()) == LIBINPUT_EVENT_DEVICE_ADDED);
+  REQUIRE(libinput_device_has_capability(libinput_event_get_device(event.get()), LIBINPUT_DEVICE_CAP_GESTURE));
+  REQUIRE(libinput_device_has_capability(libinput_event_get_device(event.get()), LIBINPUT_DEVICE_CAP_POINTER));
+  libinput_device_config_send_events_set_mode(libinput_event_get_device(event.get()),
+                                              LIBINPUT_CONFIG_SEND_EVENTS_ENABLED);
+
+  { // TODO: I can see things happening on the logs but for some fucking reason I can't get the events
+    trackpad.place_finger(0, 0.1, 0.1, 0.3);
+    event = get_event(li);
+    trackpad.place_finger(1, 0.2, 0.2, 0.3);
+    event = get_event(li);
+    std::this_thread::sleep_for(10ms);
+
+    trackpad.place_finger(0, 0.1, 0.11, 0.3);
+    event = get_event(li);
+    trackpad.place_finger(1, 0.2, 0.21, 0.3);
+    event = get_event(li);
+    std::this_thread::sleep_for(10ms);
+
+    trackpad.place_finger(0, 0.1, 0.12, 0.3);
+    event = get_event(li);
+    trackpad.place_finger(1, 0.2, 0.22, 0.3);
+    event = get_event(li);
+    std::this_thread::sleep_for(10ms);
+
+    trackpad.place_finger(0, 0.1, 0.13, 0.3);
+    event = get_event(li);
+    trackpad.place_finger(1, 0.2, 0.23, 0.3);
+    event = get_event(li);
+    std::this_thread::sleep_for(10ms);
+
+    trackpad.release_finger(0);
+    event = get_event(li);
+    trackpad.release_finger(1);
+    event = get_event(li);
   }
 }

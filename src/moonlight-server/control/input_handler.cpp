@@ -64,7 +64,7 @@ std::shared_ptr<Joypad> create_new_joypad(const state::StreamSession &session,
   return new_pad;
 }
 
-float netfloat_to_0_1(utils::netfloat f) {
+float netfloat_to_0_1(const utils::netfloat &f) {
   return std::clamp(utils::from_netfloat(f), 0.0f, 1.0f);
 }
 
@@ -231,13 +231,18 @@ void handle_input(const state::StreamSession &session,
       switch (touch_pkt->event_type) {
       case TOUCH_EVENT_DOWN:
       case TOUCH_EVENT_HOVER:
-      case TOUCH_EVENT_MOVE:
-        selected_pad->touchpad_place_finger(pointer_id, netfloat_to_0_1(touch_pkt->x), netfloat_to_0_1(touch_pkt->y));
+      case TOUCH_EVENT_MOVE: {
+        // TODO: Moonlight seems to always pass 1.0 (0x0000803f little endian)
+        // Values too high will be discarded by libinput as detecting palm pressure
+        auto pressure = std::clamp(utils::from_netfloat(touch_pkt->pressure), 0.0f, 0.5f);
+        selected_pad->touchpad_place_finger(pointer_id,
+                                            netfloat_to_0_1(touch_pkt->x),
+                                            netfloat_to_0_1(touch_pkt->y),
+                                            pressure);
         break;
+      }
       case TOUCH_EVENT_UP:
       case TOUCH_EVENT_HOVER_LEAVE:
-        selected_pad->touchpad_release_finger(pointer_id);
-        break;
       case TOUCH_EVENT_CANCEL:
         selected_pad->touchpad_release_finger(pointer_id);
         break;

@@ -176,11 +176,14 @@ struct HAPTICS_PACKET : INPUT_PKT {
 
 struct TOUCH_PACKET : INPUT_PKT {
   uint8_t event_type;
-  uint8_t zero[3]; // Alignment/reserved
+  uint8_t zero[1]; // Alignment/reserved
+  uint16_t rotation;
   uint32_t pointer_id;
   utils::netfloat x;
   utils::netfloat y;
-  utils::netfloat pressure;
+  utils::netfloat pressure_or_distance;
+  utils::netfloat contact_area_major;
+  utils::netfloat contact_area_minor;
 };
 
 struct PEN_PACKET : INPUT_PKT {
@@ -190,10 +193,12 @@ struct PEN_PACKET : INPUT_PKT {
   uint8_t zero[1]; // Alignment/reserved
   utils::netfloat x;
   utils::netfloat y;
-  utils::netfloat pressure;
+  utils::netfloat pressure_or_distance;
   uint16_t rotation;
   uint8_t tilt;
   uint8_t zero2[1];
+  utils::netfloat contact_area_major;
+  utils::netfloat contact_area_minor;
 };
 
 struct CONTROLLER_ARRIVAL_PACKET : INPUT_PKT {
