@@ -64,11 +64,28 @@ std::shared_ptr<Joypad> create_new_joypad(const state::StreamSession &session,
   return new_pad;
 }
 
+/**
+ * Creates a new PenTablet and saves it into the session;
+ * will also trigger a PlugDeviceEvent
+ */
+std::shared_ptr<PenTablet> create_pen_tablet(state::StreamSession &session) {
+  logs::log(logs::debug, "[INPUT] Creating new pen tablet");
+  auto tablet = std::make_shared<PenTablet>();
+  session.event_bus->fire_event(
+      immer::box<state::PlugDeviceEvent>(state::PlugDeviceEvent{.session_id = session.session_id, .device = tablet}));
+  session.pen_tablet = tablet;
+  return tablet;
+}
+
 float netfloat_to_0_1(const utils::netfloat &f) {
   return std::clamp(utils::from_netfloat(f), 0.0f, 1.0f);
 }
 
-void handle_input(const state::StreamSession &session,
+static inline float deg2rad(float degree) {
+  return M_PI * degree / 180.0;
+}
+
+void handle_input(state::StreamSession &session,
                   const immer::atom<enet_clients_map> &connected_clients,
                   INPUT_PKT *pkt) {
   switch (pkt->type) {
@@ -165,9 +182,66 @@ void handle_input(const state::StreamSession &session,
   case TOUCH:
     logs::log(logs::trace, "[INPUT] Received input of type: TOUCH");
     break;
-  case PEN:
+  case PEN: {
     logs::log(logs::trace, "[INPUT] Received input of type: PEN");
+    if (!session.pen_tablet) {
+      create_pen_tablet(session);
+    }
+    auto pen_pkt = static_cast<PEN_PACKET *>(pkt);
+
+    // First set the buttons
+    session.pen_tablet->set_btn(PenTablet::PRIMARY, pen_pkt->pen_buttons & PEN_BUTTON_TYPE_PRIMARY);
+    session.pen_tablet->set_btn(PenTablet::SECONDARY, pen_pkt->pen_buttons & PEN_BUTTON_TYPE_SECONDARY);
+    session.pen_tablet->set_btn(PenTablet::TERTIARY, pen_pkt->pen_buttons & PEN_BUTTON_TYPE_TERTIARY);
+
+    // Set the tool
+    PenTablet::TOOL_TYPE tool;
+    switch (pen_pkt->tool_type) {
+    case moonlight::control::pkts::TOOL_TYPE_PEN:
+      tool = PenTablet::PEN;
+      break;
+    case moonlight::control::pkts::TOOL_TYPE_ERASER:
+      tool = PenTablet::ERASER;
+      break;
+    default:
+      tool = PenTablet::SAME_AS_BEFORE;
+      break;
+    }
+
+    auto pressure_or_distance = netfloat_to_0_1(pen_pkt->pressure_or_distance);
+
+    // Normalize rotation value to 0-359 degree range
+    auto rotation = boost::endian::little_to_native(pen_pkt->rotation);
+    if (rotation != PEN_ROTATION_UNKNOWN) {
+      rotation %= 360;
+    }
+
+    // Here we receive:
+    //  - Rotation: degrees from vertical in Y dimension (parallel to screen, 0..360)
+    //  - Tilt: degrees from vertical in Z dimension (perpendicular to screen, 0..90)
+    float tilt_x = 0;
+    float tilt_y = 0;
+    // Convert polar coordinates into Y tilt angles
+    if (pen_pkt->tilt != PEN_TILT_UNKNOWN && rotation != PEN_ROTATION_UNKNOWN) {
+      auto rotation_rads = deg2rad(rotation);
+      auto tilt_rads = deg2rad(pen_pkt->tilt);
+      auto r = std::sin(tilt_rads);
+      auto z = std::cos(tilt_rads);
+
+      tilt_x = std::atan2(std::sin(-rotation_rads) * r, z) * 180.f / M_PI;
+      tilt_y = std::atan2(std::cos(-rotation_rads) * r, z) * 180.f / M_PI;
+    }
+
+    session.pen_tablet->place_tool(tool,
+                                   netfloat_to_0_1(pen_pkt->x),
+                                   netfloat_to_0_1(pen_pkt->y),
+                                   pen_pkt->event_type == TOUCH_EVENT_DOWN ? pressure_or_distance : -1,
+                                   pen_pkt->event_type == TOUCH_EVENT_HOVER ? pressure_or_distance : -1,
+                                   tilt_x,
+                                   tilt_y);
+
     break;
+  }
     /*
      *  CONTROLLER
      */

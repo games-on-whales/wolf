@@ -1,4 +1,5 @@
 #include "catch2/catch_all.hpp"
+#include "libinput.h"
 #include <boost/endian/conversion.hpp>
 #include <boost/locale.hpp>
 #include <chrono>
@@ -11,6 +12,7 @@
 using Catch::Matchers::ContainsSubstring;
 using Catch::Matchers::Equals;
 using Catch::Matchers::StartsWith;
+using Catch::Matchers::WithinRel;
 
 using namespace wolf::core::input;
 using namespace moonlight::control;
@@ -52,6 +54,74 @@ TEST_CASE("uinput - keyboard", "UINPUT") {
   REQUIRE_THAT(libevdev_event_type_get_name(events[0]->type), Equals("EV_KEY"));
   REQUIRE_THAT(libevdev_event_code_get_name(events[0]->type, events[0]->code), Equals("KEY_LEFTSHIFT"));
   REQUIRE(events[0]->value == 0);
+}
+
+TEST_CASE("uinput - pen tablet", "[UINPUT]") {
+  libevdev_ptr tablet_dev(libevdev_new(), ::libevdev_free);
+  auto session = state::StreamSession{.pen_tablet = std::make_shared<PenTablet>()};
+  auto li = create_libinput_context(session.pen_tablet->get_nodes());
+  auto event = get_event(li);
+  REQUIRE(libinput_event_get_type(event.get()) == LIBINPUT_EVENT_DEVICE_ADDED);
+  REQUIRE(libinput_device_has_capability(libinput_event_get_device(event.get()), LIBINPUT_DEVICE_CAP_TABLET_TOOL));
+
+  auto packet = pkts::PEN_PACKET{.event_type = pkts::TOUCH_EVENT_HOVER,
+                                 .tool_type = pkts::TOOL_TYPE_PEN,
+                                 .pen_buttons = pkts::PEN_BUTTON_TYPE_PRIMARY,
+                                 .x = {0, 0, 0, 63},                    // 0.5 in float (little endian)
+                                 .y = {0, 0, 0, 63},                    // 0.5 in float (little endian)
+                                 .pressure_or_distance = {0, 0, 0, 63}, // 0.5 in float (little endian)
+                                 .rotation = 90,
+                                 .tilt = 45};
+  packet.type = pkts::PEN;
+
+  control::handle_input(session, {}, &packet);
+
+  float TARGET_W = 1920;
+  float TARGET_H = 1080;
+  {
+    event = get_event(li);
+    REQUIRE(libinput_event_get_type(event.get()) == LIBINPUT_EVENT_TABLET_TOOL_PROXIMITY);
+    auto t_event = libinput_event_get_tablet_tool_event(event.get());
+    REQUIRE(libinput_event_tablet_tool_get_proximity_state(t_event) == LIBINPUT_TABLET_TOOL_PROXIMITY_STATE_IN);
+    REQUIRE(libinput_tablet_tool_get_type(libinput_event_tablet_tool_get_tool(t_event)) ==
+            LIBINPUT_TABLET_TOOL_TYPE_PEN);
+    REQUIRE(libinput_event_tablet_tool_get_distance(t_event) == 0.5);
+    REQUIRE(libinput_event_tablet_tool_get_pressure(t_event) == 0.0);
+    REQUIRE_THAT(libinput_event_tablet_tool_get_x_transformed(t_event, TARGET_W), WithinRel(TARGET_W * 0.5f, 0.5f));
+    REQUIRE_THAT(libinput_event_tablet_tool_get_y_transformed(t_event, TARGET_H), WithinRel(TARGET_H * 0.5f, 0.5f));
+    REQUIRE_THAT(libinput_event_tablet_tool_get_tilt_x(t_event), WithinRel(-45.0f, 0.1f));
+    REQUIRE_THAT(libinput_event_tablet_tool_get_tilt_y(t_event),
+                 WithinRel(0.0f, 0.1f)); // 90° rotation means 0° tilt Y (full right position)
+    REQUIRE(libinput_event_tablet_tool_get_tip_state(t_event) == LIBINPUT_TABLET_TOOL_TIP_UP);
+  }
+
+  packet = pkts::PEN_PACKET{.event_type = pkts::TOUCH_EVENT_DOWN,
+                            .tool_type = pkts::TOOL_TYPE_PEN,
+                            .pen_buttons = pkts::PEN_BUTTON_TYPE_PRIMARY,
+                            .x = {0, 0, 0, 63},                    // 0.5 in float (little endian)
+                            .y = {0, 0, 0, 63},                    // 0.5 in float (little endian)
+                            .pressure_or_distance = {0, 0, 0, 63}, // 0.5 in float (little endian)
+                            .rotation = 180,
+                            .tilt = 90};
+  packet.type = pkts::PEN;
+
+  control::handle_input(session, {}, &packet);
+  {
+    event = get_event(li);
+    REQUIRE(libinput_event_get_type(event.get()) == LIBINPUT_EVENT_TABLET_TOOL_TIP);
+    auto t_event = libinput_event_get_tablet_tool_event(event.get());
+    REQUIRE(libinput_event_tablet_tool_get_proximity_state(t_event) == LIBINPUT_TABLET_TOOL_PROXIMITY_STATE_IN);
+    REQUIRE(libinput_tablet_tool_get_type(libinput_event_tablet_tool_get_tool(t_event)) ==
+            LIBINPUT_TABLET_TOOL_TYPE_PEN);
+    REQUIRE(libinput_event_tablet_tool_get_distance(t_event) == 0.0);
+    REQUIRE_THAT(libinput_event_tablet_tool_get_pressure(t_event), WithinRel(0.5f, 0.1f));
+    REQUIRE_THAT(libinput_event_tablet_tool_get_x_transformed(t_event, TARGET_W), WithinRel(TARGET_W * 0.5f, 0.5f));
+    REQUIRE_THAT(libinput_event_tablet_tool_get_y_transformed(t_event, TARGET_H), WithinRel(TARGET_H * 0.5f, 0.5f));
+    REQUIRE_THAT(libinput_event_tablet_tool_get_tilt_x(t_event), WithinRel(90.0f, 0.1f));
+    REQUIRE_THAT(libinput_event_tablet_tool_get_tilt_y(t_event),
+                 WithinRel(-90.0f, 0.1f)); // 180° rotation means -90° tilt Y (full down position)
+    REQUIRE(libinput_event_tablet_tool_get_tip_state(t_event) == LIBINPUT_TABLET_TOOL_TIP_DOWN);
+  }
 }
 
 TEST_CASE("uinput - mouse", "UINPUT") {
@@ -336,7 +406,7 @@ TEST_CASE("uinput - joypad", "UINPUT") {
 
       REQUIRE_THAT(libevdev_event_type_get_name(events[1]->type), Equals("EV_ABS"));
       REQUIRE_THAT(libevdev_event_code_get_name(events[1]->type, events[1]->code), Equals("ABS_Y"));
-      REQUIRE(events[1]->value == -32768); //DS_ACC_RANGE
+      REQUIRE(events[1]->value == -32768); // DS_ACC_RANGE
 
       REQUIRE_THAT(libevdev_event_type_get_name(events[2]->type), Equals("EV_ABS"));
       REQUIRE_THAT(libevdev_event_code_get_name(events[2]->type, events[2]->code), Equals("ABS_Z"));

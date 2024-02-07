@@ -102,6 +102,9 @@ public:
 
 /**
  * A virtual trackpad
+ *
+ * implements a pure multi-touch touchpad as defined in libinput
+ * https://wayland.freedesktop.org/libinput/doc/latest/touchpads.html
  */
 class Trackpad : public VirtualDevice {
 protected:
@@ -136,13 +139,59 @@ public:
 };
 
 /**
- * TODO: better name?
+ * A virtual pen tablet
+ *
+ * implements a pen tablet as defined in libinput
+ * https://wayland.freedesktop.org/libinput/doc/latest/tablet-support.html
  */
-// class DrawingTablet {
-//   DrawingTablet();
-//
-//   void press(int x, int y, int pressure, uint8_t buttons, uint8_t tool_type, uint16_t rotation, uint8_t tilt);
-// };
+class PenTablet : public VirtualDevice {
+protected:
+  typedef struct PenTabletState PenTabletState;
+
+private:
+  std::shared_ptr<PenTabletState> _state;
+
+public:
+  PenTablet();
+  PenTablet(const PenTablet &j) : _state(j._state) {}
+  PenTablet(PenTablet &&j) : _state(std::move(j._state)) {}
+  ~PenTablet() override;
+
+  std::vector<std::string> get_nodes() const override;
+
+  std::vector<std::map<std::string, std::string>> get_udev_events() const override;
+  std::vector<std::pair<std::string, std::vector<std::string>>> get_udev_hw_db_entries() const override;
+
+  enum TOOL_TYPE {
+    PEN,
+    ERASER,
+    BRUSH,
+    PENCIL,
+    AIRBRUSH,
+    TOUCH,
+    SAME_AS_BEFORE /* Real devices don't need to report the tool type when it's still the same */
+  };
+
+  enum BTN_TYPE {
+    PRIMARY,
+    SECONDARY,
+    TERTIARY
+  };
+
+  /**
+   * x,y,pressure and distance should be normalized in the range [0.0, 1.0].
+   * Passing a negative value will discard that value; this is used to report pressure instead of distance
+   * (they should never be both positive).
+   *
+   * tilt_x and tilt_y are in the range [-90.0, 90.0] degrees.
+   *
+   * Refer to the libinput docs to better understand what each param means:
+   * https://wayland.freedesktop.org/libinput/doc/latest/tablet-support.html#special-axes-on-tablet-tools
+   */
+  void place_tool(TOOL_TYPE tool_type, float x, float y, float pressure, float distance, float tilt_x, float tilt_y);
+
+  void set_btn(BTN_TYPE btn, bool pressed);
+};
 
 /**
  * A virtual keyboard device
@@ -161,11 +210,8 @@ private:
 public:
   explicit Keyboard(std::chrono::milliseconds timeout_repress_key = 50ms);
 
-  // A keyboard can't be copied, you can only create a new one
-  Keyboard(const Keyboard &j) = delete;
-  Keyboard(Keyboard &&j) = delete;
-  void operator=(const Keyboard &j) = delete;
-
+  Keyboard(const Keyboard &j) : _state(j._state) {}
+  Keyboard(Keyboard &&j) : _state(std::move(j._state)) {}
   ~Keyboard() override;
 
   std::vector<std::string> get_nodes() const override;
@@ -223,11 +269,8 @@ public:
 
   Joypad(CONTROLLER_TYPE type, uint8_t capabilities);
 
-  // A joypad can't be copied, you can only create a new one
-  Joypad(const Joypad &j) = delete;
-  Joypad(Joypad &&j) = delete;
-  void operator=(const Joypad &j) = delete;
-
+  Joypad(const Joypad &j) : _state(j._state) {}
+  Joypad(Joypad &&j) : _state(std::move(j._state)) {}
   ~Joypad() override;
 
   std::vector<std::string> get_nodes() const override;

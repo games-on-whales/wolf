@@ -19,15 +19,6 @@ set(SRC_LIST
         testRTSP.cpp)
 
 if (UNIX AND NOT APPLE)
-    option(TEST_UINPUT "Enable uinput test" ON) # uinput doesn't work in GA
-    if (TEST_UINPUT)
-        list(APPEND SRC_LIST "platforms/linux/input.cpp")
-        if (BUILD_FAKE_UDEV_CLI)
-            list(APPEND SRC_LIST "platforms/linux/fake-udev.cpp")
-            target_link_libraries(wolftests PRIVATE fake-udev::lib)
-        endif ()
-    endif ()
-
     option(TEST_RUST_WAYLAND "Enable custom wayland test" ON)
     if (TEST_RUST_WAYLAND)
         list(APPEND SRC_LIST "platforms/linux/wayland-display.cpp")
@@ -44,7 +35,14 @@ if (UNIX AND NOT APPLE)
         pkg_check_modules(LIBINPUT REQUIRED IMPORTED_TARGET libinput)
         target_link_libraries(wolftests PRIVATE PkgConfig::LIBINPUT)
 
-        list(APPEND SRC_LIST "platforms/linux/testLibinput.cpp")
+        if (BUILD_FAKE_UDEV_CLI)
+            list(APPEND SRC_LIST "platforms/linux/fake-udev.cpp")
+            target_link_libraries(wolftests PRIVATE fake-udev::lib)
+        endif ()
+        list(APPEND SRC_LIST
+                "platforms/linux/libinput.h"
+                "platforms/linux/testLibinput.cpp"
+                "platforms/linux/input.cpp")
     endif ()
 endif ()
 

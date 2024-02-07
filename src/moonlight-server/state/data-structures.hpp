@@ -197,6 +197,7 @@ struct StreamSession {
   std::shared_ptr<input::Mouse> mouse;
   std::shared_ptr<input::Keyboard> keyboard;
   std::shared_ptr<immer::atom<JoypadList>> joypads;
+  std::shared_ptr<input::PenTablet> pen_tablet = nullptr; /* Optional, will be set on first use*/
 };
 
 struct PlugDeviceEvent {

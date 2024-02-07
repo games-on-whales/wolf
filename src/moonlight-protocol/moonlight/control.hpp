@@ -174,8 +174,19 @@ struct HAPTICS_PACKET : INPUT_PKT {
   uint16_t enable;
 };
 
+enum TOUCH_EVENT_TYPE : uint8_t {
+  TOUCH_EVENT_HOVER = 0x00,
+  TOUCH_EVENT_DOWN = 0x01,
+  TOUCH_EVENT_UP = 0x02,
+  TOUCH_EVENT_MOVE = 0x03,
+  TOUCH_EVENT_CANCEL = 0x04,
+  TOUCH_EVENT_BUTTON_ONLY = 0x05,
+  TOUCH_EVENT_HOVER_LEAVE = 0x06,
+  TOUCH_EVENT_CANCEL_ALL = 0x07
+};
+
 struct TOUCH_PACKET : INPUT_PKT {
-  uint8_t event_type;
+  TOUCH_EVENT_TYPE event_type;
   uint8_t zero[1]; // Alignment/reserved
   uint16_t rotation;
   uint32_t pointer_id;
@@ -186,9 +197,24 @@ struct TOUCH_PACKET : INPUT_PKT {
   utils::netfloat contact_area_minor;
 };
 
+enum TOOL_TYPE : uint8_t {
+  TOOL_TYPE_UNKNOWN = 0x00,
+  TOOL_TYPE_PEN = 0x01,
+  TOOL_TYPE_ERASER = 0x02,
+};
+
+enum PEN_BUTTON_TYPE : uint8_t {
+  PEN_BUTTON_TYPE_PRIMARY = 0x01,
+  PEN_BUTTON_TYPE_SECONDARY = 0x02,
+  PEN_BUTTON_TYPE_TERTIARY = 0x04
+};
+
+static constexpr uint8_t PEN_TILT_UNKNOWN = 0xFF;
+static constexpr uint16_t PEN_ROTATION_UNKNOWN = 0xFFFF;
+
 struct PEN_PACKET : INPUT_PKT {
-  uint8_t event_type;
-  uint8_t tool_type;
+  TOUCH_EVENT_TYPE event_type;
+  TOOL_TYPE tool_type;
   uint8_t pen_buttons;
   uint8_t zero[1]; // Alignment/reserved
   utils::netfloat x;
@@ -206,17 +232,6 @@ struct CONTROLLER_ARRIVAL_PACKET : INPUT_PKT {
   CONTROLLER_TYPE controller_type;
   uint8_t capabilities; // see: CONTROLLER_CAPABILITIES
   uint32_t support_button_flags;
-};
-
-enum TOUCH_EVENT_TYPE : uint8_t {
-  TOUCH_EVENT_HOVER = 0x00,
-  TOUCH_EVENT_DOWN = 0x01,
-  TOUCH_EVENT_UP = 0x02,
-  TOUCH_EVENT_MOVE = 0x03,
-  TOUCH_EVENT_CANCEL = 0x04,
-  TOUCH_EVENT_BUTTON_ONLY = 0x05,
-  TOUCH_EVENT_HOVER_LEAVE = 0x06,
-  TOUCH_EVENT_CANCEL_ALL = 0x07
 };
 
 struct CONTROLLER_TOUCH_PACKET : INPUT_PKT {

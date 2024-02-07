@@ -1,61 +1,14 @@
 #include "catch2/catch_all.hpp"
 
 #include <core/input.hpp>
-#include <helpers/logger.hpp>
+#include "libinput.h"
 #include <libinput.h>
 #include <linux/input-event-codes.h>
-#include <memory>
 #include <platforms/linux/uinput/keyboard.hpp>
 #include <vector>
 
 using namespace wolf::core::input;
 using Catch::Matchers::WithinRel;
-
-/**
- * UTILS
- */
-
-static int open_restricted(const char *path, int flags, void *user_data) {
-  int fd = open(path, flags);
-  return fd < 0 ? -errno : fd;
-}
-
-static void close_restricted(int fd, void *user_data) {
-  close(fd);
-}
-
-const static struct libinput_interface interface = {
-    .open_restricted = open_restricted,
-    .close_restricted = close_restricted,
-};
-
-static void LogHandler(libinput __attribute__((unused)) * libinput,
-                       libinput_log_priority priority,
-                       const char *format,
-                       va_list args) {
-  if (priority == LIBINPUT_LOG_PRIORITY_DEBUG) {
-    char buf[512];
-    int n = vsnprintf(buf, sizeof(buf), format, args);
-    if (n > 0)
-      logs::log(logs::debug, "libinput: {}", buf);
-  }
-}
-
-std::shared_ptr<libinput> create_libinput_context(const std::vector<std::string> &nodes) {
-  auto li = libinput_path_create_context(&interface, NULL);
-  libinput_log_set_handler(li, LogHandler);
-  libinput_log_set_priority(li, LIBINPUT_LOG_PRIORITY_DEBUG);
-  for (const auto &node : nodes) {
-    libinput_path_add_device(li, node.c_str());
-  }
-  return std::shared_ptr<libinput>(li, [](libinput *li) { libinput_unref(li); });
-}
-
-std::shared_ptr<libinput_event> get_event(std::shared_ptr<libinput> li) {
-  libinput_dispatch(li.get());
-  struct libinput_event *event = libinput_get_event(li.get());
-  return std::shared_ptr<libinput_event>(event, [](libinput_event *event) { libinput_event_destroy(event); });
-}
 
 /**
  * TESTS
@@ -240,5 +193,68 @@ TEST_CASE("virtual trackpad", "[LIBINPUT]") {
     event = get_event(li);
     trackpad.release_finger(1);
     event = get_event(li);
+  }
+}
+
+TEST_CASE("virtual pen tablet", "[LIBINPUT]") {
+  auto tablet = PenTablet();
+  auto li = create_libinput_context(tablet.get_nodes());
+  auto event = get_event(li);
+  REQUIRE(libinput_event_get_type(event.get()) == LIBINPUT_EVENT_DEVICE_ADDED);
+  REQUIRE(libinput_device_has_capability(libinput_event_get_device(event.get()), LIBINPUT_DEVICE_CAP_TABLET_TOOL));
+
+  float TARGET_W = 1920;
+  float TARGET_H = 1080;
+
+  { // Let's move the pen close but not in contact with the tablet
+    tablet.place_tool(PenTablet::PEN, 0.1, 0.2, -1, 0.5, 45, 0);
+    event = get_event(li);
+    REQUIRE(libinput_event_get_type(event.get()) == LIBINPUT_EVENT_TABLET_TOOL_PROXIMITY);
+    auto t_event = libinput_event_get_tablet_tool_event(event.get());
+    REQUIRE(libinput_event_tablet_tool_get_proximity_state(t_event) == LIBINPUT_TABLET_TOOL_PROXIMITY_STATE_IN);
+    REQUIRE(libinput_tablet_tool_get_type(libinput_event_tablet_tool_get_tool(t_event)) ==
+            LIBINPUT_TABLET_TOOL_TYPE_PEN);
+    REQUIRE(libinput_event_tablet_tool_get_distance(t_event) == 0.5);
+    REQUIRE(libinput_event_tablet_tool_get_pressure(t_event) == 0.0);
+    REQUIRE_THAT(libinput_event_tablet_tool_get_x_transformed(t_event, TARGET_W), WithinRel(TARGET_W * 0.1f, 0.5f));
+    REQUIRE_THAT(libinput_event_tablet_tool_get_y_transformed(t_event, TARGET_H), WithinRel(TARGET_H * 0.2f, 0.5f));
+    REQUIRE_THAT(libinput_event_tablet_tool_get_tilt_x(t_event), WithinRel(45, 0.1f));
+    REQUIRE(libinput_event_tablet_tool_get_tilt_y(t_event) == 0);
+    REQUIRE(libinput_event_tablet_tool_get_tip_state(t_event) == LIBINPUT_TABLET_TOOL_TIP_UP);
+  }
+
+  { // Let's put the pen in contact with the tablet
+    tablet.place_tool(PenTablet::PEN, 0.1, 0.2, 0.5, -1.0, 45, 25);
+    event = get_event(li);
+    REQUIRE(libinput_event_get_type(event.get()) == LIBINPUT_EVENT_TABLET_TOOL_TIP);
+    auto t_event = libinput_event_get_tablet_tool_event(event.get());
+    REQUIRE(libinput_event_tablet_tool_get_proximity_state(t_event) == LIBINPUT_TABLET_TOOL_PROXIMITY_STATE_IN);
+    REQUIRE(libinput_tablet_tool_get_type(libinput_event_tablet_tool_get_tool(t_event)) ==
+            LIBINPUT_TABLET_TOOL_TYPE_PEN);
+    REQUIRE(libinput_event_tablet_tool_get_distance(t_event) == 0.0);
+    REQUIRE_THAT(libinput_event_tablet_tool_get_pressure(t_event), WithinRel(0.5f, 0.5f));
+    REQUIRE_THAT(libinput_event_tablet_tool_get_x_transformed(t_event, TARGET_W), WithinRel(TARGET_W * 0.1f, 0.5f));
+    REQUIRE_THAT(libinput_event_tablet_tool_get_y_transformed(t_event, TARGET_H), WithinRel(TARGET_H * 0.2f, 0.5f));
+    REQUIRE_THAT(libinput_event_tablet_tool_get_tilt_x(t_event), WithinRel(45, 0.1f));
+    REQUIRE_THAT(libinput_event_tablet_tool_get_tilt_y(t_event), WithinRel(25, 0.1f));
+    REQUIRE(libinput_event_tablet_tool_get_tip_state(t_event) == LIBINPUT_TABLET_TOOL_TIP_DOWN);
+  }
+
+  { // Test out pressing a button on the tool
+    tablet.set_btn(PenTablet::PRIMARY, true);
+    event = get_event(li);
+    REQUIRE(libinput_event_get_type(event.get()) == LIBINPUT_EVENT_TABLET_TOOL_BUTTON);
+    auto t_event = libinput_event_get_tablet_tool_event(event.get());
+    REQUIRE(libinput_event_tablet_tool_get_button(t_event) == BTN_STYLUS);
+    REQUIRE(libinput_event_tablet_tool_get_button_state(t_event) == LIBINPUT_BUTTON_STATE_PRESSED);
+  }
+
+  { // Test out releasing a button on the tool
+    tablet.set_btn(PenTablet::PRIMARY, false);
+    event = get_event(li);
+    REQUIRE(libinput_event_get_type(event.get()) == LIBINPUT_EVENT_TABLET_TOOL_BUTTON);
+    auto t_event = libinput_event_get_tablet_tool_event(event.get());
+    REQUIRE(libinput_event_tablet_tool_get_button(t_event) == BTN_STYLUS);
+    REQUIRE(libinput_event_tablet_tool_get_button_state(t_event) == LIBINPUT_BUTTON_STATE_RELEASED);
   }
 }

@@ -8,7 +8,10 @@ namespace control {
 
 using namespace moonlight::control::pkts;
 
-void handle_input(const state::StreamSession &session,
+/**
+ * Side effect: session devices might be updated when hotplugging
+ */
+void handle_input(state::StreamSession &session,
                   const immer::atom<enet_clients_map> &connected_clients,
                   INPUT_PKT *pkt);
 
