@@ -63,9 +63,41 @@ public:
 
   void release(MOUSE_BUTTON button);
 
-  void vertical_scroll(int amount);
+  /**
+   *
+   * A value that is a fraction of ±120 indicates a wheel movement less than
+   * one logical click, a caller should either scroll by the respective
+   * fraction of the normal scroll distance or accumulate that value until a
+   * multiple of 120 is reached.
+   *
+   * The magic number 120 originates from the
+   * <a href="http://download.microsoft.com/download/b/d/1/bd1f7ef4-7d72-419e-bc5c-9f79ad7bb66e/wheel.docx">
+   * Windows Vista Mouse Wheel design document
+   * </a>.
+   *
+   * Positive numbers will scroll down, negative numbers will scroll up
+   *
+   * @param high_res_distance The distance in high resolution
+   */
+  void vertical_scroll(int high_res_distance);
 
-  void horizontal_scroll(int amount);
+  /**
+   *
+   * A value that is a fraction of ±120 indicates a wheel movement less than
+   * one logical click, a caller should either scroll by the respective
+   * fraction of the normal scroll distance or accumulate that value until a
+   * multiple of 120 is reached.
+   *
+   * The magic number 120 originates from the
+   * <a href="http://download.microsoft.com/download/b/d/1/bd1f7ef4-7d72-419e-bc5c-9f79ad7bb66e/wheel.docx">
+   * Windows Vista Mouse Wheel design document
+   * </a>.
+   *
+   * Positive numbers will scroll right, negative numbers will scroll left
+   *
+   * @param high_res_distance The distance in high resolution
+   */
+  void horizontal_scroll(int high_res_distance);
 };
 
 /**

@@ -65,7 +65,6 @@ constexpr int ABS_MAX_HEIGHT = 12000;
 static std::optional<libevdev_uinput *> create_mouse(libevdev *dev) {
   libevdev_uinput *uidev;
 
-  libevdev_set_uniq(dev, "Wolf Mouse");
   libevdev_set_name(dev, "Wolf mouse virtual device");
   libevdev_set_id_vendor(dev, 0xAB00);
   libevdev_set_id_product(dev, 0xAB01);
@@ -108,8 +107,7 @@ static std::optional<libevdev_uinput *> create_mouse(libevdev *dev) {
 static std::optional<libevdev_uinput *> create_mouse_abs(libevdev *dev) {
   libevdev_uinput *uidev;
 
-  libevdev_set_uniq(dev, "Wolf Touchpad");
-  libevdev_set_name(dev, "Wolf touchpad virtual device");
+  libevdev_set_name(dev, "Wolf mouse (abs) virtual device");
   libevdev_set_id_vendor(dev, 0xAB00);
   libevdev_set_id_product(dev, 0xAB02);
   libevdev_set_id_version(dev, 0xAB00);
@@ -120,7 +118,7 @@ static std::optional<libevdev_uinput *> create_mouse_abs(libevdev *dev) {
   libevdev_enable_event_code(dev, EV_KEY, BTN_LEFT, nullptr);
 
   struct input_absinfo absinfo {
-    .value = 0, .minimum = 0, .maximum = 65535, .fuzz = 1, .flat = 0, .resolution = 28
+    .value = 0, .minimum = 0, .maximum = 0, .fuzz = 1, .flat = 0, .resolution = 28
   };
   libevdev_enable_event_type(dev, EV_ABS);
 
@@ -135,7 +133,7 @@ static std::optional<libevdev_uinput *> create_mouse_abs(libevdev *dev) {
     return {};
   }
 
-  logs::log(logs::debug, "[INPUT] Created virtual touchpad {}", libevdev_uinput_get_devnode(uidev));
+  logs::log(logs::debug, "[INPUT] Created virtual mouse (abs) {}", libevdev_uinput_get_devnode(uidev));
 
   return uidev;
 }
@@ -208,8 +206,7 @@ void Mouse::release(Mouse::MOUSE_BUTTON button) {
   }
 }
 
-void Mouse::horizontal_scroll(int amount) {
-  int high_res_distance = amount;
+void Mouse::horizontal_scroll(int high_res_distance) {
   int distance = high_res_distance / 120;
 
   if (auto mouse = _state->mouse_rel.get()) {
@@ -219,8 +216,7 @@ void Mouse::horizontal_scroll(int amount) {
   }
 }
 
-void Mouse::vertical_scroll(int amount) {
-  int high_res_distance = amount;
+void Mouse::vertical_scroll(int high_res_distance) {
   int distance = high_res_distance / 120;
 
   if (auto mouse = _state->mouse_rel.get()) {

@@ -58,6 +58,7 @@ jobs:
                 -DCMAKE_CXX_EXTENSIONS=OFF \
                 -DCMAKE_CXX_STANDARD=17 \
                 -DTEST_UINPUT=OFF \
+                -DTEST_LIBINPUT=OFF \
                 -DTEST_DOCKER=ON \
                 -DLINK_RUST_WAYLAND=ON \
                 -DTEST_RUST_WAYLAND=OFF \
@@ -152,6 +153,7 @@ jobs:
                 -DBUILD_SHARED_LIBS=${{ matrix.shared }} \
                 -DCATCH_DEVELOPMENT_BUILD=ON \
                 -DTEST_UINPUT=OFF \
+                -DTEST_LIBINPUT=OFF \
                 -DTEST_DOCKER=OFF \
                 -DLINK_RUST_WAYLAND=ON \
                 -DTEST_RUST_WAYLAND=OFF \

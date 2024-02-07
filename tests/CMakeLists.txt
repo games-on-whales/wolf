@@ -37,6 +37,15 @@ if (UNIX AND NOT APPLE)
     if (TEST_NVIDIA)
         list(APPEND SRC_LIST "platforms/linux/nvidia.cpp")
     endif ()
+
+    option(TEST_LIBINPUT "Enable libinput test" ON)
+    if (TEST_LIBINPUT)
+        find_package(PkgConfig)
+        pkg_check_modules(LIBINPUT REQUIRED IMPORTED_TARGET libinput)
+        target_link_libraries(wolftests PRIVATE PkgConfig::LIBINPUT)
+
+        list(APPEND SRC_LIST "platforms/linux/testLibinput.cpp")
+    endif ()
 endif ()
 
 option(TEST_DOCKER "Enable docker tests" ON)
