@@ -156,8 +156,8 @@ void TouchScreen::place_finger(int finger_nr, float x, float y, float pressure) 
     libevdev_uinput_write_event(ts, EV_ABS, ABS_MT_POSITION_X, scaled_x);
     libevdev_uinput_write_event(ts, EV_ABS, ABS_Y, scaled_y);
     libevdev_uinput_write_event(ts, EV_ABS, ABS_MT_POSITION_Y, scaled_y);
-    libevdev_uinput_write_event(ts, EV_ABS, ABS_PRESSURE, (int) std::lround(pressure * PRESSURE_MAX));
-    libevdev_uinput_write_event(ts, EV_ABS, ABS_MT_PRESSURE, (int) std::lround(pressure * PRESSURE_MAX));
+    libevdev_uinput_write_event(ts, EV_ABS, ABS_PRESSURE, (int)std::lround(pressure * PRESSURE_MAX));
+    libevdev_uinput_write_event(ts, EV_ABS, ABS_MT_PRESSURE, (int)std::lround(pressure * PRESSURE_MAX));
 
     libevdev_uinput_write_event(ts, EV_SYN, SYN_REPORT, 0);
   }

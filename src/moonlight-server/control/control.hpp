@@ -3,10 +3,10 @@
 #include <chrono>
 #include <enet/enet.h>
 #include <helpers/logger.hpp>
+#include <moonlight/control.hpp>
 #include <range/v3/view.hpp>
 #include <state/data-structures.hpp>
 #include <thread>
-#include <moonlight/control.hpp>
 
 namespace control {
 

@@ -76,7 +76,7 @@ typedef uint8_t netfloat[4];
  * @param f Netfloat value.
  * @return Float value.
  */
-inline float from_netfloat(const utils::netfloat & f) {
+inline float from_netfloat(const utils::netfloat &f) {
   return boost::endian::endian_load<float, sizeof(float), boost::endian::order::little>(f);
 }
 
