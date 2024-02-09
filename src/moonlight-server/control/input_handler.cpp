@@ -77,6 +77,19 @@ std::shared_ptr<PenTablet> create_pen_tablet(state::StreamSession &session) {
   return tablet;
 }
 
+/**
+ * Creates a new Touch screen and saves it into the session;
+ * will also trigger a PlugDeviceEvent
+ */
+std::shared_ptr<TouchScreen> create_touch_screen(state::StreamSession &session) {
+  logs::log(logs::debug, "[INPUT] Creating new touch screen");
+  auto touch_screen = std::make_shared<TouchScreen>();
+  session.event_bus->fire_event(immer::box<state::PlugDeviceEvent>(
+      state::PlugDeviceEvent{.session_id = session.session_id, .device = touch_screen}));
+  session.touch_screen = touch_screen;
+  return touch_screen;
+}
+
 float netfloat_to_0_1(const utils::netfloat &f) {
   return std::clamp(utils::from_netfloat(f), 0.0f, 1.0f);
 }
@@ -179,9 +192,33 @@ void handle_input(state::StreamSession &session,
     session.keyboard->paste_utf(utf32);
     break;
   }
-  case TOUCH:
+  case TOUCH: {
     logs::log(logs::trace, "[INPUT] Received input of type: TOUCH");
+    if (!session.touch_screen) {
+      create_touch_screen(session);
+    }
+    auto touch_pkt = static_cast<TOUCH_PACKET *>(pkt);
+
+    auto finger_id = boost::endian::little_to_native(touch_pkt->pointer_id);
+    auto x = netfloat_to_0_1(touch_pkt->x);
+    auto y = netfloat_to_0_1(touch_pkt->y);
+    auto pressure_or_distance = netfloat_to_0_1(touch_pkt->pressure_or_distance);
+    switch (touch_pkt->event_type) {
+    case pkts::TOUCH_EVENT_HOVER:
+    case pkts::TOUCH_EVENT_DOWN:
+    case pkts::TOUCH_EVENT_MOVE:
+      session.touch_screen->place_finger(finger_id, x, y, pressure_or_distance);
+      break;
+    case pkts::TOUCH_EVENT_UP:
+    case pkts::TOUCH_EVENT_HOVER_LEAVE:
+    case pkts::TOUCH_EVENT_CANCEL:
+      session.touch_screen->release_finger(finger_id);
+      break;
+    default:
+      logs::log(logs::warning, "[INPUT] Unknown touch event type {}", touch_pkt->event_type);
+    }
     break;
+  }
   case PEN: {
     logs::log(logs::trace, "[INPUT] Received input of type: PEN");
     if (!session.pen_tablet) {

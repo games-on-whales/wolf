@@ -57,7 +57,6 @@ TEST_CASE("uinput - keyboard", "UINPUT") {
 }
 
 TEST_CASE("uinput - pen tablet", "[UINPUT]") {
-  libevdev_ptr tablet_dev(libevdev_new(), ::libevdev_free);
   auto session = state::StreamSession{.pen_tablet = std::make_shared<PenTablet>()};
   auto li = create_libinput_context(session.pen_tablet->get_nodes());
   auto event = get_event(li);
@@ -121,6 +120,55 @@ TEST_CASE("uinput - pen tablet", "[UINPUT]") {
     REQUIRE_THAT(libinput_event_tablet_tool_get_tilt_y(t_event),
                  WithinRel(-90.0f, 0.1f)); // 180° rotation means -90° tilt Y (full down position)
     REQUIRE(libinput_event_tablet_tool_get_tip_state(t_event) == LIBINPUT_TABLET_TOOL_TIP_DOWN);
+  }
+}
+
+TEST_CASE("uinput - touch screen", "[UINPUT]") {
+  auto session = state::StreamSession{.touch_screen = std::make_shared<TouchScreen>()};
+  auto li = create_libinput_context(session.touch_screen->get_nodes());
+  auto event = get_event(li);
+  REQUIRE(libinput_event_get_type(event.get()) == LIBINPUT_EVENT_DEVICE_ADDED);
+  REQUIRE(libinput_device_has_capability(libinput_event_get_device(event.get()), LIBINPUT_DEVICE_CAP_TOUCH));
+
+  auto packet = pkts::TOUCH_PACKET{
+      .event_type = pkts::TOUCH_EVENT_HOVER,
+      .pointer_id = boost::endian::native_to_little(0),
+      .x = {0, 0, 0, 63},                    // 0.5 in float (little endian)
+      .y = {0, 0, 0, 63},                    // 0.5 in float (little endian)
+      .pressure_or_distance = {0, 0, 0, 63}, // 0.5 in float (little endian)
+  };
+  packet.type = pkts::TOUCH;
+
+  control::handle_input(session, {}, &packet);
+
+  float TARGET_W = 1920;
+  float TARGET_H = 1080;
+  {
+    event = get_event(li);
+    REQUIRE(libinput_event_get_type(event.get()) == LIBINPUT_EVENT_TOUCH_DOWN);
+    auto t_event = libinput_event_get_touch_event(event.get());
+    REQUIRE(libinput_event_touch_get_slot(t_event) == 1);
+    REQUIRE_THAT(libinput_event_touch_get_x_transformed(t_event, TARGET_W), WithinRel(TARGET_W * 0.5f, 0.5f));
+    REQUIRE_THAT(libinput_event_touch_get_y_transformed(t_event, TARGET_H), WithinRel(TARGET_H * 0.5f, 0.5f));
+    event = get_event(li);
+    REQUIRE(libinput_event_get_type(event.get()) == LIBINPUT_EVENT_TOUCH_FRAME);
+  }
+
+  packet = pkts::TOUCH_PACKET{
+      .event_type = pkts::TOUCH_EVENT_UP,
+      .pointer_id = boost::endian::native_to_little(0),
+  };
+  packet.type = pkts::TOUCH;
+
+  control::handle_input(session, {}, &packet);
+
+  {
+    event = get_event(li);
+    REQUIRE(libinput_event_get_type(event.get()) == LIBINPUT_EVENT_TOUCH_UP);
+    auto t_event = libinput_event_get_touch_event(event.get());
+    REQUIRE(libinput_event_touch_get_slot(t_event) == 1);
+    event = get_event(li);
+    REQUIRE(libinput_event_get_type(event.get()) == LIBINPUT_EVENT_TOUCH_FRAME);
   }
 }
 

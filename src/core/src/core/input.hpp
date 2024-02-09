@@ -139,6 +139,39 @@ public:
 };
 
 /**
+ * A virtual touchscreen
+ */
+class TouchScreen : public VirtualDevice {
+protected:
+  typedef struct TouchScreenState TouchScreenState;
+
+private:
+  std::shared_ptr<TouchScreenState> _state;
+
+public:
+  TouchScreen();
+  TouchScreen(const TouchScreen &j) : _state(j._state) {}
+  TouchScreen(TouchScreen &&j) : _state(std::move(j._state)) {}
+  ~TouchScreen() override;
+
+  std::vector<std::string> get_nodes() const override;
+
+  std::vector<std::map<std::string, std::string>> get_udev_events() const override;
+  std::vector<std::pair<std::string, std::vector<std::string>>> get_udev_hw_db_entries() const override;
+
+  /**
+   * We expect (x,y) to be in the range [0.0, 1.0]; x and y values are normalised device coordinates
+   * from the top-left corner (0.0, 0.0) to bottom-right corner (1.0, 1.0)
+   *
+   * @param finger_nr
+   * @param pressure A value between 0 and 1
+   */
+  void place_finger(int finger_nr, float x, float y, float pressure);
+
+  void release_finger(int finger_nr);
+};
+
+/**
  * A virtual pen tablet
  *
  * implements a pen tablet as defined in libinput

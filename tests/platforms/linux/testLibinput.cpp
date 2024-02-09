@@ -1,7 +1,7 @@
 #include "catch2/catch_all.hpp"
 
-#include <core/input.hpp>
 #include "libinput.h"
+#include <core/input.hpp>
 #include <libinput.h>
 #include <linux/input-event-codes.h>
 #include <platforms/linux/uinput/keyboard.hpp>
@@ -151,6 +151,60 @@ TEST_CASE("virtual mouse absolue", "[LIBINPUT]") {
                  WithinRel(TARGET_HEIGHT, 0.5f));
     REQUIRE_THAT(libinput_event_pointer_get_absolute_x_transformed(p_event, TARGET_WIDTH),
                  WithinRel(TARGET_WIDTH, 0.5f));
+  }
+}
+
+TEST_CASE("virtual touch screen", "[LIBINPUT]") {
+  auto touch = TouchScreen();
+  auto li = create_libinput_context(touch.get_nodes());
+  auto event = get_event(li);
+  REQUIRE(libinput_event_get_type(event.get()) == LIBINPUT_EVENT_DEVICE_ADDED);
+  REQUIRE(libinput_device_has_capability(libinput_event_get_device(event.get()), LIBINPUT_DEVICE_CAP_TOUCH));
+
+  auto TARGET_WIDTH = 1920;
+  auto TARGET_HEIGHT = 1080;
+  { // Put down one finger
+    touch.place_finger(0, 0.1, 0.1, 0.3);
+    event = get_event(li);
+    REQUIRE(libinput_event_get_type(event.get()) == LIBINPUT_EVENT_TOUCH_DOWN);
+    auto t_event = libinput_event_get_touch_event(event.get());
+    REQUIRE(libinput_event_touch_get_slot(t_event) == 1);
+    REQUIRE_THAT(libinput_event_touch_get_x_transformed(t_event, TARGET_WIDTH), WithinRel(TARGET_WIDTH * 0.1f, 0.5f));
+    REQUIRE_THAT(libinput_event_touch_get_y_transformed(t_event, TARGET_HEIGHT), WithinRel(TARGET_HEIGHT * 0.1f, 0.5f));
+    event = get_event(li);
+    REQUIRE(libinput_event_get_type(event.get()) == LIBINPUT_EVENT_TOUCH_FRAME);
+  }
+
+  { // Add a second finger
+    touch.place_finger(1, 0.2, 0.2, 0.3);
+    event = get_event(li);
+    REQUIRE(libinput_event_get_type(event.get()) == LIBINPUT_EVENT_TOUCH_DOWN);
+    auto t_event = libinput_event_get_touch_event(event.get());
+    REQUIRE(libinput_event_touch_get_slot(t_event) == 2);
+    REQUIRE_THAT(libinput_event_touch_get_x_transformed(t_event, TARGET_WIDTH), WithinRel(TARGET_WIDTH * 0.2f, 0.5f));
+    REQUIRE_THAT(libinput_event_touch_get_y_transformed(t_event, TARGET_HEIGHT), WithinRel(TARGET_HEIGHT * 0.2f, 0.5f));
+    event = get_event(li);
+    REQUIRE(libinput_event_get_type(event.get()) == LIBINPUT_EVENT_TOUCH_FRAME);
+  }
+
+  { // Lift first finger
+    touch.release_finger(0);
+    event = get_event(li);
+    REQUIRE(libinput_event_get_type(event.get()) == LIBINPUT_EVENT_TOUCH_UP);
+    auto t_event = libinput_event_get_touch_event(event.get());
+    REQUIRE(libinput_event_touch_get_slot(t_event) == 1);
+    event = get_event(li);
+    REQUIRE(libinput_event_get_type(event.get()) == LIBINPUT_EVENT_TOUCH_FRAME);
+  }
+
+  { // Lift second finger
+    touch.release_finger(1);
+    event = get_event(li);
+    REQUIRE(libinput_event_get_type(event.get()) == LIBINPUT_EVENT_TOUCH_UP);
+    auto t_event = libinput_event_get_touch_event(event.get());
+    REQUIRE(libinput_event_touch_get_slot(t_event) == 2);
+    event = get_event(li);
+    REQUIRE(libinput_event_get_type(event.get()) == LIBINPUT_EVENT_TOUCH_FRAME);
   }
 }
 

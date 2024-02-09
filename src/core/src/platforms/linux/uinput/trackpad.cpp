@@ -112,14 +112,14 @@ std::optional<libevdev_uinput *> create_trackpad() {
   input_absinfo abs_pressure{0, 0, PRESSURE_MAX, 0, 0, 0};
   libevdev_enable_event_code(dev, EV_ABS, ABS_PRESSURE, &abs_pressure);
   libevdev_enable_event_code(dev, EV_ABS, ABS_MT_PRESSURE, &abs_pressure);
-  //
+  // TODO:
   //  input_absinfo touch{0, 0, TOUCH_MAX, 4, 0, 0};
   //  libevdev_enable_event_code(dev, EV_ABS, ABS_MT_TOUCH_MAJOR, &touch);
   //  libevdev_enable_event_code(dev, EV_ABS, ABS_MT_TOUCH_MINOR, &touch);
-
   //  input_absinfo orientation{0, -3, 4, 0, 0, 0};
   //  libevdev_enable_event_code(dev, EV_ABS, ABS_MT_ORIENTATION, &orientation);
 
+  // https://docs.kernel.org/input/event-codes.html#trackpads
   libevdev_enable_property(dev, INPUT_PROP_POINTER);
   libevdev_enable_property(dev, INPUT_PROP_BUTTONPAD);
 
@@ -186,8 +186,8 @@ void Trackpad::place_finger(int finger_nr, float x, float y, float pressure) {
     libevdev_uinput_write_event(touchpad, EV_ABS, ABS_MT_POSITION_X, scaled_x);
     libevdev_uinput_write_event(touchpad, EV_ABS, ABS_Y, scaled_y);
     libevdev_uinput_write_event(touchpad, EV_ABS, ABS_MT_POSITION_Y, scaled_y);
-    libevdev_uinput_write_event(touchpad, EV_ABS, ABS_PRESSURE, pressure * PRESSURE_MAX);
-    libevdev_uinput_write_event(touchpad, EV_ABS, ABS_MT_PRESSURE, pressure * PRESSURE_MAX);
+    libevdev_uinput_write_event(touchpad, EV_ABS, ABS_PRESSURE, (int) std::lround(pressure * PRESSURE_MAX));
+    libevdev_uinput_write_event(touchpad, EV_ABS, ABS_MT_PRESSURE, (int) std::lround(pressure * PRESSURE_MAX));
 
     libevdev_uinput_write_event(touchpad, EV_SYN, SYN_REPORT, 0);
   }

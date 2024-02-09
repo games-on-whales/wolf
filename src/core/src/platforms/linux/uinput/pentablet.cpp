@@ -67,6 +67,7 @@ std::optional<libevdev_uinput *> create_tablet() {
   libevdev_enable_event_code(dev, EV_ABS, ABS_TILT_X, &abs_tilt);
   libevdev_enable_event_code(dev, EV_ABS, ABS_TILT_Y, &abs_tilt);
 
+  // https://docs.kernel.org/input/event-codes.html#tablets
   libevdev_enable_property(dev, INPUT_PROP_POINTER);
   libevdev_enable_property(dev, INPUT_PROP_DIRECT);
   auto err = libevdev_uinput_create_from_device(dev, LIBEVDEV_UINPUT_OPEN_MANAGED, &uidev);
