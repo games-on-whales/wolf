@@ -59,6 +59,18 @@
           rev = "v3.7.1";
           hash = "sha256-HnhXBvIjo1JXhp+hUQvjs83t5IBVbNN6o3ZGhB4WESQ=";
         };
+        cpptrace_src = pkgs.fetchFromGitHub {
+          owner = "jeremy-rifkin";
+          repo = "cpptrace";
+          rev = "448c325";
+          hash = "sha256-JGwRhmsd0xiHkK0JW0AUvWAnJA9UztK2wQ+c5aq2y6E=";
+        };
+        libdwarf_src = pkgs.fetchFromGitHub {
+          owner = "jeremy-rifkin";
+          repo = "libdwarf-lite";
+          rev = "5c0cb25";
+           hash = "sha256-so/y6GnhwYZPFCeoKih+sPgndnuHWHE1h9mWXnccXxM=";
+        };
         simplewebserver_src = pkgs.fetchFromGitLab {
           owner = "eidheim";
           repo = "Simple-Web-Server";
