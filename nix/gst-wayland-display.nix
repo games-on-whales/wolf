@@ -11,6 +11,9 @@ pkgs.rustPlatform.buildRustPackage rec {
   };
   nativeBuildInputs = with pkgs; [ pkg-config cargo-c ];
   buildInputs = with pkgs; [
+    mesa
+    libglvnd
+    pipewire
     glib
     wayland
     libinput
@@ -27,6 +30,7 @@ pkgs.rustPlatform.buildRustPackage rec {
 
     udev
   ];
+
   cargoLockFile =
     builtins.toFile "cargo.lock" (builtins.readFile "${src}/Cargo.lock");
   cargoLock = {
@@ -36,6 +40,17 @@ pkgs.rustPlatform.buildRustPackage rec {
       "smithay-0.3.0" = "sha256-jrBY/r4IuVKiE7ykuxeZcJgikqJo6VoKQlBWrDbpy9Y=";
     };
   };
+
+  # Force linking to libEGL, which is always dlopen()ed, and to
+  # libwayland-client, which is always dlopen()ed except by the
+  # obscure winit backend.
+  RUSTFLAGS = map (a: "-C link-arg=${a}") [
+    "-Wl,--push-state,--no-as-needed"
+    "-lEGL"
+    "-lwayland-client"
+    "-Wl,--pop-state"
+  ];
+
   postPatch = ''
     cp ${cargoLockFile} Cargo.lock
   '';
