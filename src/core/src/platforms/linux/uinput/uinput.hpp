@@ -23,6 +23,7 @@
 #include <core/input.hpp>
 #include <filesystem>
 #include <helpers/logger.hpp>
+#include <inputtino/protected_types.hpp>
 #include <libevdev/libevdev-uinput.h>
 #include <libevdev/libevdev.h>
 #include <libudev.h>
@@ -35,8 +36,6 @@
 namespace wolf::core::input {
 
 using libevdev_ptr = std::shared_ptr<libevdev>;
-using libevdev_uinput_ptr = std::shared_ptr<libevdev_uinput>;
-using libevdev_event_ptr = std::shared_ptr<input_event>;
 
 /**
  * Given a device will read all queued events available at this time up to max_events
@@ -44,12 +43,7 @@ using libevdev_event_ptr = std::shared_ptr<input_event>;
  *
  * @returns a list of smart pointers of evdev input_event (empty when no events are available)
  */
-std::vector<libevdev_event_ptr> fetch_events(const libevdev_ptr &dev, int max_events = 50);
-
-/**
- * Given a uinput fd will read all queued events available at this time up to max_events
- */
-std::vector<libevdev_event_ptr> fetch_events(int uinput_fd, int max_events = 50);
+std::vector<inputtino::libevdev_event_ptr> fetch_events(const libevdev_ptr &dev, int max_events = 50);
 
 static std::pair<unsigned int, unsigned int> get_major_minor(const std::string &devnode) {
   struct stat buf {};
@@ -66,10 +60,14 @@ static std::pair<unsigned int, unsigned int> get_major_minor(const std::string &
   return {major(buf.st_rdev), minor(buf.st_rdev)};
 }
 
-static std::string gen_udev_hw_db_filename(libevdev_uinput_ptr node) {
-  auto [dev_major, dev_minor] = get_major_minor(libevdev_uinput_get_devnode(node.get()));
+static std::string gen_udev_hw_db_filename(std::string dev_node) {
+  auto [dev_major, dev_minor] = get_major_minor(dev_node);
   auto filename = fmt::format("c{}:{}", dev_major, dev_minor);
   return filename;
+}
+
+static std::string gen_udev_hw_db_filename(inputtino::libevdev_uinput_ptr node) {
+  return gen_udev_hw_db_filename(libevdev_uinput_get_devnode(node.get()));
 }
 
 static std::map<std::string, std::string>
@@ -96,7 +94,7 @@ gen_udev_base_event(const std::string &devnode, const std::string &syspath, cons
   };
 }
 
-static std::map<std::string, std::string> gen_udev_base_event(libevdev_uinput_ptr node,
+static std::map<std::string, std::string> gen_udev_base_event(inputtino::libevdev_uinput_ptr node,
                                                               const std::string &action = "add") {
 
   // Get paths
@@ -108,7 +106,7 @@ static std::map<std::string, std::string> gen_udev_base_event(libevdev_uinput_pt
   return gen_udev_base_event(devnode, syspath, action);
 }
 
-static std::map<std::string, std::string> gen_udev_base_device_event(libevdev_uinput_ptr node,
+static std::map<std::string, std::string> gen_udev_base_device_event(inputtino::libevdev_uinput_ptr node,
                                                                      const std::string &action = "add") {
   std::string syspath = libevdev_uinput_get_syspath(node.get());
   syspath.erase(0, 4); // Remove leading /sys/ from syspath TODO: what if it's not /sys/?

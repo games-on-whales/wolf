@@ -280,8 +280,19 @@ void launch(const std::shared_ptr<typename SimpleWeb::Server<SimpleWeb::HTTPS>::
   auto app = state::get_app_by_id(state->config, get_header(headers, "appid").value());
   auto new_session = create_run_session(request, current_client, state->event_bus, app);
   // virtual devices
-  new_session.mouse = std::make_shared<input::Mouse>();
-  new_session.keyboard = std::make_shared<input::Keyboard>();
+  auto mouse = input::Mouse::create();
+  if (!mouse) {
+    logs::log(logs::error, "Failed to create mouse: {}", mouse.getErrorMessage());
+  } else {
+    new_session.mouse = std::make_shared<input::Mouse>(input::Mouse(**mouse));
+  }
+
+  auto keyboard = input::Keyboard::create();
+  if (!keyboard) {
+    logs::log(logs::error, "Failed to create keyboard: {}", keyboard.getErrorMessage());
+  } else {
+    new_session.keyboard = std::make_shared<input::Keyboard>(input::Keyboard(**keyboard));
+  }
   // joypads will be created on-demand in the Control stream
   new_session.joypads = std::make_shared<immer::atom<state::JoypadList>>();
   state->event_bus->fire_event(immer::box<state::StreamSession>(new_session));

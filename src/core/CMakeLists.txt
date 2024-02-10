@@ -49,6 +49,12 @@ if (UNIX AND NOT APPLE)
     add_subdirectory(src/platforms/linux/pulseaudio)
     target_link_libraries(wolf_core PUBLIC wolf::audio)
 
+    FetchContent_Declare(
+            inputtino
+            GIT_REPOSITORY https://github.com/games-on-whales/inputtino.git
+            GIT_TAG eb8c3a4)
+    FetchContent_MakeAvailable(inputtino)
+
     add_subdirectory(src/platforms/linux/uinput)
     target_link_libraries(wolf_core PUBLIC wolf::uinput)
 

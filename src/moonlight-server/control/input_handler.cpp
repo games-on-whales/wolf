@@ -17,8 +17,13 @@ std::shared_ptr<Joypad> create_new_joypad(const state::StreamSession &session,
                                           int controller_number,
                                           Joypad::CONTROLLER_TYPE type,
                                           uint8_t capabilities) {
-  auto new_pad = std::make_shared<Joypad>(type, capabilities);
+  auto joypad = Joypad::create(type, capabilities);
+  if(!joypad){
+    logs::log(logs::error, "Failed to create joypad: {}", joypad.getErrorMessage());
+    return {};
+  }
 
+  auto new_pad = std::make_shared<Joypad>(Joypad(**joypad));
   new_pad->set_on_rumble([clients = &connected_clients,
                           controller_number,
                           session_id = session.session_id,
@@ -70,11 +75,16 @@ std::shared_ptr<Joypad> create_new_joypad(const state::StreamSession &session,
  */
 std::shared_ptr<PenTablet> create_pen_tablet(state::StreamSession &session) {
   logs::log(logs::debug, "[INPUT] Creating new pen tablet");
-  auto tablet = std::make_shared<PenTablet>();
+  auto tablet = PenTablet::create();
+  if(!tablet){
+    logs::log(logs::error, "Failed to create pen tablet: {}", tablet.getErrorMessage());
+    return {};
+  }
+  auto tablet_ptr = std::make_shared<PenTablet>(PenTablet(**tablet));
   session.event_bus->fire_event(
-      immer::box<state::PlugDeviceEvent>(state::PlugDeviceEvent{.session_id = session.session_id, .device = tablet}));
-  session.pen_tablet = tablet;
-  return tablet;
+      immer::box<state::PlugDeviceEvent>(state::PlugDeviceEvent{.session_id = session.session_id, .device = tablet_ptr}));
+  session.pen_tablet = tablet_ptr;
+  return tablet_ptr;
 }
 
 /**
@@ -83,7 +93,11 @@ std::shared_ptr<PenTablet> create_pen_tablet(state::StreamSession &session) {
  */
 std::shared_ptr<TouchScreen> create_touch_screen(state::StreamSession &session) {
   logs::log(logs::debug, "[INPUT] Creating new touch screen");
-  auto touch_screen = std::make_shared<TouchScreen>();
+  auto touch = TouchScreen::create();
+  if(!touch){
+    logs::log(logs::error, "Failed to create touch screen: {}", touch.getErrorMessage());
+  }
+  auto touch_screen = std::make_shared<TouchScreen>(TouchScreen(**touch));
   session.event_bus->fire_event(immer::box<state::PlugDeviceEvent>(
       state::PlugDeviceEvent{.session_id = session.session_id, .device = touch_screen}));
   session.touch_screen = touch_screen;

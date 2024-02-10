@@ -3,8 +3,8 @@
 
 namespace wolf::core::input {
 
-std::vector<libevdev_event_ptr> fetch_events(const libevdev_ptr &dev, int max_events) {
-  std::vector<libevdev_event_ptr> events = {};
+std::vector<inputtino::libevdev_event_ptr> fetch_events(const libevdev_ptr &dev, int max_events) {
+  std::vector<inputtino::libevdev_event_ptr> events = {};
   input_event evt = {};
   int read_events = 1;
   int ret = libevdev_next_event(dev.get(), LIBEVDEV_READ_FLAG_NORMAL, &evt);
@@ -29,8 +29,8 @@ std::vector<libevdev_event_ptr> fetch_events(const libevdev_ptr &dev, int max_ev
   return events;
 }
 
-std::vector<libevdev_event_ptr> fetch_events(int uinput_fd, int max_events) {
-  std::vector<libevdev_event_ptr> events = {};
+std::vector<inputtino::libevdev_event_ptr> fetch_events(int uinput_fd, int max_events) {
+  std::vector<inputtino::libevdev_event_ptr> events = {};
   struct input_event ev {};
   int ret, read_events = 0;
   while (read_events < max_events && (ret = read(uinput_fd, &ev, sizeof(ev))) == sizeof(ev)) {

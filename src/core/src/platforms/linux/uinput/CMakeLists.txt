@@ -8,6 +8,8 @@ add_library(wolf::uinput ALIAS wolf_uinput)
 target_include_directories(wolf_uinput PRIVATE ../../../)
 
 if (UNIX AND NOT APPLE)
+    target_link_libraries(wolf_uinput PUBLIC inputtino::libinputtino)
+
     find_package(PkgConfig)
     pkg_check_modules(LIBEVDEV REQUIRED IMPORTED_TARGET libevdev)
     target_link_libraries(wolf_uinput PUBLIC PkgConfig::LIBEVDEV)
