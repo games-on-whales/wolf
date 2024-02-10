@@ -55,6 +55,8 @@ pkgs.stdenv.mkDerivation {
     "-DFETCHCONTENT_SOURCE_DIR_SIMPLEWEBSERVER=${deps.simplewebserver_src}"
     "-DFETCHCONTENT_SOURCE_DIR_TOML=${deps.toml_src}"
     "-DFETCHCONTENT_SOURCE_DIR_ENET=${deps.enet_src}"
+    "-DFETCHCONTENT_SOURCE_DIR_CPPTRACE=${deps.cpptrace_src}"
+    "-DFETCHCONTENT_SOURCE_DIR_LIBDWARF=${deps.libdwarf_src}"
     "-DCMAKE_BUILD_TYPE=Release"
     "-DCMAKE_CXX_STANDARD=17"
     "-DCMAKE_CXX_EXTENSIONS=OFF"
