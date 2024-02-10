@@ -4,8 +4,6 @@
 #include <boost/endian/conversion.hpp>
 #include <chrono>
 #include <cstdint>
-#include <immer/array.hpp>
-#include <immer/box.hpp>
 #include <map>
 #include <optional>
 #include <thread>
@@ -130,8 +128,9 @@ public:
    *
    * @param finger_nr
    * @param pressure A value between 0 and 1
+   * @param orientation A value between -90 and 90
    */
-  void place_finger(int finger_nr, float x, float y, float pressure);
+  void place_finger(int finger_nr, float x, float y, float pressure, int orientation);
 
   void release_finger(int finger_nr);
 
@@ -166,7 +165,7 @@ public:
    * @param finger_nr
    * @param pressure A value between 0 and 1
    */
-  void place_finger(int finger_nr, float x, float y, float pressure);
+  void place_finger(int finger_nr, float x, float y, float pressure, int orientation);
 
   void release_finger(int finger_nr);
 };
@@ -255,19 +254,6 @@ public:
   void press(short key_code);
 
   void release(short key_code);
-
-  /**
-   * Here we receive a single UTF-8 encoded char at a time,
-   * the trick is to convert it to UTF-32 then send CTRL+SHIFT+U+<HEXCODE> in order to produce any
-   * unicode character, see: https://en.wikipedia.org/wiki/Unicode_input
-   *
-   * ex:
-   * - when receiving UTF-8 [0xF0 0x9F 0x92 0xA9] (which is '💩')
-   * - we'll convert it to UTF-32 [0x1F4A9]
-   * - then type: CTRL+SHIFT+U+1F4A9
-   * see the conversion at: https://www.compart.com/en/unicode/U+1F4A9
-   */
-  void paste_utf(const std::basic_string<char32_t> &utf32);
 };
 
 /**
@@ -363,14 +349,9 @@ public:
   void set_on_rumble(const std::function<void(int low_freq, int high_freq)> &callback);
 
   /**
-   * @see: Trackpad->place_finger
+   * If the joypad has been created with the TOUCHPAD capability this will return the associated trackpad
    */
-  void touchpad_place_finger(int finger_nr, float x, float y, float pressure);
-
-  /**
-   * @see: Trackpad->release_finger
-   */
-  void touchpad_release_finger(int finger_nr);
+  std::optional<Trackpad> get_trackpad() const;
 
   enum MOTION_TYPE : uint8_t {
     ACCELERATION = 0x01,

@@ -5,7 +5,7 @@
 #include <chrono>
 #include <control/input_handler.hpp>
 #include <fcntl.h>
-#include <platforms/linux/uinput/keyboard.hpp>
+#include <platforms/input.hpp>
 #include <platforms/linux/uinput/uinput.hpp>
 #include <thread>
 
@@ -505,14 +505,14 @@ TEST_CASE("uinput - paste UTF8", "UINPUT") {
   SECTION("UTF8 to HEX") {
     auto utf8 = boost::locale::conv::to_utf<wchar_t>("\xF0\x9F\x92\xA9", "UTF-8"); // UTF-8 '💩'
     auto utf32 = boost::locale::conv::utf_to_utf<char32_t>(utf8);
-    REQUIRE_THAT(to_hex(utf32), Equals("1F4A9"));
+    REQUIRE_THAT(wolf::platforms::input::to_hex(utf32), Equals("1F4A9"));
   }
 
   SECTION("UTF16 to HEX") {
     char16_t payload[] = {0xD83D, 0xDCA9}; // UTF-16 '💩'
     auto utf16 = std::u16string(payload, 2);
     auto utf32 = boost::locale::conv::utf_to_utf<char32_t>(utf16);
-    REQUIRE_THAT(to_hex(utf32), Equals("1F4A9"));
+    REQUIRE_THAT(wolf::platforms::input::to_hex(utf32), Equals("1F4A9"));
   }
 
   SECTION("Paste UTF8") {

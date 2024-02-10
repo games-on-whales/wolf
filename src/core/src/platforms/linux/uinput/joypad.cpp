@@ -768,16 +768,8 @@ void Joypad::set_on_led(const std::function<void(int r, int g, int b)> &callback
   this->_state->on_led = callback;
 }
 
-void Joypad::touchpad_place_finger(int finger_nr, float x, float y, float pressure) {
-  if (auto touchpad = this->_state->trackpad) {
-    touchpad->place_finger(finger_nr, x, y, pressure);
-  }
-}
-
-void Joypad::touchpad_release_finger(int finger_nr) {
-  if (auto touchpad = this->_state->trackpad) {
-    touchpad->release_finger(finger_nr);
-  }
+std::optional<Trackpad> Joypad::get_trackpad() const {
+  return this->_state->trackpad;
 }
 
 } // namespace wolf::core::input

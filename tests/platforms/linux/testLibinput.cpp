@@ -164,7 +164,7 @@ TEST_CASE("virtual touch screen", "[LIBINPUT]") {
   auto TARGET_WIDTH = 1920;
   auto TARGET_HEIGHT = 1080;
   { // Put down one finger
-    touch.place_finger(0, 0.1, 0.1, 0.3);
+    touch.place_finger(0, 0.1, 0.1, 0.3, 45);
     event = get_event(li);
     REQUIRE(libinput_event_get_type(event.get()) == LIBINPUT_EVENT_TOUCH_DOWN);
     auto t_event = libinput_event_get_touch_event(event.get());
@@ -176,7 +176,7 @@ TEST_CASE("virtual touch screen", "[LIBINPUT]") {
   }
 
   { // Add a second finger
-    touch.place_finger(1, 0.2, 0.2, 0.3);
+    touch.place_finger(1, 0.2, 0.2, 0.3, -45);
     event = get_event(li);
     REQUIRE(libinput_event_get_type(event.get()) == LIBINPUT_EVENT_TOUCH_DOWN);
     auto t_event = libinput_event_get_touch_event(event.get());
@@ -219,27 +219,27 @@ TEST_CASE("virtual trackpad", "[LIBINPUT]") {
                                               LIBINPUT_CONFIG_SEND_EVENTS_ENABLED);
 
   { // TODO: I can see things happening on the logs but for some fucking reason I can't get the events
-    trackpad.place_finger(0, 0.1, 0.1, 0.3);
+    trackpad.place_finger(0, 0.1, 0.1, 0.3, 0);
     event = get_event(li);
-    trackpad.place_finger(1, 0.2, 0.2, 0.3);
-    event = get_event(li);
-    std::this_thread::sleep_for(10ms);
-
-    trackpad.place_finger(0, 0.1, 0.11, 0.3);
-    event = get_event(li);
-    trackpad.place_finger(1, 0.2, 0.21, 0.3);
+    trackpad.place_finger(1, 0.2, 0.2, 0.3, 0);
     event = get_event(li);
     std::this_thread::sleep_for(10ms);
 
-    trackpad.place_finger(0, 0.1, 0.12, 0.3);
+    trackpad.place_finger(0, 0.1, 0.11, 0.3, 0);
     event = get_event(li);
-    trackpad.place_finger(1, 0.2, 0.22, 0.3);
+    trackpad.place_finger(1, 0.2, 0.21, 0.3, 0);
     event = get_event(li);
     std::this_thread::sleep_for(10ms);
 
-    trackpad.place_finger(0, 0.1, 0.13, 0.3);
+    trackpad.place_finger(0, 0.1, 0.12, 0.3, 0);
     event = get_event(li);
-    trackpad.place_finger(1, 0.2, 0.23, 0.3);
+    trackpad.place_finger(1, 0.2, 0.22, 0.3, 0);
+    event = get_event(li);
+    std::this_thread::sleep_for(10ms);
+
+    trackpad.place_finger(0, 0.1, 0.13, 0.3, 0);
+    event = get_event(li);
+    trackpad.place_finger(1, 0.2, 0.23, 0.3, 0);
     event = get_event(li);
     std::this_thread::sleep_for(10ms);
 

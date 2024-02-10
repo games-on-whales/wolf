@@ -58,7 +58,7 @@ FetchContent_Declare(
 )
 find_package(PkgConfig)
 pkg_check_modules(LIBUNWIND QUIET libunwind)
-if(LIBUNWIND_FOUND)
+if (LIBUNWIND_FOUND)
     set(CPPTRACE_UNWIND_WITH_LIBUNWIND ON)
 else ()
     message(WARNING "Missing libunwind, stacktraces will not be available.")
@@ -70,7 +70,7 @@ FetchContent_MakeAvailable(cpptrace)
 find_package(Threads REQUIRED)
 find_package(OpenSSL REQUIRED)
 
-find_package(Boost REQUIRED COMPONENTS log)
+find_package(Boost REQUIRED COMPONENTS log locale)
 include_directories(${Boost_INCLUDE_DIRS})
 
 target_link_libraries(
@@ -97,6 +97,12 @@ file(GLOB SRC_LIST SRCS
         streaming/*.cpp)
 
 if (UNIX AND NOT APPLE)
+    message(STATUS "Adding input implementation for LINUX")
+
+    find_package(ICU 61.0 COMPONENTS uc REQUIRED) # brought by libboost-locale-dev
+    target_link_libraries_system(wolf_runner PRIVATE ICU::uc)
+
+    list(APPEND SRC_LIST platforms/input_linux.cpp)
     pkg_check_modules(LIBDRM IMPORTED_TARGET libdrm)
     pkg_check_modules(LIBPCI IMPORTED_TARGET libpci)
 

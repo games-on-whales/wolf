@@ -3,8 +3,8 @@
 #include <control/input_handler.hpp>
 #include <helpers/logger.hpp>
 #include <immer/box.hpp>
-#include <moonlight/control.hpp>
 #include <string>
+#include <platforms/input.hpp>
 
 namespace control {
 
@@ -95,7 +95,7 @@ float netfloat_to_0_1(const utils::netfloat &f) {
 }
 
 static inline float deg2rad(float degree) {
-  return M_PI * degree / 180.0;
+  return degree * (M_PI / 180.f);
 }
 
 void handle_input(state::StreamSession &session,
@@ -183,13 +183,23 @@ void handle_input(state::StreamSession &session,
   }
   case UTF8_TEXT: {
     logs::log(logs::trace, "[INPUT] Received input of type: UTF8_TEXT");
+    /* Here we receive a single UTF-8 encoded char at a time,
+     * the trick is to convert it to UTF-32 then send CTRL+SHIFT+U+<HEXCODE> in order to produce any
+     * unicode character, see: https://en.wikipedia.org/wiki/Unicode_input
+     *
+     * ex:
+     * - when receiving UTF-8 [0xF0 0x9F 0x92 0xA9] (which is '💩')
+     * - we'll convert it to UTF-32 [0x1F4A9]
+     * - then type: CTRL+SHIFT+U+1F4A9
+     * see the conversion at: https://www.compart.com/en/unicode/U+1F4A9
+     */
     auto txt_pkt = static_cast<UTF8_TEXT_PACKET *>(pkt);
     auto size = boost::endian::big_to_native(txt_pkt->data_size) - sizeof(txt_pkt->packet_type) - 2;
     /* Reading input text as UTF-8 */
     auto utf8 = boost::locale::conv::to_utf<wchar_t>(txt_pkt->text, txt_pkt->text + size, "UTF-8");
     /* Converting to UTF-32 */
     auto utf32 = boost::locale::conv::utf_to_utf<char32_t>(utf8);
-    session.keyboard->paste_utf(utf32);
+    wolf::platforms::input::paste_utf(session.keyboard, utf32);
     break;
   }
   case TOUCH: {
@@ -206,9 +216,24 @@ void handle_input(state::StreamSession &session,
     switch (touch_pkt->event_type) {
     case pkts::TOUCH_EVENT_HOVER:
     case pkts::TOUCH_EVENT_DOWN:
-    case pkts::TOUCH_EVENT_MOVE:
-      session.touch_screen->place_finger(finger_id, x, y, pressure_or_distance);
+    case pkts::TOUCH_EVENT_MOVE: {
+      // Convert our 0..360 range to -90..90 relative to Y axis
+      int adjusted_angle = touch_pkt->rotation;
+
+      if (adjusted_angle > 90 && adjusted_angle < 270) {
+        // Lower hemisphere
+        adjusted_angle = 180 - adjusted_angle;
+      }
+
+      // Wrap the value if it's out of range
+      if (adjusted_angle > 90) {
+        adjusted_angle -= 360;
+      } else if (adjusted_angle < -90) {
+        adjusted_angle += 360;
+      }
+      session.touch_screen->place_finger(finger_id, x, y, pressure_or_distance, adjusted_angle);
       break;
+    }
     case pkts::TOUCH_EVENT_UP:
     case pkts::TOUCH_EVENT_HOVER_LEAVE:
     case pkts::TOUCH_EVENT_CANCEL:
@@ -345,18 +370,20 @@ void handle_input(state::StreamSession &session,
       case TOUCH_EVENT_MOVE: {
         // TODO: Moonlight seems to always pass 1.0 (0x0000803f little endian)
         // Values too high will be discarded by libinput as detecting palm pressure
-        auto pressure = std::clamp(utils::from_netfloat(touch_pkt->pressure), 0.0f, 0.5f);
-        selected_pad->touchpad_place_finger(pointer_id,
-                                            netfloat_to_0_1(touch_pkt->x),
-                                            netfloat_to_0_1(touch_pkt->y),
-                                            pressure);
+        if (auto trackpad = selected_pad->get_trackpad()) {
+          auto pressure = std::clamp(utils::from_netfloat(touch_pkt->pressure), 0.0f, 0.5f);
+          trackpad->place_finger(pointer_id, netfloat_to_0_1(touch_pkt->x), netfloat_to_0_1(touch_pkt->y), pressure, 0);
+        }
         break;
       }
       case TOUCH_EVENT_UP:
       case TOUCH_EVENT_HOVER_LEAVE:
-      case TOUCH_EVENT_CANCEL:
-        selected_pad->touchpad_release_finger(pointer_id);
+      case TOUCH_EVENT_CANCEL: {
+        if (auto trackpad = selected_pad->get_trackpad()) {
+          trackpad->release_finger(pointer_id);
+        }
         break;
+      }
       case TOUCH_EVENT_CANCEL_ALL:
         logs::log(logs::warning, "Received TOUCH_EVENT_CANCEL_ALL which isn't supported");
         break;                      // TODO: remove all fingers

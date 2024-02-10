@@ -148,34 +148,5 @@ void Keyboard::release(short key_code) {
   }
 }
 
-static void keyboard_ev(libevdev_uinput *keyboard, int linux_code, int event_code = 1) {
-  libevdev_uinput_write_event(keyboard, EV_KEY, linux_code, event_code);
-  libevdev_uinput_write_event(keyboard, EV_SYN, SYN_REPORT, 0);
-}
-
-void Keyboard::paste_utf(const std::basic_string<char32_t> &utf32) {
-  /* To HEX string */
-  auto hex_unicode = to_hex(utf32);
-  logs::log(logs::debug, "[INPUT] Typing U+{}", hex_unicode);
-
-  keyboard_ev(this->_state->kb.get(), KEY_LEFTCTRL, 1);
-  keyboard_ev(this->_state->kb.get(), KEY_LEFTSHIFT, 1);
-  keyboard_ev(this->_state->kb.get(), KEY_U, 1);
-  keyboard_ev(this->_state->kb.get(), KEY_U, 0);
-
-  for (auto &ch : hex_unicode) {
-    auto key_str = "KEY_"s + ch;
-    auto keycode = libevdev_event_code_from_name(EV_KEY, key_str.c_str());
-    if (keycode == -1) {
-      logs::log(logs::warning, "[INPUT] Unable to find keycode for: {}", ch);
-    } else {
-      keyboard_ev(this->_state->kb.get(), keycode, 1);
-      keyboard_ev(this->_state->kb.get(), keycode, 0);
-    }
-  }
-
-  keyboard_ev(this->_state->kb.get(), KEY_LEFTSHIFT, 0);
-  keyboard_ev(this->_state->kb.get(), KEY_LEFTCTRL, 0);
-}
 
 } // namespace wolf::core::input

@@ -116,8 +116,8 @@ std::optional<libevdev_uinput *> create_trackpad() {
   //  input_absinfo touch{0, 0, TOUCH_MAX, 4, 0, 0};
   //  libevdev_enable_event_code(dev, EV_ABS, ABS_MT_TOUCH_MAJOR, &touch);
   //  libevdev_enable_event_code(dev, EV_ABS, ABS_MT_TOUCH_MINOR, &touch);
-  //  input_absinfo orientation{0, -3, 4, 0, 0, 0};
-  //  libevdev_enable_event_code(dev, EV_ABS, ABS_MT_ORIENTATION, &orientation);
+  input_absinfo orientation{0, -90, 90, 0, 0, 0};
+  libevdev_enable_event_code(dev, EV_ABS, ABS_MT_ORIENTATION, &orientation);
 
   // https://docs.kernel.org/input/event-codes.html#trackpads
   libevdev_enable_property(dev, INPUT_PROP_POINTER);
@@ -143,10 +143,11 @@ Trackpad::Trackpad() {
 
 Trackpad::~Trackpad() {}
 
-void Trackpad::place_finger(int finger_nr, float x, float y, float pressure) {
+void Trackpad::place_finger(int finger_nr, float x, float y, float pressure, int orientation) {
   if (auto touchpad = this->_state->trackpad.get()) {
     int scaled_x = (int)std::lround(TOUCH_MAX_X * x);
     int scaled_y = (int)std::lround(TOUCH_MAX_Y * y);
+    int scaled_orientation = std::clamp(orientation, -90, 90);
 
     if (_state->fingers.find(finger_nr) == _state->fingers.end()) {
       // Wow, a wild finger appeared!
@@ -188,6 +189,7 @@ void Trackpad::place_finger(int finger_nr, float x, float y, float pressure) {
     libevdev_uinput_write_event(touchpad, EV_ABS, ABS_MT_POSITION_Y, scaled_y);
     libevdev_uinput_write_event(touchpad, EV_ABS, ABS_PRESSURE, (int)std::lround(pressure * PRESSURE_MAX));
     libevdev_uinput_write_event(touchpad, EV_ABS, ABS_MT_PRESSURE, (int)std::lround(pressure * PRESSURE_MAX));
+    libevdev_uinput_write_event(touchpad, EV_ABS, ABS_MT_ORIENTATION, scaled_orientation);
 
     libevdev_uinput_write_event(touchpad, EV_SYN, SYN_REPORT, 0);
   }

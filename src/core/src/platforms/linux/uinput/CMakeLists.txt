@@ -5,42 +5,19 @@ file(GLOB PRIVATE_LIST SRCS *.cpp)
 add_library(wolf_uinput)
 add_library(wolf::uinput ALIAS wolf_uinput)
 
-find_package(LIBEVDEV)
-if (NOT (LIBEVDEV_FOUND))
-    message(FATAL_ERROR "Please install libevdev: CMake will Exit")
-endif ()
-
-target_link_libraries(wolf_uinput PUBLIC evdev)
-target_include_directories(wolf_uinput PUBLIC ${LIBEVDEV_INCLUDE_DIR})
-
-pkg_check_modules(LIBUDEV REQUIRED libudev)
-target_link_libraries(wolf_uinput PUBLIC ${LIBUDEV_LIBRARIES})
-target_include_directories(wolf_uinput PUBLIC ${LIBUDEV_INCLUDE_DIR})
-
-
-message(STATUS "Adding input implementation for LINUX")
-
-find_package(ICU 61.0 COMPONENTS uc REQUIRED)
-target_link_libraries_system(wolf_uinput PRIVATE ICU::uc)
-
 target_include_directories(wolf_uinput PRIVATE ../../../)
-target_sources(wolf_uinput
-        PUBLIC "keyboard.hpp" "uinput.hpp"
-        PRIVATE ${PRIVATE_LIST})
 
-FetchContent_Declare(
-        immer
-        GIT_REPOSITORY https://github.com/arximboldi/immer.git
-        GIT_TAG e02cbd795e9424a8405a8cb01f659ad61c0cbbc7)
-set(immer_BUILD_TESTS OFF)
-set(immer_BUILD_EXAMPLES OFF)
-set(immer_BUILD_DOCS OFF)
-set(immer_BUILD_EXTRAS OFF)
+if (UNIX AND NOT APPLE)
+    find_package(PkgConfig)
+    pkg_check_modules(LIBEVDEV REQUIRED IMPORTED_TARGET libevdev)
+    target_link_libraries(wolf_uinput PUBLIC PkgConfig::LIBEVDEV)
 
-set(FPHSA_NAME_MISMATCHED on) # see: https://github.com/arximboldi/immer/issues/204
-FetchContent_MakeAvailable(immer)
-target_link_libraries_system(wolf_uinput PUBLIC immer)
-unset(FPHSA_NAME_MISMATCHED)
+    pkg_check_modules(LIBUDEV REQUIRED IMPORTED_TARGET libudev)
+    target_link_libraries(wolf_uinput PUBLIC PkgConfig::LIBUDEV)
+    target_sources(wolf_uinput
+            PUBLIC "keyboard.hpp" "uinput.hpp"
+            PRIVATE ${PRIVATE_LIST})
+endif ()
 
 # We need this directory, and users of our library will need it too
 target_include_directories(wolf_uinput PUBLIC .)

@@ -132,10 +132,11 @@ TouchScreen::TouchScreen() {
   }
 }
 TouchScreen::~TouchScreen() {}
-void TouchScreen::place_finger(int finger_nr, float x, float y, float pressure) {
+void TouchScreen::place_finger(int finger_nr, float x, float y, float pressure, int orientation) {
   if (auto ts = this->_state->touch_screen.get()) {
     int scaled_x = (int)std::lround(TOUCH_MAX_X * x);
     int scaled_y = (int)std::lround(TOUCH_MAX_Y * y);
+    int scaled_orientation = std::clamp(orientation, -90, 90);
 
     if (_state->fingers.find(finger_nr) == _state->fingers.end()) {
       // Wow, a wild finger appeared!
@@ -156,8 +157,9 @@ void TouchScreen::place_finger(int finger_nr, float x, float y, float pressure) 
     libevdev_uinput_write_event(ts, EV_ABS, ABS_MT_POSITION_X, scaled_x);
     libevdev_uinput_write_event(ts, EV_ABS, ABS_Y, scaled_y);
     libevdev_uinput_write_event(ts, EV_ABS, ABS_MT_POSITION_Y, scaled_y);
-    libevdev_uinput_write_event(ts, EV_ABS, ABS_PRESSURE, (int)std::lround(pressure * PRESSURE_MAX));
-    libevdev_uinput_write_event(ts, EV_ABS, ABS_MT_PRESSURE, (int)std::lround(pressure * PRESSURE_MAX));
+    libevdev_uinput_write_event(ts, EV_ABS, ABS_PRESSURE, (int) std::lround(pressure * PRESSURE_MAX));
+    libevdev_uinput_write_event(ts, EV_ABS, ABS_MT_PRESSURE, (int) std::lround(pressure * PRESSURE_MAX));
+    libevdev_uinput_write_event(ts, EV_ABS, ABS_MT_ORIENTATION, scaled_orientation);
 
     libevdev_uinput_write_event(ts, EV_SYN, SYN_REPORT, 0);
   }

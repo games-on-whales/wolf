@@ -23,9 +23,6 @@
 #include <core/input.hpp>
 #include <filesystem>
 #include <helpers/logger.hpp>
-#include <immer/array.hpp>
-#include <immer/atom.hpp>
-#include <iomanip>
 #include <libevdev/libevdev-uinput.h>
 #include <libevdev/libevdev.h>
 #include <libudev.h>
@@ -53,25 +50,6 @@ std::vector<libevdev_event_ptr> fetch_events(const libevdev_ptr &dev, int max_ev
  * Given a uinput fd will read all queued events available at this time up to max_events
  */
 std::vector<libevdev_event_ptr> fetch_events(int uinput_fd, int max_events = 50);
-
-/**
- * Takes an UTF-32 encoded string and returns a hex string representation of the bytes (uppercase)
- *
- * ex: ['💩'] = "1F4A9" // see UTF encoding at https://www.compart.com/en/unicode/U+1F4A9
- *
- * adapted from: https://stackoverflow.com/a/7639754
- */
-static std::string to_hex(const std::basic_string<char32_t> &str) {
-  std::stringstream ss;
-  ss << std::hex << std::setfill('0');
-  for (const auto &ch : str) {
-    ss << ch;
-  }
-
-  std::string hex_unicode(ss.str());
-  std::transform(hex_unicode.begin(), hex_unicode.end(), hex_unicode.begin(), ::toupper);
-  return hex_unicode;
-}
 
 static std::pair<unsigned int, unsigned int> get_major_minor(const std::string &devnode) {
   struct stat buf {};
