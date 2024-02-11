@@ -29,8 +29,8 @@ if (UNIX AND NOT APPLE)
         list(APPEND SRC_LIST "platforms/linux/nvidia.cpp")
     endif ()
 
-    option(TEST_LIBINPUT "Enable libinput test" ON)
-    if (TEST_LIBINPUT)
+    option(TEST_VIRTUAL_INPUT "Enable libinput test" ON)
+    if (TEST_VIRTUAL_INPUT)
         find_package(PkgConfig)
         pkg_check_modules(LIBINPUT REQUIRED IMPORTED_TARGET libinput)
         target_link_libraries(wolftests PRIVATE PkgConfig::LIBINPUT)
@@ -41,7 +41,6 @@ if (UNIX AND NOT APPLE)
         endif ()
         list(APPEND SRC_LIST
                 "platforms/linux/libinput.h"
-                "platforms/linux/testLibinput.cpp"
                 "platforms/linux/input.cpp")
     endif ()
 endif ()

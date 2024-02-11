@@ -17,7 +17,7 @@ if (UNIX AND NOT APPLE)
     pkg_check_modules(LIBUDEV REQUIRED IMPORTED_TARGET libudev)
     target_link_libraries(wolf_uinput PUBLIC PkgConfig::LIBUDEV)
     target_sources(wolf_uinput
-            PUBLIC "keyboard.hpp" "uinput.hpp"
+            PUBLIC "uinput.hpp"
             PRIVATE ${PRIVATE_LIST})
 endif ()
 
