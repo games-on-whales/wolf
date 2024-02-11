@@ -3,8 +3,8 @@
 #include <control/input_handler.hpp>
 #include <helpers/logger.hpp>
 #include <immer/box.hpp>
-#include <string>
 #include <platforms/input.hpp>
+#include <string>
 
 namespace control {
 
@@ -18,7 +18,7 @@ std::shared_ptr<Joypad> create_new_joypad(const state::StreamSession &session,
                                           Joypad::CONTROLLER_TYPE type,
                                           uint8_t capabilities) {
   auto joypad = Joypad::create(type, capabilities);
-  if(!joypad){
+  if (!joypad) {
     logs::log(logs::error, "Failed to create joypad: {}", joypad.getErrorMessage());
     return {};
   }
@@ -76,13 +76,13 @@ std::shared_ptr<Joypad> create_new_joypad(const state::StreamSession &session,
 std::shared_ptr<PenTablet> create_pen_tablet(state::StreamSession &session) {
   logs::log(logs::debug, "[INPUT] Creating new pen tablet");
   auto tablet = PenTablet::create();
-  if(!tablet){
+  if (!tablet) {
     logs::log(logs::error, "Failed to create pen tablet: {}", tablet.getErrorMessage());
     return {};
   }
   auto tablet_ptr = std::make_shared<PenTablet>(PenTablet(**tablet));
-  session.event_bus->fire_event(
-      immer::box<state::PlugDeviceEvent>(state::PlugDeviceEvent{.session_id = session.session_id, .device = tablet_ptr}));
+  session.event_bus->fire_event(immer::box<state::PlugDeviceEvent>(
+      state::PlugDeviceEvent{.session_id = session.session_id, .device = tablet_ptr}));
   session.pen_tablet = tablet_ptr;
   return tablet_ptr;
 }
@@ -94,7 +94,7 @@ std::shared_ptr<PenTablet> create_pen_tablet(state::StreamSession &session) {
 std::shared_ptr<TouchScreen> create_touch_screen(state::StreamSession &session) {
   logs::log(logs::debug, "[INPUT] Creating new touch screen");
   auto touch = TouchScreen::create();
-  if(!touch){
+  if (!touch) {
     logs::log(logs::error, "Failed to create touch screen: {}", touch.getErrorMessage());
   }
   auto touch_screen = std::make_shared<TouchScreen>(TouchScreen(**touch));

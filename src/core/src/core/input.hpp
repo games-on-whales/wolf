@@ -26,7 +26,7 @@ public:
  */
 class Mouse : public inputtino::Mouse, public VirtualDevice {
 public:
-  Mouse(const inputtino::Mouse &m): inputtino::Mouse(m) {}
+  Mouse(const inputtino::Mouse &m) : inputtino::Mouse(m) {}
 
   std::vector<std::map<std::string, std::string>> get_udev_events() const override;
   std::vector<std::pair<std::string, std::vector<std::string>>> get_udev_hw_db_entries() const override;
@@ -34,7 +34,7 @@ public:
 
 class Trackpad : public inputtino::Trackpad, public VirtualDevice {
 public:
-  Trackpad(const inputtino::Trackpad &t): inputtino::Trackpad(t) {}
+  Trackpad(const inputtino::Trackpad &t) : inputtino::Trackpad(t) {}
 
   std::vector<std::map<std::string, std::string>> get_udev_events() const override;
   std::vector<std::pair<std::string, std::vector<std::string>>> get_udev_hw_db_entries() const override;
@@ -42,7 +42,7 @@ public:
 
 class TouchScreen : public inputtino::TouchScreen, public VirtualDevice {
 public:
-  TouchScreen(const inputtino::TouchScreen &t): inputtino::TouchScreen(t) {}
+  TouchScreen(const inputtino::TouchScreen &t) : inputtino::TouchScreen(t) {}
 
   std::vector<std::map<std::string, std::string>> get_udev_events() const override;
   std::vector<std::pair<std::string, std::vector<std::string>>> get_udev_hw_db_entries() const override;
@@ -50,7 +50,7 @@ public:
 
 class PenTablet : public inputtino::PenTablet, public VirtualDevice {
 public:
-  PenTablet(const inputtino::PenTablet &t): inputtino::PenTablet(t) {}
+  PenTablet(const inputtino::PenTablet &t) : inputtino::PenTablet(t) {}
 
   std::vector<std::map<std::string, std::string>> get_udev_events() const override;
   std::vector<std::pair<std::string, std::vector<std::string>>> get_udev_hw_db_entries() const override;
@@ -58,7 +58,7 @@ public:
 
 class Keyboard : public inputtino::Keyboard, public VirtualDevice {
 public:
-  Keyboard(const inputtino::Keyboard &k): inputtino::Keyboard(k) {}
+  Keyboard(const inputtino::Keyboard &k) : inputtino::Keyboard(k) {}
 
   std::vector<std::map<std::string, std::string>> get_udev_events() const override;
   std::vector<std::pair<std::string, std::vector<std::string>>> get_udev_hw_db_entries() const override;
@@ -66,7 +66,7 @@ public:
 
 class Joypad : public inputtino::Joypad, public VirtualDevice {
 public:
-  Joypad(const inputtino::Joypad &j): inputtino::Joypad(j) {}
+  Joypad(const inputtino::Joypad &j) : inputtino::Joypad(j) {}
 
   std::vector<std::map<std::string, std::string>> get_udev_events() const override;
   std::vector<std::pair<std::string, std::vector<std::string>>> get_udev_hw_db_entries() const override;
