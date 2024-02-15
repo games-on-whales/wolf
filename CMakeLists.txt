@@ -51,23 +51,19 @@ endif (CCACHE_FOUND)
 include(FetchContent)
 set(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} ${CMAKE_CURRENT_SOURCE_DIR}/cmake/)
 
-option(LINK_RUST_WAYLAND "Link to our custom Rust wayland compositor" ON)
-if (LINK_RUST_WAYLAND AND UNIX AND NOT APPLE)
-    # Adapted from: https://github.com/Devolutions/CMakeRust/
-    enable_language(Rust)
-    include(CMakeCargo)
-    add_subdirectory(src/rust/gst-wayland-display)
+include(TargetLinkLibrariesSystem)
+
+add_subdirectory(src/core)
+
+if (UNIX AND NOT APPLE)
+    add_subdirectory(src/fake-udev)
 endif ()
 
-include(TargetLinkLibrariesSystem)
-add_subdirectory(src/helpers)
-add_subdirectory(src/crypto)
-add_subdirectory(src/moonlight)
-add_subdirectory(src/streaming)
-add_subdirectory(src/input)
-add_subdirectory(src/audio)
-add_subdirectory(src/docker)
-add_subdirectory(src/wolf)
+option(BUILD_MOONLIGHT "Build Moonlight server" ON)
+if (BUILD_MOONLIGHT)
+    add_subdirectory(src/moonlight-protocol)
+    add_subdirectory(src/moonlight-server)
+endif (BUILD_MOONLIGHT)
 
 # Testing only available if this is the main app
 # Emergency override MODERN_CMAKE_BUILD_TESTING provided as well

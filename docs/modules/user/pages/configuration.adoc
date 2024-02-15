@@ -50,6 +50,10 @@ Wolf is configured via a TOML config file and some additional optional ENV varia
 |WOLF_RENDER_NODE
 |/dev/dri/renderD128
 |The default render node used for virtual desktops; see: <<_multiple_gpu>>
+
+|WOLF_DOCKER_FAKE_UDEV_PATH
+|$HOST_APPS_STATE_FOLDER/fake-udev
+|The path on the host for the fake-udev CLI tool
 |===
 
 Additional env variables useful when debugging:
@@ -249,7 +253,6 @@ ls -l /sys/class/drm/renderD*/device/driver
 ====
 
 Wolf supports also overriding the render node in each single app defined in the `config.toml` config file by setting the `render_node` property; example:
-
 
 [source,toml]
 ....

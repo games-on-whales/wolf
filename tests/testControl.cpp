@@ -75,3 +75,15 @@ TEST_CASE("Control AES Encryption", "CONTROL") {
     REQUIRE_THAT(packet_type_to_str(((ControlPacket *)decrypted.data())->type), Equals("INPUT_DATA"));
   }
 }
+
+TEST_CASE("control joypad input packets") {
+  std::string payload =
+      crypto::hex_to_str("060222000000001E0C0000001A000000010014000010000000000000000000009C0000005500");
+
+  auto input_data = (pkts::CONTROLLER_MULTI_PACKET *)payload.data();
+  auto pressed_btns = input_data->button_flags | (input_data->buttonFlags2 << 16);
+
+  REQUIRE(input_data->type == pkts::CONTROLLER_MULTI);
+  REQUIRE(input_data->active_gamepad_mask == 1);
+  REQUIRE(pressed_btns & wolf::core::input::Joypad::CONTROLLER_BTN::A);
+}

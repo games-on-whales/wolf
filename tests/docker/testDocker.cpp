@@ -3,7 +3,7 @@
 using Catch::Matchers::Contains;
 using Catch::Matchers::Equals;
 
-#include <docker/docker.hpp>
+#include <core/docker.hpp>
 #include <runners/docker.hpp>
 
 TEST_CASE("Docker API", "DOCKER") {

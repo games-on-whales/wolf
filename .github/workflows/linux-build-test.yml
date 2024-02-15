@@ -22,7 +22,7 @@ jobs:
         run: |
           sudo apt-get update -y
           sudo apt-get install -y \
-              g++-11 \
+              g++ \
               cmake \
               ninja-build \
               libboost-locale-dev libboost-thread-dev libboost-filesystem-dev libboost-log-dev libboost-stacktrace-dev \
@@ -34,28 +34,37 @@ jobs:
               libevdev-dev \
               libudev-dev \
               libdrm-dev \
-              libpci-dev
+              libpci-dev \
+              libunwind-dev
 
       - name: Setup Rust
         uses: ATiltedTree/setup-rust@v1
         with:
           rust-version: stable
 
+      - name: Setup gst-wayland-display
+        run: |
+          git clone https://github.com/games-on-whales/gst-wayland-display
+          cd gst-wayland-display
+          cargo install cargo-c
+          cargo cinstall -p c-bindings --prefix=/usr/local
+
       - name: Configure build
         working-directory: ${{runner.workspace}}
-        env:
-          CXX: g++-11
         run: |
           cmake -Bbuild \
                 -H$GITHUB_WORKSPACE \
                 -DCMAKE_BUILD_TYPE=Debug \
                 -DCMAKE_CXX_EXTENSIONS=OFF \
                 -DCMAKE_CXX_STANDARD=17 \
-                -DTEST_UINPUT=OFF \
+                -DTEST_VIRTUAL_INPUT=OFF \
+                -DTEST_LIBINPUT=OFF \
                 -DTEST_DOCKER=ON \
                 -DLINK_RUST_WAYLAND=ON \
                 -DTEST_RUST_WAYLAND=OFF \
                 -DTEST_NVIDIA=OFF \
+                -DTEST_EXCEPTIONS=OFF \
+                -DTEST_SDL=OFF \
                 -DCARGO_TARGET_BUILD=aarch64-unknown-linux-gnu \
                 -G Ninja
 
@@ -112,12 +121,21 @@ jobs:
               libudev-dev \
               libdrm-dev \
               libpci-dev \
+              libunwind-dev \
               ${{ join(matrix.other_pkgs, ' ') }}
 
       - name: Setup Rust
         uses: ATiltedTree/setup-rust@v1
         with:
           rust-version: stable
+
+      - name: Setup gst-wayland-display
+        run: |
+          git clone https://github.com/games-on-whales/gst-wayland-display
+          cd gst-wayland-display
+          cargo install cargo-c
+          cargo cinstall -p c-bindings --prefix=/usr/local --destdir=temp
+          sudo cp -r temp/usr/local/* /usr/local/
 
       - name: Configure build
         working-directory: ${{runner.workspace}}
@@ -134,11 +152,13 @@ jobs:
                 -DCMAKE_CXX_EXTENSIONS=OFF \
                 -DBUILD_SHARED_LIBS=${{ matrix.shared }} \
                 -DCATCH_DEVELOPMENT_BUILD=ON \
-                -DTEST_UINPUT=OFF \
+                -DTEST_VIRTUAL_INPUT=OFF \
+                -DTEST_LIBINPUT=OFF \
                 -DTEST_DOCKER=OFF \
                 -DLINK_RUST_WAYLAND=ON \
                 -DTEST_RUST_WAYLAND=OFF \
                 -DTEST_NVIDIA=OFF \
+                -DTEST_SDL=OFF \
                 -G Ninja
 
       - name: Build tests + lib

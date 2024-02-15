@@ -1,5 +1,4 @@
 # Start by removing everything and add just the things we need
 *
 
-!gstreamer.control
 !startup.sh

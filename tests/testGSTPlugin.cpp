@@ -1,9 +1,9 @@
 #include "catch2/catch_all.hpp"
 using Catch::Matchers::Equals;
 
+#include <gst-plugin/audio.hpp>
+#include <gst-plugin/video.hpp>
 #include <moonlight/fec.hpp>
-#include <streaming/gst-plugin/audio.hpp>
-#include <streaming/gst-plugin/video.hpp>
 #include <string>
 
 using namespace std::string_literals;
@@ -22,8 +22,8 @@ static std::pair<char * /* data */, unsigned long /* size */> copy_buffer_data(G
   return {res, size};
 }
 
-static state::AudioRTPHeaders *get_rtp_audio_from_buf(GstBuffer *buf) {
-  return (state::AudioRTPHeaders *)copy_buffer_data(buf).first;
+static audio::AudioRTPHeaders *get_rtp_audio_from_buf(GstBuffer *buf) {
+  return (audio::AudioRTPHeaders *)copy_buffer_data(buf).first;
 }
 
 static std::string get_str_from_buf(GstBuffer *buf) {
@@ -102,7 +102,7 @@ TEST_CASE_METHOD(GStreamerTestsFixture, "RTP VIDEO Splits", "[GSTPlugin]") {
                      "Never gonna say goodbye\n"
                      "Never gonna tell a lie and hurt you"s;
 
-  auto rtp_header_size = (int)sizeof(state::VideoRTPHeaders);
+  auto rtp_header_size = (int)sizeof(gst_moonlight_video::VideoRTPHeaders);
   auto rtp_payload_header_size = 8; // 017charss
   rtpmoonlightpay->payload_size = 32;
   rtpmoonlightpay->fec_percentage = 50;
@@ -120,7 +120,8 @@ TEST_CASE_METHOD(GStreamerTestsFixture, "RTP VIDEO Splits", "[GSTPlugin]") {
   std::string returned_payload = ""s;
   for (auto i = 0; i < payload_expected_packets; i++) {
     auto buf = gst_buffer_copy_content(gst_buffer_list_get(rtp_packets, i), rtp_header_size);
-    returned_payload += std::string(buf.begin() + (long)(i == 0 ? sizeof(state::VideoShortHeader) : 0), buf.end());
+    returned_payload +=
+        std::string(buf.begin() + (long)(i == 0 ? sizeof(gst_moonlight_video::VideoShortHeader) : 0), buf.end());
   }
   REQUIRE_THAT(returned_payload, Equals(payload_str));
 
@@ -136,8 +137,9 @@ TEST_CASE_METHOD(GStreamerTestsFixture, "RTP VIDEO Splits", "[GSTPlugin]") {
             payload_expected_packets + fec_expected_packets - 1); // TODO: why one less?
 
     auto first_payload = gst_buffer_copy_content(gst_buffer_list_get(rtp_packets, 0), rtp_header_size);
-    REQUIRE_THAT(std::string(first_payload.begin() + sizeof(state::VideoShortHeader), first_payload.end()),
-                 Equals("Never go"));
+    REQUIRE_THAT(
+        std::string(first_payload.begin() + sizeof(gst_moonlight_video::VideoShortHeader), first_payload.end()),
+        Equals("Never go"));
     // TODO: proper check content and FEC
   }
 
@@ -155,10 +157,10 @@ TEST_CASE_METHOD(GStreamerTestsFixture, "Create RTP VIDEO packets", "[GSTPlugin]
   rtpmoonlightpay->fec_percentage = 50;
   rtpmoonlightpay->add_padding = true;
   auto rtp_packet_size = rtpmoonlightpay->payload_size + sizeof(moonlight::NV_VIDEO_PACKET);
-  auto rtp_header_size = (long)sizeof(state::VideoRTPHeaders);
+  auto rtp_header_size = (long)sizeof(gst_moonlight_video::VideoRTPHeaders);
 
   auto payload = gst_buffer_new_and_fill(10, "$A PAYLOAD");
-  auto video_payload = gst_moonlight_video::prepend_video_header(payload);
+  auto video_payload = gst_moonlight_video::prepend_video_header(*rtpmoonlightpay, payload);
   auto rtp_packets = gst_moonlight_video::generate_rtp_packets(*rtpmoonlightpay, video_payload);
 
   // 10 bytes of actual payload + 8 bytes of payload header
@@ -168,25 +170,28 @@ TEST_CASE_METHOD(GStreamerTestsFixture, "Create RTP VIDEO packets", "[GSTPlugin]
 
   SECTION("First packet") {
     auto first_packet = gst_buffer_copy_content(gst_buffer_list_get(rtp_packets, 0));
-    auto rtp_packet = reinterpret_cast<state::VideoRTPHeaders *>(first_packet.data());
+    auto rtp_packet = reinterpret_cast<gst_moonlight_video::VideoRTPHeaders *>(first_packet.data());
 
     REQUIRE(rtp_packet->packet.flags == FLAG_CONTAINS_PIC_DATA + FLAG_SOF);
     REQUIRE(rtp_packet->packet.frameIndex == 0);
     REQUIRE(rtp_packet->packet.streamPacketIndex == 0);
     REQUIRE(rtp_packet->rtp.sequenceNumber == boost::endian::native_to_big((uint16_t)0));
 
-    auto short_header = reinterpret_cast<state::VideoShortHeader *>(first_packet.data() + rtp_header_size);
-    REQUIRE(short_header->frame_type == 1);
+    auto short_header =
+        reinterpret_cast<gst_moonlight_video::VideoShortHeader *>(first_packet.data() + rtp_header_size);
+    REQUIRE(short_header->frame_type == 2);
     REQUIRE(short_header->header_type == 1);
+    REQUIRE(short_header->last_payload_len == 8);
 
-    auto rtp_payload =
-        std::string(first_packet.begin() + rtp_header_size + sizeof(state::VideoShortHeader), first_packet.end());
+    auto rtp_payload = std::string(
+        first_packet.begin() + rtp_header_size + sizeof(gst_moonlight_video::VideoShortHeader),
+        first_packet.end());
     REQUIRE_THAT("$A"s, Equals(rtp_payload));
   }
 
   SECTION("Second packet") {
     auto second_packet = gst_buffer_copy_content(gst_buffer_list_get(rtp_packets, 1));
-    auto rtp_packet = reinterpret_cast<state::VideoRTPHeaders *>(second_packet.data());
+    auto rtp_packet = reinterpret_cast<gst_moonlight_video::VideoRTPHeaders *>(second_packet.data());
 
     REQUIRE(rtp_packet->packet.flags == FLAG_CONTAINS_PIC_DATA + FLAG_EOF);
     REQUIRE(rtp_packet->packet.frameIndex == 0);
@@ -205,7 +210,7 @@ TEST_CASE_METHOD(GStreamerTestsFixture, "Create RTP VIDEO packets", "[GSTPlugin]
     SECTION("First packet (payload)") {
       auto first_packet = gst_buffer_copy_content(gst_buffer_list_get(rtp_packets, 0));
 
-      auto rtp_packet = reinterpret_cast<state::VideoRTPHeaders *>(first_packet.data());
+      auto rtp_packet = reinterpret_cast<gst_moonlight_video::VideoRTPHeaders *>(first_packet.data());
 
       REQUIRE(rtp_packet->packet.flags == FLAG_CONTAINS_PIC_DATA + FLAG_SOF);
       REQUIRE(rtp_packet->packet.frameIndex == 0);
@@ -217,18 +222,21 @@ TEST_CASE_METHOD(GStreamerTestsFixture, "Create RTP VIDEO packets", "[GSTPlugin]
       REQUIRE(rtp_packet->packet.multiFecBlocks == 0);
       REQUIRE(rtp_packet->packet.multiFecFlags == 0x10);
 
-      auto short_header = reinterpret_cast<state::VideoShortHeader *>(first_packet.data() + rtp_header_size);
-      REQUIRE(short_header->frame_type == 1);
+      auto short_header =
+          reinterpret_cast<gst_moonlight_video::VideoShortHeader *>(first_packet.data() + rtp_header_size);
+      REQUIRE(short_header->frame_type == 2);
       REQUIRE(short_header->header_type == 1);
+      REQUIRE(short_header->last_payload_len == 8);
 
-      auto rtp_payload =
-          std::string(first_packet.begin() + rtp_header_size + sizeof(state::VideoShortHeader), first_packet.end());
+      auto rtp_payload = std::string(
+          first_packet.begin() + rtp_header_size + sizeof(gst_moonlight_video::VideoShortHeader),
+          first_packet.end());
       REQUIRE_THAT("$A"s, Equals(rtp_payload));
     }
 
     SECTION("Second packet (payload)") {
       auto second_packet = gst_buffer_copy_content(gst_buffer_list_get(rtp_packets, 1));
-      auto rtp_packet = reinterpret_cast<state::VideoRTPHeaders *>(second_packet.data());
+      auto rtp_packet = reinterpret_cast<gst_moonlight_video::VideoRTPHeaders *>(second_packet.data());
 
       REQUIRE(rtp_packet->packet.flags == FLAG_CONTAINS_PIC_DATA + FLAG_EOF);
       REQUIRE(rtp_packet->packet.frameIndex == 0);
@@ -246,7 +254,7 @@ TEST_CASE_METHOD(GStreamerTestsFixture, "Create RTP VIDEO packets", "[GSTPlugin]
 
     SECTION("Third packet (FEC)") {
       auto third_packet = gst_buffer_copy_content(gst_buffer_list_get(rtp_packets, 2));
-      auto rtp_packet = reinterpret_cast<state::VideoRTPHeaders *>(third_packet.data());
+      auto rtp_packet = reinterpret_cast<gst_moonlight_video::VideoRTPHeaders *>(third_packet.data());
 
       REQUIRE(rtp_packet->packet.frameIndex == 0);
       REQUIRE(rtp_packet->rtp.sequenceNumber == boost::endian::native_to_big((uint16_t)2));
@@ -259,7 +267,7 @@ TEST_CASE_METHOD(GStreamerTestsFixture, "Create RTP VIDEO packets", "[GSTPlugin]
 
     SECTION("Fourth packet (FEC)") {
       auto fourth_packet = gst_buffer_copy_content(gst_buffer_list_get(rtp_packets, 3));
-      auto rtp_packet = reinterpret_cast<state::VideoRTPHeaders *>(fourth_packet.data());
+      auto rtp_packet = reinterpret_cast<gst_moonlight_video::VideoRTPHeaders *>(fourth_packet.data());
 
       REQUIRE(rtp_packet->packet.frameIndex == 0);
       REQUIRE(rtp_packet->rtp.sequenceNumber == boost::endian::native_to_big((uint16_t)3));
@@ -308,10 +316,11 @@ TEST_CASE_METHOD(GStreamerTestsFixture, "Create RTP VIDEO packets", "[GSTPlugin]
         // We can only check the packet payload here which should be correctly reconstructed
         auto pay_size = rtpmoonlightpay->payload_size - MAX_RTP_HEADER_SIZE;
         auto missing_pkt_payload = std::vector<unsigned char>(
-            missing_pkt.begin() + sizeof(state::VideoRTPHeaders),
-            missing_pkt.begin() + sizeof(state::VideoRTPHeaders) + pay_size);
-        auto first_packet_pay_before_fec =
-            gst_buffer_copy_content(gst_buffer_list_get(rtp_packets, 0), sizeof(state::VideoRTPHeaders), pay_size);
+            missing_pkt.begin() + sizeof(gst_moonlight_video::VideoRTPHeaders),
+            missing_pkt.begin() + sizeof(gst_moonlight_video::VideoRTPHeaders) + pay_size);
+        auto first_packet_pay_before_fec = gst_buffer_copy_content(gst_buffer_list_get(rtp_packets, 0),
+                                                                   sizeof(gst_moonlight_video::VideoRTPHeaders),
+                                                                   pay_size);
 
         REQUIRE_THAT(missing_pkt_payload, Equals(first_packet_pay_before_fec));
       }
@@ -354,7 +363,7 @@ TEST_CASE_METHOD(GStreamerTestsFixture, "Audio RTP packet creation", "[GSTPlugin
     REQUIRE(rtp_packet->rtp.sequenceNumber == 0);
     REQUIRE(rtp_packet->rtp.timestamp == 0);
 
-    auto rtp_payload = gst_buffer_copy_content(first_pkt, sizeof(state::AudioRTPHeaders));
+    auto rtp_payload = gst_buffer_copy_content(first_pkt, sizeof(audio::AudioRTPHeaders));
 
     auto decrypted = crypto::aes_decrypt_cbc(std::string(rtp_payload.begin(), rtp_payload.end()),
                                              rtpmoonlightpay->aes_key,
@@ -377,7 +386,7 @@ TEST_CASE_METHOD(GStreamerTestsFixture, "Audio RTP packet creation", "[GSTPlugin
     REQUIRE(boost::endian::big_to_native(rtp_packet->rtp.sequenceNumber) == 1);
     REQUIRE(boost::endian::big_to_native(rtp_packet->rtp.timestamp) == 5);
 
-    auto rtp_payload = gst_buffer_copy_content(second_pkt, sizeof(state::AudioRTPHeaders));
+    auto rtp_payload = gst_buffer_copy_content(second_pkt, sizeof(audio::AudioRTPHeaders));
 
     auto decrypted = crypto::aes_decrypt_cbc(std::string(rtp_payload.begin(), rtp_payload.end()),
                                              rtpmoonlightpay->aes_key,
@@ -400,7 +409,7 @@ TEST_CASE_METHOD(GStreamerTestsFixture, "Audio RTP packet creation", "[GSTPlugin
     REQUIRE(boost::endian::big_to_native(rtp_packet->rtp.sequenceNumber) == 2);
     REQUIRE(boost::endian::big_to_native(rtp_packet->rtp.timestamp) == 10);
 
-    auto rtp_payload = gst_buffer_copy_content(third_pkt, sizeof(state::AudioRTPHeaders));
+    auto rtp_payload = gst_buffer_copy_content(third_pkt, sizeof(audio::AudioRTPHeaders));
 
     auto decrypted = crypto::aes_decrypt_cbc(std::string(rtp_payload.begin(), rtp_payload.end()),
                                              rtpmoonlightpay->aes_key,
@@ -418,7 +427,7 @@ TEST_CASE_METHOD(GStreamerTestsFixture, "Audio RTP packet creation", "[GSTPlugin
 
   SECTION("FEC") {
     SECTION("First FEC packet") {
-      auto fec_packet = (state::AudioFECPacket *)copy_buffer_data((gst_buffer_list_get(rtp_packets, 1))).first;
+      auto fec_packet = (audio::AudioFECPacket *)copy_buffer_data((gst_buffer_list_get(rtp_packets, 1))).first;
 
       REQUIRE(fec_packet->rtp.ssrc == 0);
       REQUIRE(fec_packet->rtp.packetType == 127);
@@ -432,7 +441,7 @@ TEST_CASE_METHOD(GStreamerTestsFixture, "Audio RTP packet creation", "[GSTPlugin
     }
 
     SECTION("Second FEC packet") {
-      auto fec_packet = (state::AudioFECPacket *)copy_buffer_data((gst_buffer_list_get(rtp_packets, 2))).first;
+      auto fec_packet = (audio::AudioFECPacket *)copy_buffer_data((gst_buffer_list_get(rtp_packets, 2))).first;
 
       REQUIRE(fec_packet->rtp.ssrc == 0);
       REQUIRE(fec_packet->rtp.packetType == 127);
@@ -462,7 +471,7 @@ TEST_CASE_METHOD(GStreamerTestsFixture, "Audio RTP packet creation", "[GSTPlugin
     }
 
     SECTION("Missing one packet should still lead to successful reconstruct") {
-      auto original_pkt = gst_buffer_copy_content(first_pkt, sizeof(state::AudioRTPHeaders));
+      auto original_pkt = gst_buffer_copy_content(first_pkt, sizeof(audio::AudioRTPHeaders));
       auto missing_pkt = std::vector<unsigned char>(packet_size);
       rtpmoonlightpay->packets_buffer[0] = &missing_pkt[0];
       std::vector<unsigned char> marks = {1, 0, 0, 0, 0, 0};
@@ -474,7 +483,7 @@ TEST_CASE_METHOD(GStreamerTestsFixture, "Audio RTP packet creation", "[GSTPlugin
                                            packet_size);
 
       REQUIRE(result == 0);
-      REQUIRE_THAT(std::string(missing_pkt.begin() + sizeof(state::AudioRTPHeaders), missing_pkt.end()),
+      REQUIRE_THAT(std::string(missing_pkt.begin() + sizeof(audio::AudioRTPHeaders), missing_pkt.end()),
                    Equals(std::string(original_pkt.begin(), original_pkt.end())));
     }
 

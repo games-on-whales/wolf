@@ -20,14 +20,14 @@ docker run \
     -e XDG_RUNTIME_DIR=/tmp/sockets \
     -v /tmp/sockets:/tmp/sockets:rw \
     -e HOST_APPS_STATE_FOLDER=/etc/wolf \
-    -v /etc/wolf/wolf:/wolf/cfg \
+    -v /etc/wolf:/etc/wolf:rw \
+    -v /etc/wolf/wolf:/wolf/cfg:rw \
     -v /var/run/docker.sock:/var/run/docker.sock:rw \
     --device /dev/dri/ \
     --device /dev/uinput \
-    --device-cgroup-rule "c 13:* rmw" \
     -v /dev/shm:/dev/shm:rw \
     -v /dev/input:/dev/input:rw \
-    -v /run/udev:/run/udev:rw \
+    -v /run/udev:/run/udev:rw
     ghcr.io/games-on-whales/wolf:stable
 ....
 
@@ -48,7 +48,6 @@ services:
       - /var/run/docker.sock:/var/run/docker.sock:rw
       - /dev/shm:/dev/shm:rw
       - /dev/input:/dev/input:rw
-      - /run/udev:/run/udev:rw
     devices:
       - /dev/dri
       - /dev/uinput
@@ -63,7 +62,7 @@ Nvidia::
 +
 --
 
-Unfortunately on Nvidia things are a little bit more complex:
+Unfortunately, on Nvidia, things are a little bit more complex:
 
 * Your driver version must be `>= 530.30.02`
 * `--gpus` and the Nvidia Docker Toolkit seems to not work (to be investigated)
@@ -96,7 +95,7 @@ docker volume ls | grep nvidia-driver
 local     nvidia-driver-vol
 ....
 
-One last final check: we have to make sure that the `nvidia-drm` module has been loaded and make sure that the module is loaded with the flag `modeset=1`.
+One last final check: we have to make sure that the `nvidia-drm` module has been loaded and that the module is loaded with the flag `modeset=1`.
 
 [source,bash]
 ....
@@ -132,9 +131,9 @@ docker run \
     -e NVIDIA_DRIVER_VOLUME_NAME=nvidia-driver-vol \
     -v nvidia-driver-vol:/usr/nvidia:rw \
     -e HOST_APPS_STATE_FOLDER=/etc/wolf \
+    -v /etc/wolf:/etc/wolf:rw \
     -v /etc/wolf/wolf:/wolf/cfg \
     -v /var/run/docker.sock:/var/run/docker.sock:rw \
-    --device-cgroup-rule "c 13:* rmw" \
     --device /dev/nvidia-uvm \
     --device /dev/nvidia-uvm-tools \
     --device /dev/dri/ \
@@ -146,7 +145,7 @@ docker run \
     --device /dev/uinput \
     -v /dev/shm:/dev/shm:rw \
     -v /dev/input:/dev/input:rw \
-    -v /run/udev:/run/udev:rw \
+    -v /run/udev:/run/udev:rw
     ghcr.io/games-on-whales/wolf:stable
 ....
 
@@ -168,7 +167,6 @@ services:
       - /var/run/docker.sock:/var/run/docker.sock:rw
       - /dev/shm:/dev/shm:rw
       - /dev/input:/dev/input:rw
-      - /run/udev:/run/udev:rw
       - nvidia-driver-vol:/usr/nvidia:rw
     devices:
       - /dev/dri
@@ -190,7 +188,16 @@ volumes:
     external: true
 ....
 
-Depending on your system you might also need to initialise the `nvidia-uvm` devices:
+If you are missing any of the `/dev/nvidia*` devices you might also need to initialise them using:
+
+[source,bash]
+....
+sudo nvidia-container-cli --load-kmods info
+....
+
+.Or if that fails:
+[%collapsible]
+====
 
 [source,bash]
 ....
@@ -223,6 +230,7 @@ else
   exit 1
 fi
 ....
+====
 
 --
 
@@ -235,12 +243,18 @@ To keep things simple the scripts above defaulted to `network:host`; that's not 
 
 [source,dockerfile]
 ....
-EXPOSE 47984/tcp # HTTPS
-EXPOSE 47989/tcp # HTTP
-EXPOSE 47998/udp # Video
-EXPOSE 47999/udp # Control
-EXPOSE 48000/udp # Audio
-EXPOSE 48010/tcp # RTSP
+# HTTPS
+EXPOSE 47984/tcp
+# HTTP
+EXPOSE 47989/tcp
+# Control
+EXPOSE 47999/udp
+# RTSP
+EXPOSE 48010/tcp
+# Video (up to 10 users)
+EXPOSE 48100-48110/udp
+# Audio (up to 10 users)
+EXPOSE 48200-48210/udp
 ....
 ====
 
@@ -277,9 +291,17 @@ sudo usermod -a -G input $USER
 .Create `udev` rules under `/etc/udev/rules.d/85-wolf-virtual-inputs.rules`
 [source,bash]
 ....
+# Allows Wolf to acces /dev/uinput
 KERNEL=="uinput", SUBSYSTEM=="misc", MODE="0660", GROUP="input", OPTIONS+="static_node=uinput"
+
+# Move virtual keyboard and mouse into a different seat
 SUBSYSTEMS=="input", ATTRS{id/vendor}=="ab00", MODE="0660", GROUP="input", ENV{ID_SEAT}="seat9"
-SUBSYSTEMS=="input", ATTRS{id/vendor}=="045e", ATTRS{id/product}=="02d1", ATTRS{id/version}=="ab00", MODE="0660", GROUP="input"
+
+# Joypads
+SUBSYSTEMS=="input", ATTRS{name}=="Wolf X-Box One (virtual) pad", MODE="0660", GROUP="input"
+SUBSYSTEMS=="input", ATTRS{name}=="Wolf PS5 (virtual) pad", MODE="0660", GROUP="input"
+SUBSYSTEMS=="input", ATTRS{name}=="Wolf gamepad (virtual) motion sensors", MODE="0660", GROUP="input"
+SUBSYSTEMS=="input", ATTRS{name}=="Wolf Nintendo (virtual) pad", MODE="0660", GROUP="input"
 ....
 
 .What does that mean?
@@ -296,10 +318,13 @@ This is usually not the default on servers, but if that is already working for y
 
 This line checks for the custom vendor-id that Wolf gives to newly created virtual devices and assigns them to `seat9`, which will cause any session with a lower seat (usually you only have `seat1` for your main session) to ignore the devices.
 
-    SUBSYSTEMS=="input", ATTRS{id/vendor}=="045e", ATTRS{id/product}=="02d1", ATTRS{id/version}=="ab00", MODE="0660", GROUP="input"
+    SUBSYSTEMS=="input", ATTRS{name}=="Wolf X-Box One (virtual) pad", MODE="0660", GROUP="input"
+    SUBSYSTEMS=="input", ATTRS{name}=="Wolf PS5 (virtual) pad", MODE="0660", GROUP="input"
+    SUBSYSTEMS=="input", ATTRS{name}=="Wolf gamepad (virtual) motion sensors", MODE="0660", GROUP="input"
+    SUBSYSTEMS=="input", ATTRS{name}=="Wolf Nintendo (virtual) pad", MODE="0660", GROUP="input"
 
-Now the virtual controllers are different, because we need to emulate an existing brand for them to be picked up correctly, so our virtual controllers have a vendor/product id resembling an Xbox controller.
-But the version is again specific to Wolf.
+Now the virtual controllers are different, because we need to emulate an existing brand for them to be picked up correctly, so our virtual controllers have a vendor/product id resembling a real controller.
+The assigned name instead is specific to Wolf.
 
 You can't assign controllers a seat however (well - you can - but it won't have the same effect), so we just give it permissions where only user+group can pick it up.
 ====

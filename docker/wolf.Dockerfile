@@ -1,4 +1,4 @@
-ARG BASE_IMAGE=ghcr.io/games-on-whales/gstreamer:1.22.0
+ARG BASE_IMAGE=ghcr.io/games-on-whales/gstreamer:1.22.7
 ########################################################
 FROM $BASE_IMAGE AS wolf-builder
 
@@ -26,9 +26,20 @@ RUN apt-get update -y && \
     libpci-dev \
     && rm -rf /var/lib/apt/lists/*
 
-## Install Rust in order to build our custom compositor (the build will be done inside Cmake)
-RUN curl https://sh.rustup.rs -sSf | sh -s -- -y
-ENV PATH="/root/.cargo/bin:${PATH}"
+## Install Rust in order to build our custom compositor
+RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
+ENV PATH="$HOME/.cargo/bin:${PATH}"
+
+WORKDIR /tmp/
+RUN <<_GST_WAYLAND_DISPLAY
+    #!/bin/bash
+    set -e
+
+    git clone https://github.com/games-on-whales/gst-wayland-display
+    cd gst-wayland-display
+    cargo install cargo-c
+    cargo cinstall --prefix=/usr/local
+_GST_WAYLAND_DISPLAY
 
 COPY . /wolf/
 WORKDIR /wolf
@@ -42,11 +53,14 @@ RUN --mount=type=cache,target=/cache/ccache \
     -DCMAKE_CXX_EXTENSIONS=OFF \
     -DBUILD_SHARED_LIBS=OFF \
     -DBoost_USE_STATIC_LIBS=ON \
+    -DBUILD_FAKE_UDEV_CLI=ON \
     -DBUILD_TESTING=OFF \
     -G Ninja && \
-    ninja -C $CMAKE_BUILD_DIR && \
-    # We have to copy out the built executable because this will only be available inside the buildkit cache
-    cp $CMAKE_BUILD_DIR/src/wolf/wolf /wolf/wolf
+    ninja -C $CMAKE_BUILD_DIR wolf && \
+    ninja -C $CMAKE_BUILD_DIR fake-udev && \
+    # We have to copy out the built executables because this will only be available inside the buildkit cache
+    cp $CMAKE_BUILD_DIR/src/moonlight-server/wolf /wolf/wolf && \
+    cp $CMAKE_BUILD_DIR/src/fake-udev/fake-udev /wolf/fake-udev
 
 ########################################################
 FROM $BASE_IMAGE AS runner
@@ -62,6 +76,7 @@ RUN apt-get update -y && \
     libcurl4 \
     libdrm2 \
     libpci3 \
+    libunwind8 \
     && rm -rf /var/lib/apt/lists/*
 
 # gst-plugin-wayland runtime dependencies
@@ -72,13 +87,18 @@ RUN apt-get update -y && \
     && rm -rf /var/lib/apt/lists/*
 
 ENV GST_PLUGIN_PATH=/usr/local/lib/x86_64-linux-gnu/gstreamer-1.0/
-COPY --from=wolf-builder /wolf/wolf /wolf/wolf
+# Copying out our custom compositor from the build stage
+COPY --from=wolf-builder /usr/local/lib/gstreamer-1.0/* $GST_PLUGIN_PATH
+COPY --from=wolf-builder /usr/local/lib/liblibgstwaylanddisplay* /usr/local/lib/
 
 WORKDIR /wolf
 
 ARG WOLF_CFG_FOLDER=/wolf/cfg
 ENV WOLF_CFG_FOLDER=$WOLF_CFG_FOLDER
 RUN mkdir $WOLF_CFG_FOLDER
+
+COPY --from=wolf-builder /wolf/wolf /wolf/wolf
+COPY --from=wolf-builder /wolf/fake-udev /wolf/fake-udev
 
 ENV XDG_RUNTIME_DIR=/tmp/sockets \
     WOLF_LOG_LEVEL=INFO \
@@ -90,7 +110,6 @@ ENV XDG_RUNTIME_DIR=/tmp/sockets \
     WOLF_STOP_CONTAINER_ON_EXIT=TRUE \
     WOLF_DOCKER_SOCKET=/var/run/docker.sock \
     RUST_BACKTRACE=full \
-    NVIDIA_DRIVER_VOLUME_NAME=nvidia-driver-vol \
     HOST_APPS_STATE_FOLDER=/etc/wolf \
     GST_DEBUG=2 \
     PUID=0 \
@@ -103,14 +122,14 @@ VOLUME $WOLF_CFG_FOLDER
 EXPOSE 47984/tcp
 # HTTP
 EXPOSE 47989/tcp
-# Video
-EXPOSE 47998/udp
 # Control
 EXPOSE 47999/udp
-# Audio
-EXPOSE 48000/udp
 # RTSP
 EXPOSE 48010/tcp
+# Video (up to 10 users)
+EXPOSE 48100-48110/udp
+# Audio (up to 10 users)
+EXPOSE 48200-48210/udp
 
 LABEL org.opencontainers.image.source="https://github.com/games-on-whales/wolf/"
 LABEL org.opencontainers.image.description="Wolf: stream virtual desktops and games in Docker"
