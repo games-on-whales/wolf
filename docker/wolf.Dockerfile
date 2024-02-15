@@ -93,7 +93,7 @@ COPY --from=wolf-builder /usr/local/lib/liblibgstwaylanddisplay* /usr/local/lib/
 
 WORKDIR /wolf
 
-ARG WOLF_CFG_FOLDER=/wolf/cfg
+ARG WOLF_CFG_FOLDER=/etc/wolf/cfg
 ENV WOLF_CFG_FOLDER=$WOLF_CFG_FOLDER
 RUN mkdir $WOLF_CFG_FOLDER
 

@@ -12,15 +12,15 @@ Wolf is configured via a TOML config file and some additional optional ENV varia
 |The log level to show, one of ERROR, WARNING, INFO, DEBUG, TRACE
 
 |WOLF_CFG_FILE
-|/wolf/cfg/config.toml
+|/etc/wolf/cfg/config.toml
 |Full path to the config file
 
 |WOLF_PRIVATE_KEY_FILE
-|/wolf/cfg/key.pem
+|/etc/wolf/cfg/key.pem
 |Full path to the key.pem file
 
 |WOLF_PRIVATE_CERT_FILE
-|/wolf/cfg/cert.pem
+|/etc/wolf/cfg/cert.pem
 |Full path to the cert.pem file
 
 |XDG_RUNTIME_DIR

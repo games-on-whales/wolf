@@ -21,7 +21,6 @@ docker run \
     -v /tmp/sockets:/tmp/sockets:rw \
     -e HOST_APPS_STATE_FOLDER=/etc/wolf \
     -v /etc/wolf:/etc/wolf:rw \
-    -v /etc/wolf/wolf:/wolf/cfg:rw \
     -v /var/run/docker.sock:/var/run/docker.sock:rw \
     --device /dev/dri/ \
     --device /dev/uinput \
@@ -43,16 +42,15 @@ services:
       - XDG_RUNTIME_DIR=/tmp/sockets
       - HOST_APPS_STATE_FOLDER=/etc/wolf
     volumes:
-      - /etc/wolf/wolf:/wolf/cfg
+      - /etc/wolf/:/etc/wolf
       - /tmp/sockets:/tmp/sockets:rw
       - /var/run/docker.sock:/var/run/docker.sock:rw
       - /dev/shm:/dev/shm:rw
       - /dev/input:/dev/input:rw
+      - /run/udev:/run/udev:rw
     devices:
       - /dev/dri
       - /dev/uinput
-    device_cgroup_rules:
-      - 'c 13:* rmw'
     network_mode: host
     restart: unless-stopped
 ....
@@ -71,7 +69,7 @@ First, let's build an additional docker image that will contain the Nvidia drive
 
 [source,bash]
 ....
-docker build -t gow/nvidia-driver:latest --build-arg NV_VERSION=$(cat /sys/module/nvidia/version) -f images/nvidia-driver/Dockerfile github.com/games-on-whales/gow#master
+curl https://raw.githubusercontent.com/games-on-whales/gow/master/images/nvidia-driver/Dockerfile | docker build -t gow/nvidia-driver:latest -f - --build-arg NV_VERSION=$(cat /sys/module/nvidia/version) .
 ....
 
 This will create `gow/nvidia-driver:latest` locally.
@@ -132,7 +130,6 @@ docker run \
     -v nvidia-driver-vol:/usr/nvidia:rw \
     -e HOST_APPS_STATE_FOLDER=/etc/wolf \
     -v /etc/wolf:/etc/wolf:rw \
-    -v /etc/wolf/wolf:/wolf/cfg \
     -v /var/run/docker.sock:/var/run/docker.sock:rw \
     --device /dev/nvidia-uvm \
     --device /dev/nvidia-uvm-tools \
@@ -162,7 +159,7 @@ services:
       - NVIDIA_DRIVER_VOLUME_NAME=nvidia-driver-vol
       - HOST_APPS_STATE_FOLDER=/etc/wolf
     volumes:
-      - /etc/wolf/wolf:/wolf/cfg
+      - /etc/wolf/:/etc/wolf:rw
       - /tmp/sockets:/tmp/sockets:rw
       - /var/run/docker.sock:/var/run/docker.sock:rw
       - /dev/shm:/dev/shm:rw
