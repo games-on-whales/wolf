@@ -95,7 +95,7 @@ WORKDIR /wolf
 
 ARG WOLF_CFG_FOLDER=/etc/wolf/cfg
 ENV WOLF_CFG_FOLDER=$WOLF_CFG_FOLDER
-RUN mkdir $WOLF_CFG_FOLDER
+RUN mkdir -p $WOLF_CFG_FOLDER
 
 COPY --from=wolf-builder /wolf/wolf /wolf/wolf
 COPY --from=wolf-builder /wolf/fake-udev /wolf/fake-udev
