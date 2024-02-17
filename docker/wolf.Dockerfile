@@ -116,8 +116,6 @@ ENV XDG_RUNTIME_DIR=/tmp/sockets \
     PGID=0 \
     UNAME="root"
 
-VOLUME $WOLF_CFG_FOLDER
-
 # HTTPS
 EXPOSE 47984/tcp
 # HTTP
