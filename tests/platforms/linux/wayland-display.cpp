@@ -1,6 +1,6 @@
 #include "catch2/catch_all.hpp"
-#include <csignal>
 #include <core/virtual-display.hpp>
+#include <csignal>
 
 using Catch::Matchers::Contains;
 using Catch::Matchers::Equals;
@@ -19,10 +19,11 @@ TEST_CASE("Wayland C APIs", "[WAYLAND]") {
   REQUIRE_THAT(graphic_devices, Contains("/dev/dri/renderD128"));
   REQUIRE_THAT(graphic_devices, Contains("/dev/dri/card0"));
 
-  SECTION("Set resolution to 1080p") {
+  { // Set resolution to 1080p
     auto caps = set_resolution(*w_state, {1920, 1080, 60});
 
     auto gst_buffer = get_frame(*w_state);
+    REQUIRE(GST_IS_BUFFER(gst_buffer));
     REQUIRE(gst_buffer_get_size(gst_buffer) == 1920 * 1080 * 4);
     REQUIRE_THAT(
         gst_caps_to_string(caps.get()),
@@ -31,10 +32,11 @@ TEST_CASE("Wayland C APIs", "[WAYLAND]") {
     gst_buffer_unref(gst_buffer);
   }
 
-  SECTION("Changing Resolution to 720p") {
+  { // Set resolution to 720p
     auto caps = set_resolution(*w_state, {1280, 720, 30});
 
     auto gst_buffer = get_frame(*w_state);
+    REQUIRE(GST_IS_BUFFER(gst_buffer));
     REQUIRE(gst_buffer_get_size(gst_buffer) == 1280 * 720 * 4);
     REQUIRE_THAT(
         gst_caps_to_string(caps.get()),
