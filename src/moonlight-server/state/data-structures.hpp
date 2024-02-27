@@ -198,7 +198,8 @@ struct StreamSession {
    * Optional: the wayland display for the current session.
    * Will be only set during an active streaming and destroyed on stream end.
    */
-  std::shared_ptr<immer::atom<virtual_display::wl_state_ptr>> wayland_display = std::make_shared<immer::atom<virtual_display::wl_state_ptr>>();
+  std::shared_ptr<immer::atom<virtual_display::wl_state_ptr>> wayland_display =
+      std::make_shared<immer::atom<virtual_display::wl_state_ptr>>();
 
   // virtual devices
   std::shared_ptr<input::Mouse> mouse;
