@@ -23,7 +23,7 @@ std::shared_ptr<Joypad> create_new_joypad(const state::StreamSession &session,
     return {};
   }
 
-  auto new_pad = std::make_shared<Joypad>(Joypad(**joypad));
+  auto new_pad = std::make_shared<Joypad>(*joypad);
   new_pad->set_on_rumble([clients = &connected_clients,
                           controller_number,
                           session_id = session.session_id,

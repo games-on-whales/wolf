@@ -65,8 +65,10 @@ public:
 };
 
 class Joypad : public inputtino::Joypad, public VirtualDevice {
+private:
+  std::shared_ptr<inputtino::Joypad> _j; // We have to keep a reference to the original ptr to avoid removing the thread
 public:
-  Joypad(const inputtino::Joypad &j) : inputtino::Joypad(j) {}
+  Joypad(std::shared_ptr<inputtino::Joypad> j) : _j(std::move(j)), inputtino::Joypad(*j) {}
 
   std::vector<std::map<std::string, std::string>> get_udev_events() const override;
   std::vector<std::pair<std::string, std::vector<std::string>>> get_udev_hw_db_entries() const override;

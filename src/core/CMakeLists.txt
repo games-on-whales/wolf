@@ -52,7 +52,7 @@ if (UNIX AND NOT APPLE)
     FetchContent_Declare(
             inputtino
             GIT_REPOSITORY https://github.com/games-on-whales/inputtino.git
-            GIT_TAG eb8c3a4)
+            GIT_TAG 753a639)
     FetchContent_MakeAvailable(inputtino)
 
     add_subdirectory(src/platforms/linux/uinput)
