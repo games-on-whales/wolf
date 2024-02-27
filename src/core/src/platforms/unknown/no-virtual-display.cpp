@@ -26,4 +26,8 @@ GstBuffer *get_frame(WaylandState &w_state) {
   return nullptr;
 }
 
+bool add_input_device(WaylandState &w_state, const std::string &device_path) {
+  return false;
+}
+
 } // namespace wolf::core::virtual_display

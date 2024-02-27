@@ -91,4 +91,9 @@ static void destroy(WaylandState *w_state) {
   display_finish(w_state->display);
 }
 
+bool add_input_device(WaylandState &w_state, const std::string &device_path) {
+  display_add_input_device(w_state.display, device_path.c_str());
+  return true;
+}
+
 } // namespace wolf::core::virtual_display

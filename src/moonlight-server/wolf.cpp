@@ -268,6 +268,8 @@ auto setup_sessions_handlers(const immer::box<state::AppState> &app_state,
               full_env.set(utils::to_string(split[0]), utils::to_string(split[1]));
             }
 
+            // Set the wayland display
+            session->wayland_display->store(wl_state);
             wl_promise->set_value(std::move(wl_state));
           }
 
@@ -314,6 +316,8 @@ auto setup_sessions_handlers(const immer::box<state::AppState> &app_state,
           if (audio_server && audio_server->server) {
             audio::delete_virtual_sink(audio_server->server, v_device);
           }
+
+          session->wayland_display->store(nullptr);
 
           /* When the app closes there's no point in keeping the stream running */
           app_state->event_bus->fire_event(

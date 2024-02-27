@@ -8,6 +8,7 @@
 
 namespace control {
 
+using namespace wolf::core::virtual_display;
 using namespace wolf::core::input;
 using namespace std::string_literals;
 using namespace moonlight::control;
@@ -59,6 +60,14 @@ std::shared_ptr<Joypad> create_new_joypad(const state::StreamSession &session,
     encrypt_and_send(plaintext, session.aes_key, connected_clients, session.session_id);
   }
 
+  if (auto trackpad = new_pad->get_trackpad()) {
+    if (auto wl = *session.wayland_display->load()) {
+      for (const auto node : trackpad->get_nodes()) {
+        add_input_device(*wl, node);
+      }
+    }
+  }
+
   session.joypads->update([&](state::JoypadList joypads) {
     logs::log(logs::debug, "[INPUT] Creating joypad {} of type: {}", controller_number, type);
 
@@ -84,6 +93,11 @@ std::shared_ptr<PenTablet> create_pen_tablet(state::StreamSession &session) {
   session.event_bus->fire_event(immer::box<state::PlugDeviceEvent>(
       state::PlugDeviceEvent{.session_id = session.session_id, .device = tablet_ptr}));
   session.pen_tablet = tablet_ptr;
+  if (auto wl = *session.wayland_display->load()) {
+    for (const auto node : tablet_ptr->get_nodes()) {
+      add_input_device(*wl, node);
+    }
+  }
   return tablet_ptr;
 }
 
@@ -101,6 +115,11 @@ std::shared_ptr<TouchScreen> create_touch_screen(state::StreamSession &session) 
   session.event_bus->fire_event(immer::box<state::PlugDeviceEvent>(
       state::PlugDeviceEvent{.session_id = session.session_id, .device = touch_screen}));
   session.touch_screen = touch_screen;
+  if (auto wl = *session.wayland_display->load()) {
+    for (const auto node : touch_screen->get_nodes()) {
+      add_input_device(*wl, node);
+    }
+  }
   return touch_screen;
 }
 

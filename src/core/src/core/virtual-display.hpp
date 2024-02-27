@@ -30,4 +30,5 @@ immer::vector<std::string> get_env(const WaylandState &w_state);
 
 static void destroy(WaylandState *w_state);
 GstBuffer *get_frame(WaylandState &w_state);
+bool add_input_device(WaylandState &w_state, const std::string &device_path);
 } // namespace wolf::core::virtual_display

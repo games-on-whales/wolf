@@ -4,6 +4,7 @@
 #include <chrono>
 #include <core/audio.hpp>
 #include <core/input.hpp>
+#include <core/virtual-display.hpp>
 #include <deque>
 #include <eventbus/event_bus.hpp>
 #include <immer/array.hpp>
@@ -192,6 +193,12 @@ struct StreamSession {
   // client info
   std::size_t session_id;
   std::string ip;
+
+  /**
+   * Optional: the wayland display for the current session.
+   * Will be only set during an active streaming and destroyed on stream end.
+   */
+  std::shared_ptr<immer::atom<virtual_display::wl_state_ptr>> wayland_display = std::make_shared<immer::atom<virtual_display::wl_state_ptr>>();
 
   // virtual devices
   std::shared_ptr<input::Mouse> mouse;
