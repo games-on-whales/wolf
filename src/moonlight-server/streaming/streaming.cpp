@@ -126,6 +126,12 @@ void start_streaming_video(const immer::box<state::VideoSession> &video_session,
 
       auto caps = set_resolution(*appsrc_state->wayland_state, video_session->display_mode, app_src_ptr);
       g_object_set(app_src_ptr.get(), "caps", caps.get(), NULL);
+      // No seeking is supported, this is a live stream
+      g_object_set(app_src_el, "stream-type", GST_APP_STREAM_TYPE_STREAM, NULL);
+      // appsrc will drop any buffers that are pushed into it once its internal queue is full
+      g_object_set(app_src_el, "leaky-type", GST_APP_LEAKY_TYPE_DOWNSTREAM, NULL);
+      // sometimes the encoder or the network sink might lag behind, we'll keep up to 3 buffers in the queue
+      g_object_set(app_src_el, "max-buffers", 3, NULL);
 
       /* Adapted from the tutorial at:
        * https://gstreamer.freedesktop.org/documentation/tutorials/basic/short-cutting-the-pipeline.html?gi-language=c*/
