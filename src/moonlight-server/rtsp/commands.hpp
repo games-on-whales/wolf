@@ -98,7 +98,11 @@ std::pair<std::string, std::optional<int>> parse_arg_line(const std::pair<std::s
   auto split = utils::split(line.second, ':');
   std::optional<int> val;
   try {
-    val = std::stoi(split[1].data());
+    if (split.size() == 2 && split[1].data()) {
+      val = std::stoi(split[1].data());
+    } else {
+      logs::log(logs::warning, "[RTSP] Received unparsable value {}", line);
+    }
   } catch (std::exception const &ex) {
     logs::log(logs::warning, "[RTSP] Unable to parse line: {} error: {}", line, ex.what());
     val = {};
@@ -119,9 +123,9 @@ announce(const RTSP_PACKET &req,
               | views::transform(parse_arg_line)               // turns an arg line into a pair
               | to<std::map<std::string, std::optional<int>>>; // to map
 
-  bool video_format_hevc = args["x-nv-vqos[0].bitStreamFormat"].value() == 1;
-  bool video_format_av1 = args["x-nv-vqos[0].bitStreamFormat"].value() == 2;
-  auto csc = args["x-nv-video[0].encoderCscMode"].value();
+  bool video_format_hevc = args["x-nv-vqos[0].bitStreamFormat"].value_or(0) == 1;
+  bool video_format_av1 = args["x-nv-vqos[0].bitStreamFormat"].value_or(0) == 2;
+  auto csc = args["x-nv-video[0].encoderCscMode"].value_or(0);
 
   // Video session
   moonlight::DisplayMode display = {.width = args["x-nv-video[0].clientViewportWd"].value(),
@@ -158,12 +162,12 @@ announce(const RTSP_PACKET &req,
       .session_id = session.session_id,
 
       .port = video_port,
-      .timeout = std::chrono::milliseconds(args["x-nv-video[0].timeoutLengthMs"].value()),
-      .packet_size = args["x-nv-video[0].packetSize"].value(),
-      .frames_with_invalid_ref_threshold = args["x-nv-video[0].framesWithInvalidRefThreshold"].value(),
+      .timeout = std::chrono::milliseconds(args["x-nv-video[0].timeoutLengthMs"].value_or(7000)),
+      .packet_size = args["x-nv-video[0].packetSize"].value_or(1024),
+      .frames_with_invalid_ref_threshold = args["x-nv-video[0].framesWithInvalidRefThreshold"].value_or(0),
       .fec_percentage = 20,
       .min_required_fec_packets = args["x-nv-vqos[0].fec.minRequiredFecPackets"].value_or(0),
-      .bitrate_kbps = args["x-nv-video[0].initialBitrateKbps"].value(),
+      .bitrate_kbps = args["x-nv-video[0].initialBitrateKbps"].value_or(15500),
       .slices_per_frame = args["x-nv-video[0].videoEncoderSlicesPerFrame"].value_or(1),
 
       .color_range = (csc & 0x1) ? state::JPEG : state::MPEG,
@@ -182,19 +186,20 @@ announce(const RTSP_PACKET &req,
   });
 
   // Audio session
-  state::AudioSession audio = {.gst_pipeline = session.app->opus_gst_pipeline,
+  state::AudioSession audio = {
+      .gst_pipeline = session.app->opus_gst_pipeline,
 
-                               .session_id = session.session_id,
+      .session_id = session.session_id,
 
-                               .encrypt_audio = static_cast<bool>(args["x-nv-general.featureFlags"].value() & 0x20),
-                               .aes_key = session.aes_key,
-                               .aes_iv = session.aes_iv,
+      .encrypt_audio = static_cast<bool>(args["x-nv-general.featureFlags"].value_or(167) & 0x20),
+      .aes_key = session.aes_key,
+      .aes_iv = session.aes_iv,
 
-                               .port = audio_port,
-                               .client_ip = session.ip,
+      .port = audio_port,
+      .client_ip = session.ip,
 
-                               .packet_duration = args["x-nv-aqos.packetDuration"].value(),
-                               .channels = args["x-nv-audio.surround.numChannels"].value()};
+      .packet_duration = args["x-nv-aqos.packetDuration"].value_or(5),
+      .channels = args["x-nv-audio.surround.numChannels"].value_or(2)};
   event_bus->fire_event(immer::box<state::AudioSession>(audio));
 
   return ok_msg(req.seq_number);

@@ -424,4 +424,28 @@ TEST_CASE("Commands", "[RTSP]") {
                        REQUIRE(response.value().seq_number == 6);
                      });
   }
+
+  SECTION("Non valid payload") {
+    wolf_client->run("ANNOUNCE streamid=control/13/0 RTSP/1.0\n"
+                     "CSeq: 7\n"
+                     "X-GS-ClientVersion: 14\n"
+                     "Host: 192.168.1.227\n"
+                     "Session:  DEADBEEFCAFE\n"
+                     "Content-type: application/sdp\n"
+                     "Content-length: 170\n"
+                     "\n"
+                     "v=0\n"
+                     "a=x-nv-video[0].timeoutLengthM\n" // Missing :
+                     "a=x-nv-vqos[0].fec.enable:YES\n"  // Non number after :
+                     // The following are required fields
+                     "a=x-nv-video[0].clientViewportWd:1920 \n"
+                     "a=x-nv-video[0].clientViewportHt:1080 \n"
+                     "a=x-nv-video[0].maxFPS:60 \n"
+                     "\n\n\n\n"sv,
+                     [](std::optional<RTSP_PACKET> response) {
+                       REQUIRE(response.has_value());
+                       REQUIRE(response.value().response.status_code == 200);
+                       REQUIRE(response.value().seq_number == 7);
+                     });
+  }
 }
