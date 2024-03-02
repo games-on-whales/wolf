@@ -77,17 +77,16 @@ curl https://raw.githubusercontent.com/games-on-whales/gow/master/images/nvidia-
 
 This will create `gow/nvidia-driver:latest` locally.
 
-Unfortunately, docker doesn't seem to support directly mounting images, but you can https://docs.docker.com/storage/volumes/#populate-a-volume-using-a-container[pre-polulate volumes]!
+Unfortunately, docker doesn't seem to support directly mounting images, but you can https://docs.docker.com/storage/volumes/#populate-a-volume-using-a-container[pre-polulate volumes] by running:
 
 [source,bash]
 ....
-docker run --name nvidia-driver-container --rm --mount source=nvidia-driver-vol,destination=/usr/nvidia gow/nvidia-driver:latest sh
-
-docker: Error response from daemon: failed to create shim task: OCI runtime create failed: runc create failed: unable to start container process: exec: "sh": executable file not found in $PATH: unknown.
-ERRO[0003] error waiting for container:
+docker create --rm --mount source=nvidia-driver-vol,destination=/usr/nvidia gow/nvidia-driver:latest sh
 ....
 
-As you can see, the command will fail because the image contains no binary, but it'll create a new volume nevertheless.
+It will create a Docker container, populate `nvidia-driver-vol` with Nvidia driver if it wasn't already done and remove the container.
+
+Check volume exists with:
 
 [source,bash]
 ....
