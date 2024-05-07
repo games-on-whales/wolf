@@ -1,8 +1,8 @@
 { pkgs, self, deps, ... }:
 let
-  wolf_folder = /etc/wolf;
-  wolf_cfg_folder = ${wolf_folder}/cfg;
-  wolf_state_folder = ${wolf_folder}/state;
+  wolf_folder = "/etc/wolf";
+  wolf_cfg_folder = "${wolf_folder}/cfg";
+  wolf_state_folder = "${wolf_folder}/state";
   fake-udev = pkgs.stdenv.mkDerivation {
     pname = "fake-udev";
     version = "1.0";
