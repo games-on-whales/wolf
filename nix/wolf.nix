@@ -1,6 +1,8 @@
 { pkgs, self, deps, ... }:
 let
-  wolf_cfg_folder = /etc/wolf/cfg;
+  wolf_folder = /etc/wolf;
+  wolf_cfg_folder = ${wolf_folder}/cfg;
+  wolf_state_folder = ${wolf_folder}/state;
   fake-udev = pkgs.stdenv.mkDerivation {
     pname = "fake-udev";
     version = "1.0";
@@ -94,7 +96,7 @@ in pkgs.stdenv.mkDerivation {
       --prefix WOLF_CFG_FILE : "${wolf_cfg_folder}/config.toml"
       --prefix WOLF_PRIVATE_KEY_FILE : "${wolf_cfg_folder}/key.pem"
       --prefix WOLF_PRIVATE_CERT_FILE : "${wolf_cfg_folder}/cert.pem"
-      --prefix HOST_APPS_STATE_FOLDER : "/etc/wolf"
+      --prefix HOST_APPS_STATE_FOLDER : "${wolf_state_folder}"
       --prefix WOLF_PULSE_IMAGE : "ghcr.io/games-on-whales/pulseaudio:master"
       --prefix WOLF_DOCKER_SOCKET : "/var/run/docker.sock"
       --prefix WOLF_RENDER_NODE : "/dev/dri/renderD128"
