@@ -75,7 +75,7 @@
           owner = "jeremy-rifkin";
           repo = "libdwarf-lite";
           rev = "5c0cb25";
-           hash = "sha256-so/y6GnhwYZPFCeoKih+sPgndnuHWHE1h9mWXnccXxM=";
+          hash = "sha256-so/y6GnhwYZPFCeoKih+sPgndnuHWHE1h9mWXnccXxM=";
         };
         simplewebserver_src = pkgs.fetchFromGitLab {
           owner = "eidheim";
