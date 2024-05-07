@@ -1,5 +1,6 @@
 { pkgs, self, deps, ... }:
 let
+  wolf_cfg_folder = /etc/wolf/cfg;
   fake-udev = pkgs.stdenv.mkDerivation {
     pname = "fake-udev";
     version = "1.0";
@@ -62,11 +63,6 @@ in pkgs.stdenv.mkDerivation {
     openssl
     curl
   ];
-  # ++ lib.optionals cudaSupport [
-  # cudaPackages.cudatoolkit
-  # ] ++ lib.optionals stdenv.isx86_64 [
-  # intel-media-sdk
-  # ];
 
   cmakeFlags = [
     "-DFETCHCONTENT_SOURCE_DIR_IMMER=${deps.immer_src}"
@@ -90,6 +86,28 @@ in pkgs.stdenv.mkDerivation {
     "-DBUILD_TESTING=OFF"
     "-G Ninja"
   ];
+
+  preFixup = ''
+       gappsWrapperArgs+=(
+      --prefix XDG_RUNTIME_DIR : "/tmp/sockets"
+      --prefix WOLF_CFG_FOLDER  : "${wolf_cfg_folder}"
+      --prefix WOLF_CFG_FILE : "${wolf_cfg_folder}/config.toml"
+      --prefix WOLF_PRIVATE_KEY_FILE : "${wolf_cfg_folder}/key.pem"
+      --prefix WOLF_PRIVATE_CERT_FILE : "${wolf_cfg_folder}/cert.pem"
+      --prefix HOST_APPS_STATE_FOLDER : "/etc/wolf"
+      --prefix WOLF_PULSE_IMAGE : "ghcr.io/games-on-whales/pulseaudio:master"
+      --prefix WOLF_DOCKER_SOCKET : "/var/run/docker.sock"
+      --prefix WOLF_RENDER_NODE : "/dev/dri/renderD128"
+      --prefix WOLF_STOP_CONTAINER_ON_EXIT : "TRUE"
+      --prefix WOLF_LOG_LEVEL : "INFO"
+      --prefix RUST_BACKTRACE : "full"
+      --prefix RUST_LOG : "WARN"
+      --prefix GST_DEBUG : 2
+      --prefix PUID : 0 
+      --prefix PGID : 0 
+      --prefix UNAME : "root"
+    )
+  '';
 
   buildPhase = "ninja wolf";
   installPhase = ''
