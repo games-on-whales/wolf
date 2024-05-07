@@ -70,6 +70,7 @@ in pkgs.stdenv.mkDerivation {
 
   cmakeFlags = [
     "-DFETCHCONTENT_SOURCE_DIR_IMMER=${deps.immer_src}"
+    "-DFETCHCONTENT_SOURCE_DIR_INPUTTINO=${deps.inputtino_src}"
     "-DFETCHCONTENT_SOURCE_DIR_EVENTBUS=${deps.eventbus_src}"
     "-DFETCHCONTENT_SOURCE_DIR_BOOST_JSON=${deps.boost-json_src}"
     "-DFETCHCONTENT_SOURCE_DIR_RANGE=${deps.range_src}"

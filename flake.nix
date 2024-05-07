@@ -23,6 +23,12 @@
           rev = "e02cbd795e9424a8405a8cb01f659ad61c0cbbc7";
           hash = "sha256-buIaXxoJSTbqzsnxpd33BUCQtTGmdd10j1ArQd5rink=";
         };
+        inputtino_src = pkgs.fetchFromGitHub {
+          owner = "games-on-whales";
+          repo = "inputtino";
+          rev = "753a639";
+          hash = "sha256-qw0qKNWPjO/VfFqNX3uhSniY+/KMIL8aggwyvQht9z8=";
+        };
         fmtlib_src = pkgs.fetchFromGitHub {
           owner = "fmtlib";
           repo = "fmt";
