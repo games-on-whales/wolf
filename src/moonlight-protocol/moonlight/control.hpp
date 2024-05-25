@@ -244,9 +244,23 @@ struct CONTROLLER_TOUCH_PACKET : INPUT_PKT {
   utils::netfloat pressure;
 };
 
+enum MOTION_TYPE : unsigned short {
+  ACCELERATION = 0x01,
+  GYROSCOPE = 0x02
+};
+
+enum BATTERY_STATE : unsigned short {
+  BATTERY_DISCHARGING = 0x0,
+  BATTERY_CHARGHING = 0x1,
+  BATTERY_FULL = 0x2,
+  VOLTAGE_OR_TEMPERATURE_OUT_OF_RANGE = 0xA,
+  TEMPERATURE_ERROR = 0xB,
+  CHARGHING_ERROR = 0xF
+};
+
 struct CONTROLLER_MOTION_PACKET : INPUT_PKT {
   uint8_t controller_number;
-  wolf::core::input::Joypad::MOTION_TYPE motion_type;
+  MOTION_TYPE motion_type;
   uint8_t zero[2]; // Alignment/reserved
   utils::netfloat x;
   utils::netfloat y;
@@ -255,7 +269,7 @@ struct CONTROLLER_MOTION_PACKET : INPUT_PKT {
 
 struct CONTROLLER_BATTERY_PACKET : INPUT_PKT {
   uint8_t controller_number;
-  wolf::core::input::Joypad::BATTERY_STATE battery_state;
+  BATTERY_STATE battery_state;
   uint8_t battery_percentage;
   uint8_t zero[1]; // Alignment/reserved
 };

@@ -23,7 +23,20 @@ namespace state {
 using namespace std::chrono_literals;
 using namespace wolf::core;
 namespace ba = boost::asio;
-using devices_atom_queue = immer::atom<immer::vector<std::shared_ptr<input::VirtualDevice>>>;
+
+struct PlugDeviceEvent {
+  std::size_t session_id;
+  std::vector<std::map<std::string, std::string>> udev_events;
+  std::vector<std::pair<std::string, std::vector<std::string>>> udev_hw_db_entries;
+};
+
+struct UnplugDeviceEvent {
+  std::size_t session_id;
+  std::vector<std::map<std::string, std::string>> udev_events;
+  std::vector<std::pair<std::string, std::vector<std::string>>> udev_hw_db_entries;
+};
+
+using devices_atom_queue = immer::atom<immer::vector<immer::box<PlugDeviceEvent>>>;
 
 struct Runner {
 
@@ -170,7 +183,8 @@ struct PairCache {
   std::optional<std::string> client_hash;
 };
 
-using JoypadList = immer::map<int /* controller number */, std::shared_ptr<input::Joypad>>;
+using JoypadTypes = std::variant<input::XboxOneJoypad, input::SwitchJoypad, input::PS5Joypad>;
+using JoypadList = immer::map<int /* controller number */, std::shared_ptr<JoypadTypes>>;
 
 /**
  * A StreamSession is created when a Moonlight user call `launch`
@@ -207,16 +221,6 @@ struct StreamSession {
   std::shared_ptr<immer::atom<JoypadList>> joypads;
   std::shared_ptr<input::PenTablet> pen_tablet = nullptr;     /* Optional, will be set on first use*/
   std::shared_ptr<input::TouchScreen> touch_screen = nullptr; /* Optional, will be set on first use*/
-};
-
-struct PlugDeviceEvent {
-  std::size_t session_id;
-  std::shared_ptr<input::VirtualDevice> device;
-};
-
-struct UnplugDeviceEvent {
-  std::size_t session_id;
-  std::shared_ptr<input::VirtualDevice> device;
 };
 
 // TODO: unplug device event? Or should this be tied to the session?

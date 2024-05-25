@@ -7,6 +7,7 @@
 #include <fcntl.h>
 #include <platforms/input.hpp>
 #include <platforms/linux/uinput/uinput.hpp>
+#include <range/v3/action/sort.hpp>
 #include <thread>
 
 using Catch::Matchers::ContainsSubstring;
@@ -29,7 +30,7 @@ void link_devnode(libevdev *dev, const std::string &device_node) {
 
 TEST_CASE("uinput - keyboard", "UINPUT") {
   libevdev_ptr keyboard_dev(libevdev_new(), ::libevdev_free);
-  auto session = state::StreamSession{.keyboard = std::make_shared<Keyboard>(Keyboard(**Keyboard::create()))};
+  auto session = state::StreamSession{.keyboard = std::make_shared<Keyboard>(std::move(*Keyboard::create()))};
   link_devnode(keyboard_dev.get(), session.keyboard->get_nodes()[0]);
 
   auto events = fetch_events(keyboard_dev);
@@ -57,7 +58,7 @@ TEST_CASE("uinput - keyboard", "UINPUT") {
 }
 
 TEST_CASE("uinput - pen tablet", "[UINPUT]") {
-  auto session = state::StreamSession{.pen_tablet = std::make_shared<PenTablet>(PenTablet(**PenTablet::create()))};
+  auto session = state::StreamSession{.pen_tablet = std::make_shared<PenTablet>(std::move(*PenTablet::create()))};
   auto li = create_libinput_context(session.pen_tablet->get_nodes());
   auto event = get_event(li);
   REQUIRE(libinput_event_get_type(event.get()) == LIBINPUT_EVENT_DEVICE_ADDED);
@@ -124,8 +125,7 @@ TEST_CASE("uinput - pen tablet", "[UINPUT]") {
 }
 
 TEST_CASE("uinput - touch screen", "[UINPUT]") {
-  auto session =
-      state::StreamSession{.touch_screen = std::make_shared<TouchScreen>(TouchScreen(**TouchScreen::create()))};
+  auto session = state::StreamSession{.touch_screen = std::make_shared<TouchScreen>(std::move(*TouchScreen::create()))};
   auto li = create_libinput_context(session.touch_screen->get_nodes());
   auto event = get_event(li);
   REQUIRE(libinput_event_get_type(event.get()) == LIBINPUT_EVENT_DEVICE_ADDED);
@@ -176,11 +176,11 @@ TEST_CASE("uinput - touch screen", "[UINPUT]") {
 TEST_CASE("uinput - mouse", "UINPUT") {
   libevdev_ptr mouse_rel_dev(libevdev_new(), ::libevdev_free);
   libevdev_ptr mouse_abs_dev(libevdev_new(), ::libevdev_free);
-  wolf::core::input::Mouse mouse = **Mouse::create();
-  auto session = state::StreamSession{.mouse = std::make_shared<Mouse>(mouse)};
+  auto mouse = std::make_shared<Mouse>(std::move(*Mouse::create()));
+  auto session = state::StreamSession{.mouse = mouse};
 
-  link_devnode(mouse_rel_dev.get(), mouse.get_nodes()[0]);
-  link_devnode(mouse_abs_dev.get(), mouse.get_nodes()[1]);
+  link_devnode(mouse_rel_dev.get(), mouse->get_nodes()[0]);
+  link_devnode(mouse_abs_dev.get(), mouse->get_nodes()[1]);
 
   auto events = fetch_events(mouse_rel_dev);
   REQUIRE(events.empty());
@@ -263,7 +263,7 @@ TEST_CASE("uinput - mouse", "UINPUT") {
   }
 
   SECTION("UDEV") {
-    auto udev_events = mouse.get_udev_events();
+    auto udev_events = mouse->get_udev_events();
 
     REQUIRE(udev_events.size() == 2);
 
@@ -287,13 +287,14 @@ TEST_CASE("uinput - joypad", "UINPUT") {
                                         .joypads = std::make_shared<immer::atom<state::JoypadList>>()};
     short controller_number = 1;
     auto c_pkt =
-        pkts::CONTROLLER_MULTI_PACKET{.controller_number = controller_number, .button_flags = Joypad::RIGHT_STICK};
+        pkts::CONTROLLER_MULTI_PACKET{.controller_number = controller_number, .button_flags = pkts::RIGHT_STICK};
     c_pkt.type = pkts::CONTROLLER_MULTI;
 
     control::handle_input(session, {}, &c_pkt);
 
     REQUIRE(session.joypads->load()->size() == 1);
-    REQUIRE(session.joypads->load()->at(controller_number)->get_nodes().size() == 2);
+    auto joypad = session.joypads->load()->at(controller_number);
+    std::visit([](auto &joypad) { REQUIRE(joypad.get_nodes().size() == 2); }, *joypad);
   }
 
   SECTION("NEW Moonlight: create joypad with CONTROLLER_ARRIVAL") {
@@ -303,18 +304,32 @@ TEST_CASE("uinput - joypad", "UINPUT") {
     auto c_pkt = pkts::CONTROLLER_ARRIVAL_PACKET{
         .controller_number = controller_number,
         .controller_type = pkts::PS,
-        .capabilities = Joypad::ANALOG_TRIGGERS | Joypad::RUMBLE | Joypad::TOUCHPAD | Joypad::GYRO};
+        .capabilities = pkts::ANALOG_TRIGGERS | pkts::RUMBLE | pkts::TOUCHPAD | pkts::GYRO};
     c_pkt.type = pkts::CONTROLLER_ARRIVAL;
 
     control::handle_input(session, {}, &c_pkt);
+    std::this_thread::sleep_for(std::chrono::milliseconds(100));
 
-    auto dev_nodes = session.joypads->load()->at(controller_number)->get_nodes();
+    auto joypad = session.joypads->load()->at(controller_number);
+    std::vector<std::string> dev_nodes;
+    std::visit([&dev_nodes](auto &joypad) { dev_nodes = joypad.get_nodes(); }, *joypad);
     REQUIRE(session.joypads->load()->size() == 1);
-    REQUIRE(dev_nodes.size() == 5);
+    REQUIRE(dev_nodes.size() >= 4);
 
-    libevdev_ptr touch_rel_dev(libevdev_new(), ::libevdev_free);
-    // We know that the 3rd device is the touchpad
-    link_devnode(touch_rel_dev.get(), dev_nodes[2]);
+    // Search dev_nodes /dev/input/eventXX device and turn them into libevdev devices
+    std::sort(dev_nodes.begin(), dev_nodes.end()); // ranges::actions::sort doesn't work for some reason
+    auto devices =
+        dev_nodes |                                                                                              //
+        ranges::views::filter([](const std::string &node) { return node.find("event") != std::string::npos; }) | //
+        ranges::views::transform([](const std::string &node) {
+          libevdev_ptr el(libevdev_new(), ::libevdev_free);
+          link_devnode(el.get(), node);
+          return el;
+        }) |
+        ranges::to_vector;
+
+    // We know the 3rd device is the touchpad
+    auto touch_rel_dev = devices[2];
 
     SECTION("Joypad touchpad") {
       { // Touch finger one
@@ -327,23 +342,27 @@ TEST_CASE("uinput - joypad", "UINPUT") {
 
         control::handle_input(session, {}, &touch_packet);
         auto events = fetch_events(touch_rel_dev);
-        REQUIRE(events.size() == 4); // TODO: why there are no ABS_X and ABS_Y?
+        REQUIRE(events.size() == 5); // TODO: why there are no ABS_X and ABS_Y?
 
         REQUIRE_THAT(libevdev_event_type_get_name(events[0]->type), Equals("EV_ABS"));
-        REQUIRE_THAT(libevdev_event_code_get_name(events[0]->type, events[0]->code), Equals("ABS_MT_SLOT"));
-        REQUIRE(events[0]->value == 1);
+        REQUIRE_THAT(libevdev_event_code_get_name(events[0]->type, events[0]->code), Equals("ABS_MT_TRACKING_ID"));
+        REQUIRE(events[0]->value == 0);
 
         REQUIRE_THAT(libevdev_event_type_get_name(events[1]->type), Equals("EV_ABS"));
-        REQUIRE_THAT(libevdev_event_code_get_name(events[1]->type, events[1]->code), Equals("ABS_MT_TRACKING_ID"));
+        REQUIRE_THAT(libevdev_event_code_get_name(events[1]->type, events[1]->code), Equals("ABS_MT_SLOT"));
         REQUIRE(events[1]->value == 1);
 
-        REQUIRE_THAT(libevdev_event_type_get_name(events[2]->type), Equals("EV_KEY"));
-        REQUIRE_THAT(libevdev_event_code_get_name(events[2]->type, events[2]->code), Equals("BTN_TOOL_FINGER"));
+        REQUIRE_THAT(libevdev_event_type_get_name(events[2]->type), Equals("EV_ABS"));
+        REQUIRE_THAT(libevdev_event_code_get_name(events[2]->type, events[2]->code), Equals("ABS_MT_TRACKING_ID"));
         REQUIRE(events[2]->value == 1);
 
         REQUIRE_THAT(libevdev_event_type_get_name(events[3]->type), Equals("EV_KEY"));
         REQUIRE_THAT(libevdev_event_code_get_name(events[3]->type, events[3]->code), Equals("BTN_TOUCH"));
         REQUIRE(events[3]->value == 1);
+
+        REQUIRE_THAT(libevdev_event_type_get_name(events[4]->type), Equals("EV_KEY"));
+        REQUIRE_THAT(libevdev_event_code_get_name(events[4]->type, events[4]->code), Equals("BTN_TOOL_DOUBLETAP"));
+        REQUIRE(events[4]->value == 1);
       }
 
       { // Touch finger 2
@@ -434,12 +453,11 @@ TEST_CASE("uinput - joypad", "UINPUT") {
       }
     }
 
-    libevdev_ptr motion_dev(libevdev_new(), ::libevdev_free);
-    // We know that the last node is the motion sensor
-    link_devnode(motion_dev.get(), dev_nodes[3]);
+    // We know the 2nd device is the motion sensor
+    auto motion_dev = devices[1];
     SECTION("Motion sensor") {
       auto motion_pkt = pkts::CONTROLLER_MOTION_PACKET{.controller_number = controller_number,
-                                                       .motion_type = Joypad::ACCELERATION,
+                                                       .motion_type = pkts::ACCELERATION,
                                                        .x = {255, 255, 255, 0},
                                                        .y = {0, 255, 255, 255},
                                                        .z = {0, 0, 0, 0}};
@@ -466,7 +484,9 @@ TEST_CASE("uinput - joypad", "UINPUT") {
     }
 
     SECTION("UDEV") {
-      auto udev_events = session.joypads->load()->at(controller_number)->get_udev_events();
+      auto joypad = session.joypads->load()->at(controller_number);
+      std::vector<std::map<std::string, std::string>> udev_events;
+      std::visit([&udev_events](auto &joypad) { udev_events = joypad.get_udev_events(); }, *joypad);
 
       REQUIRE(udev_events.size() == 5);
 
@@ -519,7 +539,7 @@ TEST_CASE("uinput - paste UTF8", "UINPUT") {
 
   SECTION("Paste UTF8") {
     libevdev_ptr keyboard_dev(libevdev_new(), ::libevdev_free);
-    auto session = state::StreamSession{.keyboard = std::make_shared<Keyboard>(**Keyboard::create())};
+    auto session = state::StreamSession{.keyboard = std::make_shared<Keyboard>(std::move(*Keyboard::create()))};
     link_devnode(keyboard_dev.get(), session.keyboard->get_nodes()[0]);
 
     auto events = fetch_events(keyboard_dev);

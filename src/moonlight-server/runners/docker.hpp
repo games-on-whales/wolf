@@ -124,8 +124,9 @@ protected:
   docker::DockerAPI docker_api;
 };
 
-void create_udev_hw_files(std::filesystem::path base_hw_db_path, std::shared_ptr<input::VirtualDevice> device) {
-  for (const auto &[filename, content] : device->get_udev_hw_db_entries()) {
+void create_udev_hw_files(std::filesystem::path base_hw_db_path,
+                          std::vector<std::pair<std::string, std::vector<std::string>>> udev_hw_db_entries) {
+  for (const auto &[filename, content] : udev_hw_db_entries) {
     auto host_file_path = (base_hw_db_path / filename).string();
     logs::log(logs::debug, "[DOCKER] Writing hwdb file: {}", host_file_path);
     std::ofstream host_file(host_file_path);
@@ -211,11 +212,11 @@ void RunDocker::run(std::size_t session_id,
     auto unplug_device_handler = this->ev_bus->register_handler<immer::box<state::UnplugDeviceEvent>>(
         [session_id, container_id, hw_db_path, this](const immer::box<state::UnplugDeviceEvent> &ev) {
           if (ev->session_id == session_id) {
-            for (const auto &[filename, content] : ev->device->get_udev_hw_db_entries()) {
+            for (const auto &[filename, content] : ev->udev_hw_db_entries) {
               std::filesystem::remove(hw_db_path / filename);
             }
 
-            for (auto udev_ev : ev->device->get_udev_events()) {
+            for (auto udev_ev : ev->udev_events) {
               udev_ev["ACTION"] = "remove";
               std::string udev_msg = base64_encode(map_to_string(udev_ev));
               auto cmd = fmt::format("fake-udev -m {} && rm {}", udev_msg, udev_ev["DEVNAME"]);
@@ -228,12 +229,12 @@ void RunDocker::run(std::size_t session_id,
     do {
       // Plug all devices that are waiting in the queue
       plugged_devices_queue->update([this, container_id, use_fake_udev, hw_db_path](const auto devices) {
-        for (const auto device : devices) {
+        for (const state::PlugDeviceEvent &device_ev : devices) {
           if (use_fake_udev) {
-            create_udev_hw_files(hw_db_path, device);
+            create_udev_hw_files(hw_db_path, device_ev.udev_hw_db_entries);
           }
 
-          for (auto udev_ev : device->get_udev_events()) {
+          for (auto udev_ev : device_ev.udev_events) {
             std::string cmd;
             std::string udev_msg = base64_encode(map_to_string(udev_ev));
             if (udev_ev.count("DEVNAME") == 0) {
@@ -252,7 +253,7 @@ void RunDocker::run(std::size_t session_id,
         }
 
         // Remove all devices that we have plugged
-        return immer::vector<std::shared_ptr<input::VirtualDevice>>{};
+        return immer::vector<immer::box<state::PlugDeviceEvent>>{};
       });
       boost::this_thread::sleep_for(boost::chrono::milliseconds(500));
     } while (docker_api.get_by_id(container_id)->status == RUNNING);

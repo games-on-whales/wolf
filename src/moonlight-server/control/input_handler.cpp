@@ -13,22 +13,16 @@ using namespace wolf::core::input;
 using namespace std::string_literals;
 using namespace moonlight::control;
 
-std::shared_ptr<Joypad> create_new_joypad(const state::StreamSession &session,
-                                          const immer::atom<enet_clients_map> &connected_clients,
-                                          int controller_number,
-                                          Joypad::CONTROLLER_TYPE type,
-                                          uint8_t capabilities) {
-  auto joypad = Joypad::create(type, capabilities);
-  if (!joypad) {
-    logs::log(logs::error, "Failed to create joypad: {}", joypad.getErrorMessage());
-    return {};
-  }
+std::shared_ptr<state::JoypadTypes> create_new_joypad(const state::StreamSession &session,
+                                                      const immer::atom<enet_clients_map> &connected_clients,
+                                                      int controller_number,
+                                                      CONTROLLER_TYPE type,
+                                                      uint8_t capabilities) {
 
-  auto new_pad = std::make_shared<Joypad>(*joypad);
-  new_pad->set_on_rumble([clients = &connected_clients,
-                          controller_number,
-                          session_id = session.session_id,
-                          aes_key = session.aes_key](int low_freq, int high_freq) {
+  auto on_rumble_fn = ([clients = &connected_clients,
+                        controller_number,
+                        session_id = session.session_id,
+                        aes_key = session.aes_key](int low_freq, int high_freq) {
     auto rumble_pkt = ControlRumblePacket{
         .header = {.type = RUMBLE_DATA, .length = sizeof(ControlRumblePacket) - sizeof(ControlPacket)},
         .controller_number = boost::endian::native_to_little((uint16_t)controller_number),
@@ -38,41 +32,86 @@ std::shared_ptr<Joypad> create_new_joypad(const state::StreamSession &session,
     encrypt_and_send(plaintext, aes_key, *clients, session_id);
   });
 
-  if (capabilities & Joypad::ACCELEROMETER) {
+  std::shared_ptr<state::JoypadTypes> new_pad;
+  switch (type) {
+  case UNKNOWN:
+  case XBOX: {
+    auto result =
+        XboxOneJoypad::create({.name = "Wolf X-Box One (virtual) pad",
+                               // https://github.com/torvalds/linux/blob/master/drivers/input/joystick/xpad.c#L147
+                               .vendor_id = 0x045E,
+                               .product_id = 0x02EA,
+                               .version = 0x0408});
+    if (!result) {
+      logs::log(logs::error, "Failed to create Xbox One joypad: {}", result.getErrorMessage());
+      return {};
+    } else {
+      (*result).set_on_rumble(on_rumble_fn);
+      new_pad = std::make_shared<state::JoypadTypes>(std::move(*result));
+    }
+    break;
+  }
+  case PS: {
+    auto result = PS5Joypad::create(
+        {.name = "Wolf DualSense (virtual) pad", .vendor_id = 0x054C, .product_id = 0x0CE6, .version = 0x8111});
+    if (!result) {
+      logs::log(logs::error, "Failed to create PS5 joypad: {}", result.getErrorMessage());
+      return {};
+    } else {
+      (*result).set_on_rumble(on_rumble_fn);
+      new_pad = std::make_shared<state::JoypadTypes>(std::move(*result));
+    }
+    break;
+  }
+  case NINTENDO:
+    auto result = SwitchJoypad::create({.name = "Wolf Nintendo (virtual) pad",
+                                        // https://github.com/torvalds/linux/blob/master/drivers/hid/hid-ids.h#L981
+                                        .vendor_id = 0x057e,
+                                        .product_id = 0x2009,
+                                        .version = 0x8111});
+    if (!result) {
+      logs::log(logs::error, "Failed to create Switch joypad: {}", result.getErrorMessage());
+      return {};
+    } else {
+      (*result).set_on_rumble(on_rumble_fn);
+      new_pad = std::make_shared<state::JoypadTypes>(std::move(*result));
+    }
+    break;
+  }
+
+  if (capabilities & ACCELEROMETER && type == PS) {
     // Request acceleromenter events from the client at 100 Hz
     auto accelerometer_pkt = ControlMotionEventPacket{
         .header{.type = MOTION_EVENT, .length = sizeof(ControlMotionEventPacket) - sizeof(ControlPacket)},
         .controller_number = static_cast<uint16_t>(controller_number),
         .reportrate = 100,
-        .type = Joypad::ACCELERATION};
+        .type = ACCELERATION};
     std::string plaintext = {(char *)&accelerometer_pkt, sizeof(accelerometer_pkt)};
     encrypt_and_send(plaintext, session.aes_key, connected_clients, session.session_id);
   }
 
-  if (capabilities & Joypad::GYRO) {
+  if (capabilities & GYRO && type == PS) {
     // Request gyroscope events from the client at 100 Hz
     auto gyro_pkt = ControlMotionEventPacket{
         .header{.type = MOTION_EVENT, .length = sizeof(ControlMotionEventPacket) - sizeof(ControlPacket)},
         .controller_number = static_cast<uint16_t>(controller_number),
         .reportrate = 100,
-        .type = Joypad::GYROSCOPE};
+        .type = GYROSCOPE};
     std::string plaintext = {(char *)&gyro_pkt, sizeof(gyro_pkt)};
     encrypt_and_send(plaintext, session.aes_key, connected_clients, session.session_id);
-  }
-
-  if (auto trackpad = new_pad->get_trackpad()) {
-    if (auto wl = *session.wayland_display->load()) {
-      for (const auto node : trackpad->get_nodes()) {
-        add_input_device(*wl, node);
-      }
-    }
   }
 
   session.joypads->update([&](state::JoypadList joypads) {
     logs::log(logs::debug, "[INPUT] Creating joypad {} of type: {}", controller_number, type);
 
-    session.event_bus->fire_event(immer::box<state::PlugDeviceEvent>(
-        state::PlugDeviceEvent{.session_id = session.session_id, .device = new_pad}));
+    state::PlugDeviceEvent unplug_ev{.session_id = session.session_id};
+    std::visit(
+        [&unplug_ev](auto &pad) {
+          unplug_ev.udev_events = pad.get_udev_events();
+          unplug_ev.udev_hw_db_entries = pad.get_udev_hw_db_entries();
+        },
+        *new_pad);
+    session.event_bus->fire_event(immer::box<state::PlugDeviceEvent>(unplug_ev));
     return joypads.set(controller_number, new_pad);
   });
   return new_pad;
@@ -89,9 +128,11 @@ std::shared_ptr<PenTablet> create_pen_tablet(state::StreamSession &session) {
     logs::log(logs::error, "Failed to create pen tablet: {}", tablet.getErrorMessage());
     return {};
   }
-  auto tablet_ptr = std::make_shared<PenTablet>(PenTablet(**tablet));
+  auto tablet_ptr = std::make_shared<PenTablet>(std::move(*tablet));
   session.event_bus->fire_event(immer::box<state::PlugDeviceEvent>(
-      state::PlugDeviceEvent{.session_id = session.session_id, .device = tablet_ptr}));
+      state::PlugDeviceEvent{.session_id = session.session_id,
+                             .udev_events = tablet_ptr->get_udev_events(),
+                             .udev_hw_db_entries = tablet_ptr->get_udev_hw_db_entries()}));
   session.pen_tablet = tablet_ptr;
   if (auto wl = *session.wayland_display->load()) {
     for (const auto node : tablet_ptr->get_nodes()) {
@@ -111,9 +152,11 @@ std::shared_ptr<TouchScreen> create_touch_screen(state::StreamSession &session) 
   if (!touch) {
     logs::log(logs::error, "Failed to create touch screen: {}", touch.getErrorMessage());
   }
-  auto touch_screen = std::make_shared<TouchScreen>(TouchScreen(**touch));
+  auto touch_screen = std::make_shared<TouchScreen>(std::move(*touch));
   session.event_bus->fire_event(immer::box<state::PlugDeviceEvent>(
-      state::PlugDeviceEvent{.session_id = session.session_id, .device = touch_screen}));
+      state::PlugDeviceEvent{.session_id = session.session_id,
+                             .udev_events = touch_screen->get_udev_events(),
+                             .udev_hw_db_entries = touch_screen->get_udev_hw_db_entries()}));
   session.touch_screen = touch_screen;
   if (auto wl = *session.wayland_display->load()) {
     for (const auto node : touch_screen->get_nodes()) {
@@ -352,7 +395,7 @@ void handle_input(state::StreamSession &session,
       create_new_joypad(session,
                         connected_clients,
                         new_controller->controller_number,
-                        (Joypad::CONTROLLER_TYPE)new_controller->controller_type,
+                        (CONTROLLER_TYPE)new_controller->controller_type,
                         new_controller->capabilities);
     }
     break;
@@ -361,7 +404,7 @@ void handle_input(state::StreamSession &session,
     logs::log(logs::trace, "[INPUT] Received input of type: CONTROLLER_MULTI");
     auto controller_pkt = static_cast<CONTROLLER_MULTI_PACKET *>(pkt);
     auto joypads = session.joypads->load();
-    std::shared_ptr<Joypad> selected_pad;
+    std::shared_ptr<state::JoypadTypes> selected_pad;
     if (auto joypad = joypads->find(controller_pkt->controller_number)) {
       selected_pad = std::move(*joypad);
 
@@ -369,8 +412,15 @@ void handle_input(state::StreamSession &session,
       if (!(controller_pkt->active_gamepad_mask & (1 << controller_pkt->controller_number))) {
         logs::log(logs::debug, "Removing joypad {}", controller_pkt->controller_number);
         // Send the event downstream, Docker will pick it up and remove the device
-        session.event_bus->fire_event(immer::box<state::UnplugDeviceEvent>(
-            state::UnplugDeviceEvent{.session_id = session.session_id, .device = selected_pad}));
+        state::UnplugDeviceEvent unplug_ev{.session_id = session.session_id};
+        std::visit(
+            [&unplug_ev](auto &pad) {
+              unplug_ev.udev_events = pad.get_udev_events();
+              unplug_ev.udev_hw_db_entries = pad.get_udev_hw_db_entries();
+            },
+            *selected_pad);
+        session.event_bus->fire_event(immer::box<state::UnplugDeviceEvent>(unplug_ev));
+
         // Remove the joypad, this will delete the last reference
         session.joypads->update(
             [&](state::JoypadList joypads) { return joypads.erase(controller_pkt->controller_number); });
@@ -380,20 +430,24 @@ void handle_input(state::StreamSession &session,
       selected_pad = create_new_joypad(session,
                                        connected_clients,
                                        controller_pkt->controller_number,
-                                       Joypad::XBOX,
-                                       Joypad::ANALOG_TRIGGERS | Joypad::RUMBLE);
+                                       XBOX,
+                                       ANALOG_TRIGGERS | RUMBLE);
     }
-    selected_pad->set_pressed_buttons(controller_pkt->button_flags | (controller_pkt->buttonFlags2 << 16));
-    selected_pad->set_stick(Joypad::LS, controller_pkt->left_stick_x, controller_pkt->left_stick_y);
-    selected_pad->set_stick(Joypad::RS, controller_pkt->right_stick_x, controller_pkt->right_stick_y);
-    selected_pad->set_triggers(controller_pkt->left_trigger, controller_pkt->right_trigger);
+    std::visit(
+        [controller_pkt](auto &pad) {
+          pad.set_pressed_buttons(controller_pkt->button_flags | (controller_pkt->buttonFlags2 << 16));
+          pad.set_stick(inputtino::Joypad::LS, controller_pkt->left_stick_x, controller_pkt->left_stick_y);
+          pad.set_stick(inputtino::Joypad::RS, controller_pkt->right_stick_x, controller_pkt->right_stick_y);
+          pad.set_triggers(controller_pkt->left_trigger, controller_pkt->right_trigger);
+        },
+        *selected_pad);
     break;
   }
   case CONTROLLER_TOUCH: {
     logs::log(logs::trace, "[INPUT] Received input of type: CONTROLLER_TOUCH");
     auto touch_pkt = static_cast<CONTROLLER_TOUCH_PACKET *>(pkt);
     auto joypads = session.joypads->load();
-    std::shared_ptr<Joypad> selected_pad;
+    std::shared_ptr<state::JoypadTypes> selected_pad;
     if (auto joypad = joypads->find(touch_pkt->controller_number)) {
       selected_pad = std::move(*joypad);
       auto pointer_id = boost::endian::little_to_native(touch_pkt->pointer_id);
@@ -401,19 +455,20 @@ void handle_input(state::StreamSession &session,
       case TOUCH_EVENT_DOWN:
       case TOUCH_EVENT_HOVER:
       case TOUCH_EVENT_MOVE: {
-        // TODO: Moonlight seems to always pass 1.0 (0x0000803f little endian)
-        // Values too high will be discarded by libinput as detecting palm pressure
-        if (auto trackpad = selected_pad->get_trackpad()) {
+        if (std::holds_alternative<PS5Joypad>(*selected_pad)) {
           auto pressure = std::clamp(utils::from_netfloat(touch_pkt->pressure), 0.0f, 0.5f);
-          trackpad->place_finger(pointer_id, netfloat_to_0_1(touch_pkt->x), netfloat_to_0_1(touch_pkt->y), pressure, 0);
+          // TODO: Moonlight seems to always pass 1.0 (0x0000803f little endian)
+          // Values too high will be discarded by libinput as detecting palm pressure
+          std::get<PS5Joypad>(*selected_pad)
+              .place_finger(pointer_id, netfloat_to_0_1(touch_pkt->x), netfloat_to_0_1(touch_pkt->y));
         }
         break;
       }
       case TOUCH_EVENT_UP:
       case TOUCH_EVENT_HOVER_LEAVE:
       case TOUCH_EVENT_CANCEL: {
-        if (auto trackpad = selected_pad->get_trackpad()) {
-          trackpad->release_finger(pointer_id);
+        if (std::holds_alternative<PS5Joypad>(*selected_pad)) {
+          std::get<PS5Joypad>(*selected_pad).release_finger(pointer_id);
         }
         break;
       }
@@ -429,23 +484,38 @@ void handle_input(state::StreamSession &session,
     }
     break;
   }
-  case CONTROLLER_MOTION: {
+  case CONTROLLER_MOTION: { // Only the PS5 controller supports motion
     logs::log(logs::trace, "[INPUT] Received input of type: CONTROLLER_MOTION");
     auto motion_pkt = static_cast<CONTROLLER_MOTION_PACKET *>(pkt);
     auto joypads = session.joypads->load();
-    std::shared_ptr<Joypad> selected_pad;
+    std::shared_ptr<state::JoypadTypes> selected_pad;
     if (auto joypad = joypads->find(motion_pkt->controller_number)) {
       selected_pad = std::move(*joypad);
-      selected_pad->set_motion(motion_pkt->motion_type,
-                               utils::from_netfloat(motion_pkt->x),
-                               utils::from_netfloat(motion_pkt->y),
-                               utils::from_netfloat(motion_pkt->z));
+      if (std::holds_alternative<PS5Joypad>(*selected_pad)) {
+        std::get<PS5Joypad>(*selected_pad)
+            .set_motion(inputtino::PS5Joypad::MOTION_TYPE(motion_pkt->motion_type),
+                        utils::from_netfloat(motion_pkt->x),
+                        utils::from_netfloat(motion_pkt->y),
+                        utils::from_netfloat(motion_pkt->z));
+      }
     }
     break;
   }
-  case CONTROLLER_BATTERY:
+  case CONTROLLER_BATTERY: { // Only the PS5 controller supports battery
     logs::log(logs::trace, "[INPUT] Received input of type: CONTROLLER_BATTERY");
+    auto battery_pkt = static_cast<CONTROLLER_BATTERY_PACKET *>(pkt);
+    auto joypads = session.joypads->load();
+    std::shared_ptr<state::JoypadTypes> selected_pad;
+    if (auto joypad = joypads->find(battery_pkt->controller_number)) {
+      selected_pad = std::move(*joypad);
+      if (std::holds_alternative<PS5Joypad>(*selected_pad)) {
+        std::get<PS5Joypad>(*selected_pad)
+            .set_battery(inputtino::PS5Joypad::BATTERY_STATE(battery_pkt->battery_state),
+                         battery_pkt->battery_percentage / 2.55); // TODO: 255 (0xFF) is 100%?
+      }
+    }
     break;
+  }
   case HAPTICS:
     logs::log(logs::trace, "[INPUT] Received input of type: HAPTICS");
     break;

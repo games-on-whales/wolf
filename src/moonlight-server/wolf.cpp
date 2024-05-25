@@ -180,8 +180,7 @@ auto setup_sessions_handlers(const immer::box<state::AppState> &app_state,
           logs::log(logs::debug, "{} received hot-plug device event", hotplug_ev->session_id);
 
           if (auto session_devices_queue = map.find(hotplug_ev->session_id)) {
-            session_devices_queue->get()->update(
-                [=](const auto queue) { return queue.push_back({hotplug_ev->device}); });
+            session_devices_queue->get()->update([=](const auto queue) { return queue.push_back(hotplug_ev); });
           } else {
             logs::log(logs::warning, "Unable to find plugged_devices_queue for session {}", hotplug_ev->session_id);
           }
@@ -294,8 +293,13 @@ auto setup_sessions_handlers(const immer::box<state::AppState> &app_state,
 
           /* Initialise plugged device queue with mouse and keyboard */
           plugged_devices_queue->update([=](const session_devices map) {
-            immer::vector<std::shared_ptr<input::VirtualDevice>> devices({session->mouse, session->keyboard});
-            state::devices_atom_queue devices_atom = {devices};
+            auto devices = immer::vector<immer::box<state::PlugDeviceEvent>>{
+                state::PlugDeviceEvent{.session_id = session->session_id,
+                                       .udev_events = session->mouse->get_udev_events(),
+                                       .udev_hw_db_entries = session->mouse->get_udev_hw_db_entries()},
+                state::PlugDeviceEvent{.session_id = session->session_id,
+                                       .udev_events = session->keyboard->get_udev_events(),
+                                       .udev_hw_db_entries = session->keyboard->get_udev_hw_db_entries()}};
             return map.set(session->session_id, std::make_shared<state::devices_atom_queue>(devices));
           });
           std::shared_ptr<state::devices_atom_queue> session_devices_queue =

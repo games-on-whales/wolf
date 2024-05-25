@@ -85,5 +85,5 @@ TEST_CASE("control joypad input packets") {
 
   REQUIRE(input_data->type == pkts::CONTROLLER_MULTI);
   REQUIRE(input_data->active_gamepad_mask == 1);
-  REQUIRE(pressed_btns & wolf::core::input::Joypad::CONTROLLER_BTN::A);
+  REQUIRE(pressed_btns & pkts::CONTROLLER_BTN::A);
 }
