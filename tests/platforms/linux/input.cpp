@@ -28,7 +28,7 @@ void link_devnode(libevdev *dev, const std::string &device_node) {
   libevdev_set_fd(dev, fd);
 }
 
-TEST_CASE("uinput - keyboard", "UINPUT") {
+TEST_CASE("uinput - keyboard", "[UINPUT]") {
   libevdev_ptr keyboard_dev(libevdev_new(), ::libevdev_free);
   auto session = state::StreamSession{.keyboard = std::make_shared<Keyboard>(std::move(*Keyboard::create()))};
   link_devnode(keyboard_dev.get(), session.keyboard->get_nodes()[0]);
@@ -173,7 +173,7 @@ TEST_CASE("uinput - touch screen", "[UINPUT]") {
   }
 }
 
-TEST_CASE("uinput - mouse", "UINPUT") {
+TEST_CASE("uinput - mouse", "[UINPUT]") {
   libevdev_ptr mouse_rel_dev(libevdev_new(), ::libevdev_free);
   libevdev_ptr mouse_abs_dev(libevdev_new(), ::libevdev_free);
   auto mouse = std::make_shared<Mouse>(std::move(*Mouse::create()));
@@ -281,7 +281,7 @@ TEST_CASE("uinput - mouse", "UINPUT") {
   }
 }
 
-TEST_CASE("uinput - joypad", "UINPUT") {
+TEST_CASE("uinput - joypad", "[UINPUT]") {
   SECTION("OLD Moonlight: create joypad on first packet arrival") {
     auto session = state::StreamSession{.event_bus = std::make_shared<dp::event_bus>(),
                                         .joypads = std::make_shared<immer::atom<state::JoypadList>>()};
@@ -491,38 +491,29 @@ TEST_CASE("uinput - joypad", "UINPUT") {
       REQUIRE(udev_events.size() == 5);
 
       REQUIRE_THAT(udev_events[0]["ACTION"], Equals("add"));
-      REQUIRE_THAT(udev_events[0]["ID_INPUT_JOYSTICK"], Equals("1"));
-      REQUIRE_THAT(udev_events[0][".INPUT_CLASS"], Equals("joystick"));
       REQUIRE_THAT(udev_events[0]["DEVNAME"], ContainsSubstring("/dev/input/"));
-      REQUIRE_THAT(udev_events[0]["DEVPATH"], StartsWith("/devices/virtual/input/input"));
+      REQUIRE_THAT(udev_events[0]["DEVPATH"], StartsWith("/devices/virtual/misc/uhid/"));
 
       REQUIRE_THAT(udev_events[1]["ACTION"], Equals("add"));
-      REQUIRE_THAT(udev_events[1]["ID_INPUT_JOYSTICK"], Equals("1"));
-      REQUIRE_THAT(udev_events[1][".INPUT_CLASS"], Equals("joystick"));
       REQUIRE_THAT(udev_events[1]["DEVNAME"], ContainsSubstring("/dev/input/"));
-      REQUIRE_THAT(udev_events[1]["DEVPATH"], StartsWith("/devices/virtual/input/input"));
+      REQUIRE_THAT(udev_events[1]["DEVPATH"], StartsWith("/devices/virtual/misc/uhid/"));
 
       REQUIRE_THAT(udev_events[2]["ACTION"], Equals("add"));
-      REQUIRE_THAT(udev_events[2]["ID_INPUT_TOUCHPAD"], Equals("1"));
-      REQUIRE_THAT(udev_events[2][".INPUT_CLASS"], Equals("mouse"));
       REQUIRE_THAT(udev_events[2]["DEVNAME"], ContainsSubstring("/dev/input/"));
-      // TODO: missing trackpad devpath
-      //      REQUIRE_THAT(udev_events[2]["DEVPATH"], StartsWith("/devices/virtual/input/input"));
+      REQUIRE_THAT(udev_events[2]["DEVPATH"], StartsWith("/devices/virtual/misc/uhid/"));
 
       REQUIRE_THAT(udev_events[3]["ACTION"], Equals("add"));
-      REQUIRE_THAT(udev_events[3]["ID_INPUT_ACCELEROMETER"], Equals("1"));
       REQUIRE_THAT(udev_events[3]["DEVNAME"], ContainsSubstring("/dev/input/"));
-      REQUIRE_THAT(udev_events[3]["DEVPATH"], StartsWith("/devices/virtual/input/input"));
+      REQUIRE_THAT(udev_events[3]["DEVPATH"], StartsWith("/devices/virtual/misc/uhid"));
 
       REQUIRE_THAT(udev_events[4]["ACTION"], Equals("add"));
-      REQUIRE_THAT(udev_events[4]["ID_INPUT_ACCELEROMETER"], Equals("1"));
       REQUIRE_THAT(udev_events[4]["DEVNAME"], ContainsSubstring("/dev/input/"));
-      REQUIRE_THAT(udev_events[4]["DEVPATH"], StartsWith("/devices/virtual/input/input"));
+      REQUIRE_THAT(udev_events[4]["DEVPATH"], StartsWith("/devices/virtual/misc/uhid/"));
     }
   }
 }
 
-TEST_CASE("uinput - paste UTF8", "UINPUT") {
+TEST_CASE("uinput - paste UTF8", "[UINPUT]") {
 
   SECTION("UTF8 to HEX") {
     auto utf8 = boost::locale::conv::to_utf<wchar_t>("\xF0\x9F\x92\xA9", "UTF-8"); // UTF-8 '💩'
