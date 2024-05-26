@@ -32,6 +32,21 @@ std::shared_ptr<state::JoypadTypes> create_new_joypad(const state::StreamSession
     encrypt_and_send(plaintext, aes_key, *clients, session_id);
   });
 
+  auto on_led_fn = ([clients = &connected_clients,
+                     controller_number,
+                     session_id = session.session_id,
+                     aes_key = session.aes_key](int r, int g, int b) {
+    logs::log(logs::debug, "({}) LED: {}, {}, {}", controller_number, r, g, b);
+    auto led_pkt = ControlRGBLedPacket{
+        .header{.type = RGB_LED_EVENT, .length = sizeof(ControlRGBLedPacket) - sizeof(ControlPacket)},
+        .controller_number = boost::endian::native_to_little((uint16_t)controller_number),
+        .r = static_cast<uint8_t>(r),
+        .g = static_cast<uint8_t>(g),
+        .b = static_cast<uint8_t>(b)};
+    std::string plaintext = {(char *)&led_pkt, sizeof(led_pkt)};
+    encrypt_and_send(plaintext, aes_key, *clients, session_id);
+  });
+
   std::shared_ptr<state::JoypadTypes> new_pad;
   switch (type) {
   case UNKNOWN:
@@ -59,7 +74,20 @@ std::shared_ptr<state::JoypadTypes> create_new_joypad(const state::StreamSession
       return {};
     } else {
       (*result).set_on_rumble(on_rumble_fn);
+      (*result).set_on_led(on_led_fn);
       new_pad = std::make_shared<state::JoypadTypes>(std::move(*result));
+
+      std::visit(
+          [&session](auto &pad) {
+            if (auto wl = *session.wayland_display->load()) {
+              for (const auto node : pad.get_udev_events()) {
+                if (node.find("ID_INPUT_TOUCHPAD") != node.end()) {
+                  add_input_device(*wl, node.at("DEVNAME"));
+                }
+              }
+            }
+          },
+          *new_pad);
     }
     break;
   }

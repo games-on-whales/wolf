@@ -80,11 +80,13 @@ std::vector<std::pair<std::string, std::vector<std::string>>> SwitchJoypad::get_
 std::vector<std::map<std::string, std::string>> PS5Joypad::get_udev_events() const {
   std::vector<std::map<std::string, std::string>> events;
 
-  for (const auto sys_entry : this->get_sys_nodes()) {
-    auto sys_nodes = std::filesystem::directory_iterator{sys_entry};
+  auto sys_nodes = this->get_sys_nodes();
+  for (const auto sys_entry : sys_nodes) {
+    auto input_nodes = std::filesystem::directory_iterator{sys_entry};
 
-    for (auto sys_node : sys_nodes) {
+    for (auto sys_node : input_nodes) {
       if (sys_node.is_directory() && (sys_node.path().filename().string().rfind("event", 0) == 0 ||
+                                      sys_node.path().filename().string().rfind("mouse", 0) == 0 ||
                                       sys_node.path().filename().string().rfind("js", 0) == 0)) {
         auto sys_path = sys_node.path().string();
         sys_path.erase(0, 4); // Remove leading /sys/ from syspath TODO: what if it's not /sys/?
@@ -98,6 +100,7 @@ std::vector<std::map<std::string, std::string>> PS5Joypad::get_udev_events() con
         if (name.find("Touchpad") != std::string::npos) { // touchpad
           event["ID_INPUT_TOUCHPAD"] = "1";
           event[".INPUT_CLASS"] = "mouse";
+          event["ID_INPUT_TOUCHPAD_INTEGRATION"] = "internal";
         } else if (name.find("Motion") != std::string::npos) { // gyro + acc
           event["ID_INPUT_ACCELEROMETER"] = "1";
           event["ID_INPUT_WIDTH_MM"] = "8";
@@ -116,6 +119,28 @@ std::vector<std::map<std::string, std::string>> PS5Joypad::get_udev_events() con
     }
   }
 
+  // LEDS
+  if (sys_nodes.size() >= 1) {
+    auto base_path = std::filesystem::path(sys_nodes[0]).parent_path().parent_path() / "leds";
+    auto leds = std::filesystem::directory_iterator{base_path};
+    for (auto led : leds) {
+      if (led.is_directory()) {
+        auto now = std::chrono::system_clock::now();
+        auto timestamp = std::chrono::duration_cast<std::chrono::seconds>(now.time_since_epoch()).count();
+
+        events.emplace_back(std::map<std::string, std::string>{
+            {"ACTION", "add"},
+            {"SUBSYSTEM", "leds"},
+            {"DEVPATH", led.path().string()}, // TODO: should we mount this? How does the container access the led?
+            {"SEQNUM", "3712"},
+            {"USEC_INITIALIZED", std::to_string(timestamp)},
+            {"TAGS", ":seat:"},
+            {"CURRENT_TAGS", ":seat:"},
+        });
+      }
+    }
+  }
+
   return events;
 }
 
@@ -127,7 +152,8 @@ std::vector<std::pair<std::string, std::vector<std::string>>> PS5Joypad::get_ude
 
     for (auto sys_node : sys_nodes) {
       if (sys_node.is_directory() && (sys_node.path().filename().string().rfind("event", 0) == 0 ||
-                                      sys_node.path().filename().string().rfind("js", 0) == 0)) {
+                                      sys_node.path().filename().string().rfind("js", 0) == 0 ||
+                                      sys_node.path().filename().string().rfind("mouse", 0) == 0)) {
         auto sys_path = sys_node.path().string();
         sys_path.erase(0, 4); // Remove leading /sys/ from syspath TODO: what if it's not /sys/?
         auto dev_path = ("/dev/input/" / sys_node.path().filename()).string();
@@ -172,6 +198,15 @@ std::vector<std::pair<std::string, std::vector<std::string>>> PS5Joypad::get_ude
       }
     }
   }
+
+  // TODO: LEDS
+  /**
+   cat /run/udev/data/+leds:input61:rgb:indicator
+    I:1968647189
+    G:seat
+    Q:seat
+    V:1
+   */
 
   return result;
 }
