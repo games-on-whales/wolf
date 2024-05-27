@@ -114,7 +114,7 @@ inline logs::severity_level parse_level(const std::string &level) {
     return logs::debug;
   } else if (lvl == "INFO") {
     return logs::info;
-  } else if (lvl == "WARNING") {
+  } else if (lvl.find("WARN") != std::string::npos) {
     return logs::warning;
   } else if (lvl == "ERROR") {
     return logs::error;

@@ -10,6 +10,7 @@
 #include <memory>
 #include <streaming/data-structures.hpp>
 #include <streaming/streaming.hpp>
+#include <tracy/Tracy.hpp>
 
 namespace streaming {
 
@@ -38,9 +39,14 @@ std::shared_ptr<GstAppDataState> setup_app_src(const immer::box<state::VideoSess
 }
 
 static bool push_data(GstAppDataState *data) {
+  ZoneScopedN("gst_wayland_src_push_data");
   GstFlowReturn ret;
 
-  auto buffer = get_frame(*data->wayland_state);
+  GstBuffer *buffer;
+  {
+    ZoneScopedN("get_frame");
+    buffer = get_frame(*data->wayland_state);
+  }
   if (GST_IS_BUFFER(buffer) && GST_IS_APP_SRC(data->app_src.get())) {
 
     GST_BUFFER_PTS(buffer) = data->timestamp;
@@ -49,7 +55,11 @@ static bool push_data(GstAppDataState *data) {
     data->timestamp += GST_BUFFER_DURATION(buffer);
 
     // gst_app_src_push_buffer takes ownership of the buffer
-    ret = gst_app_src_push_buffer(GST_APP_SRC(data->app_src.get()), buffer);
+    {
+      ZoneScopedN("push_buffer");
+      ret = gst_app_src_push_buffer(GST_APP_SRC(data->app_src.get()), buffer);
+    }
+    FrameMark;
     if (ret == GST_FLOW_OK) {
       return true;
     }
@@ -132,11 +142,14 @@ void start_streaming_video(const immer::box<state::VideoSession> &video_session,
       g_object_set(app_src_el, "leaky-type", GST_APP_LEAKY_TYPE_DOWNSTREAM, NULL);
       // sometimes the encoder or the network sink might lag behind, we'll keep up to 3 buffers in the queue
       g_object_set(app_src_el, "max-buffers", 3, NULL);
+      g_object_set(app_src_el, "emit-signals", false, NULL);
 
       /* Adapted from the tutorial at:
        * https://gstreamer.freedesktop.org/documentation/tutorials/basic/short-cutting-the-pipeline.html?gi-language=c*/
-      g_signal_connect(app_src_el, "need-data", G_CALLBACK(custom_src::app_src_need_data), appsrc_state.get());
-      g_signal_connect(app_src_el, "enough-data", G_CALLBACK(custom_src::app_src_enough_data), appsrc_state.get());
+      appsrc_state->source_id = g_idle_add((GSourceFunc)custom_src::push_data, appsrc_state.get());
+      //      g_signal_connect(app_src_el, "need-data", G_CALLBACK(custom_src::app_src_need_data), appsrc_state.get());
+      //      g_signal_connect(app_src_el, "enough-data", G_CALLBACK(custom_src::app_src_enough_data),
+      //      appsrc_state.get());
       appsrc_state->app_src = std::move(app_src_ptr);
     }
 

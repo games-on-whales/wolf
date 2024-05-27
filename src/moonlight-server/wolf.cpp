@@ -20,6 +20,8 @@
 #include <state/config.hpp>
 #include <streaming/streaming.hpp>
 #include <vector>
+#include <tracy/Tracy.hpp>
+#include <tracy/TracyC.h>
 
 namespace ba = boost::asio;
 namespace fs = std::filesystem;

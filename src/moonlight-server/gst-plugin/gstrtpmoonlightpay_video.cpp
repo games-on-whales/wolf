@@ -20,6 +20,7 @@
 #include <gst-plugin/video.hpp>
 #include <gst/base/gstbasetransform.h>
 #include <gst/gst.h>
+#include <tracy/Tracy.hpp>
 
 GST_DEBUG_CATEGORY_STATIC(gst_rtp_moonlight_pay_video_debug_category);
 #define GST_CAT_DEFAULT gst_rtp_moonlight_pay_video_debug_category
@@ -228,7 +229,12 @@ void gst_rtp_moonlight_pay_video_finalize(GObject *object) {
  * into a list of buffers: a series of RTP packets encoded following the Moonlight protocol specs.
  */
 static GstFlowReturn gst_rtp_moonlight_pay_video_generate_output(GstBaseTransform *trans, GstBuffer **outbuf) {
-  gst_rtp_moonlight_pay_video *rtpmoonlightpay_video = gst_rtp_moonlight_pay_video(trans);
+  ZoneScoped;
+  gst_rtp_moonlight_pay_video *rtpmoonlightpay_video;
+  {
+    ZoneScopedN("gst_rtp_moonlight_pay_video");
+    rtpmoonlightpay_video = gst_rtp_moonlight_pay_video(trans);
+  }
   GstBuffer *inbuf;
 
   /* Retrieve stashed input buffer, if the default submit_input_buffer was run. Takes ownership back from there */
@@ -239,10 +245,17 @@ static GstFlowReturn gst_rtp_moonlight_pay_video_generate_output(GstBaseTransfor
   if (inbuf == nullptr)
     return GST_FLOW_OK;
 
-  auto rtp_packets = gst_moonlight_video::split_into_rtp(rtpmoonlightpay_video, inbuf);
+  GstBufferList *rtp_packets;
+  {
+    ZoneScopedN("split_into_rtp");
+    rtp_packets = gst_moonlight_video::split_into_rtp(rtpmoonlightpay_video, inbuf);
+  }
 
   /* Send the generated packets to any downstream listener */
-  gst_pad_push_list(trans->srcpad, rtp_packets);
+  {
+    ZoneScopedN("gst_pad_push_list");
+    gst_pad_push_list(trans->srcpad, rtp_packets);
+  }
 
   gst_buffer_unref(inbuf);
 
