@@ -33,6 +33,26 @@ inline std::string get_gst_version() {
   return fmt::format("{}.{}.{}-{}", major, minor, micro, nano);
 }
 
+static inline void gst_debug_fn(GstDebugCategory *category,
+                                GstDebugLevel level,
+                                const gchar *file,
+                                const gchar *function,
+                                gint line,
+                                GObject *object,
+                                GstDebugMessage *message,
+                                gpointer user_data) {
+  auto msg_str = gst_debug_message_get(message);
+  auto level_name = gst_debug_level_get_name(level);
+  auto category_name = gst_debug_category_get_name(category);
+  logs::log(logs::parse_level(level_name),
+            "[GSTREAMER] {} - {} {}:{}:{}",
+            category_name,
+            msg_str,
+            file,
+            function,
+            line);
+}
+
 /**
  * GStreamer needs to be initialised once per run
  * Call this method in your main.
@@ -42,6 +62,8 @@ inline void init() {
    * in which case no command line options will be parsed by GStreamer.
    */
   gst_init(nullptr, nullptr);
+  gst_debug_remove_log_function(gst_debug_log_default);
+  gst_debug_add_log_function(gst_debug_fn, nullptr, nullptr);
   logs::log(logs::info, "Gstreamer version: {}", get_gst_version());
 
   GstPlugin *video_plugin = gst_plugin_load_by_name("rtpmoonlightpay_video");
