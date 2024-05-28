@@ -19,9 +19,9 @@
 #include <rtsp/net.hpp>
 #include <state/config.hpp>
 #include <streaming/streaming.hpp>
-#include <vector>
 #include <tracy/Tracy.hpp>
 #include <tracy/TracyC.h>
+#include <vector>
 
 namespace ba = boost::asio;
 namespace fs = std::filesystem;
