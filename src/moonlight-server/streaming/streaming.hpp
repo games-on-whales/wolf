@@ -1,4 +1,5 @@
 #pragma once
+#include "gst-plugin/gsttracy.hpp"
 #include "moonlight/fec.hpp"
 #include <boost/asio.hpp>
 #include <core/virtual-display.hpp>
@@ -61,6 +62,9 @@ inline void init() {
   /* It is also possible to call the init function with two NULL arguments,
    * in which case no command line options will be parsed by GStreamer.
    */
+  GstPlugin *tracy_plugin = gst_plugin_load_by_name("gsttracy");
+  gst_tracer_register(tracy_plugin, "gsttracy", GST_TYPE_TRACY_TRACER);
+
   gst_init(nullptr, nullptr);
   gst_debug_remove_log_function(gst_debug_log_default);
   gst_debug_add_log_function(gst_debug_fn, nullptr, nullptr);

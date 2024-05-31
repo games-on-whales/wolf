@@ -44,6 +44,20 @@ target_link_libraries(wolf_core PUBLIC
         PkgConfig::GSTREAMER
         PkgConfig::GLIB2)
 
+FetchContent_Declare(tracy
+        GIT_REPOSITORY https://github.com/wolfpld/tracy.git
+        GIT_TAG v0.10
+        GIT_SHALLOW TRUE
+        GIT_PROGRESS TRUE
+)
+set(TRACY_ENABLE ON)
+set(TRACY_ON_DEMAND ON)
+if (LIBUNWIND_FOUND)
+    set(TRACY_LIBUNWIND_BACKTRACE ON)
+endif ()
+FetchContent_MakeAvailable(tracy)
+target_link_libraries(wolf_core PUBLIC TracyClient)
+
 # Platform dependent code
 if (UNIX AND NOT APPLE)
     add_subdirectory(src/platforms/linux/pulseaudio)

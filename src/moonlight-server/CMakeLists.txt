@@ -65,19 +65,6 @@ else ()
 endif ()
 FetchContent_MakeAvailable(cpptrace)
 
-FetchContent_Declare(tracy
-        GIT_REPOSITORY https://github.com/wolfpld/tracy.git
-        GIT_TAG v0.10
-        GIT_SHALLOW TRUE
-        GIT_PROGRESS TRUE
-)
-set(TRACY_ENABLE ON)
-set(TRACY_ON_DEMAND ON)
-if (LIBUNWIND_FOUND)
-    set(TRACY_LIBUNWIND_BACKTRACE ON)
-endif ()
-FetchContent_MakeAvailable(tracy)
-
 ##############################
 
 find_package(Threads REQUIRED)
@@ -92,7 +79,6 @@ target_link_libraries(
         wolf::helpers
         wolf::core
         cpptrace::cpptrace
-        TracyClient
         ${Boost_LIBRARIES}
         ${CMAKE_DL_LIBS}
         ${CMAKE_THREAD_LIBS_INIT})

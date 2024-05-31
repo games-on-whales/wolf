@@ -2,6 +2,7 @@
 #include <gst/app/gstappsrc.h>
 #include <helpers/logger.hpp>
 #include <immer/vector_transient.hpp>
+#include <tracy/TracyC.h>
 
 extern "C" {
 #include <libgstwaylanddisplay/libgstwaylanddisplay.h>
@@ -18,6 +19,19 @@ struct WaylandState {
 wl_state_ptr create_wayland_display(const immer::array<std::string> &input_devices, const std::string &render_node) {
   logs::log(logs::debug, "[WAYLAND] Creating wayland display");
   auto w_display = display_init(render_node.c_str());
+  display_set_trace_fn(
+      w_display,
+      [](const char *span_name) {
+        TracyCZoneN(zone, "gst-wayland-src", true);
+        TracyCZoneText(zone, span_name, strlen(span_name));
+        // avoiding address of local variable ‘zone’ returned
+        auto ctx = new TracyCZoneCtx{zone};
+        return (void *)ctx;
+      },
+      [](void *zone) {
+        TracyCZoneEnd(*((TracyCZoneCtx *)zone));
+        delete (TracyCZoneCtx *)zone;
+      });
   immer::vector_transient<std::string> final_devices;
   immer::vector_transient<std::string> final_env;
 
