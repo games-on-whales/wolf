@@ -6,8 +6,8 @@
 
 G_BEGIN_DECLS
 
-#define GST_TYPE_TRACY_TRACER (gst_tracy_tracer_get_type ())
-G_DECLARE_DERIVABLE_TYPE (GstTracyTracer, gst_tracy_tracer, GST_TRACY, TRACER, GstTracer)
+#define GST_TYPE_TRACY_TRACER (gst_tracy_tracer_get_type())
+G_DECLARE_DERIVABLE_TYPE(GstTracyTracer, gst_tracy_tracer, GST_TRACY, TRACER, GstTracer)
 
 struct _GstTracyTracerClass {
   GstTracerClass parent_class;
