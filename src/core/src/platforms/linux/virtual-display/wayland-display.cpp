@@ -22,8 +22,8 @@ wl_state_ptr create_wayland_display(const immer::array<std::string> &input_devic
   display_set_trace_fn(
       w_display,
       [](const char *span_name) {
-        TracyCZoneN(zone, "gst-wayland-src", true);
-        TracyCZoneText(zone, span_name, strlen(span_name));
+        TracyCZone(zone, true);
+        TracyCZoneName(zone, span_name, strlen(span_name));
         // avoiding address of local variable ‘zone’ returned
         auto ctx = new TracyCZoneCtx{zone};
         return (void *)ctx;

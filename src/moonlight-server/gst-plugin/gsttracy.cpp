@@ -64,24 +64,31 @@ static std::optional<std::string> get_unique_name(GstPad *sender_pad) {
   return gst_element_get_name(sender_element) + std::string("->") + gst_element_get_name(receiver_element);
 }
 
-static void trace_pad_push_pre(GObject *self, GstClockTime ts, GstPad *sender_pad, GstBuffer *buffer) {
+static void
+trace_pad_push_pre(G_GNUC_UNUSED GObject *self, G_GNUC_UNUSED GstClockTime ts, GstPad *sender_pad, GstBuffer *buffer) {
   if (auto unique_name = get_unique_name(sender_pad)) {
     TracyCZone(zone, true);
-    TracyCZoneText(zone, unique_name->c_str(), unique_name->length());
+    TracyCZoneName(zone, unique_name->c_str(), unique_name->length());
+    TracyCPlot("GST buffer size", gst_buffer_get_size(buffer));
+    TracyCPlotConfig("GST buffer size", TracyPlotFormatMemory, true, true, 0);
+    zones[*unique_name] = zone;
+  }
+}
+
+static void trace_pad_push_list_pre(G_GNUC_UNUSED GObject *self,
+                                    G_GNUC_UNUSED GstClockTime ts,
+                                    GstPad *sender_pad,
+                                    GstBufferList *list) {
+  if (auto unique_name = get_unique_name(sender_pad)) {
+    TracyCZone(zone, true);
+    TracyCZoneName(zone, unique_name->c_str(), unique_name->length());
+    TracyCPlot("GST list buffers", gst_buffer_list_length(list));
     zones[*unique_name] = zone;
   }
 }
 
 static void
-trace_pad_push_list_pre(GObject *self, G_GNUC_UNUSED GstClockTime ts, GstPad *sender_pad, GstBufferList *list) {
-  if (auto unique_name = get_unique_name(sender_pad)) {
-    TracyCZone(zone, true);
-    TracyCZoneText(zone, unique_name->c_str(), unique_name->length());
-    zones[*unique_name] = zone;
-  }
-}
-
-static void trace_pad_push_post(GObject *self, G_GNUC_UNUSED GstClockTime ts, GstPad *sender_pad, GstBuffer *buffer) {
+trace_pad_push_post(G_GNUC_UNUSED GObject *self, G_GNUC_UNUSED GstClockTime ts, GstPad *sender_pad, GstBuffer *buffer) {
   if (auto unique_name = get_unique_name(sender_pad)) {
     if (auto zone = zones.find(*unique_name); zone != zones.end()) {
       TracyCZoneEnd(zone->second);
@@ -92,8 +99,10 @@ static void trace_pad_push_post(GObject *self, G_GNUC_UNUSED GstClockTime ts, Gs
   }
 }
 
-static void
-trace_pad_push_list_post(GObject *self, G_GNUC_UNUSED GstClockTime ts, GstPad *sender_pad, GstBufferList *list) {
+static void trace_pad_push_list_post(G_GNUC_UNUSED GObject *self,
+                                     G_GNUC_UNUSED GstClockTime ts,
+                                     GstPad *sender_pad,
+                                     GstBufferList *list) {
   if (auto unique_name = get_unique_name(sender_pad)) {
     if (auto zone = zones.find(*unique_name); zone != zones.end()) {
       TracyCZoneEnd(zone->second);
