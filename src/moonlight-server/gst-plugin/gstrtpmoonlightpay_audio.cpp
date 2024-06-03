@@ -274,6 +274,6 @@ GST_PLUGIN_DEFINE(GST_VERSION_MAJOR,
                   "FIXME plugin description",
                   plugin_init,
                   VERSION,
-                  "LGPL",
+                  "MIT",
                   PACKAGE_NAME,
                   GST_PACKAGE_ORIGIN)
