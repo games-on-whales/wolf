@@ -135,7 +135,7 @@ public:
             content_length_pos += 16; //"Content-length: "sv.size();
             auto content_lenght_end = full_raw_msg.find("\r\n", content_length_pos);
             auto total_length_str = full_raw_msg.substr(content_length_pos, content_lenght_end - content_length_pos);
-            auto total_length = std::stoi(total_length_str);
+            auto total_length = std::stoi(total_length_str) + content_lenght_end + 2; // 2 for the \r\n
             if (total_bytes_transferred < total_length) {
               self->prev_read_ = full_raw_msg;
               self->prev_read_bytes_ += bytes_transferred;
