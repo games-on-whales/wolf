@@ -38,9 +38,7 @@ jobs:
               libunwind-dev
 
       - name: Setup Rust
-        uses: ATiltedTree/setup-rust@v1
-        with:
-          rust-version: stable
+        uses: dtolnay/rust-toolchain@stable
 
       - name: Setup gst-wayland-display
         run: |
@@ -125,9 +123,7 @@ jobs:
               ${{ join(matrix.other_pkgs, ' ') }}
 
       - name: Setup Rust
-        uses: ATiltedTree/setup-rust@v1
-        with:
-          rust-version: stable
+        uses: dtolnay/rust-toolchain@stable
 
       - name: Setup gst-wayland-display
         run: |
