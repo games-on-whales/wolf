@@ -1,13 +1,10 @@
 #include <boost/asio.hpp>
 #include <chrono>
 #include <control/control.hpp>
-#include <core/audio.hpp>
 #include <core/docker.hpp>
-#include <core/virtual-display.hpp>
 #include <csignal>
 #include <exceptions/exceptions.h>
 #include <filesystem>
-#include <gst-plugin/video.hpp>
 #include <immer/array.hpp>
 #include <immer/array_transient.hpp>
 #include <immer/map_transient.hpp>
@@ -15,7 +12,6 @@
 #include <memory>
 #include <platforms/hw.hpp>
 #include <rest/rest.hpp>
-#include <rtp/udp-ping.hpp>
 #include <rtsp/net.hpp>
 #include <state/config.hpp>
 #include <streaming/streaming.hpp>
@@ -28,6 +24,8 @@ using namespace std::string_literals;
 using namespace std::chrono_literals;
 using namespace control;
 using namespace wolf::core;
+
+static constexpr int DEFAULT_SESSION_TIMEOUT_MILLIS = 4000;
 
 /**
  * @brief Will try to load the config file and fallback to defaults
@@ -351,7 +349,14 @@ auto setup_sessions_handlers(const immer::box<state::AppState> &app_state,
               });
 
           logs::log(logs::debug, "Video session {}, waiting for PING...", sess->session_id);
-          auto client_port = port_fut.get(); // Stop here until we get a PING
+
+          // Stop here until we get a PING
+          auto status = port_fut.wait_for(boost::chrono::milliseconds(DEFAULT_SESSION_TIMEOUT_MILLIS));
+          if (status != boost::future_status::ready) {
+            logs::log(logs::warning, "Video session {} timed out waiting for PING", sess->session_id);
+            return;
+          }
+          auto client_port = port_fut.get();
           cancel_event.unregister();
           ev_handler.unregister();
 
@@ -393,7 +398,14 @@ auto setup_sessions_handlers(const immer::box<state::AppState> &app_state,
               });
 
           logs::log(logs::debug, "Audio session {}, waiting for PING...", sess->session_id);
-          auto client_port = port_fut.get(); // Stop here until we get a PING
+
+          // Stop here until we get a PING
+          auto status = port_fut.wait_for(boost::chrono::milliseconds(DEFAULT_SESSION_TIMEOUT_MILLIS));
+          if (status != boost::future_status::ready) {
+            logs::log(logs::warning, "Audio session {} timed out waiting for PING", sess->session_id);
+            return;
+          }
+          auto client_port = port_fut.get();
           cancel_event.unregister();
           ev_handler.unregister();
 

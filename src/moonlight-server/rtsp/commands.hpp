@@ -146,15 +146,8 @@ announce(const RTSP_PACKET &req,
     gst_pipeline = session.app->h264_gst_pipeline;
   }
 
+  // Video session
   unsigned short video_port = state::VIDEO_PING_PORT + number_of_sessions;
-
-  // Video RTP Ping
-  rtp::wait_for_ping(video_port, [event_bus](unsigned short client_port, const std::string &client_ip) {
-    logs::log(logs::trace, "[PING] video from {}:{}", client_ip, client_port);
-    auto ev = state::RTPVideoPingEvent{.client_ip = client_ip, .client_port = client_port};
-    event_bus->fire_event(immer::box<state::RTPVideoPingEvent>(ev));
-  });
-
   state::VideoSession video = {
       .display_mode = {.width = display.width, .height = display.height, .refreshRate = display.refreshRate},
       .gst_pipeline = gst_pipeline,
@@ -176,16 +169,8 @@ announce(const RTSP_PACKET &req,
       .client_ip = session.ip};
   event_bus->fire_event(immer::box<state::VideoSession>(video));
 
-  unsigned short audio_port = state::AUDIO_PING_PORT + number_of_sessions;
-
-  // Audio RTP Ping
-  rtp::wait_for_ping(audio_port, [event_bus](unsigned short client_port, const std::string &client_ip) {
-    logs::log(logs::trace, "[PING] audio from {}:{}", client_ip, client_port);
-    auto ev = state::RTPAudioPingEvent{.client_ip = client_ip, .client_port = client_port};
-    event_bus->fire_event(immer::box<state::RTPAudioPingEvent>(ev));
-  });
-
   // Audio session
+  unsigned short audio_port = state::AUDIO_PING_PORT + number_of_sessions;
   state::AudioSession audio = {
       .gst_pipeline = session.app->opus_gst_pipeline,
 
