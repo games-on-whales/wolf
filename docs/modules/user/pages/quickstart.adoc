@@ -252,9 +252,9 @@ EXPOSE 47989/tcp
 EXPOSE 47999/udp
 # RTSP
 EXPOSE 48010/tcp
-# Video (up to 10 users)
+# Video (up to 10 users, you can open more ports if needed)
 EXPOSE 48100-48110/udp
-# Audio (up to 10 users)
+# Audio (up to 10 users, you can open more ports if needed)
 EXPOSE 48200-48210/udp
 ....
 ====
@@ -273,6 +273,7 @@ If you can only see a *black screen* with a cursor in Moonlight it's because the
 Keep an eye on the logs from Wolf to get more details.
 ====
 
+[#_virtual_devices_support]
 == Virtual devices support
 
 We use uinput to create virtual devices (Mouse, Keyboard and Joypad), make sure that `/dev/uinput` is present in the host:

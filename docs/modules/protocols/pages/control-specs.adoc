@@ -1,4 +1,4 @@
-:includedir: ./diagrams
+:includedir: partial$
 
 = Control specifications
 

@@ -96,3 +96,23 @@ WARN  | Unable to recognise GPU vendor: red hat, inc.
 
 Do you have multiple GPUs installed (or even just a virtual display in a VM)? +
 Checkout the xref:user:configuration.adoc#_multiple_gpu[Multiple GPU configuration page]
+
+== Intel: MFX_ERR_UNSUPPORTED
+
+Example log line:
+....
+0:01:31.983118812     1 0x7f1d50000b70 ERROR             qsvencoder gstqsvencoder.cpp:1098:gst_qsv_encoder_init_encode_session:<qsvh265enc3> MFXVideoENCODE::Query failed -3 (MFX_ERR_UNSUPPORTED)
+0:01:31.983243805     1 0x7f1d50000b70 WARN            videoencoder gstvideoencoder.c:771:gst_video_encoder_setcaps:<qsvh265enc3> rejected caps video/x-raw(memory:VAMemory), width=(int)1280, height=(int)720, framerate=(fraction)60/1, format=(string)NV12, chroma-site=(string)mpeg2, colorimetry=(string)bt601
+....
+
+Follow the steps outlined in https://www.intel.com/content/www/us/en/support/articles/000089952/software/iot-software.html[here]:
+
+  *  `sudo apt install --reinstall linux-firmware`
+  *  Add `i915.enable_guc=2`  in `/etc/default/grub`: `GRUB_CMDLINE_LINUX_DEFAULT="quiet splash i915.force_probe=* i915.enable_guc=2"`
+  *  `sudo update-initramfs –u`
+  *  `sudo update-grub`
+  *  Reboot the system.
+  *  After reboot, execute the command: `dmesg | grep guc`
+  *  Verify the logs for guc information.
+
+Note: If output doesn't contain guc details, then install the latest guc/huc firmware. Copy the https://git.kernel.org/pub/scm/linux/kernel/git/firmware/linux-firmware.git/tree/i915[firmware] to `/lib/firmware/i915/`, and reboot the system.

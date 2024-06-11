@@ -3,6 +3,7 @@
 image:https://github.com/games-on-whales/wolf/actions/workflows/linux-build-test.yml/badge.svg[Build badge]
 image:https://img.shields.io/discord/856434175455133727.svg?label=&logo=discord&logoColor=ffffff&color=7389D8&labelColor=6A7EC2[Discord link]
 image:https://img.shields.io/github/license/games-on-whales/wolf[License MIT]
+https://opencollective.com/games-on-whales/donate[image:https://img.shields.io/badge/Donate-Open%20Collective-blue.svg?color=blue[Donate button]]
 
 [quote,Matshona Dhliwayo.]
 An intelligent wolf is better than a foolish lion.

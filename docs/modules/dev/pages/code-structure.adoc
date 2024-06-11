@@ -20,11 +20,11 @@ High-level utilities and re-usable libraries, not strictly tied to Moonlight or 
 * https://github.com/games-on-whales/wolf/blob/HEAD/src/core/src/core/docker.hpp[docker.hpp]: using libcurl and boost json to interrogate the Docker socket and provide an easy to use interface to most methods.
 * https://github.com/games-on-whales/wolf/blob/HEAD/src/core/src/core/input.hpp[input.hpp]: an easy to use virtual input device library; supports mouse, keyboard, joypads and more!
 * https://github.com/games-on-whales/wolf/blob/HEAD/src/core/src/core/virtual-display.hpp[virtual-display.hpp]: a simple abstraction on top of https://github.com/games-on-whales/gst-wayland-display[games-on-whales/gst-wayland-display] in order to create and control virtual desktops.
-* https://github.com/games-on-whales/wolf/blob/HEAD/src/core/src/core/audio.hpp[audio.hpp]: virtual audio library
+* https://github.com/games-on-whales/wolf/blob/HEAD/src/core/src/core/audio.hpp[audio.hpp]: a simple abstraction on top of `libpulse` to create and control virtual audio devices.
 
 === src/fake-udev
 
-A little CLI tool that enables us to generate udev events.
+A little standalone CLI tool that enables us to generate udev events.
 You can read more about the rationale behind it in xref:dev:fake-udev.adoc[].
 
 === src/moonlight-protocol
@@ -41,11 +41,13 @@ It currently hosts the followings:
 
 === src/moonlight-server
 
-This is where the final Wolf executable will be built, contains all the additional code and logic required to run the full Moonlight server.
+This is where the final Wolf executable will be built, contains all the additional code and logic required to run the full Moonlight server. +
+In order to keep modules decoupled most of the logic revolves around reacting to events in a shared event bus (implemented using https://github.com/DeveloperPaul123/eventbus[DeveloperPaul123/eventbus]).
 
 === tests
 
 Unit tests will live under `tests/` and are written using the https://github.com/catchorg/Catch2[Catch2] framework. +
 We are implementing unit tests for most of the methods and (where possible) also mocking packets/requests seen during real Moonlight sessions.
 
-Some of them are platform/HW specific; they are all enabled by default, you should disable them based on your platform. Checkout the options in the https://github.com/games-on-whales/wolf/blob/HEAD/tests/CMakeLists.txt[tests/CMakeLists.txt]
+Some of them are platform/HW specific; they are all enabled by default, you should disable them based on your platform.
+Checkout the options in the https://github.com/games-on-whales/wolf/blob/HEAD/tests/CMakeLists.txt[tests/CMakeLists.txt]

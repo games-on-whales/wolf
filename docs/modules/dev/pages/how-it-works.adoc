@@ -1,0 +1,44 @@
+= How does it work?
+
+Wolf is composed of a few independent components that, when used together, allow us to run and stream multiple graphical applications on the same server without any overlap between them.
+
+image:ROOT:wolf-dev-components.svg[Wolf components diagram]
+
+== Virtual desktop
+
+In order to create virtual desktops on-demand, we've created a custom (micro) Wayland compositor: https://github.com/games-on-whales/gst-wayland-display[gst-wayland-display].
+It's based on https://github.com/Smithay/smithay[Smithay], coded in Rust and exposes both a standalone GStreamer plugin and an easy-to-use C API. +
+The main benefit of this solution is that our compositor will then expose the raw framebuffer so that Wolf can feed that directly to the video encoding pipeline.
+You can read more about it in xref:wayland.adoc[].
+
+To keep things simple, our Wayland compositor doesn't support XWayland, for containers that need it (like Steam) we use https://github.com/ValveSoftware/gamescope[Gamescope] which can be run as a Wayland client, and it'll provide XWayland support to the downstream app.
+
+== Virtual audio
+
+Audio doesn't need any HW acceleration, it's fairly trivial to run PulseAudio as a standalone container and use `libpulse` in order to create virtual audio sink on-demand.
+
+== Virtual input devices
+
+Creating and managing virtual devices is handled by https://github.com/games-on-whales/inputtino[inputtino]: a small library that abstracts away the complexities of managing `uinput` (and `uhid`) to create virtual input devices. +
+
+Virtual devices created by inputtino will be visible on the host system and can potentially break the host isolation that we're trying to achieve.
+In order to avoid this, we encourage users to install a set of udev rules that will restrict access to these devices to a specific group (e.g. `input`) and move mouse and keyboard to a different seat (see xref:user:quickstart.adoc#_virtual_devices_support[]).
+
+You can read a more detailed explanation into why we've added `uhid` and how gyro/acceleration is achieved https://github.com/games-on-whales/inputtino/blob/stable/src/uhid/README.adoc[here]
+
+=== Support hotplug via fake-udev
+
+Some devices like mouse and keyboard are always present and will be automatically created and setup before starting the application.
+Other devices can be hotplugged whilst the streaming is running; for example, a gamepad can be plugged in after the game has started. +
+Special care is needed in order to safely mount these new devices in the app container and to make them available to the running application, there's an in-depth article about it here: xref:fake-udev.adoc[] +
+
+== Running applications/games
+
+We run applications in a containerised environment, this way we can ensure that the application will not interfere with the host system (and with other running apps) and that it will have access only to the virtual devices that we've created. +
+We have a set of pre-built containers that are optimised to work with our flow in https://github.com/games-on-whales/gow[games-on-whales/gow]. Generally, though, most of the GUI applications should work inside a container that can then be streamed via Wolf.
+
+== Streaming
+
+We use https://gstreamer.freedesktop.org/[GStreamer] to encode the video and audio streams and send them to the client. We have automatic support for HW acceleration using CUDA, QuickSync and VAAPI but thanks to GStreamer we can easily add more encoders into the mix, without having to write a single line of code! The full encoding pipeline is described in a string that can be overridden by users just by changing the `config.toml` file.
+
+We've implemented a couple of custom GStreamer plugins in order to properly split, RTP encode and add https://en.wikipedia.org/wiki/Error_correction_code[FEC] to the resulting buffers into the format that Moonlight expects; they live in here: https://github.com/games-on-whales/wolf/tree/stable/src/moonlight-server/gst-plugin[src/moonlight-server/gst-plugin].
