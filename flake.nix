@@ -1,9 +1,14 @@
 {
   description = "wolf stream";
+  inputs = {
+    # nixpkgs.url = "github:NixOS/nixpkgs/9957cd48326fe8dbd52fdc50dd2502307f188b0d";
+    nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
+  };
 
-  outputs = { self, nixpkgs }:
+  outputs = inputs@{ self,... }:
     let
-      pkgs = nixpkgs.legacyPackages.x86_64-linux;
+    system = "x86_64-linux";
+      pkgs = import inputs.nixpkgs { inherit system; };
       deps = {
         boost-json_src = pkgs.fetchFromGitHub {
           owner = "boostorg";
