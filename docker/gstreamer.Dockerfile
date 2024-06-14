@@ -32,7 +32,7 @@ RUN <<_GSTREAMER_INSTALL
     DEV_PACKAGES=" \
         build-essential ninja-build gcc meson cmake ccache bison equivs \
         ca-certificates git libllvm15 \
-        flex libx265-dev libopus-dev nasm libzxingcore-dev libzbar-dev libdrm-dev libva-dev \
+        flex libx265-dev libopus-dev nasm libzxing-dev libzbar-dev libdrm-dev libva-dev \
         libmfx-dev libvpl-dev libmfx-tools libunwind8 libcap2-bin \
         libx11-dev libxfixes-dev libxdamage-dev libwayland-dev libpulse-dev libglib2.0-dev \
         libopenjp2-7-dev liblcms2-dev libcairo2-dev libcairo-gobject2 libwebp7 librsvg2-dev libaom-dev \
