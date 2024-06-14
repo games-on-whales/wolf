@@ -11,17 +11,22 @@
 #include <boost/log/expressions.hpp>
 #include <boost/log/sinks/sync_frontend.hpp>
 #include <boost/log/sinks/text_ostream_backend.hpp>
+#include <boost/log/sources/exception_handler_feature.hpp>
+#include <boost/log/sources/global_logger_storage.hpp>
 #include <boost/log/sources/logger.hpp>
 #include <boost/log/sources/severity_logger.hpp>
 #include <boost/log/support/date_time.hpp>
 #include <boost/log/trivial.hpp>
+#include <boost/log/utility/exception_handler.hpp>
 #include <boost/log/utility/setup/common_attributes.hpp>
 #include <boost/log/utility/setup/console.hpp>
 #include <boost/shared_ptr.hpp>
+#include <boost/thread/shared_mutex.hpp>
 
 namespace logs {
 
 using namespace boost::log::trivial;
+namespace src = boost::log::sources;
 
 inline auto get_color(boost::log::trivial::severity_level level) {
   switch (level) {
@@ -92,17 +97,38 @@ inline void init(severity_level min_log_level) {
 }
 
 /**
+ * A thread safe (_mt) logger class that allows to intercept exceptions and supports severity level
+ * Taken from:
+ * https://www.boost.org/doc/libs/1_85_0/libs/log/doc/html/log/detailed/sources.html#log.detailed.sources.exception_handling
+ */
+class my_logger_mt
+    : public src::basic_composite_logger<char,
+                                         my_logger_mt,
+                                         src::multi_thread_model<boost::shared_mutex>,
+                                         src::features<src::severity<severity_level>, src::exception_handler>> {
+  BOOST_LOG_FORWARD_LOGGER_MEMBERS(my_logger_mt)
+};
+
+BOOST_LOG_INLINE_GLOBAL_LOGGER_INIT(my_logger, my_logger_mt) {
+  my_logger_mt lg;
+
+  // Set up exception handler: all exceptions that occur while
+  // logging through this logger, will be suppressed
+  lg.set_exception_handler(boost::log::make_exception_suppressor());
+
+  return lg;
+}
+
+/**
  * @brief output a log message with optional format
  *
  * @param lv: log level
  * @param format_str: a valid fmt::format string
  * @param args: optional additional args to be formatted
  */
-template <typename S, typename... Args> inline void log(severity_level lv, const S &format_str, const Args &...args) {
+template <typename S, typename... Args> inline void log(severity_level lvl, const S &format_str, const Args &...args) {
   auto msg = fmt::format(format_str, args...);
-  boost::log::sources::severity_logger<severity_level> lg;
-
-  BOOST_LOG_SEV(lg, lv) << msg;
+  BOOST_LOG_SEV(my_logger::get(), lvl) << msg;
 }
 
 inline logs::severity_level parse_level(const std::string &level) {
