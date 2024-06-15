@@ -122,22 +122,28 @@ std::vector<std::map<std::string, std::string>> PS5Joypad::get_udev_events() con
   // LEDS
   if (sys_nodes.size() >= 1) {
     auto base_path = std::filesystem::path(sys_nodes[0]).parent_path().parent_path() / "leds";
-    auto leds = std::filesystem::directory_iterator{base_path};
-    for (auto led : leds) {
-      if (led.is_directory()) {
-        auto now = std::chrono::system_clock::now();
-        auto timestamp = std::chrono::duration_cast<std::chrono::seconds>(now.time_since_epoch()).count();
+    if (std::filesystem::exists(base_path)) {
+      auto leds = std::filesystem::directory_iterator{base_path};
+      for (auto led : leds) {
+        if (led.is_directory()) {
+          auto now = std::chrono::system_clock::now();
+          auto timestamp = std::chrono::duration_cast<std::chrono::seconds>(now.time_since_epoch()).count();
+          auto led_path = led.path().string();
+          led_path.erase(0, 4); // Remove leading /sys/ from syspath TODO: what if it's not /sys/?
 
-        events.emplace_back(std::map<std::string, std::string>{
-            {"ACTION", "add"},
-            {"SUBSYSTEM", "leds"},
-            {"DEVPATH", led.path().string()}, // TODO: should we mount this? How does the container access the led?
-            {"SEQNUM", "3712"},
-            {"USEC_INITIALIZED", std::to_string(timestamp)},
-            {"TAGS", ":seat:"},
-            {"CURRENT_TAGS", ":seat:"},
-        });
+          events.emplace_back(std::map<std::string, std::string>{
+              {"ACTION", "add"},
+              {"SUBSYSTEM", "leds"},
+              {"DEVPATH", led_path}, // TODO: should we mount this? How does the container access the led?
+              {"SEQNUM", "3712"},
+              {"USEC_INITIALIZED", std::to_string(timestamp)},
+              {"TAGS", ":seat:"},
+              {"CURRENT_TAGS", ":seat:"},
+          });
+        }
       }
+    } else {
+      logs::log(logs::warning, "Unable to find LED nodes for PS5 joypad under {}", base_path.string());
     }
   }
 

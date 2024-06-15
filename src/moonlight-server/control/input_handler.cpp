@@ -539,7 +539,7 @@ void handle_input(state::StreamSession &session,
       if (std::holds_alternative<PS5Joypad>(*selected_pad)) {
         std::get<PS5Joypad>(*selected_pad)
             .set_battery(inputtino::PS5Joypad::BATTERY_STATE(battery_pkt->battery_state),
-                         battery_pkt->battery_percentage / 2.55); // TODO: 255 (0xFF) is 100%?
+                         battery_pkt->battery_percentage);
       }
     }
     break;
