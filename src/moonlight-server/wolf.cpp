@@ -39,7 +39,7 @@ auto load_config(std::string_view config_file, const std::shared_ptr<dp::event_b
  * @brief Get the Display Modes
  */
 immer::array<moonlight::DisplayMode> getDisplayModes() {
-  return {{1920, 1080, 60}, {1024, 768, 30}};
+  return {{1920, 1080, 60}, {1280, 720, 60}, {1024, 768, 30}, {800, 600, 30}};
 }
 
 /**

@@ -62,7 +62,7 @@ void serverinfo(const std::shared_ptr<typename SimpleWeb::Server<T>::Response> &
 
   auto session = get_session_by_ip(state->running_sessions->load(), get_client_ip<T>(request));
   bool is_busy = session.has_value();
-  int app_id = session.has_value() ? std::stoi(session->app->base.id) : -1;
+  int app_id = session.has_value() ? std::stoi(session->app->base.id) : 0;
 
   auto local_ip = get_host_ip<T>(request, state);
 
