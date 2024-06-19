@@ -24,6 +24,7 @@ docker run \
     -v /var/run/docker.sock:/var/run/docker.sock:rw \
     --device /dev/dri/ \
     --device /dev/uinput \
+    --device /dev/uhid \
     -v /dev/shm:/dev/shm:rw \
     -v /dev/input:/dev/input:rw \
     -v /run/udev:/run/udev:rw \
@@ -54,6 +55,7 @@ services:
     devices:
       - /dev/dri
       - /dev/uinput
+      - /dev/uhid
     network_mode: host
     restart: unless-stopped
 ....
@@ -142,6 +144,7 @@ docker run \
     --device /dev/nvidia0 \
     --device /dev/nvidia-modeset \
     --device /dev/uinput \
+    --device /dev/uhid \
     -v /dev/shm:/dev/shm:rw \
     -v /dev/input:/dev/input:rw \
     -v /run/udev:/run/udev:rw \
@@ -172,6 +175,7 @@ services:
     devices:
       - /dev/dri
       - /dev/uinput
+      - /dev/uhid
       - /dev/nvidia-uvm
       - /dev/nvidia-uvm-tools
       - /dev/nvidia-caps/nvidia-cap1
@@ -295,6 +299,9 @@ sudo usermod -a -G input $USER
 ....
 # Allows Wolf to acces /dev/uinput
 KERNEL=="uinput", SUBSYSTEM=="misc", MODE="0660", GROUP="input", OPTIONS+="static_node=uinput"
+
+# Allows Wolf to access /dev/uhid
+KERNEL=="uhid", TAG+="uaccess"
 
 # Move virtual keyboard and mouse into a different seat
 SUBSYSTEMS=="input", ATTRS{id/vendor}=="ab00", MODE="0660", GROUP="input", ENV{ID_SEAT}="seat9"
