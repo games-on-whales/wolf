@@ -49,11 +49,16 @@ if (UNIX AND NOT APPLE)
     add_subdirectory(src/platforms/linux/pulseaudio)
     target_link_libraries(wolf_core PUBLIC wolf::audio)
 
-    FetchContent_Declare(
-            inputtino
-            GIT_REPOSITORY https://github.com/games-on-whales/inputtino.git
-            GIT_TAG 68f51dd)
-    FetchContent_MakeAvailable(inputtino)
+    option(WOLF_CUSTOM_INPUTTINO_SRC "Use custom inputtino source" OFF)
+    if(WOLF_CUSTOM_INPUTTINO_SRC)
+        add_subdirectory(${WOLF_CUSTOM_INPUTTINO_SRC} ${CMAKE_CURRENT_BINARY_DIR}/inputtino EXCLUDE_FROM_ALL)
+    else()
+        FetchContent_Declare(
+                inputtino
+                GIT_REPOSITORY https://github.com/games-on-whales/inputtino.git
+                GIT_TAG 8a33706)
+        FetchContent_MakeAvailable(inputtino)
+    endif ()
 
     add_subdirectory(src/platforms/linux/uinput)
     target_link_libraries(wolf_core PUBLIC wolf::uinput)

@@ -119,31 +119,27 @@ std::vector<std::map<std::string, std::string>> PS5Joypad::get_udev_events() con
     }
   }
 
-  // LEDS
-  if (sys_nodes.size() >= 1) {
-    auto base_path = std::filesystem::path(sys_nodes[0]).parent_path().parent_path() / "leds";
-    if (std::filesystem::exists(base_path)) {
-      auto leds = std::filesystem::directory_iterator{base_path};
-      for (auto led : leds) {
-        if (led.is_directory()) {
-          auto now = std::chrono::system_clock::now();
-          auto timestamp = std::chrono::duration_cast<std::chrono::seconds>(now.time_since_epoch()).count();
-          auto led_path = led.path().string();
-          led_path.erase(0, 4); // Remove leading /sys/ from syspath TODO: what if it's not /sys/?
+  if (!sys_nodes.empty()) {
+    // Add /dev/hidraw* device
+    // Used by Steam to access the LED status and who knows what else...
+    auto base_path =
+        std::filesystem::path(sys_nodes[0]) // /sys/devices/virtual/misc/uhid/0003:054C:0CE6.0016/input/input158
+            .parent_path()                  // "/sys/devices/virtual/misc/uhid/0003:054C:0CE6.0016/input/
+            .parent_path();                 // "/sys/devices/virtual/misc/uhid/0003:054C:0CE6.0016/
 
-          events.emplace_back(std::map<std::string, std::string>{
-              {"ACTION", "add"},
-              {"SUBSYSTEM", "leds"},
-              {"DEVPATH", led_path}, // TODO: should we mount this? How does the container access the led?
-              {"SEQNUM", "3712"},
-              {"USEC_INITIALIZED", std::to_string(timestamp)},
-              {"TAGS", ":seat:"},
-              {"CURRENT_TAGS", ":seat:"},
-          });
-        }
+    if (std::filesystem::exists(base_path / "hidraw")) {
+      auto hidraw_entries = std::filesystem::directory_iterator{base_path / "hidraw"};
+      for (auto hidraw_entry : hidraw_entries) {
+        auto dev_path = "/dev/" + hidraw_entry.path().filename().string();
+        auto sys_path = hidraw_entry.path().string();
+        sys_path.erase(0, 4); // Remove leading /sys/ from syspath TODO: what if it's not /sys/?
+
+        auto event = gen_udev_base_event(dev_path, sys_path);
+        event["SUBSYSTEM"] = "hidraw";
+        events.emplace_back(event);
       }
     } else {
-      logs::log(logs::warning, "Unable to find LED nodes for PS5 joypad under {}", base_path.string());
+      logs::log(logs::warning, "Unable to find HIDRAW nodes for PS5 joypad under {}", base_path.string());
     }
   }
 
@@ -204,15 +200,6 @@ std::vector<std::pair<std::string, std::vector<std::string>>> PS5Joypad::get_ude
       }
     }
   }
-
-  // TODO: LEDS
-  /**
-   cat /run/udev/data/+leds:input61:rgb:indicator
-    I:1968647189
-    G:seat
-    Q:seat
-    V:1
-   */
 
   return result;
 }

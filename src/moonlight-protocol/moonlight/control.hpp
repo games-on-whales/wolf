@@ -244,7 +244,7 @@ struct CONTROLLER_TOUCH_PACKET : INPUT_PKT {
   utils::netfloat pressure;
 };
 
-enum MOTION_TYPE : unsigned short {
+enum MOTION_TYPE : uint8_t {
   ACCELERATION = 0x01,
   GYROSCOPE = 0x02
 };

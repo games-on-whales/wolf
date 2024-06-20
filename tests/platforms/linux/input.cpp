@@ -500,13 +500,15 @@ TEST_CASE("uinput - joypad", "[UINPUT]") {
         logs::log(logs::debug, "UDEV: {}", ss.str());
       }
 
-      REQUIRE(udev_events.size() == 12);
+      REQUIRE(udev_events.size() == 7);
 
       for (auto &event : udev_events) {
         REQUIRE_THAT(event["ACTION"], Equals("add"));
         REQUIRE_THAT(event["DEVPATH"], StartsWith("/devices/virtual/misc/uhid/0003:054C"));
-        if (event.find("DEVNAME") != event.end()) {
+        if (event["SUBSYSTEM"] == "input") {
           REQUIRE_THAT(event["DEVNAME"], ContainsSubstring("/dev/input/"));
+        } else if (event["SUBSYSTEM"] == "hidraw") {
+          REQUIRE_THAT(event["DEVNAME"], ContainsSubstring("/dev/hidraw"));
         }
       }
     }
