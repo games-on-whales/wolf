@@ -1,10 +1,13 @@
-#define CATCH_CONFIG_MAIN // This tells Catch to provide a main() - only do this in one cpp file
-#include "catch2/catch_all.hpp"
+#define CATCH_CONFIG_FAST_COMPILE
 
-/**
- * THIS FILE NEEDS TO BE LEFT EMPTY
- * This allows us to compile the catch main once and then,
- * when changing any test, compiling only them without rebuild it all.
- *
- * Greatly decreases compilation times!!!
- */
+#include <catch2/catch_session.hpp>
+#include <helpers/logger.hpp>
+#include <helpers/utils.hpp>
+
+int main(int argc, char *argv[]) {
+  logs::init(logs::parse_level(utils::get_env("WOLF_LOG_LEVEL", "TRACE")));
+
+  int result = Catch::Session().run(argc, argv);
+
+  return result;
+}

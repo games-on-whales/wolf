@@ -1,4 +1,7 @@
-#include "catch2/catch_all.hpp"
+#include <catch2/catch_test_macros.hpp>
+#include <catch2/matchers/catch_matchers_string.hpp>
+#include <catch2/matchers/catch_matchers_vector.hpp>
+#include <catch2/matchers/catch_matchers_floating_point.hpp>
 #include "libinput.h"
 #include <boost/endian/conversion.hpp>
 #include <boost/locale.hpp>
@@ -342,7 +345,6 @@ TEST_CASE("uinput - joypad", "[UINPUT]") {
 
     // We know the 3rd device is the touchpad
     auto touch_rel_dev = devices[2];
-
     {   // "Joypad touchpad"
       { // Touch finger one
         auto touch_packet = pkts::CONTROLLER_TOUCH_PACKET{.controller_number = controller_number,
