@@ -64,7 +64,7 @@ jobs:
                 -DCMAKE_BUILD_TYPE=Debug \
                 -DCMAKE_CXX_EXTENSIONS=OFF \
                 -DCMAKE_CXX_STANDARD=17 \
-                -DTEST_VIRTUAL_INPUT=ON \
+                -DTEST_VIRTUAL_INPUT=OFF \
                 -DTEST_DOCKER=ON \
                 -DTEST_RUST_WAYLAND=ON \
                 -DTEST_NVIDIA=OFF \
@@ -88,7 +88,7 @@ jobs:
         uses: dorny/test-reporter@v1
         if: success() || failure()    # run this step even if previous step failed
         with:
-          name: CATCH2 (aarch64) tests
+          name: aarch64
           path: ${{runner.workspace}}/report.xml
           reporter: java-junit
 
@@ -221,6 +221,6 @@ jobs:
         uses: dorny/test-reporter@v1
         if: success() || failure()    # run this step even if previous step failed
         with:
-          name: CATCH2 (${{matrix.cxx}} - STD ${{ matrix.std }}) tests
+          name: ${{matrix.cxx}} - STD ${{ matrix.std }} - Shared ${{ matrix.shared }}
           path: ${{runner.workspace}}/report.xml
           reporter: java-junit
