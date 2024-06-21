@@ -15,7 +15,7 @@ jobs:
     timeout-minutes: 30
     runs-on: [ self-hosted, ARM64 ] # self-hosted, using Oracle free tier instance
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
 
       - name: Prepare environment
         run: |
@@ -82,7 +82,7 @@ jobs:
           RUST_BACKTRACE: FULL
           RUST_LOG: FATAL
           XDG_RUNTIME_DIR: /tmp
-        run: ./wolftests --reporter JUnit::out=${{runner.workspace}}/result-junit.xml --reporter console::out=-::colour-mode=ansi
+        run: ./wolftests --reporter JUnit::out=${{runner.workspace}}/report.xml --reporter console::out=-::colour-mode=ansi
 
       - name: Test Report
         uses: dorny/test-reporter@v1
@@ -152,7 +152,7 @@ jobs:
 
 
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
 
       - name: Download pre-built libgstwaylanddisplay-x86_64
         uses: actions/download-artifact@v4
@@ -215,7 +215,7 @@ jobs:
 
       - name: Run tests
         working-directory: ${{runner.workspace}}/build/tests
-        run: ./wolftests --reporter JUnit::out=${{runner.workspace}}/result-junit.xml --reporter console::out=-::colour-mode=ansi
+        run: ./wolftests --reporter JUnit::out=${{runner.workspace}}/report.xml --reporter console::out=-::colour-mode=ansi
 
       - name: Test Report
         uses: dorny/test-reporter@v1
