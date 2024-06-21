@@ -35,6 +35,11 @@ if (UNIX AND NOT APPLE)
         pkg_check_modules(LIBINPUT REQUIRED IMPORTED_TARGET libinput)
         target_link_libraries(wolftests PRIVATE PkgConfig::LIBINPUT)
 
+        option(TEST_UHID "Enable uhid test" ON)
+        if (TEST_UHID)
+            list(APPEND SRC_LIST "platforms/linux/uhid.cpp")
+        endif ()
+
         if (BUILD_FAKE_UDEV_CLI)
             list(APPEND SRC_LIST "platforms/linux/fake-udev.cpp")
             target_link_libraries(wolftests PRIVATE fake-udev::lib)

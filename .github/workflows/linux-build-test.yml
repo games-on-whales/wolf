@@ -1,4 +1,3 @@
-# Adapted from https://github.com/catchorg/Catch2/blob/devel/.github/workflows/linux-simple-builds.yml
 name: Linux build and test
 
 on:
@@ -47,6 +46,16 @@ jobs:
           cargo install cargo-c
           cargo cinstall -p c-bindings --prefix=/usr/local
 
+      - name: Archive libgstwaylanddisplay-aarch64
+        uses: actions/upload-artifact@v4
+        with:
+          name: libgstwaylanddisplay-aarch64
+          path: |
+            /usr/local/lib/aarch64-linux-gnu/liblibgstwaylanddisplay*
+            /usr/local/lib/aarch64-linux-gnu/pkgconfig/libgstwaylanddisplay*
+            /usr/local/include/libgstwaylanddisplay/*
+          if-no-files-found: error
+
       - name: Configure build
         working-directory: ${{runner.workspace}}
         run: |
@@ -55,27 +64,71 @@ jobs:
                 -DCMAKE_BUILD_TYPE=Debug \
                 -DCMAKE_CXX_EXTENSIONS=OFF \
                 -DCMAKE_CXX_STANDARD=17 \
-                -DTEST_VIRTUAL_INPUT=OFF \
-                -DTEST_LIBINPUT=OFF \
+                -DTEST_VIRTUAL_INPUT=ON \
                 -DTEST_DOCKER=ON \
-                -DLINK_RUST_WAYLAND=ON \
-                -DTEST_RUST_WAYLAND=OFF \
+                -DTEST_RUST_WAYLAND=ON \
                 -DTEST_NVIDIA=OFF \
                 -DTEST_EXCEPTIONS=OFF \
-                -DTEST_SDL=OFF \
-                -DCARGO_TARGET_BUILD=aarch64-unknown-linux-gnu \
+                -DTEST_UHID=OFF \
                 -G Ninja
 
       - name: Build tests + lib
         working-directory: ${{runner.workspace}}/build
-        run: ninja -j 4 wolftests
+        run: ninja -j $(nproc) wolftests
 
       - name: Run tests
         working-directory: ${{runner.workspace}}/build/tests
-        run: ./wolftests
+        env:
+          RUST_BACKTRACE: FULL
+          RUST_LOG: FATAL
+          XDG_RUNTIME_DIR: /tmp
+        run: ./wolftests -r JUnit -o ${{runner.workspace}}/report.xml
+
+      - name: Test Report
+        uses: dorny/test-reporter@v1
+        if: success() || failure()    # run this step even if previous step failed
+        with:
+          name: CATCH2 (aarch64) tests
+          path: ${{runner.workspace}}/report.xml
+          reporter: java-junit
+
+  # First build the common dependencies: Rust-based libgstwaylanddisplay
+  build-gst-wayland:
+    runs-on: ubuntu-22.04
+    steps:
+      - name: Prepare environment
+        # ubuntu-latest breaks without libunwind-dev,
+        # see: https://github.com/actions/runner-images/issues/6399#issuecomment-1286050292
+        run: |
+          sudo apt-get update -y
+          sudo apt-get install -y libunwind-dev
+          sudo apt-get install -y \
+              libwayland-dev libwayland-server0 libinput-dev libxkbcommon-dev libgbm-dev \
+              libgstreamer1.0-dev libgstreamer-plugins-base1.0-dev
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Setup gst-wayland-display
+        run: |
+          git clone https://github.com/games-on-whales/gst-wayland-display
+          cd gst-wayland-display
+          cargo install cargo-c
+          cargo cinstall -p c-bindings --prefix=/usr/local
+
+      - name: Archive libgstwaylanddisplay-x86_64
+        uses: actions/upload-artifact@v4
+        with:
+          name: libgstwaylanddisplay-x86_64
+          path: |
+            /usr/local/lib/x86_64-linux-gnu/liblibgstwaylanddisplay*
+            /usr/local/lib/x86_64-linux-gnu/pkgconfig/libgstwaylanddisplay*
+            /usr/local/include/libgstwaylanddisplay/*
+          if-no-files-found: error
 
   test:
     runs-on: ubuntu-22.04
+    needs: build-gst-wayland
     strategy:
       fail-fast: false
       matrix:
@@ -101,6 +154,13 @@ jobs:
     steps:
       - uses: actions/checkout@v3
 
+      - name: Download pre-built libgstwaylanddisplay-x86_64
+        uses: actions/download-artifact@v4
+        with:
+          name: libgstwaylanddisplay-x86_64
+          path: /usr/local/
+          merge-multiple: true
+
       - name: Prepare environment
         # ubuntu-latest breaks without libunwind-dev,
         # see: https://github.com/actions/runner-images/issues/6399#issuecomment-1286050292
@@ -122,17 +182,6 @@ jobs:
               libunwind-dev \
               ${{ join(matrix.other_pkgs, ' ') }}
 
-      - name: Setup Rust
-        uses: dtolnay/rust-toolchain@stable
-
-      - name: Setup gst-wayland-display
-        run: |
-          git clone https://github.com/games-on-whales/gst-wayland-display
-          cd gst-wayland-display
-          cargo install cargo-c
-          cargo cinstall -p c-bindings --prefix=/usr/local --destdir=temp
-          sudo cp -r temp/usr/local/* /usr/local/
-
       - name: Configure build
         working-directory: ${{runner.workspace}}
         env:
@@ -149,7 +198,6 @@ jobs:
                 -DBUILD_SHARED_LIBS=${{ matrix.shared }} \
                 -DCATCH_DEVELOPMENT_BUILD=ON \
                 -DTEST_VIRTUAL_INPUT=OFF \
-                -DTEST_LIBINPUT=OFF \
                 -DTEST_DOCKER=OFF \
                 -DLINK_RUST_WAYLAND=ON \
                 -DTEST_RUST_WAYLAND=OFF \
@@ -159,8 +207,16 @@ jobs:
 
       - name: Build tests + lib
         working-directory: ${{runner.workspace}}/build
-        run: ninja -j 2 wolftests
+        run: ninja -j $(nproc) wolftests
 
       - name: Run tests
         working-directory: ${{runner.workspace}}/build/tests
-        run: ./wolftests
+        run: ./wolftests -r JUnit -o ${{runner.workspace}}/report.xml
+
+      - name: Test Report
+        uses: dorny/test-reporter@v1
+        if: success() || failure()    # run this step even if previous step failed
+        with:
+          name: CATCH2 (${{matrix.cxx}} - STD ${{ matrix.std }}) tests
+          path: ${{runner.workspace}}/report.xml
+          reporter: java-junit

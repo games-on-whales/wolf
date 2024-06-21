@@ -1,12 +1,14 @@
 #pragma once
 
+#include <fcntl.h>
+#include <helpers/logger.hpp>
+#include <inputtino/protected_types.hpp>
 #include <libinput.h>
 #include <memory>
+#include <platforms/linux/uinput/uinput.hpp>
 #include <string>
-#include <vector>
 #include <unistd.h>
-#include <helpers/logger.hpp>
-#include <fcntl.h>
+#include <vector>
 
 static int open_restricted(const char *path, int flags, void *user_data) {
   int fd = open(path, flags);
@@ -48,4 +50,26 @@ static std::shared_ptr<libinput_event> get_event(std::shared_ptr<libinput> li) {
   libinput_dispatch(li.get());
   struct libinput_event *event = libinput_get_event(li.get());
   return std::shared_ptr<libinput_event>(event, [](libinput_event *event) { libinput_event_destroy(event); });
+}
+
+static void link_devnode(libevdev *dev, const std::string &device_node) {
+  // We have to sleep in order to be able to read from the newly created device
+  std::this_thread::sleep_for(std::chrono::milliseconds(200));
+
+  auto fd = open(device_node.c_str(), O_RDONLY | O_NONBLOCK);
+  assert(fd >= 0 && "Unable to open device node");
+  libevdev_set_fd(dev, fd);
+}
+
+static std::vector<inputtino::libevdev_event_ptr> fetch_events_debug(const wolf::core::input::libevdev_ptr &dev,
+                                                                     int max_events = 50) {
+  auto events = wolf::core::input::fetch_events(dev, max_events);
+  for (auto event : events) {
+    logs::log(logs::debug,
+              "Event: type={}, code={}, value={}",
+              libevdev_event_type_get_name(event->type),
+              libevdev_event_code_get_name(event->type, event->code),
+              event->value);
+  }
+  return events;
 }

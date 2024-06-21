@@ -18,6 +18,7 @@
  *
  * For force feedback see: https://www.kernel.org/doc/html/latest/input/ff.html
  */
+#pragma once
 
 #include <chrono>
 #include <core/input.hpp>

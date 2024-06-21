@@ -1,16 +1,14 @@
-#include <catch2/catch_test_macros.hpp>
-#include <catch2/matchers/catch_matchers_string.hpp>
-#include <catch2/matchers/catch_matchers_vector.hpp>
-#include <catch2/matchers/catch_matchers_floating_point.hpp>
 #include "libinput.h"
 #include <boost/endian/conversion.hpp>
 #include <boost/locale.hpp>
+#include <catch2/catch_test_macros.hpp>
+#include <catch2/matchers/catch_matchers_floating_point.hpp>
+#include <catch2/matchers/catch_matchers_string.hpp>
+#include <catch2/matchers/catch_matchers_vector.hpp>
 #include <chrono>
 #include <control/input_handler.hpp>
-#include <fcntl.h>
 #include <platforms/input.hpp>
 #include <platforms/linux/uinput/uinput.hpp>
-#include <range/v3/action/sort.hpp>
 #include <thread>
 
 using Catch::Matchers::ContainsSubstring;
@@ -21,27 +19,6 @@ using Catch::Matchers::WithinRel;
 using namespace wolf::core::input;
 using namespace moonlight::control;
 using namespace std::string_literals;
-
-void link_devnode(libevdev *dev, const std::string &device_node) {
-  // We have to sleep in order to be able to read from the newly created device
-  std::this_thread::sleep_for(std::chrono::milliseconds(200));
-
-  auto fd = open(device_node.c_str(), O_RDONLY | O_NONBLOCK);
-  REQUIRE(fd >= 0);
-  libevdev_set_fd(dev, fd);
-}
-
-std::vector<inputtino::libevdev_event_ptr> fetch_events_debug(const libevdev_ptr &dev, int max_events = 50) {
-  auto events = fetch_events(dev, max_events);
-  for (auto event : events) {
-    logs::log(logs::debug,
-              "Event: type={}, code={}, value={}",
-              libevdev_event_type_get_name(event->type),
-              libevdev_event_code_get_name(event->type, event->code),
-              event->value);
-  }
-  return events;
-}
 
 TEST_CASE("uinput - keyboard", "[UINPUT]") {
   libevdev_ptr keyboard_dev(libevdev_new(), ::libevdev_free);
@@ -316,10 +293,9 @@ TEST_CASE("uinput - joypad", "[UINPUT]") {
     auto session = state::StreamSession{.event_bus = std::make_shared<dp::event_bus>(),
                                         .joypads = std::make_shared<immer::atom<state::JoypadList>>()};
     uint8_t controller_number = 1;
-    auto c_pkt = pkts::CONTROLLER_ARRIVAL_PACKET{
-        .controller_number = controller_number,
-        .controller_type = pkts::PS,
-        .capabilities = pkts::ANALOG_TRIGGERS | pkts::RUMBLE | pkts::TOUCHPAD | pkts::GYRO};
+    auto c_pkt = pkts::CONTROLLER_ARRIVAL_PACKET{.controller_number = controller_number,
+                                                 .controller_type = pkts::XBOX,
+                                                 .capabilities = pkts::ANALOG_TRIGGERS};
     c_pkt.type = pkts::CONTROLLER_ARRIVAL;
 
     control::handle_input(session, {}, &c_pkt);
@@ -329,166 +305,9 @@ TEST_CASE("uinput - joypad", "[UINPUT]") {
     std::vector<std::string> dev_nodes;
     std::visit([&dev_nodes](auto &joypad) { dev_nodes = joypad.get_nodes(); }, *joypad);
     REQUIRE(session.joypads->load()->size() == 1);
-    REQUIRE(dev_nodes.size() >= 4);
+    REQUIRE(dev_nodes.size() >= 2);
 
-    // Search dev_nodes /dev/input/eventXX device and turn them into libevdev devices
-    std::sort(dev_nodes.begin(), dev_nodes.end()); // ranges::actions::sort doesn't work for some reason
-    auto devices =
-        dev_nodes |                                                                                              //
-        ranges::views::filter([](const std::string &node) { return node.find("event") != std::string::npos; }) | //
-        ranges::views::transform([](const std::string &node) {
-          libevdev_ptr el(libevdev_new(), ::libevdev_free);
-          link_devnode(el.get(), node);
-          return el;
-        }) |
-        ranges::to_vector;
-
-    // We know the 3rd device is the touchpad
-    auto touch_rel_dev = devices[2];
-    {   // "Joypad touchpad"
-      { // Touch finger one
-        auto touch_packet = pkts::CONTROLLER_TOUCH_PACKET{.controller_number = controller_number,
-                                                          .event_type = moonlight::control::pkts::TOUCH_EVENT_DOWN,
-                                                          .pointer_id = 0,
-                                                          .x = {255, 255, 255, 0},
-                                                          .y = {0, 255, 255, 255}};
-        touch_packet.type = pkts::CONTROLLER_TOUCH;
-
-        control::handle_input(session, {}, &touch_packet);
-        auto events = fetch_events_debug(touch_rel_dev);
-        REQUIRE(events.size() == 3);
-
-        REQUIRE_THAT(libevdev_event_type_get_name(events[0]->type), Equals("EV_ABS"));
-        REQUIRE_THAT(libevdev_event_code_get_name(events[0]->type, events[0]->code), Equals("ABS_MT_TRACKING_ID"));
-        REQUIRE(events[0]->value == 0);
-
-        REQUIRE_THAT(libevdev_event_type_get_name(events[1]->type), Equals("EV_KEY"));
-        REQUIRE_THAT(libevdev_event_code_get_name(events[1]->type, events[1]->code), Equals("BTN_TOUCH"));
-        REQUIRE(events[1]->value == 1);
-
-        REQUIRE_THAT(libevdev_event_type_get_name(events[2]->type), Equals("EV_KEY"));
-        REQUIRE_THAT(libevdev_event_code_get_name(events[2]->type, events[2]->code), Equals("BTN_TOOL_FINGER"));
-        REQUIRE(events[2]->value == 1);
-      }
-
-      { // Touch finger 2
-        auto touch_2_pkt = pkts::CONTROLLER_TOUCH_PACKET{.controller_number = controller_number,
-                                                         .event_type = moonlight::control::pkts::TOUCH_EVENT_DOWN,
-                                                         .pointer_id = boost::endian::native_to_little(1),
-                                                         .x = {255, 255, 255, 0},
-                                                         .y = {0, 255, 255, 255}};
-        touch_2_pkt.type = pkts::CONTROLLER_TOUCH;
-
-        control::handle_input(session, {}, &touch_2_pkt);
-        auto events = fetch_events_debug(touch_rel_dev);
-        REQUIRE(events.size() == 4);
-
-        REQUIRE_THAT(libevdev_event_type_get_name(events[0]->type), Equals("EV_ABS"));
-        REQUIRE_THAT(libevdev_event_code_get_name(events[0]->type, events[0]->code), Equals("ABS_MT_SLOT"));
-        REQUIRE(events[0]->value == 1);
-
-        REQUIRE_THAT(libevdev_event_type_get_name(events[1]->type), Equals("EV_ABS"));
-        REQUIRE_THAT(libevdev_event_code_get_name(events[1]->type, events[1]->code), Equals("ABS_MT_TRACKING_ID"));
-        REQUIRE(events[1]->value == 1);
-
-        REQUIRE_THAT(libevdev_event_type_get_name(events[2]->type), Equals("EV_KEY"));
-        REQUIRE_THAT(libevdev_event_code_get_name(events[2]->type, events[2]->code), Equals("BTN_TOOL_FINGER"));
-        REQUIRE(events[2]->value == 0);
-
-        REQUIRE_THAT(libevdev_event_type_get_name(events[3]->type), Equals("EV_KEY"));
-        REQUIRE_THAT(libevdev_event_code_get_name(events[3]->type, events[3]->code), Equals("BTN_TOOL_DOUBLETAP"));
-        REQUIRE(events[3]->value == 1);
-      }
-
-      { // Remove finger one
-        auto touch_2_pkt = pkts::CONTROLLER_TOUCH_PACKET{.controller_number = controller_number,
-                                                         .event_type = moonlight::control::pkts::TOUCH_EVENT_UP,
-                                                         .pointer_id = 0,
-                                                         .x = {0},
-                                                         .y = {0}};
-        touch_2_pkt.type = pkts::CONTROLLER_TOUCH;
-
-        control::handle_input(session, {}, &touch_2_pkt);
-        auto events = fetch_events_debug(touch_rel_dev);
-        REQUIRE(events.size() == 4);
-
-        REQUIRE_THAT(libevdev_event_type_get_name(events[0]->type), Equals("EV_ABS"));
-        REQUIRE_THAT(libevdev_event_code_get_name(events[0]->type, events[0]->code), Equals("ABS_MT_SLOT"));
-        REQUIRE(events[0]->value == 0);
-
-        REQUIRE_THAT(libevdev_event_type_get_name(events[1]->type), Equals("EV_ABS"));
-        REQUIRE_THAT(libevdev_event_code_get_name(events[1]->type, events[1]->code), Equals("ABS_MT_TRACKING_ID"));
-        REQUIRE(events[1]->value == -1);
-
-        REQUIRE_THAT(libevdev_event_type_get_name(events[2]->type), Equals("EV_KEY"));
-        REQUIRE_THAT(libevdev_event_code_get_name(events[2]->type, events[2]->code), Equals("BTN_TOOL_FINGER"));
-        REQUIRE(events[2]->value == 1);
-
-        REQUIRE_THAT(libevdev_event_type_get_name(events[3]->type), Equals("EV_KEY"));
-        REQUIRE_THAT(libevdev_event_code_get_name(events[3]->type, events[3]->code), Equals("BTN_TOOL_DOUBLETAP"));
-        REQUIRE(events[3]->value == 0);
-      }
-
-      { // Remove finger two, no fingers left on the touchpad
-        auto touch_2_pkt = pkts::CONTROLLER_TOUCH_PACKET{.controller_number = controller_number,
-                                                         .event_type = moonlight::control::pkts::TOUCH_EVENT_UP,
-                                                         .pointer_id = boost::endian::native_to_little(1),
-                                                         .x = {0},
-                                                         .y = {0}};
-        touch_2_pkt.type = pkts::CONTROLLER_TOUCH;
-
-        control::handle_input(session, {}, &touch_2_pkt);
-        auto events = fetch_events_debug(touch_rel_dev);
-        REQUIRE(events.size() == 4); // TODO: why there are no ABS_X and ABS_Y?
-
-        REQUIRE_THAT(libevdev_event_type_get_name(events[0]->type), Equals("EV_ABS"));
-        REQUIRE_THAT(libevdev_event_code_get_name(events[0]->type, events[0]->code), Equals("ABS_MT_SLOT"));
-        REQUIRE(events[0]->value == 1);
-
-        REQUIRE_THAT(libevdev_event_type_get_name(events[1]->type), Equals("EV_ABS"));
-        REQUIRE_THAT(libevdev_event_code_get_name(events[1]->type, events[1]->code), Equals("ABS_MT_TRACKING_ID"));
-        REQUIRE(events[1]->value == -1);
-
-        REQUIRE_THAT(libevdev_event_type_get_name(events[2]->type), Equals("EV_KEY"));
-        REQUIRE_THAT(libevdev_event_code_get_name(events[2]->type, events[2]->code), Equals("BTN_TOUCH"));
-        REQUIRE(events[2]->value == 0);
-
-        REQUIRE_THAT(libevdev_event_type_get_name(events[3]->type), Equals("EV_KEY"));
-        REQUIRE_THAT(libevdev_event_code_get_name(events[3]->type, events[3]->code), Equals("BTN_TOOL_FINGER"));
-        REQUIRE(events[3]->value == 0);
-      }
-    }
-
-    // We know the 2nd device is the motion sensor
-    auto motion_dev = devices[1];
-    { // Motion sensor
-      auto motion_pkt = pkts::CONTROLLER_MOTION_PACKET{.controller_number = controller_number,
-                                                       .motion_type = pkts::ACCELERATION,
-                                                       .x = {255, 255, 255, 0},
-                                                       .y = {0, 255, 255, 255},
-                                                       .z = {0, 0, 0, 0}};
-      motion_pkt.type = pkts::CONTROLLER_MOTION;
-
-      control::handle_input(session, {}, &motion_pkt);
-      auto events = fetch_events_debug(motion_dev);
-      REQUIRE(events.size() == 5);
-      // TODO: seems that I only get MSC_TIMESTAMP here
-      //
-      //      REQUIRE_THAT(libevdev_event_type_get_name(events[0]->type), Equals("EV_ABS"));
-      //      REQUIRE_THAT(libevdev_event_code_get_name(events[0]->type, events[0]->code), Equals("ABS_X"));
-      //      REQUIRE(events[0]->value == 0);
-      //
-      //      REQUIRE_THAT(libevdev_event_type_get_name(events[1]->type), Equals("EV_ABS"));
-      //      REQUIRE_THAT(libevdev_event_code_get_name(events[1]->type, events[1]->code), Equals("ABS_Y"));
-      //      REQUIRE(events[1]->value == -32768); // DS_ACC_RANGE
-      //
-      //      REQUIRE_THAT(libevdev_event_type_get_name(events[2]->type), Equals("EV_ABS"));
-      //      REQUIRE_THAT(libevdev_event_code_get_name(events[2]->type, events[2]->code), Equals("ABS_Z"));
-      //      REQUIRE(events[2]->value == 0);
-      //
-      //      REQUIRE_THAT(libevdev_event_type_get_name(events[3]->type), Equals("EV_MSC"));
-      //      REQUIRE_THAT(libevdev_event_code_get_name(events[3]->type, events[3]->code), Equals("MSC_TIMESTAMP"));
-    }
+    // TODO: test pressing buttons
 
     { // UDEV
       std::vector<std::map<std::string, std::string>> udev_events;
@@ -502,16 +321,13 @@ TEST_CASE("uinput - joypad", "[UINPUT]") {
         logs::log(logs::debug, "UDEV: {}", ss.str());
       }
 
-      REQUIRE(udev_events.size() == 7);
+      REQUIRE(udev_events.size() == 2);
 
       for (auto &event : udev_events) {
         REQUIRE_THAT(event["ACTION"], Equals("add"));
-        REQUIRE_THAT(event["DEVPATH"], StartsWith("/devices/virtual/misc/uhid/0003:054C"));
-        if (event["SUBSYSTEM"] == "input") {
-          REQUIRE_THAT(event["DEVNAME"], ContainsSubstring("/dev/input/"));
-        } else if (event["SUBSYSTEM"] == "hidraw") {
-          REQUIRE_THAT(event["DEVNAME"], ContainsSubstring("/dev/hidraw"));
-        }
+        REQUIRE_THAT(event["DEVNAME"], ContainsSubstring("/dev/input/"));
+        REQUIRE_THAT(event["DEVPATH"], StartsWith("/devices/virtual/input/input"));
+        REQUIRE_THAT(event[".INPUT_CLASS"], StartsWith("joystick"));
       }
     }
   }
