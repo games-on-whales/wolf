@@ -52,7 +52,7 @@ jobs:
           name: libgstwaylanddisplay-aarch64
           path: |
             /usr/local/lib/aarch64-linux-gnu/liblibgstwaylanddisplay*
-            /usr/local/lib/aarch64-linux-gnu/pkgconfig/libgstwaylanddisplay*
+            /usr/local/lib/aarch64-linux-gnu/pkgconfig/
             /usr/local/include/libgstwaylanddisplay/*
           if-no-files-found: error
 
@@ -82,7 +82,7 @@ jobs:
           RUST_BACKTRACE: FULL
           RUST_LOG: FATAL
           XDG_RUNTIME_DIR: /tmp
-        run: ./wolftests -r JUnit -o ${{runner.workspace}}/report.xml
+        run: ./wolftests -r JUnit -r console -o ${{runner.workspace}}/report.xml
 
       - name: Test Report
         uses: dorny/test-reporter@v1
@@ -114,16 +114,16 @@ jobs:
           git clone https://github.com/games-on-whales/gst-wayland-display
           cd gst-wayland-display
           cargo install cargo-c
-          cargo cinstall -p c-bindings --prefix=/usr/local
+          cargo cinstall -p c-bindings --prefix=/usr/local --destdir=${{runner.workspace}}
 
       - name: Archive libgstwaylanddisplay-x86_64
         uses: actions/upload-artifact@v4
         with:
           name: libgstwaylanddisplay-x86_64
           path: |
-            /usr/local/lib/x86_64-linux-gnu/liblibgstwaylanddisplay*
-            /usr/local/lib/x86_64-linux-gnu/pkgconfig/libgstwaylanddisplay*
-            /usr/local/include/libgstwaylanddisplay/*
+            ${{runner.workspace}}/usr/local/lib/x86_64-linux-gnu/liblibgstwaylanddisplay*
+            ${{runner.workspace}}/usr/local/lib/x86_64-linux-gnu/pkgconfig/
+            ${{runner.workspace}}/usr/local/include/libgstwaylanddisplay/*
           if-no-files-found: error
 
   test:
@@ -158,8 +158,12 @@ jobs:
         uses: actions/download-artifact@v4
         with:
           name: libgstwaylanddisplay-x86_64
-          path: /usr/local/
-          merge-multiple: true
+          path: ${{runner.workspace}}/libgstwaylanddisplay
+
+      - name: Move the library in the right place
+        run: |
+          ls -R ${{runner.workspace}}/libgstwaylanddisplay
+          sudo cp -rn ${{runner.workspace}}/libgstwaylanddisplay/* /usr/local/
 
       - name: Prepare environment
         # ubuntu-latest breaks without libunwind-dev,
@@ -211,7 +215,7 @@ jobs:
 
       - name: Run tests
         working-directory: ${{runner.workspace}}/build/tests
-        run: ./wolftests -r JUnit -o ${{runner.workspace}}/report.xml
+        run: ./wolftests -r JUnit -r console -o ${{runner.workspace}}/report.xml
 
       - name: Test Report
         uses: dorny/test-reporter@v1
