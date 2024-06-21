@@ -300,7 +300,19 @@ auto setup_sessions_handlers(const immer::box<state::AppState> &app_state,
                 state::PlugDeviceEvent{.session_id = session->session_id,
                                        .udev_events = session->keyboard->get_udev_events(),
                                        .udev_hw_db_entries = session->keyboard->get_udev_hw_db_entries()}};
-            return map.set(session->session_id, std::make_shared<state::devices_atom_queue>(devices));
+            /* Update (or create) the queue with the plugged mouse and keyboard */
+            if (auto session_devices_queue = map.find(session->session_id)) {
+              session_devices_queue->get()->update([=](const auto queue) {
+                immer::vector_transient<immer::box<state::PlugDeviceEvent>> new_queue = queue.transient();
+                for (const auto device : devices) {
+                  new_queue.push_back(device);
+                }
+                return new_queue.persistent();
+              });
+              return map;
+            } else {
+              return map.set(session->session_id, std::make_shared<state::devices_atom_queue>(devices));
+            }
           });
           std::shared_ptr<state::devices_atom_queue> session_devices_queue =
               *plugged_devices_queue->load()->find(session->session_id);
