@@ -33,9 +33,13 @@ void touch(const TOUCH_PACKET &pkt, state::StreamSession &session);
 
 void pen(const PEN_PACKET &pkt, state::StreamSession &session);
 
-void controller_arrival(const CONTROLLER_ARRIVAL_PACKET &pkt, state::StreamSession &session, const immer::atom<enet_clients_map> &connected_clients);
+void controller_arrival(const CONTROLLER_ARRIVAL_PACKET &pkt,
+                        state::StreamSession &session,
+                        const immer::atom<enet_clients_map> &connected_clients);
 
-void controller_multi(const CONTROLLER_MULTI_PACKET &pkt, state::StreamSession &session, const immer::atom<enet_clients_map> &connected_clients);
+void controller_multi(const CONTROLLER_MULTI_PACKET &pkt,
+                      state::StreamSession &session,
+                      const immer::atom<enet_clients_map> &connected_clients);
 
 void controller_touch(const CONTROLLER_TOUCH_PACKET &pkt, state::StreamSession &session);
 
