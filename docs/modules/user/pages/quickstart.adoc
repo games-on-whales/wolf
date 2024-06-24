@@ -25,8 +25,7 @@ docker run \
     --device /dev/dri/ \
     --device /dev/uinput \
     --device /dev/uhid \
-    -v /dev/shm:/dev/shm:rw \
-    -v /dev/input:/dev/input:rw \
+    -v /dev/:/dev/:rw \
     -v /run/udev:/run/udev:rw \
     --device-cgroup-rule "c 13:* rmw" \
     ghcr.io/games-on-whales/wolf:stable
@@ -47,8 +46,7 @@ services:
       - /etc/wolf/:/etc/wolf
       - /tmp/sockets:/tmp/sockets:rw
       - /var/run/docker.sock:/var/run/docker.sock:rw
-      - /dev/shm:/dev/shm:rw
-      - /dev/input:/dev/input:rw
+      - /dev/:/dev/:rw
       - /run/udev:/run/udev:rw
     device_cgroup_rules:
       - 'c 13:* rmw'
@@ -145,8 +143,7 @@ docker run \
     --device /dev/nvidia-modeset \
     --device /dev/uinput \
     --device /dev/uhid \
-    -v /dev/shm:/dev/shm:rw \
-    -v /dev/input:/dev/input:rw \
+    -v /dev/:/dev/:rw \
     -v /run/udev:/run/udev:rw \
     --device-cgroup-rule "c 13:* rmw" \
     ghcr.io/games-on-whales/wolf:stable
@@ -168,8 +165,7 @@ services:
       - /etc/wolf/:/etc/wolf:rw
       - /tmp/sockets:/tmp/sockets:rw
       - /var/run/docker.sock:/var/run/docker.sock:rw
-      - /dev/shm:/dev/shm:rw
-      - /dev/input:/dev/input:rw
+      - /dev/:/dev/:rw
       - /run/udev:/run/udev:rw
       - nvidia-driver-vol:/usr/nvidia:rw
     devices:

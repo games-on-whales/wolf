@@ -56,7 +56,7 @@ if (UNIX AND NOT APPLE)
         FetchContent_Declare(
                 inputtino
                 GIT_REPOSITORY https://github.com/games-on-whales/inputtino.git
-                GIT_TAG 8a33706)
+                GIT_TAG aff7519)
         FetchContent_MakeAvailable(inputtino)
     endif ()
 
