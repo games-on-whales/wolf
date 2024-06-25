@@ -47,9 +47,12 @@ std::shared_ptr<state::JoypadTypes> create_new_joypad(const state::StreamSession
   });
 
   std::shared_ptr<state::JoypadTypes> new_pad;
-  switch (type) {
+  CONTROLLER_TYPE final_type = session.app->joypad_type == AUTO ? type : session.app->joypad_type;
+  switch (final_type) {
   case UNKNOWN:
+  case AUTO:
   case XBOX: {
+    logs::log(logs::info, "Creating Xbox joypad for controller {}", controller_number);
     auto result =
         XboxOneJoypad::create({.name = "Wolf X-Box One (virtual) pad",
                                // https://github.com/torvalds/linux/blob/master/drivers/input/joystick/xpad.c#L147
@@ -66,6 +69,7 @@ std::shared_ptr<state::JoypadTypes> create_new_joypad(const state::StreamSession
     break;
   }
   case PS: {
+    logs::log(logs::info, "Creating PS joypad for controller {}", controller_number);
     auto result = PS5Joypad::create(
         {.name = "Wolf DualSense (virtual) pad", .vendor_id = 0x054C, .product_id = 0x0CE6, .version = 0x8111});
     if (!result) {
@@ -94,6 +98,7 @@ std::shared_ptr<state::JoypadTypes> create_new_joypad(const state::StreamSession
     break;
   }
   case NINTENDO:
+    logs::log(logs::info, "Creating Nintendo joypad for controller {}", controller_number);
     auto result = SwitchJoypad::create({.name = "Wolf Nintendo (virtual) pad",
                                         // https://github.com/torvalds/linux/blob/master/drivers/hid/hid-ids.h#L981
                                         .vendor_id = 0x057e,
@@ -132,7 +137,7 @@ std::shared_ptr<state::JoypadTypes> create_new_joypad(const state::StreamSession
   }
 
   session.joypads->update([&](state::JoypadList joypads) {
-    logs::log(logs::debug, "[INPUT] Creating joypad {} of type: {}", controller_number, type);
+    logs::log(logs::debug, "[INPUT] Sending PlugDeviceEvent for joypad {} of type: {}", controller_number, type);
 
     state::PlugDeviceEvent unplug_ev{.session_id = session.session_id};
     std::visit(

@@ -53,7 +53,8 @@ enum CONTROLLER_TYPE : uint8_t {
   UNKNOWN = 0x00,
   XBOX = 0x01,
   PS = 0x02,
-  NINTENDO = 0x03
+  NINTENDO = 0x03,
+  AUTO = 0xFF // not part of the protocol, I've added it for simplicity
 };
 
 enum CONTROLLER_CAPABILITIES : uint8_t {

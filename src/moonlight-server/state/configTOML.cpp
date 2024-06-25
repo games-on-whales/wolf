@@ -289,6 +289,18 @@ Config load_or_default(const std::string &source, const std::shared_ptr<dp::even
             toml::find_or(item, "audio", "opus_encoder", default_gst_audio_settings.default_opus_encoder) + " ! " +
             toml::find_or(item, "audio", "sink", default_gst_audio_settings.default_sink);
 
+        auto joypad_type = utils::to_lower(toml::find_or(item, "joypad_type", "auto"s));
+        moonlight::control::pkts::CONTROLLER_TYPE joypad_type_enum = moonlight::control::pkts::CONTROLLER_TYPE::AUTO;
+        if (joypad_type == "xbox") {
+          joypad_type_enum = moonlight::control::pkts::CONTROLLER_TYPE::XBOX;
+        } else if (joypad_type == "nintendo") {
+          joypad_type_enum = moonlight::control::pkts::CONTROLLER_TYPE::NINTENDO;
+        } else if (joypad_type == "ps") {
+          joypad_type_enum = moonlight::control::pkts::CONTROLLER_TYPE::PS;
+        } else if (joypad_type != "auto") {
+          logs::log(logs::warning, "Unknown joypad type: {}", joypad_type);
+        }
+
         return state::App{.base = {.title = toml::find<std::string>(item, "title"),
                                    .id = std::to_string(idx + 1),
                                    .support_hdr = toml::find_or<bool>(item, "support_hdr", false)},
@@ -302,7 +314,8 @@ Config load_or_default(const std::string &source, const std::shared_ptr<dp::even
 
                           .opus_gst_pipeline = opus_gst_pipeline,
                           .start_virtual_compositor = toml::find_or<bool>(item, "start_virtual_compositor", true),
-                          .runner = get_runner(item, ev_bus)};
+                          .runner = get_runner(item, ev_bus),
+                          .joypad_type = joypad_type_enum};
       }) |                                     //
       ranges::to<immer::vector<state::App>>(); //
 

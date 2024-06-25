@@ -14,8 +14,11 @@ using namespace moonlight::control;
 using namespace std::string_literals;
 
 TEST_CASE("Create PS5 pad with CONTROLLER_ARRIVAL", "[UHID]") {
-  auto session = state::StreamSession{.event_bus = std::make_shared<dp::event_bus>(),
-                                      .joypads = std::make_shared<immer::atom<state::JoypadList>>()};
+  state::App app = {.joypad_type = moonlight::control::pkts::CONTROLLER_TYPE::AUTO};
+  auto session = state::StreamSession{
+      .event_bus = std::make_shared<dp::event_bus>(),
+      .app = std::make_shared<state::App>(app),
+      .joypads = std::make_shared<immer::atom<state::JoypadList>>()};
   uint8_t controller_number = 1;
   auto c_pkt = pkts::CONTROLLER_ARRIVAL_PACKET{
       .controller_number = controller_number,

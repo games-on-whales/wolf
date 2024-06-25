@@ -7,6 +7,7 @@
 #include <core/virtual-display.hpp>
 #include <deque>
 #include <eventbus/event_bus.hpp>
+#include <helpers/tsqueue.hpp>
 #include <immer/array.hpp>
 #include <immer/atom.hpp>
 #include <immer/box.hpp>
@@ -16,10 +17,8 @@
 #include <moonlight/data-structures.hpp>
 #include <openssl/x509.h>
 #include <optional>
-#include <helpers/tsqueue.hpp>
 #include <toml.hpp>
 #include <utility>
-
 
 namespace state {
 using namespace std::chrono_literals;
@@ -113,6 +112,7 @@ struct App {
   std::string opus_gst_pipeline;
   bool start_virtual_compositor;
   std::shared_ptr<Runner> runner;
+  moonlight::control::pkts::CONTROLLER_TYPE joypad_type;
 };
 
 /**
