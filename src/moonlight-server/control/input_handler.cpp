@@ -425,12 +425,14 @@ void controller_multi(const CONTROLLER_MULTI_PACKET &pkt,
       session.joypads->update([&](state::JoypadList joypads) { return joypads.erase(pkt.controller_number); });
     }
   } else {
-    // Old Moonliver.ons don't support CONTROLLER_ARRIVAL, we create a default pad when it's first mentioned
+    // Old Moonlight doesn't support CONTROLLER_ARRIVAL, we create a default pad when it's first mentioned
     selected_pad = create_new_joypad(session, connected_clients, pkt.controller_number, XBOX, ANALOG_TRIGGERS | RUMBLE);
   }
   std::visit(
-      [pkt](auto &pad) {
-        pad.set_pressed_buttons(pkt.button_flags | (pkt.buttonFlags2 << 16));
+      [pkt](inputtino::Joypad &pad) {
+        std::uint16_t bf = pkt.button_flags;
+        std::uint32_t bf2 = pkt.buttonFlags2;
+        pad.set_pressed_buttons(bf | (bf2 << 16));
         pad.set_stick(inputtino::Joypad::LS, pkt.left_stick_x, pkt.left_stick_y);
         pad.set_stick(inputtino::Joypad::RS, pkt.right_stick_x, pkt.right_stick_y);
         pad.set_triggers(pkt.left_trigger, pkt.right_trigger);
@@ -449,13 +451,10 @@ void controller_touch(const CONTROLLER_TOUCH_PACKET &pkt, state::StreamSession &
     case TOUCH_EVENT_HOVER:
     case TOUCH_EVENT_MOVE: {
       if (std::holds_alternative<PS5Joypad>(*selected_pad)) {
-        auto pressure = std::clamp(utils::from_netfloat(pkt.pressure), 0.0f, 0.5f);
-        // TODO: Moonlight seems to always pass 1.0 (0x0000803f little endian)
-        // Values too high will be discarded by libinput as detecting palm pressure
         std::get<PS5Joypad>(*selected_pad)
             .place_finger(pointer_id,
-                          netfloat_to_0_1(pkt.x) * inputtino::PS5Joypad::touchpad_width,
-                          netfloat_to_0_1(pkt.y) * inputtino::PS5Joypad::touchpad_height);
+                          netfloat_to_0_1(pkt.x) * (uint16_t)inputtino::PS5Joypad::touchpad_width,
+                          netfloat_to_0_1(pkt.y) * (uint16_t)inputtino::PS5Joypad::touchpad_height);
       }
       break;
     }
