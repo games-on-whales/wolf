@@ -114,8 +114,9 @@ std::shared_ptr<state::JoypadTypes> create_new_joypad(const state::StreamSession
     break;
   }
 
-  if (capabilities & ACCELEROMETER && type == PS) {
+  if (capabilities & ACCELEROMETER && final_type == PS) {
     // Request acceleromenter events from the client at 100 Hz
+    logs::log(logs::info, "Requesting accelerometer events for controller {}", controller_number);
     auto accelerometer_pkt = ControlMotionEventPacket{
         .header{.type = MOTION_EVENT, .length = sizeof(ControlMotionEventPacket) - sizeof(ControlPacket)},
         .controller_number = static_cast<uint16_t>(controller_number),
@@ -125,8 +126,9 @@ std::shared_ptr<state::JoypadTypes> create_new_joypad(const state::StreamSession
     encrypt_and_send(plaintext, session.aes_key, connected_clients, session.session_id);
   }
 
-  if (capabilities & GYRO && type == PS) {
+  if (capabilities & GYRO && final_type == PS) {
     // Request gyroscope events from the client at 100 Hz
+    logs::log(logs::info, "Requesting gyroscope events for controller {}", controller_number);
     auto gyro_pkt = ControlMotionEventPacket{
         .header{.type = MOTION_EVENT, .length = sizeof(ControlMotionEventPacket) - sizeof(ControlPacket)},
         .controller_number = static_cast<uint16_t>(controller_number),

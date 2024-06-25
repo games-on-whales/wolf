@@ -39,7 +39,7 @@ RUN <<_GST_WAYLAND_DISPLAY
     cd gst-wayland-display
     git checkout 6c7d8cb
     cargo install cargo-c
-    cargo cinstall -p c-bindings --prefix=/usr/local
+    cargo cinstall -p c-bindings --prefix=/usr/local --libdir=/usr/local/lib/x86_64-linux-gnu
 _GST_WAYLAND_DISPLAY
 
 COPY . /wolf/
