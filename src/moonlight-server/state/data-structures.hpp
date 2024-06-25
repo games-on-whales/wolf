@@ -16,8 +16,10 @@
 #include <moonlight/data-structures.hpp>
 #include <openssl/x509.h>
 #include <optional>
+#include <helpers/tsqueue.hpp>
 #include <toml.hpp>
 #include <utility>
+
 
 namespace state {
 using namespace std::chrono_literals;
@@ -36,7 +38,7 @@ struct UnplugDeviceEvent {
   std::vector<std::pair<std::string, std::vector<std::string>>> udev_hw_db_entries;
 };
 
-using devices_atom_queue = immer::atom<immer::vector<immer::box<PlugDeviceEvent>>>;
+using devices_atom_queue = TSQueue<immer::box<PlugDeviceEvent>>;
 
 struct Runner {
 

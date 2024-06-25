@@ -233,34 +233,31 @@ void RunDocker::run(std::size_t session_id,
 
     do {
       // Plug all devices that are waiting in the queue
-      plugged_devices_queue->update([this, container_id, use_fake_udev, hw_db_path](const auto devices) {
-        for (const state::PlugDeviceEvent &device_ev : devices) {
-          if (use_fake_udev) {
-            create_udev_hw_files(hw_db_path, device_ev.udev_hw_db_entries);
-          }
-
-          for (auto udev_ev : device_ev.udev_events) {
-            std::string cmd;
-            std::string udev_msg = base64_encode(map_to_string(udev_ev));
-            if (udev_ev.count("DEVNAME") == 0) {
-              cmd = fmt::format("fake-udev -m {}", udev_msg);
-            } else {
-              cmd = fmt::format("mkdir -p /dev/input && mknod {} c {} {} && chmod 777 {} && fake-udev -m {}",
-                                udev_ev["DEVNAME"],
-                                udev_ev["MAJOR"],
-                                udev_ev["MINOR"],
-                                udev_ev["DEVNAME"],
-                                udev_msg);
-            }
-            logs::log(logs::debug, "[DOCKER] Executing command: {}", cmd);
-            docker_api.exec(container_id, {"/bin/bash", "-c", cmd}, "root");
-          }
+      while (auto device_ev = plugged_devices_queue->pop(50ms)) {
+        if (use_fake_udev) {
+          create_udev_hw_files(hw_db_path, device_ev->get().udev_hw_db_entries);
         }
 
-        // Remove all devices that we have plugged
-        return immer::vector<immer::box<state::PlugDeviceEvent>>{};
-      });
-      boost::this_thread::sleep_for(boost::chrono::milliseconds(500));
+        for (auto udev_ev : device_ev->get().udev_events) {
+          std::string cmd;
+          std::string udev_msg = base64_encode(map_to_string(udev_ev));
+          if (udev_ev.count("DEVNAME") == 0) {
+            cmd = fmt::format("fake-udev -m {}", udev_msg);
+          } else {
+            cmd = fmt::format("mkdir -p /dev/input && mknod {} c {} {} && chmod 777 {} && fake-udev -m {}",
+                              udev_ev["DEVNAME"],
+                              udev_ev["MAJOR"],
+                              udev_ev["MINOR"],
+                              udev_ev["DEVNAME"],
+                              udev_msg);
+          }
+          logs::log(logs::debug, "[DOCKER] Executing command: {}", cmd);
+          docker_api.exec(container_id, {"/bin/bash", "-c", cmd}, "root");
+        }
+      }
+
+      std::this_thread::sleep_for(500ms);
+
     } while (docker_api.get_by_id(container_id)->status == RUNNING);
 
     logs::log(logs::debug, "[DOCKER] Container logs: \n{}", docker_api.get_logs(container_id));

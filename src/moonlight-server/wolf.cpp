@@ -176,17 +176,13 @@ auto setup_sessions_handlers(const immer::box<state::AppState> &app_state,
 
   handlers.push_back(app_state->event_bus->register_handler<immer::box<state::PlugDeviceEvent>>(
       [plugged_devices_queue](const immer::box<state::PlugDeviceEvent> &hotplug_ev) {
-        plugged_devices_queue->update([=](const session_devices map) {
-          logs::log(logs::debug, "{} received hot-plug device event", hotplug_ev->session_id);
+        logs::log(logs::debug, "{} received hot-plug device event", hotplug_ev->session_id);
 
-          if (auto session_devices_queue = map.find(hotplug_ev->session_id)) {
-            session_devices_queue->get()->update([=](const auto queue) { return queue.push_back(hotplug_ev); });
-          } else {
-            logs::log(logs::warning, "Unable to find plugged_devices_queue for session {}", hotplug_ev->session_id);
-          }
-
-          return map;
-        });
+        if (auto session_devices_queue = plugged_devices_queue->load()->find(hotplug_ev->session_id)) {
+          session_devices_queue->get()->push(hotplug_ev);
+        } else {
+          logs::log(logs::warning, "Unable to find plugged_devices_queue for session {}", hotplug_ev->session_id);
+        }
       }));
 
   // Run process and our custom wayland as soon as a new StreamSession is created
@@ -302,20 +298,19 @@ auto setup_sessions_handlers(const immer::box<state::AppState> &app_state,
                                        .udev_hw_db_entries = session->keyboard->get_udev_hw_db_entries()}};
             /* Update (or create) the queue with the plugged mouse and keyboard */
             if (auto session_devices_queue = map.find(session->session_id)) {
-              session_devices_queue->get()->update([=](const auto queue) {
-                immer::vector_transient<immer::box<state::PlugDeviceEvent>> new_queue = queue.transient();
-                for (const auto device : devices) {
-                  new_queue.push_back(device);
-                }
-                return new_queue.persistent();
-              });
+              for (const auto device : devices) {
+                session_devices_queue->get()->push(device);
+              }
               return map;
             } else {
-              return map.set(session->session_id, std::make_shared<state::devices_atom_queue>(devices));
+              auto devices_q = std::make_shared<state::devices_atom_queue>();
+              for (const auto device : devices) {
+                devices_q->push(device);
+              }
+              return map.set(session->session_id, devices_q);
             }
           });
-          std::shared_ptr<state::devices_atom_queue> session_devices_queue =
-              *plugged_devices_queue->load()->find(session->session_id);
+          auto session_devices_queue = *plugged_devices_queue->load()->find(session->session_id);
 
           /* Finally run the app, this will stop here until over */
           session->app->runner->run(session->session_id,

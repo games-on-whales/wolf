@@ -76,6 +76,9 @@ std::shared_ptr<state::JoypadTypes> create_new_joypad(const state::StreamSession
       (*result).set_on_led(on_led_fn);
       new_pad = std::make_shared<state::JoypadTypes>(std::move(*result));
 
+      // Let's wait for the kernel to pick it up and mount the /dev/ devices
+      std::this_thread::sleep_for(std::chrono::milliseconds(50));
+
       std::visit(
           [&session](auto &pad) {
             if (auto wl = *session.wayland_display->load()) {
