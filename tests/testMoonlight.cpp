@@ -1,4 +1,9 @@
-#include "catch2/catch_all.hpp"
+#include <catch2/catch_test_macros.hpp>
+#include <catch2/matchers/catch_matchers_container_properties.hpp>
+#include <catch2/matchers/catch_matchers_contains.hpp>
+#include <catch2/matchers/catch_matchers_string.hpp>
+#include <catch2/matchers/catch_matchers_vector.hpp>
+
 using Catch::Matchers::Equals;
 
 #include <crypto/crypto.hpp>
@@ -28,6 +33,7 @@ TEST_CASE("LocalState load TOML", "[LocalState]") {
     REQUIRE_THAT(first_app.base.id, Equals("1"));
     REQUIRE_THAT(first_app.h264_gst_pipeline, Equals("video_source ! params ! h264_pipeline ! video_sink"));
     REQUIRE_THAT(first_app.hevc_gst_pipeline, Equals("video_source ! params ! hevc_pipeline ! video_sink"));
+    REQUIRE(first_app.joypad_type == moonlight::control::pkts::CONTROLLER_TYPE::AUTO);
     REQUIRE(first_app.start_virtual_compositor);
     REQUIRE(first_app.hevc_encoder == state::UNKNOWN);
     REQUIRE(first_app.h264_encoder == state::UNKNOWN);
@@ -40,6 +46,7 @@ TEST_CASE("LocalState load TOML", "[LocalState]") {
     REQUIRE_THAT(second_app.h264_gst_pipeline, Equals("override DEFAULT SOURCE ! params ! h264_pipeline ! video_sink"));
     REQUIRE_THAT(second_app.hevc_gst_pipeline, Equals("override DEFAULT SOURCE ! params ! hevc_pipeline ! video_sink"));
     REQUIRE(!second_app.start_virtual_compositor);
+    REQUIRE(second_app.joypad_type == moonlight::control::pkts::CONTROLLER_TYPE::XBOX);
     REQUIRE(second_app.hevc_encoder == state::UNKNOWN);
     REQUIRE(second_app.h264_encoder == state::UNKNOWN);
     REQUIRE(second_app.render_node == "/tmp/dead_beef");

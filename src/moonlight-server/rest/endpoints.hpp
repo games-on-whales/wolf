@@ -306,14 +306,14 @@ void launch(const std::shared_ptr<typename SimpleWeb::Server<SimpleWeb::HTTPS>::
   if (!mouse) {
     logs::log(logs::error, "Failed to create mouse: {}", mouse.getErrorMessage());
   } else {
-    new_session.mouse = std::make_shared<input::Mouse>(input::Mouse(**mouse));
+    new_session.mouse = std::make_shared<input::Mouse>(std::move(*mouse));
   }
 
   auto keyboard = input::Keyboard::create();
   if (!keyboard) {
     logs::log(logs::error, "Failed to create keyboard: {}", keyboard.getErrorMessage());
   } else {
-    new_session.keyboard = std::make_shared<input::Keyboard>(input::Keyboard(**keyboard));
+    new_session.keyboard = std::make_shared<input::Keyboard>(std::move(*keyboard));
   }
   // joypads will be created on-demand in the Control stream
   new_session.joypads = std::make_shared<immer::atom<state::JoypadList>>();

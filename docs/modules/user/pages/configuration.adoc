@@ -161,6 +161,26 @@ source = "audiotestsrc wave=ticks is-live=true"
 
 See more examples in the xref:gstreamer.adoc[] page.
 
+=== Override the default joypad mapping
+
+By default, Wolf will try to match the joypad type that Moonlight sends with the correct mapping.
+It is possible to override this behaviour by setting the `joypad_mapping` property in the `apps` entry; example:
+
+[source,toml]
+....
+[[apps]]
+title = "Test ball"
+joypad_type = "xbox" # Force the joypad to always be xbox
+....
+
+The available joypad types are:
+
+* `auto` (default)
+* `xbox`
+* `nintendo`
+* `ps`
+
+
 [#_app_runner]
 ==== App Runner
 

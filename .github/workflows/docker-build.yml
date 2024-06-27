@@ -11,7 +11,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
 
       # Set derived configuration variables:
       # - images: images to build (docker and/or github)
@@ -109,9 +109,9 @@ jobs:
           file: docker/gstreamer.Dockerfile
           push: true
           build-args: |
-            GSTREAMER_VERSION=1.22.7
+            GSTREAMER_VERSION=1.24.5
             BASE_IMAGE=ghcr.io/${{ github.repository_owner }}/gpu-drivers:2023.11
-          tags: ghcr.io/${{ github.repository_owner }}/gstreamer:1.22.7,gameonwhales/gstreamer:1.22.7 # TODO: set gstreamer version as param
+          tags: ghcr.io/${{ github.repository_owner }}/gstreamer:1.24.5,gameonwhales/gstreamer:1.24.5 # TODO: set gstreamer version as param
           labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=registry,ref=ghcr.io/${{ github.repository_owner }}/gstreamer:buildcache
           cache-to: type=registry,ref=ghcr.io/${{ github.repository_owner }}/gstreamer:buildcache,mode=max
@@ -126,7 +126,7 @@ jobs:
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
           build-args: |
-            BASE_IMAGE=ghcr.io/${{ github.repository_owner }}/gstreamer:1.22.7
+            BASE_IMAGE=ghcr.io/${{ github.repository_owner }}/gstreamer:1.24.5
             IMAGE_SOURCE=${{ steps.prep.outputs.github_server_url }}/${{ github.repository }}
           cache-from: ${{ steps.prep.outputs.cache_from }}
           cache-to: ${{ steps.prep.outputs.cache_to }}

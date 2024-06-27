@@ -35,6 +35,11 @@ if (UNIX AND NOT APPLE)
         pkg_check_modules(LIBINPUT REQUIRED IMPORTED_TARGET libinput)
         target_link_libraries(wolftests PRIVATE PkgConfig::LIBINPUT)
 
+        option(TEST_UHID "Enable uhid test" ON)
+        if (TEST_UHID)
+            list(APPEND SRC_LIST "platforms/linux/uhid.cpp")
+        endif ()
+
         if (BUILD_FAKE_UDEV_CLI)
             list(APPEND SRC_LIST "platforms/linux/fake-udev.cpp")
             target_link_libraries(wolftests PRIVATE fake-udev::lib)
@@ -55,20 +60,6 @@ if (TEST_EXCEPTIONS)
     list(APPEND SRC_LIST testExceptions.cpp)
 endif ()
 
-option(TEST_SDL "Enabled SDL tests" ON)
-if (TEST_SDL)
-    option(SDL_CUSTOM_SRC "Use a custom SDL source location (useful to better debug)" OFF)
-    if (SDL_CUSTOM_SRC)
-        SET(SDL_TEST OFF)
-        add_subdirectory(${SDL_CUSTOM_SRC} ${CMAKE_CURRENT_BINARY_DIR}/sdl EXCLUDE_FROM_ALL)
-    else ()
-        find_package(SDL2 REQUIRED CONFIG REQUIRED COMPONENTS SDL2)
-    endif ()
-
-    target_link_libraries(wolftests PRIVATE SDL2::SDL2)
-    list(APPEND SRC_LIST "testJoypads.cpp")
-endif ()
-
 target_sources(wolftests PRIVATE ${SRC_LIST})
 
 # I'm using C++17 in the test
@@ -77,7 +68,7 @@ target_compile_features(wolftests PRIVATE cxx_std_17)
 # Should be linked to the main library, as well as the Catch2 testing library
 target_link_libraries_system(wolftests PRIVATE
         wolf::runner
-        Catch2::Catch2WithMain)
+        Catch2::Catch2)
 
 ## Test assets
 configure_file(assets/config.v2.toml ${CMAKE_CURRENT_BINARY_DIR}/config.v2.toml COPYONLY)

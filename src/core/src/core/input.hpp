@@ -26,7 +26,7 @@ public:
  */
 class Mouse : public inputtino::Mouse, public VirtualDevice {
 public:
-  Mouse(const inputtino::Mouse &m) : inputtino::Mouse(m) {}
+  Mouse(inputtino::Mouse &&j) noexcept : inputtino::Mouse(std::move(j)) {}
 
   std::vector<std::map<std::string, std::string>> get_udev_events() const override;
   std::vector<std::pair<std::string, std::vector<std::string>>> get_udev_hw_db_entries() const override;
@@ -34,7 +34,7 @@ public:
 
 class Trackpad : public inputtino::Trackpad, public VirtualDevice {
 public:
-  Trackpad(const inputtino::Trackpad &t) : inputtino::Trackpad(t) {}
+  Trackpad(inputtino::Trackpad &&j) noexcept : inputtino::Trackpad(std::move(j)) {}
 
   std::vector<std::map<std::string, std::string>> get_udev_events() const override;
   std::vector<std::pair<std::string, std::vector<std::string>>> get_udev_hw_db_entries() const override;
@@ -42,7 +42,7 @@ public:
 
 class TouchScreen : public inputtino::TouchScreen, public VirtualDevice {
 public:
-  TouchScreen(const inputtino::TouchScreen &t) : inputtino::TouchScreen(t) {}
+  TouchScreen(inputtino::TouchScreen &&j) noexcept : inputtino::TouchScreen(std::move(j)) {}
 
   std::vector<std::map<std::string, std::string>> get_udev_events() const override;
   std::vector<std::pair<std::string, std::vector<std::string>>> get_udev_hw_db_entries() const override;
@@ -50,7 +50,7 @@ public:
 
 class PenTablet : public inputtino::PenTablet, public VirtualDevice {
 public:
-  PenTablet(const inputtino::PenTablet &t) : inputtino::PenTablet(t) {}
+  PenTablet(inputtino::PenTablet &&j) noexcept : inputtino::PenTablet(std::move(j)) {}
 
   std::vector<std::map<std::string, std::string>> get_udev_events() const override;
   std::vector<std::pair<std::string, std::vector<std::string>>> get_udev_hw_db_entries() const override;
@@ -58,17 +58,31 @@ public:
 
 class Keyboard : public inputtino::Keyboard, public VirtualDevice {
 public:
-  Keyboard(const inputtino::Keyboard &k) : inputtino::Keyboard(k) {}
+  Keyboard(inputtino::Keyboard &&j) noexcept : inputtino::Keyboard(std::move(j)) {}
 
   std::vector<std::map<std::string, std::string>> get_udev_events() const override;
   std::vector<std::pair<std::string, std::vector<std::string>>> get_udev_hw_db_entries() const override;
 };
 
-class Joypad : public inputtino::Joypad, public VirtualDevice {
-private:
-  std::shared_ptr<inputtino::Joypad> _j; // We have to keep a reference to the original ptr to avoid removing the thread
+class XboxOneJoypad : public inputtino::XboxOneJoypad, public VirtualDevice {
 public:
-  Joypad(std::shared_ptr<inputtino::Joypad> j) : _j(std::move(j)), inputtino::Joypad(*j) {}
+  XboxOneJoypad(inputtino::XboxOneJoypad &&j) noexcept : inputtino::XboxOneJoypad(std::move(j)) {}
+
+  std::vector<std::map<std::string, std::string>> get_udev_events() const override;
+  std::vector<std::pair<std::string, std::vector<std::string>>> get_udev_hw_db_entries() const override;
+};
+
+class SwitchJoypad : public inputtino::SwitchJoypad, public VirtualDevice {
+public:
+  SwitchJoypad(inputtino::SwitchJoypad &&j) noexcept : inputtino::SwitchJoypad(std::move(j)) {}
+
+  std::vector<std::map<std::string, std::string>> get_udev_events() const override;
+  std::vector<std::pair<std::string, std::vector<std::string>>> get_udev_hw_db_entries() const override;
+};
+
+class PS5Joypad : public inputtino::PS5Joypad, public VirtualDevice {
+public:
+  PS5Joypad(inputtino::PS5Joypad &&j) noexcept : inputtino::PS5Joypad(std::move(j)) {}
 
   std::vector<std::map<std::string, std::string>> get_udev_events() const override;
   std::vector<std::pair<std::string, std::vector<std::string>>> get_udev_hw_db_entries() const override;

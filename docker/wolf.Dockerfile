@@ -1,4 +1,4 @@
-ARG BASE_IMAGE=ghcr.io/games-on-whales/gstreamer:1.22.7
+ARG BASE_IMAGE=ghcr.io/games-on-whales/gstreamer:1.24.5
 ########################################################
 FROM $BASE_IMAGE AS wolf-builder
 
@@ -39,7 +39,7 @@ RUN <<_GST_WAYLAND_DISPLAY
     cd gst-wayland-display
     git checkout 6c7d8cb
     cargo install cargo-c
-    cargo cinstall -p c-bindings --prefix=/usr/local
+    cargo cinstall -p c-bindings --prefix=/usr/local --libdir=/usr/local/lib/
 _GST_WAYLAND_DISPLAY
 
 COPY . /wolf/
