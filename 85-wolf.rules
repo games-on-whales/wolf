@@ -1,5 +1,8 @@
-# Allows Wolf to acces /dev/uinput
+# Allows Wolf to access /dev/uinput
 KERNEL=="uinput", SUBSYSTEM=="misc", MODE="0660", GROUP="input", OPTIONS+="static_node=uinput"
+
+# Allows Wolf to access /dev/uhid
+KERNEL=="uhid", TAG+="uaccess"
 
 # Move virtual keyboard and mouse into a different seat
 SUBSYSTEMS=="input", ATTRS{id/vendor}=="ab00", MODE="0660", GROUP="input", ENV{ID_SEAT}="seat9"

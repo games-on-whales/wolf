@@ -22,6 +22,7 @@ name = "WolfFirefox"
 image = "ghcr.io/games-on-whales/firefox:edge"
 mounts = []
 env = [
+  "RUN_SWAY=1",
   "MOZ_ENABLE_WAYLAND=1",
   "GOW_REQUIRED_DEVICES=/dev/input/* /dev/dri/* /dev/nvidia*",
 ]
@@ -100,15 +101,16 @@ base_create_json = """
 """
 
 [[apps]]
-title = "EmulationStation DE"
+title = "Pegasus"
 start_virtual_compositor = true
 
 [apps.runner]
 type = "docker"
-name = "WolfES-DE"
-image = "ghcr.io/games-on-whales/es-de:edge"
+name = "WolfPegasus"
+image = "ghcr.io/games-on-whales/pegasus:edge"
 mounts = []
 env = [
+  "RUN_SWAY=1",
   "RUN_GAMESCOPE=true",
   "GOW_REQUIRED_DEVICES=/dev/input/event* /dev/dri/* /dev/nvidia*",
 ]
