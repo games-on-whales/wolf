@@ -112,7 +112,6 @@ image = "ghcr.io/games-on-whales/pegasus:edge"
 mounts = []
 env = [
   "RUN_SWAY=1",
-  "RUN_GAMESCOPE=true",
   "GOW_REQUIRED_DEVICES=/dev/input/event* /dev/dri/* /dev/nvidia*",
 ]
 devices = [
