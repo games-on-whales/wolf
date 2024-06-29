@@ -134,7 +134,8 @@ std::optional<AudioServer> setup_audio_server(const std::string &runtime_dir) {
                   }
             })");
     if (container && docker_api.start_by_id(container.value().id)) {
-      std::this_thread::sleep_for(1000ms); // TODO: configurable? Better way of knowing when ready?
+      auto ms = std::stoi(utils::get_env("WOLF_PULSE_CONTAINER_TIMEOUT_MS", "2000"));
+      std::this_thread::sleep_for(std::chrono::milliseconds(ms)); // TODO: Better way of knowing when ready?
       return {{.server = audio::connect(fmt::format("{}/pulse-socket", runtime_dir)), .container = container}};
     }
   }
