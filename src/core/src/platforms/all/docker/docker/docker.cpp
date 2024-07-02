@@ -1,9 +1,9 @@
 #include <core/docker.hpp>
-#include <helpers/utils.hpp>
 #include <curl/curl.h>
 #include <docker/formatters.hpp>
 #include <docker/json_formatters.hpp>
 #include <helpers/logger.hpp>
+#include <helpers/utils.hpp>
 #include <range/v3/view.hpp>
 #include <string_view>
 
