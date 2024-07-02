@@ -1,5 +1,4 @@
 #pragma once
-#include <boost/json/src.hpp>
 #include <boost/thread/thread.hpp>
 #include <chrono>
 #include <control/control.hpp>
@@ -194,9 +193,8 @@ void RunDocker::run(std::size_t session_id,
   auto final_json_opts = this->base_create_json;
   if (get_vendor(render_node) == NVIDIA && !utils::get_env("NVIDIA_DRIVER_VOLUME_NAME")) {
     logs::log(logs::info, "NVIDIA_DRIVER_VOLUME_NAME not set, assuming nvidia driver toolkit is installed..");
-    boost::json::error_code ec;
-    auto parsed_json = boost::json::parse({final_json_opts.data(), final_json_opts.size()}, ec).as_object();
-    if (!ec) {
+    {
+      auto parsed_json = utils::parse_json(final_json_opts).as_object();
       auto default_gpu_config = boost::json::array{                    // [
                                                    boost::json::object{// {
                                                                        {"Driver", "nvidia"},

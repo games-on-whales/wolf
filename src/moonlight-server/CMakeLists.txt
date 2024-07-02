@@ -65,20 +65,6 @@ else ()
 endif ()
 FetchContent_MakeAvailable(cpptrace)
 
-FetchContent_Declare(
-        boost_json
-        GIT_REPOSITORY https://github.com/boostorg/json.git
-        GIT_TAG "boost-1.75.0")
-
-FetchContent_GetProperties(boost_json)
-if (NOT boost_json_POPULATED)
-    FetchContent_Populate(boost_json)
-
-    add_library(boost_json INTERFACE)
-    target_include_directories(boost_json INTERFACE ${boost_json_SOURCE_DIR}/include)
-endif ()
-target_link_libraries_system(wolf_runner PRIVATE boost_json)
-
 ##############################
 
 find_package(Threads REQUIRED)
