@@ -15,7 +15,8 @@ void RunProcess::run(std::size_t session_id,
                      std::shared_ptr<state::devices_atom_queue> plugged_devices_queue,
                      const immer::array<std::string> &virtual_inputs,
                      const immer::array<std::pair<std::string, std::string>> &paths,
-                     const immer::map<std::string, std::string> &env_variables) {
+                     const immer::map<std::string, std::string> &env_variables,
+                     std::string_view render_node) {
   logs::log(logs::debug, "[PROCESS] Starting process: {}", this->run_cmd);
 
   std::future<std::string> std_out, err_out;

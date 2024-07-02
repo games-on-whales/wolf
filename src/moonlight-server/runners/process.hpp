@@ -23,7 +23,8 @@ public:
            std::shared_ptr<state::devices_atom_queue> plugged_devices_queue,
            const immer::array<std::string> &virtual_inputs,
            const immer::array<std::pair<std::string, std::string>> &paths,
-           const immer::map<std::string, std::string> &env_variables) override;
+           const immer::map<std::string, std::string> &env_variables,
+           std::string_view render_node) override;
 
   toml::value serialise() override {
     return {{"type", "process"}, {"run_cmd", this->run_cmd}};

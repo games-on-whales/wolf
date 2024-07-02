@@ -46,7 +46,8 @@ struct Runner {
                    std::shared_ptr<devices_atom_queue> plugged_devices_queue,
                    const immer::array<std::string> &virtual_inputs,
                    const immer::array<std::pair<std::string, std::string>> &paths,
-                   const immer::map<std::string, std::string> &env_variables) = 0;
+                   const immer::map<std::string, std::string> &env_variables,
+                   std::string_view render_node) = 0;
 
   virtual toml::value serialise() = 0;
 };
