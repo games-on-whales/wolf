@@ -32,7 +32,7 @@ FetchContent_Declare(
         boost_json
         GIT_REPOSITORY https://github.com/boostorg/json.git
         GIT_TAG "boost-1.75.0")
-
+set(BOOST_JSON_BUILD_TESTS OFF)
 FetchContent_MakeAvailable(boost_json)
 target_link_libraries(wolf_helpers INTERFACE Boost::json)
 
