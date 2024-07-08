@@ -211,7 +211,7 @@ mounts = [
 ]
 env = [
   "PROTON_LOG=1",
-  "RUN_GAMESCOPE=true",
+  "RUN_SWAY=true",
   "ENABLE_VKBASALT=1"
 ]
 devices = []

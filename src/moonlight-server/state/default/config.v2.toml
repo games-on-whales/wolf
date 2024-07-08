@@ -51,7 +51,7 @@ name = "WolfRetroarch"
 image = "ghcr.io/games-on-whales/retroarch:edge"
 mounts = []
 env = [
-  "RUN_GAMESCOPE=true",
+  "RUN_SWAY=true",
   "GOW_REQUIRED_DEVICES=/dev/input/* /dev/dri/* /dev/nvidia*",
 ]
 devices = [
@@ -80,7 +80,7 @@ image = "ghcr.io/games-on-whales/steam:edge"
 mounts = []
 env = [
   "PROTON_LOG=1",
-  "RUN_GAMESCOPE=true",
+  "RUN_SWAY=true",
   "GOW_REQUIRED_DEVICES=/dev/input/* /dev/dri/* /dev/nvidia*",
 ]
 devices = [
