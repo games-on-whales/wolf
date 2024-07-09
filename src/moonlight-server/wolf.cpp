@@ -288,35 +288,15 @@ auto setup_sessions_handlers(const immer::box<state::AppState> &app_state,
             full_env.set("INTEL_DEBUG", "norbc"); // see: https://github.com/games-on-whales/wolf/issues/50
           }
 
-          /* Initialise plugged device queue with mouse and keyboard */
-          plugged_devices_queue->update([=](const session_devices map) {
-            auto devices = immer::vector<immer::box<state::PlugDeviceEvent>>{
-                state::PlugDeviceEvent{.session_id = session->session_id,
-                                       .udev_events = session->mouse->get_udev_events(),
-                                       .udev_hw_db_entries = session->mouse->get_udev_hw_db_entries()},
-                state::PlugDeviceEvent{.session_id = session->session_id,
-                                       .udev_events = session->keyboard->get_udev_events(),
-                                       .udev_hw_db_entries = session->keyboard->get_udev_hw_db_entries()}};
-            /* Update (or create) the queue with the plugged mouse and keyboard */
-            if (auto session_devices_queue = map.find(session->session_id)) {
-              for (const auto device : devices) {
-                session_devices_queue->get()->push(device);
-              }
-              return map;
-            } else {
-              auto devices_q = std::make_shared<state::devices_atom_queue>();
-              for (const auto device : devices) {
-                devices_q->push(device);
-              }
-              return map.set(session->session_id, devices_q);
-            }
-          });
-          auto session_devices_queue = *plugged_devices_queue->load()->find(session->session_id);
+          /* Initialise plugged device queue */
+          auto devices_q = std::make_shared<state::devices_atom_queue>();
+          plugged_devices_queue->update(
+              [=](const session_devices map) { return map.set(session->session_id, devices_q); });
 
           /* Finally run the app, this will stop here until over */
           session->app->runner->run(session->session_id,
                                     session->app_state_folder,
-                                    session_devices_queue,
+                                    devices_q,
                                     all_devices.persistent(),
                                     mounted_paths.persistent(),
                                     full_env.persistent());
