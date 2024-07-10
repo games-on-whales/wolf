@@ -220,9 +220,11 @@ struct StreamSession {
   // virtual devices
   std::shared_ptr<input::Mouse> mouse;
   std::shared_ptr<input::Keyboard> keyboard;
-  std::shared_ptr<immer::atom<JoypadList>> joypads;
-  std::shared_ptr<input::PenTablet> pen_tablet = nullptr;     /* Optional, will be set on first use*/
-  std::shared_ptr<input::TouchScreen> touch_screen = nullptr; /* Optional, will be set on first use*/
+  std::shared_ptr<immer::atom<JoypadList>> joypads = std::make_shared<immer::atom<state::JoypadList>>();
+  std::shared_ptr<std::optional<input::PenTablet>> pen_tablet =
+      std::make_shared<std::optional<input::PenTablet>>(); /* Optional, will be set on first use */
+  std::shared_ptr<std::optional<input::TouchScreen>> touch_screen =
+      std::make_shared<std::optional<input::TouchScreen>>(); /* Optional, will be set on first use */
 };
 
 // TODO: unplug device event? Or should this be tied to the session?

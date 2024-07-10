@@ -315,8 +315,6 @@ void launch(const std::shared_ptr<typename SimpleWeb::Server<SimpleWeb::HTTPS>::
   } else {
     new_session.keyboard = std::make_shared<input::Keyboard>(std::move(*keyboard));
   }
-  // joypads will be created on-demand in the Control stream
-  new_session.joypads = std::make_shared<immer::atom<state::JoypadList>>();
   state->event_bus->fire_event(immer::box<state::StreamSession>(new_session));
   state->running_sessions->update(
       [&new_session](const immer::vector<state::StreamSession> &ses_v) { return ses_v.push_back(new_session); });

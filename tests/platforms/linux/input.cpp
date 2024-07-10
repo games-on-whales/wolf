@@ -50,28 +50,36 @@ TEST_CASE("uinput - keyboard", "[UINPUT]") {
 }
 
 TEST_CASE("uinput - pen tablet", "[UINPUT]") {
-  auto session = state::StreamSession{.pen_tablet = std::make_shared<PenTablet>(std::move(*PenTablet::create()))};
-  auto li = create_libinput_context(session.pen_tablet->get_nodes());
-  auto event = get_event(li);
-  REQUIRE(libinput_event_get_type(event.get()) == LIBINPUT_EVENT_DEVICE_ADDED);
-  REQUIRE(libinput_device_has_capability(libinput_event_get_device(event.get()), LIBINPUT_DEVICE_CAP_TABLET_TOOL));
-
+  auto session = state::StreamSession{.event_bus = std::make_shared<dp::event_bus>()};
   auto packet = pkts::PEN_PACKET{.event_type = pkts::TOUCH_EVENT_HOVER,
                                  .tool_type = pkts::TOOL_TYPE_PEN,
                                  .pen_buttons = pkts::PEN_BUTTON_TYPE_PRIMARY,
                                  .x = {0, 0, 0, 63},                    // 0.5 in float (little endian)
                                  .y = {0, 0, 0, 63},                    // 0.5 in float (little endian)
                                  .pressure_or_distance = {0, 0, 0, 63}, // 0.5 in float (little endian)
-                                 .rotation = 90,
-                                 .tilt = 45};
+                                 .rotation = 0,
+                                 .tilt = 0};
   packet.type = pkts::PEN;
 
+  control::handle_input(session, {}, &packet);
+
+  REQUIRE(session.pen_tablet->has_value()); // Should create a pen when a packet arrives
+  auto li = create_libinput_context(session.pen_tablet->value().get_nodes());
+  auto event = get_event(li);
+  REQUIRE(event);
+  REQUIRE(libinput_event_get_type(event.get()) == LIBINPUT_EVENT_DEVICE_ADDED);
+  REQUIRE(libinput_device_has_capability(libinput_event_get_device(event.get()), LIBINPUT_DEVICE_CAP_TABLET_TOOL));
+
+  // Changing something just so that libinput picks up the event
+  packet.rotation = 90;
+  packet.tilt = 45;
   control::handle_input(session, {}, &packet);
 
   float TARGET_W = 1920;
   float TARGET_H = 1080;
   {
     event = get_event(li);
+    REQUIRE(event);
     REQUIRE(libinput_event_get_type(event.get()) == LIBINPUT_EVENT_TABLET_TOOL_PROXIMITY);
     auto t_event = libinput_event_get_tablet_tool_event(event.get());
     REQUIRE(libinput_event_tablet_tool_get_proximity_state(t_event) == LIBINPUT_TABLET_TOOL_PROXIMITY_STATE_IN);
@@ -117,14 +125,10 @@ TEST_CASE("uinput - pen tablet", "[UINPUT]") {
 }
 
 TEST_CASE("uinput - touch screen", "[UINPUT]") {
-  auto session = state::StreamSession{.touch_screen = std::make_shared<TouchScreen>(std::move(*TouchScreen::create()))};
-  auto li = create_libinput_context(session.touch_screen->get_nodes());
-  auto event = get_event(li);
-  REQUIRE(libinput_event_get_type(event.get()) == LIBINPUT_EVENT_DEVICE_ADDED);
-  REQUIRE(libinput_device_has_capability(libinput_event_get_device(event.get()), LIBINPUT_DEVICE_CAP_TOUCH));
+  auto session = state::StreamSession{.event_bus = std::make_shared<dp::event_bus>()};
 
   auto packet = pkts::TOUCH_PACKET{
-      .event_type = pkts::TOUCH_EVENT_HOVER,
+      .event_type = pkts::TOUCH_EVENT_UP,
       .pointer_id = boost::endian::native_to_little(0),
       .x = {0, 0, 0, 63},                    // 0.5 in float (little endian)
       .y = {0, 0, 0, 63},                    // 0.5 in float (little endian)
@@ -132,6 +136,15 @@ TEST_CASE("uinput - touch screen", "[UINPUT]") {
   };
   packet.type = pkts::TOUCH;
 
+  control::handle_input(session, {}, &packet); // Should create a touch screen when a packet arrives
+  REQUIRE(session.touch_screen->has_value());
+
+  auto li = create_libinput_context(session.touch_screen->value().get_nodes());
+  auto event = get_event(li);
+  REQUIRE(libinput_event_get_type(event.get()) == LIBINPUT_EVENT_DEVICE_ADDED);
+  REQUIRE(libinput_device_has_capability(libinput_event_get_device(event.get()), LIBINPUT_DEVICE_CAP_TOUCH));
+
+  packet.event_type = pkts::TOUCH_EVENT_HOVER;
   control::handle_input(session, {}, &packet);
 
   float TARGET_W = 1920;
@@ -276,9 +289,8 @@ TEST_CASE("uinput - mouse", "[UINPUT]") {
 TEST_CASE("uinput - joypad", "[UINPUT]") {
   SECTION("OLD Moonlight: create joypad on first packet arrival") {
     state::App app = {.joypad_type = moonlight::control::pkts::CONTROLLER_TYPE::AUTO};
-    auto session = state::StreamSession{.event_bus = std::make_shared<dp::event_bus>(),
-                                        .app = std::make_shared<state::App>(app),
-                                        .joypads = std::make_shared<immer::atom<state::JoypadList>>()};
+    auto session =
+        state::StreamSession{.event_bus = std::make_shared<dp::event_bus>(), .app = std::make_shared<state::App>(app)};
     short controller_number = 1;
     auto c_pkt =
         pkts::CONTROLLER_MULTI_PACKET{.controller_number = controller_number, .button_flags = pkts::RIGHT_STICK};
@@ -293,9 +305,8 @@ TEST_CASE("uinput - joypad", "[UINPUT]") {
 
   SECTION("NEW Moonlight: create joypad with CONTROLLER_ARRIVAL") {
     state::App app = {.joypad_type = moonlight::control::pkts::CONTROLLER_TYPE::AUTO};
-    auto session = state::StreamSession{.event_bus = std::make_shared<dp::event_bus>(),
-                                        .app = std::make_shared<state::App>(app),
-                                        .joypads = std::make_shared<immer::atom<state::JoypadList>>()};
+    auto session =
+        state::StreamSession{.event_bus = std::make_shared<dp::event_bus>(), .app = std::make_shared<state::App>(app)};
     uint8_t controller_number = 1;
     auto c_pkt = pkts::CONTROLLER_ARRIVAL_PACKET{.controller_number = controller_number,
                                                  .controller_type = pkts::XBOX,
