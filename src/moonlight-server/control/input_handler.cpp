@@ -516,10 +516,27 @@ void controller_battery(const CONTROLLER_BATTERY_PACKET &pkt, state::StreamSessi
   if (auto joypad = joypads->find(pkt.controller_number)) {
     selected_pad = std::move(*joypad);
     if (std::holds_alternative<PS5Joypad>(*selected_pad)) {
-      // Battery values in Moonlight are in the range [0, 0xFF (255)]
-      // Inputtino expects them as a percentage [0, 100]
-      std::get<PS5Joypad>(*selected_pad)
-          .set_battery(inputtino::PS5Joypad::BATTERY_STATE(pkt.battery_state), pkt.battery_percentage / 2.55);
+      inputtino::PS5Joypad::BATTERY_STATE state;
+      switch (pkt.battery_state) {
+      case BATTERY_STATE_UNKNOWN:
+      case BATTERY_NOT_PRESENT:
+        return; // We can't set it, let's return
+      case BATTERY_DISCHARGHING:
+        state = inputtino::PS5Joypad::BATTERY_DISCHARGING;
+        break;
+      case BATTERY_CHARGING:
+        state = inputtino::PS5Joypad::BATTERY_CHARGHING;
+        break;
+      case BATTERY_NOT_CHARGING:
+        state = inputtino::PS5Joypad::CHARGHING_ERROR;
+        break;
+      case BATTERY_FULL:
+        state = inputtino::PS5Joypad::BATTERY_FULL;
+        break;
+      }
+      if (pkt.battery_percentage != BATTERY_PERCENTAGE_UNKNOWN) {
+        std::get<PS5Joypad>(*selected_pad).set_battery(state, pkt.battery_percentage);
+      }
     }
   }
 }
