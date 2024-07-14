@@ -40,7 +40,7 @@ unset(FPHSA_NAME_MISMATCHED)
 FetchContent_Declare(
         nanors
         GIT_REPOSITORY https://github.com/sleepybishop/nanors.git
-        GIT_TAG 395e5ada44dd8d5974eaf6bb6b17f23406e3ca72)
+        GIT_TAG 19f07b513e924e471cadd141943c1ec4adc8d0e0)
 FetchContent_GetProperties(nanors)
 if (NOT nanors_POPULATED)
     FetchContent_Populate(nanors)
@@ -53,6 +53,8 @@ if (NOT nanors_POPULATED)
             PRIVATE ${nanors_SOURCE_DIR}/rs.c
             PUBLIC ${nanors_SOURCE_DIR}/rs.h)
 
+    # TODO: There's a more advanced version of this with proper support for SSSE3,
+    # see: https://github.com/LizardByte/Sunshine/pull/2828
     set_source_files_properties(${nanors_SOURCE_DIR}/rs.c
             PROPERTIES COMPILE_FLAGS "-include deps/obl/autoshim.h -ftree-vectorize")
 
