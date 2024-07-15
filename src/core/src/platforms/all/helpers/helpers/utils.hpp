@@ -1,6 +1,7 @@
 #pragma once
 #include <algorithm>
 #include <boost/endian.hpp>
+#include <optional>
 #include <range/v3/view.hpp>
 #include <sstream>
 #include <stdlib.h>
@@ -109,6 +110,15 @@ map_to_string(const std::map<std::string, std::string> &m, char val_separator = 
   }
 
   return ss.str();
+}
+
+/**
+ * @brief: Since optional value_or is not lazy, this function allows to provide a lambda to calculate the value
+ */
+template <typename T, typename F> T lazy_value_or(const std::optional<T> &opt, F fn) {
+  if (opt)
+    return opt.value();
+  return fn();
 }
 
 } // namespace utils

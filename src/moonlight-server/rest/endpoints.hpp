@@ -72,7 +72,7 @@ void serverinfo(const std::shared_ptr<typename SimpleWeb::Server<T>::Response> &
                                    state::HTTP_PORT,
                                    cfg->uuid,
                                    cfg->hostname,
-                                   state->host->mac_address.value_or(get_mac_address(local_ip)),
+                                   utils::lazy_value_or(host->mac_address, [&]() { return get_mac_address(local_ip); }),
                                    local_ip,
                                    host->display_modes,
                                    is_https,
