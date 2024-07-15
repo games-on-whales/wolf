@@ -329,7 +329,7 @@ TEST_CASE("Commands", "[RTSP]") {
 
                        REQUIRE_THAT(response.value().options["Session"], Equals("DEADBEEFCAFE;timeout = 90"));
                        REQUIRE_THAT(response.value().options["Transport"],
-                                    Equals(fmt::format("server_port={}", state::AUDIO_PING_PORT)));
+                                    Equals(fmt::format("server_port={}", (int)state::AUDIO_PING_PORT)));
                      });
   }
 
@@ -349,7 +349,7 @@ TEST_CASE("Commands", "[RTSP]") {
 
                        REQUIRE_THAT(response.value().options["Session"], Equals("DEADBEEFCAFE;timeout = 90"));
                        REQUIRE_THAT(response.value().options["Transport"],
-                                    Equals(fmt::format("server_port={}", state::VIDEO_PING_PORT)));
+                                    Equals(fmt::format("server_port={}", (int)state::VIDEO_PING_PORT)));
                      });
   }
 
@@ -369,7 +369,7 @@ TEST_CASE("Commands", "[RTSP]") {
 
                        REQUIRE_THAT(response.value().options["Session"], Equals("DEADBEEFCAFE;timeout = 90"));
                        REQUIRE_THAT(response.value().options["Transport"],
-                                    Equals(fmt::format("server_port={}", state::CONTROL_PORT)));
+                                    Equals(fmt::format("server_port={}", (int)state::CONTROL_PORT)));
                      });
   }
 

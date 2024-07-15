@@ -19,7 +19,7 @@ target_link_libraries_system(wolf_helpers INTERFACE range-v3::range-v3)
 FetchContent_Declare(
         fmtlib
         GIT_REPOSITORY https://github.com/fmtlib/fmt.git
-        GIT_TAG 9.1.0)
+        GIT_TAG 11.0.1)
 FetchContent_MakeAvailable(fmtlib)
 target_link_libraries_system(wolf_helpers INTERFACE fmt::fmt-header-only)
 

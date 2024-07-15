@@ -11,7 +11,7 @@ namespace wolf::core::docker {
 using namespace ranges;
 namespace json = boost::json;
 
-enum METHOD {
+enum METHOD : int {
   GET,
   POST,
   DELETE
@@ -46,7 +46,7 @@ req(CURL *handle,
     std::string_view target,
     std::string_view post_body = {},
     const std::vector<std::string> &header_params = {}) {
-  logs::log(logs::trace, "[CURL] Sending [{}] -> {}", method, target);
+  logs::log(logs::trace, "[CURL] Sending [{}] -> {}", (int)method, target);
   curl_easy_setopt(handle, CURLOPT_URL, target.data());
 
   /* Set method */

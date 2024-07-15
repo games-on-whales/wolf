@@ -139,7 +139,7 @@ std::shared_ptr<state::JoypadTypes> create_new_joypad(const state::StreamSession
   }
 
   session.joypads->update([&](state::JoypadList joypads) {
-    logs::log(logs::debug, "[INPUT] Sending PlugDeviceEvent for joypad {} of type: {}", controller_number, type);
+    logs::log(logs::debug, "[INPUT] Sending PlugDeviceEvent for joypad {} of type: {}", controller_number, (int)type);
 
     state::PlugDeviceEvent unplug_ev{.session_id = session.session_id};
     std::visit(
@@ -327,7 +327,7 @@ void touch(const TOUCH_PACKET &pkt, state::StreamSession &session) {
       session.touch_screen->value().release_finger(finger_id);
       break;
     default:
-      logs::log(logs::warning, "[INPUT] Unknown touch event type {}", pkt.event_type);
+      logs::log(logs::warning, "[INPUT] Unknown touch event type {}", (int)pkt.event_type);
     }
   }
 }

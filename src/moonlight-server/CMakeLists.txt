@@ -9,7 +9,7 @@ add_library(wolf::runner ALIAS wolf_runner)
 FetchContent_Declare(
         fmtlib
         GIT_REPOSITORY https://github.com/fmtlib/fmt.git
-        GIT_TAG 9.1.0)
+        GIT_TAG 11.0.1)
 FetchContent_MakeAvailable(fmtlib) # Download and build
 target_link_libraries_system(wolf_runner PUBLIC fmt::fmt-header-only)
 

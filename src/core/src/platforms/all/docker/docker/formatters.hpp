@@ -58,7 +58,7 @@ public:
         container.id,
         container.name,
         container.image,
-        container.status,
+        (int)container.status,
         container.ports,
         container.mounts,
         container.devices,
