@@ -192,7 +192,13 @@ std::string get_ip_address(ifaddrs *ifa) {
 
 std::string get_mac_address(std::string_view local_ip) {
   ifaddrs *ifaddrptr = nullptr;
-  getifaddrs(&ifaddrptr);
+  if (getifaddrs(&ifaddrptr) == -1) {
+    logs::log(logs::warning,
+              "Unable to get ifaddrs: {} . You can override this by settings the env variables "
+              "WOLF_INTERNAL_MAC or WOLF_INTERNAL_IP",
+              strerror(errno));
+    return "00:00:00:00:00:00";
+  }
   std::unique_ptr<ifaddrs, decltype(&freeifaddrs)> ifAddrStruct = {ifaddrptr, ::freeifaddrs};
 
   // First: search for the interface name that has the same IP address
