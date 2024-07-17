@@ -37,15 +37,15 @@ static const std::map<short, short> key_mappings = {
     {KEY_DOT, 0xBE},       {KEY_SLASH, 0xBF},      {KEY_GRAVE, 0xC0},      {KEY_LEFTBRACE, 0xDB},
     {KEY_BACKSLASH, 0xDC}, {KEY_RIGHTBRACE, 0xDD}, {KEY_APOSTROPHE, 0xDE}, {KEY_102ND, 0xE2}};
 
-void paste_utf(std::shared_ptr<wolf::core::input::Keyboard> keyboard, const std::basic_string<char32_t> &utf32) {
+void paste_utf(wolf::core::input::Keyboard &keyboard, const std::basic_string<char32_t> &utf32) {
   /* To HEX string */
   auto hex_unicode = to_hex(utf32);
   logs::log(logs::debug, "[INPUT] Typing U+{}", hex_unicode);
 
-  keyboard->press(0xA2);   // LEFTCTRL
-  keyboard->press(0xA0);   // LEFTSHIFT
-  keyboard->press(0x55);   // U
-  keyboard->release(0x55); // U
+  keyboard.press(0xA2);   // LEFTCTRL
+  keyboard.press(0xA0);   // LEFTSHIFT
+  keyboard.press(0x55);   // U
+  keyboard.release(0x55); // U
 
   for (auto &ch : hex_unicode) {
     auto key_str = "KEY_"s + ch;
@@ -53,12 +53,12 @@ void paste_utf(std::shared_ptr<wolf::core::input::Keyboard> keyboard, const std:
     if (keycode == -1) {
       logs::log(logs::warning, "[INPUT] Unable to find keycode for: {}", ch);
     } else {
-      keyboard->press(key_mappings.at(keycode));
-      keyboard->release(key_mappings.at(keycode));
+      keyboard.press(key_mappings.at(keycode));
+      keyboard.release(key_mappings.at(keycode));
     }
   }
 
-  keyboard->release(0xA0); // LEFTSHIFT
-  keyboard->release(0xA2); // LEFTCTRL
+  keyboard.release(0xA0); // LEFTSHIFT
+  keyboard.release(0xA2); // LEFTCTRL
 }
 } // namespace wolf::platforms::input

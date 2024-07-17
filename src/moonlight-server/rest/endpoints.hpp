@@ -301,20 +301,6 @@ void launch(const std::shared_ptr<typename SimpleWeb::Server<SimpleWeb::HTTPS>::
   SimpleWeb::CaseInsensitiveMultimap headers = request->parse_query_string();
   auto app = state::get_app_by_id(state->config, get_header(headers, "appid").value());
   auto new_session = create_run_session(request, current_client, state->event_bus, app);
-  // virtual devices
-  auto mouse = input::Mouse::create();
-  if (!mouse) {
-    logs::log(logs::error, "Failed to create mouse: {}", mouse.getErrorMessage());
-  } else {
-    new_session.mouse = std::make_shared<input::Mouse>(std::move(*mouse));
-  }
-
-  auto keyboard = input::Keyboard::create();
-  if (!keyboard) {
-    logs::log(logs::error, "Failed to create keyboard: {}", keyboard.getErrorMessage());
-  } else {
-    new_session.keyboard = std::make_shared<input::Keyboard>(std::move(*keyboard));
-  }
   state->event_bus->fire_event(immer::box<state::StreamSession>(new_session));
   state->running_sessions->update(
       [&new_session](const immer::vector<state::StreamSession> &ses_v) { return ses_v.push_back(new_session); });
@@ -336,10 +322,14 @@ void resume(const std::shared_ptr<typename SimpleWeb::Server<SimpleWeb::HTTPS>::
   auto old_session = get_session_by_ip(state->running_sessions->load(), client_ip);
   if (old_session) {
     auto new_session = create_run_session(request, current_client, state->event_bus, *old_session->app);
+    // Carry over the old session display handle
+    new_session.wayland_display = std::move(old_session->wayland_display);
     // Carry over the old session devices, they'll be already plugged into the container
     new_session.mouse = std::move(old_session->mouse);
     new_session.keyboard = std::move(old_session->keyboard);
     new_session.joypads = std::move(old_session->joypads);
+    new_session.pen_tablet = std::move(old_session->pen_tablet);
+    new_session.touch_screen = std::move(old_session->touch_screen);
 
     start_rtp_ping(state);
 

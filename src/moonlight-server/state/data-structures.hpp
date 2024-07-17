@@ -185,6 +185,8 @@ struct PairCache {
   std::optional<std::string> client_hash;
 };
 
+using MouseTypes = std::variant<input::Mouse, virtual_display::WaylandMouse>;
+using KeyboardTypes = std::variant<input::Keyboard, virtual_display::WaylandKeyboard>;
 using JoypadTypes = std::variant<input::XboxOneJoypad, input::SwitchJoypad, input::PS5Joypad>;
 using JoypadList = immer::map<int /* controller number */, std::shared_ptr<JoypadTypes>>;
 
@@ -218,9 +220,11 @@ struct StreamSession {
       std::make_shared<immer::atom<virtual_display::wl_state_ptr>>();
 
   // virtual devices
-  std::shared_ptr<input::Mouse> mouse;
-  std::shared_ptr<input::Keyboard> keyboard;
+  std::shared_ptr<std::optional<MouseTypes>> mouse = std::make_shared<std::optional<MouseTypes>>();
+  std::shared_ptr<std::optional<KeyboardTypes>> keyboard = std::make_shared<std::optional<KeyboardTypes>>();
+
   std::shared_ptr<immer::atom<JoypadList>> joypads = std::make_shared<immer::atom<state::JoypadList>>();
+
   std::shared_ptr<std::optional<input::PenTablet>> pen_tablet =
       std::make_shared<std::optional<input::PenTablet>>(); /* Optional, will be set on first use */
   std::shared_ptr<std::optional<input::TouchScreen>> touch_screen =

@@ -213,81 +213,126 @@ static inline float deg2rad(float degree) {
 }
 
 void mouse_move_rel(const MOUSE_MOVE_REL_PACKET &pkt, state::StreamSession &session) {
-  short delta_x = boost::endian::big_to_native(pkt.delta_x);
-  short delta_y = boost::endian::big_to_native(pkt.delta_y);
-  session.mouse->move(delta_x, delta_y);
+  if (session.mouse->has_value()) {
+    short delta_x = boost::endian::big_to_native(pkt.delta_x);
+    short delta_y = boost::endian::big_to_native(pkt.delta_y);
+    std::visit([delta_x, delta_y](auto &mouse) { mouse.move(delta_x, delta_y); }, session.mouse->value());
+  } else {
+    logs::log(logs::warning, "Received MOUSE_MOVE_REL_PACKET but no mouse device is present");
+  }
 }
 
 void mouse_move_abs(const MOUSE_MOVE_ABS_PACKET &pkt, state::StreamSession &session) {
-  float x = boost::endian::big_to_native(pkt.x);
-  float y = boost::endian::big_to_native(pkt.y);
-  float width = boost::endian::big_to_native(pkt.width);
-  float height = boost::endian::big_to_native(pkt.height);
-  session.mouse->move_abs(x, y, width, height);
+  if (session.mouse->has_value()) {
+    float x = boost::endian::big_to_native(pkt.x);
+    float y = boost::endian::big_to_native(pkt.y);
+    float width = boost::endian::big_to_native(pkt.width);
+    float height = boost::endian::big_to_native(pkt.height);
+    std::visit([x, y, width, height](auto &mouse) { mouse.move_abs(x, y, width, height); }, session.mouse->value());
+  } else {
+    logs::log(logs::warning, "Received MOUSE_MOVE_ABS_PACKET but no mouse device is present");
+  }
 }
 
 void mouse_button(const MOUSE_BUTTON_PACKET &pkt, state::StreamSession &session) {
-  Mouse::MOUSE_BUTTON btn_type;
+  if (session.mouse->has_value()) {
+    if (std::holds_alternative<state::input::Mouse>(session.mouse->value())) {
+      Mouse::MOUSE_BUTTON btn_type;
 
-  switch (pkt.button) {
-  case 1:
-    btn_type = Mouse::LEFT;
-    break;
-  case 2:
-    btn_type = Mouse::MIDDLE;
-    break;
-  case 3:
-    btn_type = Mouse::RIGHT;
-    break;
-  case 4:
-    btn_type = Mouse::SIDE;
-    break;
-  default:
-    btn_type = Mouse::EXTRA;
-    break;
-  }
-  if (pkt.type == MOUSE_BUTTON_PRESS) {
-    session.mouse->press(btn_type);
+      switch (pkt.button) {
+      case 1:
+        btn_type = Mouse::LEFT;
+        break;
+      case 2:
+        btn_type = Mouse::MIDDLE;
+        break;
+      case 3:
+        btn_type = Mouse::RIGHT;
+        break;
+      case 4:
+        btn_type = Mouse::SIDE;
+        break;
+      default:
+        btn_type = Mouse::EXTRA;
+        break;
+      }
+      if (pkt.type == MOUSE_BUTTON_PRESS) {
+        std::get<state::input::Mouse>(session.mouse->value()).press(btn_type);
+      } else {
+        std::get<state::input::Mouse>(session.mouse->value()).release(btn_type);
+      }
+    } else if (std::holds_alternative<wolf::core::virtual_display::WaylandMouse>(session.mouse->value())) {
+      if (pkt.type == MOUSE_BUTTON_PRESS) {
+        std::get<wolf::core::virtual_display::WaylandMouse>(session.mouse->value()).press(pkt.button);
+      } else {
+        std::get<wolf::core::virtual_display::WaylandMouse>(session.mouse->value()).release(pkt.button);
+      }
+    }
   } else {
-    session.mouse->release(btn_type);
+    logs::log(logs::warning, "Received MOUSE_BUTTON_PACKET but no mouse device is present");
   }
 }
 
 void mouse_scroll(const MOUSE_SCROLL_PACKET &pkt, state::StreamSession &session) {
-  session.mouse->vertical_scroll(boost::endian::big_to_native(pkt.scroll_amt1));
+  if (session.mouse->has_value()) {
+    std::visit([scroll_amount = boost::endian::big_to_native(pkt.scroll_amt1)](
+                   auto &mouse) { mouse.vertical_scroll(scroll_amount); },
+               session.mouse->value());
+  } else {
+    logs::log(logs::warning, "Received MOUSE_SCROLL_PACKET but no mouse device is present");
+  }
 }
 
 void mouse_h_scroll(const MOUSE_HSCROLL_PACKET &pkt, state::StreamSession &session) {
-  session.mouse->horizontal_scroll(boost::endian::big_to_native(pkt.scroll_amount));
+  if (session.mouse->has_value()) {
+    std::visit([scroll_amount = boost::endian::big_to_native(pkt.scroll_amount)](
+                   auto &mouse) { mouse.horizontal_scroll(scroll_amount); },
+               session.mouse->value());
+  } else {
+    logs::log(logs::warning, "Received MOUSE_HSCROLL_PACKET but no mouse device is present");
+  }
 }
 
 void keyboard_key(const KEYBOARD_PACKET &pkt, state::StreamSession &session) {
   // moonlight always sets the high bit; not sure why but mask it off here
   short moonlight_key = (short)boost::endian::little_to_native(pkt.key_code) & (short)0x7fff;
-  if (pkt.type == KEY_PRESS) {
-    session.keyboard->press(moonlight_key);
+  if (session.keyboard->has_value()) {
+    if (pkt.type == KEY_PRESS) {
+      std::visit([moonlight_key](auto &keyboard) { keyboard.press(moonlight_key); }, session.keyboard->value());
+    } else {
+      std::visit([moonlight_key](auto &keyboard) { keyboard.release(moonlight_key); }, session.keyboard->value());
+    }
   } else {
-    session.keyboard->release(moonlight_key);
+    logs::log(logs::warning, "Received KEYBOARD_PACKET but no keyboard device is present");
   }
 }
 
 void utf8_text(const UTF8_TEXT_PACKET &pkt, state::StreamSession &session) {
-  /* Here we receive a single UTF-8 encoded char at a time,
-   * the trick is to convert it to UTF-32 then send CTRL+SHIFT+U+<HEXCODE> in order to produce any
-   * unicode character, see: https://en.wikipedia.org/wiki/Unicode_input
-   *
-   * ex:
-   * - when receiving UTF-8 [0xF0 0x9F 0x92 0xA9] (which is '💩')
-   * - we'll convert it to UTF-32 [0x1F4A9]
-   * - then type: CTRL+SHIFT+U+1F4A9
-   * see the conversion at: https://www.compart.com/en/unicode/U+1F4A9
-   */
-  auto size = boost::endian::big_to_native(pkt.data_size) - sizeof(pkt.packet_type) - 2;
-  /* Reading input text as UTF-8 */
-  auto utf8 = boost::locale::conv::to_utf<wchar_t>(pkt.text, pkt.text + size, "UTF-8");
-  /* Converting to UTF-32 */
-  auto utf32 = boost::locale::conv::utf_to_utf<char32_t>(utf8);
-  wolf::platforms::input::paste_utf(session.keyboard, utf32);
+  if (session.keyboard->has_value()) {
+    if (std::holds_alternative<state::input::Keyboard>(session.keyboard->value())) {
+      /* Here we receive a single UTF-8 encoded char at a time,
+       * the trick is to convert it to UTF-32 then send CTRL+SHIFT+U+<HEXCODE> in order to produce any
+       * unicode character, see: https://en.wikipedia.org/wiki/Unicode_input
+       *
+       * ex:
+       * - when receiving UTF-8 [0xF0 0x9F 0x92 0xA9] (which is '💩')
+       * - we'll convert it to UTF-32 [0x1F4A9]
+       * - then type: CTRL+SHIFT+U+1F4A9
+       * see the conversion at: https://www.compart.com/en/unicode/U+1F4A9
+       */
+      auto size = boost::endian::big_to_native(pkt.data_size) - sizeof(pkt.packet_type) - 2;
+      /* Reading input text as UTF-8 */
+      auto utf8 = boost::locale::conv::to_utf<wchar_t>(pkt.text, pkt.text + size, "UTF-8");
+      /* Converting to UTF-32 */
+      auto utf32 = boost::locale::conv::utf_to_utf<char32_t>(utf8);
+      wolf::platforms::input::paste_utf(std::get<state::input::Keyboard>(session.keyboard->value()), utf32);
+    } else {
+      // TODO: implement this in our custom comp
+      logs::log(logs::warning, "Direct paste of UTF-8 text is not supported yet");
+    }
+  } else {
+    logs::log(logs::warning, "Received UTF8_TEXT_PACKET but no keyboard device is present");
+  }
 }
 
 void touch(const TOUCH_PACKET &pkt, state::StreamSession &session) {

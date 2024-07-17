@@ -16,7 +16,7 @@ set(CORE_SRC "")
 find_package(PkgConfig)
 option(LINK_RUST_WAYLAND "Link to our custom Rust wayland compositor" ON)
 if (LINK_RUST_WAYLAND AND UNIX AND NOT APPLE)
-    pkg_check_modules(libgstwaylanddisplay REQUIRED IMPORTED_TARGET libgstwaylanddisplay)
+    pkg_check_modules(libgstwaylanddisplay REQUIRED IMPORTED_TARGET libgstwaylanddisplay>=0.3.0)
     target_link_libraries(wolf_core PUBLIC PkgConfig::libgstwaylanddisplay)
 endif ()
 

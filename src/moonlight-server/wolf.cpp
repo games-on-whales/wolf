@@ -231,13 +231,9 @@ auto setup_sessions_handlers(const immer::box<state::AppState> &app_state,
           if (session->app->start_virtual_compositor) {
             logs::log(logs::debug, "[STREAM_SESSION] Create wayland compositor");
 
-            auto mouse_nodes = session->mouse->get_nodes();
-            auto kb_nodes = session->keyboard->get_nodes();
-            auto input_nodes = immer::array_transient<std::string>();
-            std::copy(mouse_nodes.begin(), mouse_nodes.end(), std::back_inserter(input_nodes));
-            std::copy(kb_nodes.begin(), kb_nodes.end(), std::back_inserter(input_nodes));
+            // TODO: allow for old inputtino mouse and keyboard
 
-            auto wl_state = virtual_display::create_wayland_display(input_nodes.persistent(), render_node);
+            auto wl_state = virtual_display::create_wayland_display({}, render_node);
             virtual_display::set_resolution(
                 *wl_state,
                 {session->display_mode.width, session->display_mode.height, session->display_mode.refreshRate});
@@ -264,7 +260,33 @@ auto setup_sessions_handlers(const immer::box<state::AppState> &app_state,
 
             // Set the wayland display
             session->wayland_display->store(wl_state);
+
+            // Set virtual devices
+            session->mouse->emplace(virtual_display::WaylandMouse(wl_state));
+            session->keyboard->emplace(virtual_display::WaylandKeyboard(wl_state));
+
             wl_promise->set_value(std::move(wl_state));
+          } else {
+            // Create virtual devices
+            auto mouse = input::Mouse::create();
+            if (!mouse) {
+              logs::log(logs::error, "Failed to create mouse: {}", mouse.getErrorMessage());
+            } else {
+              for (auto &path : (*mouse).get_nodes()) {
+                all_devices.push_back(path);
+              }
+              session->mouse->emplace(std::move(*mouse));
+            }
+
+            auto keyboard = input::Keyboard::create();
+            if (!keyboard) {
+              logs::log(logs::error, "Failed to create keyboard: {}", keyboard.getErrorMessage());
+            } else {
+              for (auto &path : (*keyboard).get_nodes()) {
+                all_devices.push_back(path);
+              }
+              session->keyboard->emplace(std::move(*keyboard));
+            }
           }
 
           /* Adding custom state folder */

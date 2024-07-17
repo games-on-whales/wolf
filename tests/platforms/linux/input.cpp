@@ -22,8 +22,9 @@ using namespace std::string_literals;
 
 TEST_CASE("uinput - keyboard", "[UINPUT]") {
   libevdev_ptr keyboard_dev(libevdev_new(), ::libevdev_free);
-  auto session = state::StreamSession{.keyboard = std::make_shared<Keyboard>(std::move(*Keyboard::create()))};
-  link_devnode(keyboard_dev.get(), session.keyboard->get_nodes()[0]);
+  auto session = state::StreamSession{
+      .keyboard = std::make_shared<std::optional<state::KeyboardTypes>>(std::move(*Keyboard::create()))};
+  link_devnode(keyboard_dev.get(), std::get<state::input::Keyboard>(session.keyboard->value()).get_nodes()[0]);
 
   auto events = fetch_events_debug(keyboard_dev);
   REQUIRE(events.empty());
@@ -181,11 +182,11 @@ TEST_CASE("uinput - touch screen", "[UINPUT]") {
 TEST_CASE("uinput - mouse", "[UINPUT]") {
   libevdev_ptr mouse_rel_dev(libevdev_new(), ::libevdev_free);
   libevdev_ptr mouse_abs_dev(libevdev_new(), ::libevdev_free);
-  auto mouse = std::make_shared<Mouse>(std::move(*Mouse::create()));
+  auto mouse = std::make_shared<std::optional<state::MouseTypes>>(std::move(*Mouse::create()));
   auto session = state::StreamSession{.mouse = mouse};
 
-  link_devnode(mouse_rel_dev.get(), mouse->get_nodes()[0]);
-  link_devnode(mouse_abs_dev.get(), mouse->get_nodes()[1]);
+  link_devnode(mouse_rel_dev.get(), std::get<state::input::Mouse>(mouse->value()).get_nodes()[0]);
+  link_devnode(mouse_abs_dev.get(), std::get<state::input::Mouse>(mouse->value()).get_nodes()[1]);
 
   auto events = fetch_events_debug(mouse_rel_dev);
   REQUIRE(events.empty());
@@ -268,7 +269,7 @@ TEST_CASE("uinput - mouse", "[UINPUT]") {
   }
 
   SECTION("UDEV") {
-    auto udev_events = mouse->get_udev_events();
+    auto udev_events = std::get<state::input::Mouse>(mouse->value()).get_udev_events();
 
     REQUIRE(udev_events.size() == 2);
 
@@ -365,8 +366,9 @@ TEST_CASE("uinput - paste UTF8", "[UINPUT]") {
 
   SECTION("Paste UTF8") {
     libevdev_ptr keyboard_dev(libevdev_new(), ::libevdev_free);
-    auto session = state::StreamSession{.keyboard = std::make_shared<Keyboard>(std::move(*Keyboard::create()))};
-    link_devnode(keyboard_dev.get(), session.keyboard->get_nodes()[0]);
+    auto session = state::StreamSession{
+        .keyboard = std::make_shared<std::optional<state::KeyboardTypes>>(std::move(*Keyboard::create()))};
+    link_devnode(keyboard_dev.get(), std::get<state::input::Keyboard>(session.keyboard->value()).get_nodes()[0]);
 
     auto events = fetch_events_debug(keyboard_dev);
     REQUIRE(events.empty());
