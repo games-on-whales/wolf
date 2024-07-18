@@ -5,6 +5,7 @@
 #include <locale>
 #include <memory>
 #include <sstream>
+#include <state/data-structures.hpp>
 
 namespace wolf::platforms::input {
 /**
@@ -26,5 +27,5 @@ static std::string to_hex(const std::basic_string<char32_t> &str) {
   return hex_unicode;
 }
 
-void paste_utf(wolf::core::input::Keyboard &keyboard, const std::basic_string<char32_t> &utf32);
+void paste_utf(state::KeyboardTypes &keyboard, const std::basic_string<char32_t> &utf32);
 } // namespace wolf::platforms::input

@@ -1,3 +1,4 @@
+#include "core/virtual-display.hpp"
 #include "input.hpp"
 #include <helpers/logger.hpp>
 #include <libevdev/libevdev.h>
@@ -37,28 +38,33 @@ static const std::map<short, short> key_mappings = {
     {KEY_DOT, 0xBE},       {KEY_SLASH, 0xBF},      {KEY_GRAVE, 0xC0},      {KEY_LEFTBRACE, 0xDB},
     {KEY_BACKSLASH, 0xDC}, {KEY_RIGHTBRACE, 0xDD}, {KEY_APOSTROPHE, 0xDE}, {KEY_102ND, 0xE2}};
 
-void paste_utf(wolf::core::input::Keyboard &keyboard, const std::basic_string<char32_t> &utf32) {
+void paste_utf(state::KeyboardTypes &keyboard, const std::basic_string<char32_t> &utf32) {
   /* To HEX string */
   auto hex_unicode = to_hex(utf32);
   logs::log(logs::debug, "[INPUT] Typing U+{}", hex_unicode);
 
-  keyboard.press(0xA2);   // LEFTCTRL
-  keyboard.press(0xA0);   // LEFTSHIFT
-  keyboard.press(0x55);   // U
-  keyboard.release(0x55); // U
+  std::visit(
+      [hex_unicode](auto &kb) {
+        kb.press(0xA2);   // LEFTCTRL
+        kb.press(0xA0);   // LEFTSHIFT
+        kb.press(0x55);   // U
+        kb.release(0x55); // U
 
-  for (auto &ch : hex_unicode) {
-    auto key_str = "KEY_"s + ch;
-    auto keycode = libevdev_event_code_from_name(EV_KEY, key_str.c_str());
-    if (keycode == -1) {
-      logs::log(logs::warning, "[INPUT] Unable to find keycode for: {}", ch);
-    } else {
-      keyboard.press(key_mappings.at(keycode));
-      keyboard.release(key_mappings.at(keycode));
-    }
-  }
+        for (auto &ch : hex_unicode) {
+          auto key_str = "KEY_"s + ch;
+          auto keycode = libevdev_event_code_from_name(EV_KEY, key_str.c_str());
+          if (keycode == -1) {
+            logs::log(logs::warning, "[INPUT] Unable to find keycode for: {}", ch);
+          } else {
+            kb.press(key_mappings.at(keycode));
+            kb.release(key_mappings.at(keycode));
+          }
+        }
 
-  keyboard.release(0xA0); // LEFTSHIFT
-  keyboard.release(0xA2); // LEFTCTRL
+        kb.release(0xA0); // LEFTSHIFT
+        kb.release(0xA2); // LEFTCTRL
+      },
+      keyboard);
 }
+
 } // namespace wolf::platforms::input

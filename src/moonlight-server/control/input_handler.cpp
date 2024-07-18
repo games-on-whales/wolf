@@ -309,27 +309,22 @@ void keyboard_key(const KEYBOARD_PACKET &pkt, state::StreamSession &session) {
 
 void utf8_text(const UTF8_TEXT_PACKET &pkt, state::StreamSession &session) {
   if (session.keyboard->has_value()) {
-    if (std::holds_alternative<state::input::Keyboard>(session.keyboard->value())) {
-      /* Here we receive a single UTF-8 encoded char at a time,
-       * the trick is to convert it to UTF-32 then send CTRL+SHIFT+U+<HEXCODE> in order to produce any
-       * unicode character, see: https://en.wikipedia.org/wiki/Unicode_input
-       *
-       * ex:
-       * - when receiving UTF-8 [0xF0 0x9F 0x92 0xA9] (which is '💩')
-       * - we'll convert it to UTF-32 [0x1F4A9]
-       * - then type: CTRL+SHIFT+U+1F4A9
-       * see the conversion at: https://www.compart.com/en/unicode/U+1F4A9
-       */
-      auto size = boost::endian::big_to_native(pkt.data_size) - sizeof(pkt.packet_type) - 2;
-      /* Reading input text as UTF-8 */
-      auto utf8 = boost::locale::conv::to_utf<wchar_t>(pkt.text, pkt.text + size, "UTF-8");
-      /* Converting to UTF-32 */
-      auto utf32 = boost::locale::conv::utf_to_utf<char32_t>(utf8);
-      wolf::platforms::input::paste_utf(std::get<state::input::Keyboard>(session.keyboard->value()), utf32);
-    } else {
-      // TODO: implement this in our custom comp
-      logs::log(logs::warning, "Direct paste of UTF-8 text is not supported yet");
-    }
+    /* Here we receive a single UTF-8 encoded char at a time,
+     * the trick is to convert it to UTF-32 then send CTRL+SHIFT+U+<HEXCODE> in order to produce any
+     * unicode character, see: https://en.wikipedia.org/wiki/Unicode_input
+     *
+     * ex:
+     * - when receiving UTF-8 [0xF0 0x9F 0x92 0xA9] (which is '💩')
+     * - we'll convert it to UTF-32 [0x1F4A9]
+     * - then type: CTRL+SHIFT+U+1F4A9
+     * see the conversion at: https://www.compart.com/en/unicode/U+1F4A9
+     */
+    auto size = boost::endian::big_to_native(pkt.data_size) - sizeof(pkt.packet_type) - 2;
+    /* Reading input text as UTF-8 */
+    auto utf8 = boost::locale::conv::to_utf<wchar_t>(pkt.text, pkt.text + size, "UTF-8");
+    /* Converting to UTF-32 */
+    auto utf32 = boost::locale::conv::utf_to_utf<char32_t>(utf8);
+    wolf::platforms::input::paste_utf(session.keyboard->value(), utf32);
   } else {
     logs::log(logs::warning, "Received UTF8_TEXT_PACKET but no keyboard device is present");
   }
