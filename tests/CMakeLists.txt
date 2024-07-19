@@ -7,6 +7,8 @@ FetchContent_Declare(
 
 FetchContent_MakeAvailable(Catch2)
 
+project(wolftests CXX C)
+
 # Tests need to be added as executables first
 add_executable(wolftests main.cpp)
 
@@ -21,7 +23,30 @@ set(SRC_LIST
 if (UNIX AND NOT APPLE)
     option(TEST_RUST_WAYLAND "Enable custom wayland test" ON)
     if (TEST_RUST_WAYLAND)
-        list(APPEND SRC_LIST "platforms/linux/wayland-display.cpp")
+        find_package(PkgConfig)
+        pkg_check_modules(wayland-client REQUIRED IMPORTED_TARGET wayland-client)
+
+        # Add the wayland protocols
+        find_package(WaylandScanner REQUIRED QUIET)
+        pkg_check_modules(WAYLAND_PROTOCOLS REQUIRED wayland-protocols)
+        pkg_get_variable(WAYLAND_PROTOCOLS_PKGDATADIR wayland-protocols pkgdatadir)
+        # xdg-shell
+        ecm_add_wayland_client_protocol(wolftests
+                PROTOCOL ${WAYLAND_PROTOCOLS_PKGDATADIR}/stable/xdg-shell/xdg-shell.xml
+                BASENAME xdg-shell)
+        # relative-pointer
+        ecm_add_wayland_client_protocol(wolftests
+                PROTOCOL ${WAYLAND_PROTOCOLS_PKGDATADIR}/unstable/relative-pointer/relative-pointer-unstable-v1.xml
+                BASENAME relative-pointer)
+
+        # Add the generated headers and files
+        include_directories(${CMAKE_CURRENT_BINARY_DIR})
+
+        list(APPEND SRC_LIST
+                "platforms/linux/wayland-client.hpp"
+                "platforms/linux/wayland-display.cpp"
+        )
+        target_link_libraries(wolftests PRIVATE PkgConfig::wayland-client)
     endif ()
 
     option(TEST_NVIDIA "Enable Nvidia tests" ON)
@@ -46,7 +71,7 @@ if (UNIX AND NOT APPLE)
         endif ()
         list(APPEND SRC_LIST
                 "platforms/linux/libinput.h"
-                "platforms/linux/input.cpp")
+                "platforms/linux/inputtino.cpp")
     endif ()
 endif ()
 
