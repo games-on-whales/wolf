@@ -359,12 +359,6 @@ static const struct wl_pointer_listener wl_pointer_listener = {
           logs::log(logs::debug, "[MOUSE] Got mouse axis discrete event: axis={}, discrete={}", axis, discrete);
           auto queue = static_cast<TSQueue<MouseEvent> *>(data);
           queue->push({.type = MouseEventType::AXIS_DISCRETE});
-        },
-    .axis_value120 =
-        [](void *data, struct wl_pointer *wl_pointer, uint32_t axis, int32_t value120) {
-          logs::log(logs::debug, "[MOUSE] Got mouse axis value120 event: axis={}, value120={}", axis, value120);
-          auto queue = static_cast<TSQueue<MouseEvent> *>(data);
-          queue->push({.type = MouseEventType::AXIS_VALUE120});
         }};
 
 static const struct zwp_relative_pointer_v1_listener zwp_relative_pointer_v1_listener = {
