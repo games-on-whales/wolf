@@ -27,7 +27,7 @@ jobs:
               libboost-locale-dev libboost-thread-dev libboost-filesystem-dev libboost-log-dev libboost-stacktrace-dev \
               libssl-dev \
               libgstreamer1.0-dev libgstreamer-plugins-base1.0-dev \
-              libwayland-dev libwayland-server0 libinput-dev libxkbcommon-dev libgbm-dev \
+              libwayland-dev wayland-protocols libinput-dev libxkbcommon-dev libgbm-dev \
               libcurl4-openssl-dev \
               libpulse-dev \
               libevdev-dev \
