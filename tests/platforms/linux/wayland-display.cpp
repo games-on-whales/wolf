@@ -124,6 +124,32 @@ TEST_CASE("Wayland virtual inputs", "[WAYLAND]") {
     REQUIRE(!k_ev->pressed);
   }
 
+  { // Testing modifiers
+    auto press_SHIFT_A =
+        pkts::KEYBOARD_PACKET{.key_code = boost::endian::native_to_little((short)0x41), .modifiers = pkts::SHIFT};
+    press_SHIFT_A.type = pkts::KEY_PRESS;
+    control::handle_input(session, {}, &press_SHIFT_A);
+    wl_display_roundtrip(wd.get());
+
+    auto k_ev = kb_events_q->pop();
+    // Press SHIFT
+    REQUIRE(k_ev.has_value());
+    REQUIRE(k_ev->keycode == 42);
+    REQUIRE(k_ev->pressed);
+
+    // Press A
+    k_ev = kb_events_q->pop();
+    REQUIRE(k_ev.has_value());
+    REQUIRE(k_ev->keycode == 30);
+    REQUIRE(k_ev->pressed);
+
+    // Release SHIFT
+    k_ev = kb_events_q->pop();
+    REQUIRE(k_ev.has_value());
+    REQUIRE(k_ev->keycode == 42);
+    REQUIRE(!k_ev->pressed);
+  }
+
   // Mouse tests: scroll
   {
     short scroll_amt = 10;

@@ -298,7 +298,29 @@ void keyboard_key(const KEYBOARD_PACKET &pkt, state::StreamSession &session) {
   short moonlight_key = (short)boost::endian::little_to_native(pkt.key_code) & (short)0x7fff;
   if (session.keyboard->has_value()) {
     if (pkt.type == KEY_PRESS) {
+      // Press the virtual modifiers
+      if (pkt.modifiers & KEYBOARD_MODIFIERS::SHIFT && moonlight_key != M_SHIFT)
+        std::visit([](auto &keyboard) { keyboard.press(M_SHIFT); }, session.keyboard->value());
+      if (pkt.modifiers & KEYBOARD_MODIFIERS::CTRL && moonlight_key != M_CTRL)
+        std::visit([](auto &keyboard) { keyboard.press(M_CTRL); }, session.keyboard->value());
+      if (pkt.modifiers & KEYBOARD_MODIFIERS::ALT && moonlight_key != M_ALT)
+        std::visit([](auto &keyboard) { keyboard.press(M_ALT); }, session.keyboard->value());
+      if (pkt.modifiers & KEYBOARD_MODIFIERS::META && moonlight_key != M_META)
+        std::visit([](auto &keyboard) { keyboard.press(M_META); }, session.keyboard->value());
+
+      // Press the actual key
       std::visit([moonlight_key](auto &keyboard) { keyboard.press(moonlight_key); }, session.keyboard->value());
+
+      // Release the virtual modifiers
+      if (pkt.modifiers & KEYBOARD_MODIFIERS::SHIFT && moonlight_key != M_SHIFT)
+        std::visit([](auto &keyboard) { keyboard.release(M_SHIFT); }, session.keyboard->value());
+      if (pkt.modifiers & KEYBOARD_MODIFIERS::CTRL && moonlight_key != M_CTRL)
+        std::visit([](auto &keyboard) { keyboard.release(M_CTRL); }, session.keyboard->value());
+      if (pkt.modifiers & KEYBOARD_MODIFIERS::ALT && moonlight_key != M_ALT)
+        std::visit([](auto &keyboard) { keyboard.release(M_ALT); }, session.keyboard->value());
+      if (pkt.modifiers & KEYBOARD_MODIFIERS::META && moonlight_key != M_META)
+        std::visit([](auto &keyboard) { keyboard.release(M_META); }, session.keyboard->value());
+
     } else {
       std::visit([moonlight_key](auto &keyboard) { keyboard.release(moonlight_key); }, session.keyboard->value());
     }

@@ -98,6 +98,21 @@ enum CONTROLLER_BTN : unsigned int {
   Y = 0x8000
 };
 
+enum KEYBOARD_MODIFIERS : char {
+  NONE = 0x00,
+  SHIFT = 0x01,
+  CTRL = 0x02,
+  ALT = 0x04,
+  META = 0x08
+};
+
+enum MOONLIGHT_MODIFIERS : short {
+  M_SHIFT = 0x10,
+  M_CTRL = 0x11,
+  M_ALT = 0xA4,
+  M_META = 0x5B
+};
+
 // make sure these structs are allocated in 1-byte blocks so the data aligns
 // right
 #pragma pack(push, 1)
@@ -141,7 +156,7 @@ struct MOUSE_HSCROLL_PACKET : INPUT_PKT {
 struct KEYBOARD_PACKET : INPUT_PKT {
   unsigned char flags;
   short key_code;
-  unsigned char modifiers;
+  char modifiers;
   short zero1;
 };
 
