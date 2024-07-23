@@ -147,7 +147,7 @@ TEST_CASE("Wayland virtual inputs", "[WAYLAND]") {
     k_ev = kb_events_q->pop();
     REQUIRE(k_ev.has_value());
     REQUIRE(k_ev->keycode == 42);
-    //    REQUIRE(!k_ev->pressed);
+    REQUIRE(!k_ev->pressed);
   }
 
   // Mouse tests: scroll
@@ -156,7 +156,7 @@ TEST_CASE("Wayland virtual inputs", "[WAYLAND]") {
     auto scroll_packet = pkts::MOUSE_SCROLL_PACKET{.scroll_amt1 = boost::endian::native_to_big(scroll_amt)};
     scroll_packet.type = pkts::MOUSE_SCROLL;
     control::handle_input(session, {}, &scroll_packet);
-    wl_display_roundtrip(wd.get());
+    //    wl_display_roundtrip(wd.get());
 
     // TODO: seems that I don't get those events
     //       > interface 'wl_pointer' has no event 10
