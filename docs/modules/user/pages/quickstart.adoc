@@ -35,7 +35,7 @@ Docker compose:
 
 [source,yaml]
 ....
-version: "3.8"
+version: "3"
 services:
   wolf:
     image: ghcr.io/games-on-whales/wolf:stable
@@ -59,14 +59,86 @@ services:
 ....
 
 --
-Nvidia::
+Nvidia (Container Toolkit)::
 +
 --
 
-Unfortunately, on Nvidia, things are a little bit more complex:
+[WARNING]
+====
+Make sure that the version of the Nvidia container toolkit is `>= 1.16.0` and that your driver version is `>= 530.30.02` (you can check the driver version with `nvidia-smi`).
 
-* Your driver version must be `>= 530.30.02`
-* `--gpus` and the Nvidia Docker Toolkit seems to not work (to be investigated)
+[source,bash]
+....
+sudo nvidia-container-cli -V
+cli-version: 1.16.0
+lib-version: 1.16.0
+build date: 2024-07-15T13:41+00:00
+....
+====
+
+Docker CLI:
+
+[source,bash]
+....
+docker run \
+    --name wolf \
+    --network=host \
+    -e XDG_RUNTIME_DIR=/tmp/sockets \
+    -v /tmp/sockets:/tmp/sockets:rw \
+    -e HOST_APPS_STATE_FOLDER=/etc/wolf \
+    -v /etc/wolf:/etc/wolf:rw \
+    -v /var/run/docker.sock:/var/run/docker.sock:rw \
+    --gpus=all \
+    --device /dev/dri/ \
+    --device /dev/uinput \
+    --device /dev/uhid \
+    -v /dev/:/dev/:rw \
+    -v /run/udev:/run/udev:rw \
+    --device-cgroup-rule "c 13:* rmw" \
+    ghcr.io/games-on-whales/wolf:stable
+....
+
+Docker compose:
+
+[source,yaml]
+....
+version: "3"
+services:
+  wolf:
+    image: ghcr.io/games-on-whales/wolf:stable
+    environment:
+      - XDG_RUNTIME_DIR=/tmp/sockets
+      - HOST_APPS_STATE_FOLDER=/etc/wolf
+    volumes:
+      - /etc/wolf/:/etc/wolf
+      - /tmp/sockets:/tmp/sockets:rw
+      - /var/run/docker.sock:/var/run/docker.sock:rw
+      - /dev/:/dev/:rw
+      - /run/udev:/run/udev:rw
+    device_cgroup_rules:
+      - 'c 13:* rmw'
+    devices:
+      - /dev/dri
+      - /dev/uinput
+      - /dev/uhid
+    runtime: nvidia
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - capabilities: [gpu]
+    network_mode: host
+    restart: unless-stopped
+....
+
+--
+Nvidia (Manual)::
++
+--
+
+Unfortunately, on Nvidia, things are a little bit more complex..
+
+Make sure that your driver version is `>= 530.30.02`
 
 First, let's build an additional docker image that will contain the Nvidia driver files:
 
@@ -153,7 +225,7 @@ Docker compose:
 
 [source,yaml]
 ....
-version: "3.8"
+version: "3"
 services:
   wolf:
     image: ghcr.io/games-on-whales/wolf:stable
@@ -234,7 +306,38 @@ fi
 ====
 
 --
+WSL2::
++
+--
 
+[WARNING,caption=EXPERIMENTAL"]
+====
+Running Wolf in WSL2 hasn't been properly tested.
+====
+
+You can run Wolf in a very unprivileged setting without `uinput/uhid`, unfortunately this means that you'll be restricted to *only using mouse and keyboard*.
+
+[WARNING]
+====
+For Nvidia users, follow the Nvidia instructions above.
+This should work for AMD/Intel users.
+====
+
+[source,bash]
+....
+docker run \
+    --name wolf \
+    --network=host \
+    -e XDG_RUNTIME_DIR=/tmp/sockets \
+    -v /tmp/sockets:/tmp/sockets:rw \
+    -e HOST_APPS_STATE_FOLDER=/etc/wolf \
+    -v /etc/wolf:/etc/wolf:rw \
+    -v /var/run/docker.sock:/var/run/docker.sock:rw \
+    --device /dev/dri/ \
+    ghcr.io/games-on-whales/wolf:stable
+....
+
+--
 ======
 
 .Which ports are used by Wolf?

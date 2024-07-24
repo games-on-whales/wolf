@@ -90,6 +90,21 @@ These 3 variables are defined as follows:
 Can be changed in the `config.toml` file
 * `app_title`: the title of the app as defined in the `config.toml` file
 
+=== Share home folder with multiple clients
+
+By default, Wolf will create a new home folder for each client, but if you want to share the same home folder with multiple clients, you can set the `app_state_folder` to the same value for each paired client; example: +
+
+[source,toml]
+....
+[[paired_clients]]
+app_state_folder = "common"               # <-- !!!
+
+[[paired_clients]]
+app_state_folder = "common"               # <-- !!!
+....
+
+This way, when running any app from those two clients, they will share the same home folder by mounting `${HOST_APPS_STATE_FOLDER}/common/${app_title}` as `/home/retro` in the docker container.
+
 === Change the `HOST_APPS_STATE_FOLDER`
 
 Changing this folder via ENV variable is not enough; Wolf expects to be able to access files under this folder, so you need to make sure that the new folder is created and mounted in the Wolf container. +
@@ -315,3 +330,27 @@ image = "ghcr.io/games-on-whales/steam:edge"
 # More options here, removed for brevity...
 render_node = "/dev/dri/renderD129"
 ....
+
+== Directly launch a Steam game
+
+In order to directly launch a Steam game from Moonlight you can just copy the existing `[[apps]]` entry for Steam, change the name and just add the Steam app ID as env variable; example:
+
+[source,toml]
+....
+[[apps]]
+title = "Elden Ring"
+start_virtual_compositor = true
+
+[apps.runner]
+env = [
+  "PROTON_LOG=1",
+  "RUN_SWAY=true",
+  "GOW_REQUIRED_DEVICES=/dev/input/* /dev/dri/* /dev/nvidia*",
+  "STEAM_STARTUP_FLAGS=steam://rungameid/1245620"
+]
+# COPY EVERYTHING ELSE ...
+....
+
+You can get the app ID from https://steamdb.info/[]
+
+(Thanks to @nathanle1406 for the tip)
