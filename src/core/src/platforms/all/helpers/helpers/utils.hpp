@@ -1,9 +1,9 @@
 #pragma once
 #include <algorithm>
 #include <boost/endian.hpp>
-#include <optional>
 #include <boost/json.hpp>
 #include <helpers/logger.hpp>
+#include <optional>
 #include <range/v3/view.hpp>
 #include <sstream>
 #include <stdlib.h>
