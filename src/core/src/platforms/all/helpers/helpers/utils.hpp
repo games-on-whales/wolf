@@ -2,6 +2,8 @@
 #include <algorithm>
 #include <boost/endian.hpp>
 #include <optional>
+#include <boost/json.hpp>
+#include <helpers/logger.hpp>
 #include <range/v3/view.hpp>
 #include <sstream>
 #include <stdlib.h>
@@ -119,6 +121,18 @@ template <typename T, typename F> T lazy_value_or(const std::optional<T> &opt, F
   if (opt)
     return opt.value();
   return fn();
+}
+
+namespace json = boost::json;
+inline json::value parse_json(std::string_view json) {
+  json::error_code ec;
+  auto parsed = json::parse({json.data(), json.size()}, ec);
+  if (!ec) {
+    return parsed;
+  } else {
+    logs::log(logs::error, "Error while parsing JSON: {} \n {}", ec.message(), json);
+    return json::object(); // Returning an empty object should allow us to continue most of the times
+  }
 }
 
 } // namespace utils

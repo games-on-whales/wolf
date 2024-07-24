@@ -11,20 +11,6 @@ target_sources(wolf_docker
         docker/json_formatters.hpp
         docker/docker.cpp)
 
-FetchContent_Declare(
-        boost_json
-        GIT_REPOSITORY https://github.com/boostorg/json.git
-        GIT_TAG "boost-1.75.0")
-
-FetchContent_GetProperties(boost_json)
-if (NOT boost_json_POPULATED)
-    FetchContent_Populate(boost_json)
-
-    add_library(boost_json INTERFACE)
-    target_include_directories(boost_json INTERFACE ${boost_json_SOURCE_DIR}/include)
-    target_link_libraries_system(wolf_docker PRIVATE boost_json)
-endif ()
-
 find_package(CURL) # REQUIRED UnixSockets removed because it doesn't work in Github Actions
 target_link_libraries_system(wolf_docker
         PRIVATE

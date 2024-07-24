@@ -94,7 +94,8 @@ public:
            std::shared_ptr<state::devices_atom_queue> plugged_devices_queue,
            const immer::array<std::string> &virtual_inputs,
            const immer::array<std::pair<std::string, std::string>> &paths,
-           const immer::map<std::string, std::string> &env_variables) override;
+           const immer::map<std::string, std::string> &env_variables,
+           std::string_view render_node) override;
 
   toml::value serialise() override {
     return {{"type", "docker"},
@@ -140,7 +141,8 @@ void RunDocker::run(std::size_t session_id,
                     std::shared_ptr<state::devices_atom_queue> plugged_devices_queue,
                     const immer::array<std::string> &virtual_inputs,
                     const immer::array<std::pair<std::string, std::string>> &paths,
-                    const immer::map<std::string, std::string> &env_variables) {
+                    const immer::map<std::string, std::string> &env_variables,
+                    std::string_view render_node) {
 
   std::vector<std::string> full_env;
   full_env.insert(full_env.end(), this->container.env.begin(), this->container.env.end());
@@ -186,6 +188,52 @@ void RunDocker::run(std::size_t session_id,
               "[DOCKER] Unable to use fake-udev, check the env variable WOLF_DOCKER_FAKE_UDEV_PATH and the file at {}",
               fake_udev_cli_path);
   }
+
+  // Add equivalent of --gpu=all if on NVIDIA without the custom driver volume
+  auto final_json_opts = this->base_create_json;
+  if (get_vendor(render_node) == NVIDIA && !utils::get_env("NVIDIA_DRIVER_VOLUME_NAME")) {
+    logs::log(logs::info, "NVIDIA_DRIVER_VOLUME_NAME not set, assuming nvidia driver toolkit is installed..");
+    {
+      auto parsed_json = utils::parse_json(final_json_opts).as_object();
+      auto default_gpu_config = boost::json::array{                    // [
+                                                   boost::json::object{// {
+                                                                       {"Driver", "nvidia"},
+                                                                       {"DeviceIDs", {"all"}},
+                                                                       {"Capabilities", boost::json::array{{"gpu"}}}}};
+      if (auto host_config_ptr = parsed_json.if_contains("HostConfig")) {
+        auto host_config = host_config_ptr->as_object();
+        if (host_config.find("DeviceRequests") == host_config.end()) {
+          host_config["DeviceRequests"] = default_gpu_config;
+          parsed_json["HostConfig"] = host_config;
+          final_json_opts = boost::json::serialize(parsed_json);
+        } else {
+          logs::log(logs::debug, "DeviceRequests manually set in base_create_json, skipping..");
+        }
+      } else {
+        logs::log(logs::warning, "HostConfig not found in base_create_json.");
+        parsed_json["HostConfig"] = boost::json::object{{"DeviceRequests", default_gpu_config}};
+        final_json_opts = boost::json::serialize(parsed_json);
+      }
+    }
+
+    // Setup -e NVIDIA_VISIBLE_DEVICES=all  -e NVIDIA_DRIVER_CAPABILITIES=all if not present
+    {
+      auto nvd_env = std::find_if(full_env.begin(), full_env.end(), [](const std::string &env) {
+        return env.find("NVIDIA_VISIBLE_DEVICES") != std::string::npos;
+      });
+      if (nvd_env == full_env.end()) {
+        full_env.push_back("NVIDIA_VISIBLE_DEVICES=all");
+      }
+
+      auto nvd_caps_env = std::find_if(full_env.begin(), full_env.end(), [](const std::string &env) {
+        return env.find("NVIDIA_DRIVER_CAPABILITIES") != std::string::npos;
+      });
+      if (nvd_caps_env == full_env.end()) {
+        full_env.push_back("NVIDIA_DRIVER_CAPABILITIES=all");
+      }
+    }
+  }
+
   Container new_container = {.id = "",
                              .name = fmt::format("{}_{}", this->container.name, session_id),
                              .image = this->container.image,
@@ -195,7 +243,7 @@ void RunDocker::run(std::size_t session_id,
                              .devices = devices,
                              .env = full_env};
 
-  if (auto docker_container = docker_api.create(new_container, this->base_create_json)) {
+  if (auto docker_container = docker_api.create(new_container, final_json_opts)) {
     auto container_id = docker_container->id;
     docker_api.start_by_id(container_id);
 

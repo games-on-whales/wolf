@@ -292,21 +292,17 @@ auto setup_sessions_handlers(const immer::box<state::AppState> &app_state,
           /* Adding custom state folder */
           mounted_paths.push_back({session->app_state_folder, "/home/retro"});
 
-          /* Additional GPU devices */
+          /* GPU specific adjustments */
           auto additional_devices = linked_devices(render_node);
           std::copy(additional_devices.begin(), additional_devices.end(), std::back_inserter(all_devices));
 
-          /* nvidia needs some extra paths */
-          if (get_vendor(render_node) == NVIDIA) {
+          auto gpu_vendor = get_vendor(render_node);
+          if (gpu_vendor == NVIDIA) {
             if (auto driver_volume = utils::get_env("NVIDIA_DRIVER_VOLUME_NAME")) {
               logs::log(logs::info, "Mounting nvidia driver {}:/usr/nvidia", driver_volume);
               mounted_paths.push_back({driver_volume, "/usr/nvidia"});
-            } else {
-              logs::log(logs::info, "NVIDIA_DRIVER_VOLUME_NAME not set, assuming nvidia driver toolkit is installed..");
             }
-          }
-
-          if (get_vendor(render_node) == INTEL) {
+          } else if (gpu_vendor == INTEL) {
             full_env.set("INTEL_DEBUG", "norbc"); // see: https://github.com/games-on-whales/wolf/issues/50
           }
 
@@ -321,7 +317,8 @@ auto setup_sessions_handlers(const immer::box<state::AppState> &app_state,
                                     devices_q,
                                     all_devices.persistent(),
                                     mounted_paths.persistent(),
-                                    full_env.persistent());
+                                    full_env.persistent(),
+                                    render_node);
 
           /* App exited, cleanup */
           logs::log(logs::debug, "[STREAM_SESSION] Remove virtual audio sink");

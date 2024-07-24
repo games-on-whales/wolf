@@ -1,14 +1,15 @@
-#include <boost/json/src.hpp>
 #include <core/docker.hpp>
 #include <curl/curl.h>
 #include <docker/formatters.hpp>
 #include <docker/json_formatters.hpp>
 #include <helpers/logger.hpp>
+#include <helpers/utils.hpp>
 #include <range/v3/view.hpp>
 #include <string_view>
 
 namespace wolf::core::docker {
 using namespace ranges;
+using namespace utils;
 namespace json = boost::json;
 
 enum METHOD : int {
@@ -104,23 +105,12 @@ req(CURL *handle,
   }
 }
 
-json::value parse(std::string_view json) {
-  json::error_code ec;
-  auto parsed = json::parse({json.data(), json.size()}, ec);
-  if (!ec) {
-    return parsed;
-  } else {
-    logs::log(logs::error, "Error while parsing JSON: {} \n {}", ec.message(), json);
-    return json::object(); // Returning an empty object should allow us to continue most of the times
-  }
-}
-
 std::optional<Container> DockerAPI::get_by_id(std::string_view id) const {
   if (auto conn = docker_connect(socket_path)) {
     auto url = fmt::format("http://localhost/{}/containers/{}/json", DOCKER_API_VERSION, id);
     auto raw_msg = req(conn.value().get(), GET, url);
     if (raw_msg && raw_msg->first == 200) {
-      auto json = parse(raw_msg->second);
+      auto json = parse_json(raw_msg->second);
       return json::value_to<Container>(json);
     } else if (raw_msg) {
       logs::log(logs::warning, "[CURL] error {} - {}", raw_msg->first, raw_msg->second);
@@ -135,7 +125,7 @@ std::vector<Container> DockerAPI::get_containers(bool all) const {
     auto url = fmt::format("http://localhost/{}/containers/json{}", DOCKER_API_VERSION, all ? "?all=true" : "");
     auto raw_msg = req(conn.value().get(), GET, url);
     if (raw_msg && raw_msg->first == 200) {
-      auto json = parse(raw_msg->second);
+      auto json = parse_json(raw_msg->second);
       auto containers = json::value_to<std::vector<json::value>>(json);
       return containers                                                            //
              | ranges::views::transform([this](const json::value &container) {     //
@@ -173,7 +163,7 @@ std::optional<Container> DockerAPI::create(const Container &container,
       exposed_ports[fmt::format("{}/{}", port.public_port, port.type == docker::TCP ? "tcp" : "udp")] = json::object();
     }
 
-    auto post_params = parse(custom_params).as_object();
+    auto post_params = parse_json(custom_params).as_object();
     post_params["Image"] = container.image;
     merge_array(&post_params, "Env", json::value_from(container.env).as_array());
 
@@ -190,7 +180,7 @@ std::optional<Container> DockerAPI::create(const Container &container,
     auto json_payload = json::serialize(post_params);
     auto raw_msg = req(conn.value().get(), POST, url, json_payload);
     if (raw_msg && raw_msg->first == 201) {
-      auto json = parse(raw_msg->second);
+      auto json = parse_json(raw_msg->second);
       auto created_id = json.at("Id").as_string();
       return get_by_id(std::string_view{created_id.data(), created_id.size()});
     } else if (raw_msg && raw_msg->first == 404) { // 404 returned when the image is not present
@@ -335,7 +325,7 @@ bool DockerAPI::exec(std::string_view id, const std::vector<std::string_view> &c
     auto raw_msg = req(conn.value().get(), POST, api_url, json_payload);
     if (raw_msg && raw_msg->first == 201) {
       // Exec request created, start it
-      auto json = parse(raw_msg->second);
+      auto json = parse_json(raw_msg->second);
       std::string exec_id = json.at("Id").as_string().data();
       api_url = fmt::format("http://localhost/{}/exec/{}/start", DOCKER_API_VERSION, exec_id);
       post_params = json::object{{"Detach", false}, {"Tty", false}};
@@ -347,7 +337,7 @@ bool DockerAPI::exec(std::string_view id, const std::vector<std::string_view> &c
         api_url = fmt::format("http://localhost/{}/exec/{}/json", DOCKER_API_VERSION, exec_id);
         raw_msg = req(conn.value().get(), GET, api_url);
         if (raw_msg && raw_msg->first == 200) {
-          json = parse(raw_msg->second);
+          json = parse_json(raw_msg->second);
           auto exit_code = json.at("ExitCode").as_int64();
           if (exit_code != 0) {
             logs::log(logs::warning, "Docker exec failed ({}), {}", exit_code, console);
