@@ -497,21 +497,26 @@ void controller_multi(const CONTROLLER_MULTI_PACKET &pkt,
 
       // Remove the joypad, this will delete the last reference
       session.joypads->update([&](state::JoypadList joypads) { return joypads.erase(pkt.controller_number); });
+      return;
     }
   } else {
     // Old Moonlight doesn't support CONTROLLER_ARRIVAL, we create a default pad when it's first mentioned
     selected_pad = create_new_joypad(session, connected_clients, pkt.controller_number, XBOX, ANALOG_TRIGGERS | RUMBLE);
   }
-  std::visit(
-      [pkt](inputtino::Joypad &pad) {
-        std::uint16_t bf = pkt.button_flags;
-        std::uint32_t bf2 = pkt.buttonFlags2;
-        pad.set_pressed_buttons(bf | (bf2 << 16));
-        pad.set_stick(inputtino::Joypad::LS, pkt.left_stick_x, pkt.left_stick_y);
-        pad.set_stick(inputtino::Joypad::RS, pkt.right_stick_x, pkt.right_stick_y);
-        pad.set_triggers(pkt.left_trigger, pkt.right_trigger);
-      },
-      *selected_pad);
+
+  // Update the joypad state
+  if (selected_pad) {
+    std::visit(
+        [pkt](inputtino::Joypad &pad) {
+          std::uint16_t bf = pkt.button_flags;
+          std::uint32_t bf2 = pkt.buttonFlags2;
+          pad.set_pressed_buttons(bf | (bf2 << 16));
+          pad.set_stick(inputtino::Joypad::LS, pkt.left_stick_x, pkt.left_stick_y);
+          pad.set_stick(inputtino::Joypad::RS, pkt.right_stick_x, pkt.right_stick_y);
+          pad.set_triggers(pkt.left_trigger, pkt.right_trigger);
+        },
+        *selected_pad);
+  }
 }
 
 void controller_touch(const CONTROLLER_TOUCH_PACKET &pkt, state::StreamSession &session) {
