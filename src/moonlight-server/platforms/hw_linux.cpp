@@ -213,7 +213,7 @@ std::string get_mac_address(std::string_view local_ip) {
   if (!interface.empty()) {
     logs::log(logs::trace, "Found interface: {}, looking for MAC address", interface);
     for (auto ifa = ifAddrStruct.get(); ifa != NULL; ifa = ifa->ifa_next) {
-      if (ifa->ifa_name && interface == ifa->ifa_name && ifa->ifa_addr->sa_family == AF_PACKET) {
+      if (ifa->ifa_name && interface == ifa->ifa_name && ifa->ifa_addr && ifa->ifa_addr->sa_family == AF_PACKET) {
         struct sockaddr_ll *s = (struct sockaddr_ll *)(ifa->ifa_addr);
         std::vector<std::string> mac(s->sll_halen);
         for (int i = 0; i < s->sll_halen; i++) {
