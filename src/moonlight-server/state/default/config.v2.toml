@@ -190,7 +190,7 @@ height={height}, format=NV12, colorimetry={color_space}
 \
 """
 encoder_pipeline = """
-qsvh265enc low-latency=true b-frames=0 gop-size=0 idr-interval=1 ref-frames=1 bitrate={bitrate} !
+qsvh265enc b-frames=0 gop-size=0 idr-interval=1 ref-frames=1 max-bitrate={bitrate} rate-control=qvbr !
 h265parse !
 video/x-h265, profile=main, stream-format=byte-stream
 \
@@ -208,6 +208,23 @@ height={height}, format=NV12, colorimetry={color_space}
 """
 encoder_pipeline = """
 vah265enc aud=false b-frames=0 ref-frames=1 num-slices={slices_per_frame} bitrate={bitrate} !
+h265parse !
+video/x-h265, profile=main, stream-format=byte-stream
+\
+"""
+
+[[gstreamer.video.hevc_encoders]]
+plugin_name = "vaapi" # VAAPI: Intel/AMD
+check_elements = ["vah265lpenc", "vapostproc"] # lp: (Low Power)
+video_params = """
+queue !
+vapostproc !
+video/x-raw(memory:VAMemory), chroma-site={color_range}, width={width},
+height={height}, format=NV12, colorimetry={color_space}
+\
+"""
+encoder_pipeline = """
+vah265lpenc aud=false b-frames=0 ref-frames=1 num-slices={slices_per_frame} bitrate={bitrate} !
 h265parse !
 video/x-h265, profile=main, stream-format=byte-stream
 \
@@ -281,7 +298,7 @@ height={height}, format=NV12, colorimetry={color_space}
 \
 """
 encoder_pipeline = """
-qsvh264enc low-latency=true b-frames=0 gop-size=0 idr-interval=0 ref-frames=1 bitrate={bitrate} !
+qsvh264enc b-frames=0 gop-size=0 idr-interval=1 ref-frames=1 max-bitrate={bitrate} rate-control=qvbr !
 h264parse !
 video/x-h264, profile=main, stream-format=byte-stream
 \
@@ -299,6 +316,23 @@ height={height}, format=NV12, colorimetry={color_space}
 """
 encoder_pipeline = """
 vah264enc aud=false b-frames=0 ref-frames=1 num-slices={slices_per_frame} bitrate={bitrate} !
+h264parse !
+video/x-h264, profile=main, stream-format=byte-stream
+\
+"""
+
+[[gstreamer.video.h264_encoders]]
+plugin_name = "vaapi" # VAAPI: Intel/AMD
+check_elements = ["vah264lpenc", "vapostproc"] # lp: (Low Power)
+video_params = """
+queue !
+vapostproc !
+video/x-raw(memory:VAMemory), chroma-site={color_range}, width={width},
+height={height}, format=NV12, colorimetry={color_space}
+\
+"""
+encoder_pipeline = """
+vah264lpenc aud=false b-frames=0 ref-frames=1 num-slices={slices_per_frame} bitrate={bitrate} !
 h264parse !
 video/x-h264, profile=main, stream-format=byte-stream
 \
