@@ -102,11 +102,8 @@ struct App {
   moonlight::App base;
 
   std::string h264_gst_pipeline;
-  Encoder h264_encoder;
   std::string hevc_gst_pipeline;
-  Encoder hevc_encoder;
   std::string av1_gst_pipeline;
-  Encoder av1_encoder;
 
   std::string render_node;
 
