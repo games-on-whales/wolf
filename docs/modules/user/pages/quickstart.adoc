@@ -58,6 +58,46 @@ services:
     restart: unless-stopped
 ....
 
+Podman quadlet:
+
+[source,ini]
+....
+[Unit]
+Description=Podman Wolf Gamestreaming
+
+[Service]
+TimeoutStartSec=900
+ExecStartPre=-/usr/bin/mkdir /tmp/sockets
+ExecStartPre=-/usr/bin/podman rm --force WolfPulseAudio
+Restart=on-failure
+RestartSec=5
+StartLimitBurst=5
+
+[Container]
+AutoUpdate=registry
+ContainerName=%N
+HostName=%N
+Image=ghcr.io/games-on-whales/wolf:stable
+AddCapability=CAP_SYS_PTRACE
+AddCapability=CAP_NET_ADMIN
+Network=host
+SecurityLabelDisable=true
+PodmanArgs=--ipc=host --device-cgroup-rule "c 13:* rmw"
+AddDevice=/dev/dri
+AddDevice=/dev/uinput
+AddDevice=/dev/uhid
+Environment=HOST_APPS_STATE_FOLDER=/etc/wolf
+Environment=GST_DEBUG=2
+Volume=/dev/input:/dev/input:ro
+Volume=/run/udev:/run/udev:ro
+Volume=/tmp/sockets:/tmp/sockets:rw
+Volume=/run/podman/podman.sock:/var/run/docker.sock:ro
+Volume=/etc/wolf:/etc/wolf
+
+[Install]
+WantedBy=multi-user.target
+....
+
 --
 Nvidia (Container Toolkit)::
 +
