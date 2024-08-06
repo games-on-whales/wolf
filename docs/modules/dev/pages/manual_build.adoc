@@ -1,6 +1,8 @@
 = Dev environment setup
 
 This has been tested on Debian 12, you should adjust the setup based on your distro of choice.
+This guide will explain how to build and run Wolf outside of docker, but docker will need to be installed and configured on the host for Wolf to do anything useful.
+Consult your distribution's documentation for instructions on setting up Docker.
 
 == Install Nvidia driver + cuda
 
@@ -75,12 +77,13 @@ This will install libraries and include files under `~/gstreamer`, in order for 
 .Custom env
 [source,bash]
 ....
-export PATH="$HOME/gstreamer/usr/local/bin:$PATH"
-export LIBRARY_PATH="$LIBRARY_PATH:$HOME/gstreamer/usr/local/lib/x86_64-linux-gnu/"
-export LD_LIBRARY_PATH="$LD_LIBRARY_PATH:$HOME/gstreamer/lib/x86_64-linux-gnu/"
-export LDFLAGS="$LDFLAGS -L$HOME/gstreamer/usr/local/lib/x86_64-linux-gnu/"
-export CFLAGS="$CFLAGS -I$HOME/gstreamer/usr/local/include"
-export PKG_CONFIG_PATH="$PKG_CONFIG_PATH:$HOME/gstreamer/usr/local/lib/x86_64-linux-gnu/pkgconfig/"
+GSTREAMER_FOLDER="$HOME/gstreamer"
+export PATH="$GSTREAMER_FOLDER/usr/local/bin:$PATH"
+export LIBRARY_PATH="$LIBRARY_PATH:$GSTREAMER_FOLDER/usr/local/lib/x86_64-linux-gnu/"
+export LD_LIBRARY_PATH="$LD_LIBRARY_PATH:$GSTREAMER_FOLDER/lib/x86_64-linux-gnu/"
+export LDFLAGS="$LDFLAGS -L$GSTREAMER_FOLDER/usr/local/lib/x86_64-linux-gnu/"
+export CFLAGS="$CFLAGS -I$GSTREAMER_FOLDER/usr/local/include"
+export PKG_CONFIG_PATH="$PKG_CONFIG_PATH:$GSTREAMER_FOLDER/usr/local/lib/x86_64-linux-gnu/pkgconfig/"
 ....
 
 You can now check that the `nvcodec` plugin correctly works (only on Nvidia hosts)
@@ -110,11 +113,12 @@ Like we have done for Gstreamer we are going to install this in a different dire
 .Custom env
 [source,bash]
 ....
-export LIBRARY_PATH="$LIBRARY_PATH:$HOME/gst-wayland-display/lib/"
-export LD_LIBRARY_PATH="$LD_LIBRARY_PATH:$HOME/gst-wayland-display/lib/"
-export LDFLAGS="$LDFLAGS -L$HOME/gst-wayland-display/lib"
-export CFLAGS="$CFLAGS -I$HOME/gst-wayland-display/include"
-export PKG_CONFIG_PATH="$PKG_CONFIG_PATH:$HOME/gst-wayland-display/lib/pkgconfig/"
+GSTWAYLANDDISPLAY_FOLDER="$HOME/gst-wayland-display"
+export LIBRARY_PATH="$LIBRARY_PATH:$GSTWAYLANDDISPLAY_FOLDER/lib/"
+export LD_LIBRARY_PATH="$LD_LIBRARY_PATH:$GSTWAYLANDDISPLAY_FOLDER/lib/"
+export LDFLAGS="$LDFLAGS -L$GSTWAYLANDDISPLAY_FOLDER/lib"
+export CFLAGS="$CFLAGS -I$GSTWAYLANDDISPLAY_FOLDER/include -fPIC"
+export PKG_CONFIG_PATH="$PKG_CONFIG_PATH:$GSTWAYLANDDISPLAY_FOLDER/lib/pkgconfig/"
 ....
 
 === Install Wolf deps
@@ -148,16 +152,41 @@ apt-get install -y --no-install-recommends \
 .Compile
 [source,bash]
 ....
-cmake -Bbuild -DCMAKE_C_FLAGS=$CFLAGS -DCMAKE_BUILD_TYPE=Release -DCMAKE_CXX_STANDARD=17 -DCMAKE_CXX_EXTENSIONS=OFF -G Ninja
+cmake -Bbuild -DCMAKE_C_FLAGS="$CFLAGS" -DCMAKE_BUILD_TYPE=Release -DCMAKE_CXX_STANDARD=17 -DCMAKE_CXX_EXTENSIONS=OFF -G Ninja
 ninja -C build
 ....
 
-If compilation completes correctly, you can finally start Wolf
+If compilation completes correctly, you can finally start Wolf. The built binary can be found at `build/src/moonlight-server/wolf`
+Since Wolf is configured via a swoth of environment variables, it may be a good idea to lanch it via shell script.
+
+.runwolf.sh
+[source,bash]
+....
+#!/bin/bash
+
+: ${WOLF_CFG_FOLDER:-"config"}
+
+XDG_RUNTIME_DIR="${XDG_RUNTIME_DIR:-/tmp/sockets}" \
+WOLF_LOG_LEVEL="${WOLF_LOG_LEVEL:-INFO}" \
+WOLF_CFG_FILE="${WOLF_CFG_FILE:-$WOLF_CFG_FOLDER/config.toml}" \
+WOLF_PRIVATE_KEY_FILE="${WOLF_PRIVATE_KEY_FILE:-$WOLF_CFG_FOLDER/key.pem}" \
+WOLF_PRIVATE_CERT_FILE="${WOLF_PRIVATE_CERT_FILE:-$WOLF_CFG_FOLDER/cert.pem}" \
+WOLF_PULSE_IMAGE="${WOLF_PULSE_IMAGE:-ghcr.io/games-on-whales/pulseaudio:master}" \
+WOLF_RENDER_NODE="${WOLF_RENDER_NODE:-/dev/dri/renderD128}" \
+WOLF_STOP_CONTAINER_ON_EXIT="${WOLF_STOP_CONTAINER_ON_EXIT:-TRUE}" \
+WOLF_DOCKER_SOCKET="${WOLF_DOCKER_SOCKET:-/var/run/docker.sock}" \
+RUST_BACKTRACE="${RUST_BACKTRACE:-full}" \
+RUST_LOG="${RUST_LOG:-WARN}" \
+HOST_APPS_STATE_FOLDER="${HOST_APPS_STATE_FOLDER:-$WOLF_CFG_FOLDER}" \
+GST_DEBUG="${GST_DEBUG:-2}" \
+./build/src/moonlight-server/wolf
+....
 
 .Run!
 [source,bash]
 ....
-build/src/wolf/wolf
+chmod +x runwolf.sh
+./runwolf.sh
 INFO  | Reading config file from: config.toml
 WARN  | Unable to open config file: config.toml, creating one using defaults
 INFO  | x509 certificates not present, generating...
