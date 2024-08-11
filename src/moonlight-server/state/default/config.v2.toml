@@ -164,7 +164,7 @@ udpsink bind-port={host_port} host={client_ip} port={client_port} sync=true
 # Order here matters: Wolf will try them in order and pick the first one that's not failing
 ###
 [[gstreamer.video.hevc_encoders]]
-plugin_name = "nvcodec" # Nvidia
+plugin_name = "nvcodec"
 check_elements = ["nvh265enc", "cudaconvertscale", "cudaupload"]
 video_params = """
 queue ! cudaupload ! cudaconvertscale !
@@ -180,69 +180,48 @@ video/x-h265, profile=main, stream-format=byte-stream
 """
 
 [[gstreamer.video.hevc_encoders]]
-plugin_name = "qsv" # Intel QuickSync
-check_elements = ["qsvh265enc", "vapostproc"]
+plugin_name = "qsv"
+check_elements = ["qsvh265enc", "videoconvert"]
 video_params = """
 queue !
-vapostproc !
-video/x-raw(memory:VAMemory), chroma-site={color_range}, width={width},
-height={height}, format=NV12, colorimetry={color_space}
-\
-"""
-encoder_pipeline = """
-qsvh265enc b-frames=0 gop-size=0 idr-interval=1 ref-frames=1 max-bitrate={bitrate} rate-control=qvbr !
-h265parse !
-video/x-h265, profile=main, stream-format=byte-stream
-\
-"""
-
-[[gstreamer.video.hevc_encoders]]
-plugin_name = "vaapi" # VAAPI: Intel/AMD
-check_elements = ["vah265enc", "vapostproc"]
-video_params = """
-queue !
-vapostproc !
-video/x-raw(memory:VAMemory), chroma-site={color_range}, width={width},
-height={height}, format=NV12, colorimetry={color_space}
-\
-"""
-encoder_pipeline = """
-vah265enc aud=false b-frames=0 ref-frames=1 num-slices={slices_per_frame} bitrate={bitrate} !
-h265parse !
-video/x-h265, profile=main, stream-format=byte-stream
-\
-"""
-
-[[gstreamer.video.hevc_encoders]]
-plugin_name = "vaapi" # VAAPI: Intel/AMD
-check_elements = ["vah265lpenc", "vapostproc"] # lp: (Low Power)
-video_params = """
-queue !
-vapostproc !
-video/x-raw(memory:VAMemory), chroma-site={color_range}, width={width},
-height={height}, format=NV12, colorimetry={color_space}
-\
-"""
-encoder_pipeline = """
-vah265lpenc aud=false b-frames=0 ref-frames=1 num-slices={slices_per_frame} bitrate={bitrate} !
-h265parse !
-video/x-h265, profile=main, stream-format=byte-stream
-\
-"""
-
-[[gstreamer.video.hevc_encoders]]
-plugin_name = "applemedia" # OSX HW encoder
-video_params = """
-videoscale !
 videoconvert !
-videorate !
-video/x-raw, width={width}, height={height}, framerate={fps}/1, format=I420,
-chroma-site={color_range}, colorimetry={color_space}
+video/x-raw, chroma-site={color_range}, width={width}, height={height}, format=NV12, colorimetry={color_space}
 \
 """
-check_elements = ["vtenc_h265_hw"]
 encoder_pipeline = """
-vtenc_h265_hw allow-frame-reordering=false bitrate={bitrate} max-keyframe-interval=-1 realtime=true !
+qsvh265enc b-frames=0 gop-size=0 idr-interval=1 ref-frames=1 bitrate={bitrate} rate-control=cbr low-latency=1 target-usage=6 !
+h265parse !
+video/x-h265, profile=main, stream-format=byte-stream
+\
+"""
+
+[[gstreamer.video.hevc_encoders]]
+plugin_name = "vaapi"
+check_elements = ["vah265lpenc", "videoconvert"] # lp: (Low Power)
+video_params = """
+queue !
+videoconvert !
+video/x-raw, chroma-site={color_range}, width={width}, height={height}, format=NV12, colorimetry={color_space}
+\
+"""
+encoder_pipeline = """
+vah265lpenc aud=false b-frames=0 ref-frames=1 num-slices={slices_per_frame} bitrate={bitrate} mbbrc=1 rate-control=cbr target-usage=6 !
+h265parse !
+video/x-h265, profile=main, stream-format=byte-stream
+\
+"""
+
+[[gstreamer.video.hevc_encoders]]
+plugin_name = "vaapi"
+check_elements = ["vah265enc", "videoconvert"]
+video_params = """
+queue !
+videoconvert !
+video/x-raw, chroma-site={color_range}, width={width}, height={height}, format=NV12, colorimetry={color_space}
+\
+"""
+encoder_pipeline = """
+vah265enc aud=false b-frames=0 ref-frames=1 num-slices={slices_per_frame} bitrate={bitrate} mbbrc=1 rate-control=cbr target-usage=6 !
 h265parse !
 video/x-h265, profile=main, stream-format=byte-stream
 \
@@ -272,7 +251,7 @@ video/x-h265, profile=main, stream-format=byte-stream
 # Order here matters: Wolf will try them in order and pick the first one that's not failing
 ###
 [[gstreamer.video.h264_encoders]]
-plugin_name = "nvcodec" # Nvidia
+plugin_name = "nvcodec"
 check_elements = ["nvh264enc", "cudaconvertscale", "cudaupload"]
 video_params = """
 queue ! cudaupload ! cudaconvertscale !
@@ -288,69 +267,48 @@ video/x-h264, profile=main, stream-format=byte-stream
 """
 
 [[gstreamer.video.h264_encoders]]
-plugin_name = "qsv" # Intel QuickSync
-check_elements = ["qsvh264enc", "vapostproc"]
+plugin_name = "qsv"
+check_elements = ["qsvh264enc", "videoconvert"]
 video_params = """
 queue !
-vapostproc !
-video/x-raw(memory:VAMemory), chroma-site={color_range}, width={width},
-height={height}, format=NV12, colorimetry={color_space}
-\
-"""
-encoder_pipeline = """
-qsvh264enc b-frames=0 gop-size=0 idr-interval=1 ref-frames=1 max-bitrate={bitrate} rate-control=qvbr !
-h264parse !
-video/x-h264, profile=main, stream-format=byte-stream
-\
-"""
-
-[[gstreamer.video.h264_encoders]]
-plugin_name = "vaapi" # VAAPI: Intel/AMD
-check_elements = ["vah264enc", "vapostproc"]
-video_params = """
-queue !
-vapostproc !
-video/x-raw(memory:VAMemory), chroma-site={color_range}, width={width},
-height={height}, format=NV12, colorimetry={color_space}
-\
-"""
-encoder_pipeline = """
-vah264enc aud=false b-frames=0 ref-frames=1 num-slices={slices_per_frame} bitrate={bitrate} !
-h264parse !
-video/x-h264, profile=main, stream-format=byte-stream
-\
-"""
-
-[[gstreamer.video.h264_encoders]]
-plugin_name = "vaapi" # VAAPI: Intel/AMD
-check_elements = ["vah264lpenc", "vapostproc"] # lp: (Low Power)
-video_params = """
-queue !
-vapostproc !
-video/x-raw(memory:VAMemory), chroma-site={color_range}, width={width},
-height={height}, format=NV12, colorimetry={color_space}
-\
-"""
-encoder_pipeline = """
-vah264lpenc aud=false b-frames=0 ref-frames=1 num-slices={slices_per_frame} bitrate={bitrate} !
-h264parse !
-video/x-h264, profile=main, stream-format=byte-stream
-\
-"""
-
-[[gstreamer.video.h264_encoders]]
-plugin_name = "applemedia" # OSX HW encoder
-video_params = """
-videoscale !
 videoconvert !
-videorate !
-video/x-raw, width={width}, height={height}, framerate={fps}/1, format=I420,
-chroma-site={color_range}, colorimetry={color_space}
+video/x-raw, chroma-site={color_range}, width={width}, height={height}, format=NV12, colorimetry={color_space}
 \
 """
-check_elements = ["vtenc_h264_hw"]
 encoder_pipeline = """
-vtenc_h264_hw allow-frame-reordering=false bitrate={bitrate} max-keyframe-interval=-1 realtime=true !
+qsvh264enc b-frames=0 gop-size=0 idr-interval=1 ref-frames=1 bitrate={bitrate} rate-control=cbr target-usage=6  !
+h264parse !
+video/x-h264, profile=main, stream-format=byte-stream
+\
+"""
+
+[[gstreamer.video.h264_encoders]]
+plugin_name = "vaapi"
+check_elements = ["vah264lpenc", "videoconvert"] # lp: (Low Power)
+video_params = """
+queue !
+videoconvert !
+video/x-raw, chroma-site={color_range}, width={width}, height={height}, format=NV12, colorimetry={color_space}
+\
+"""
+encoder_pipeline = """
+vah264lpenc aud=false b-frames=0 ref-frames=1 num-slices={slices_per_frame} bitrate={bitrate} target-usage=6 !
+h264parse !
+video/x-h264, profile=main, stream-format=byte-stream
+\
+"""
+
+[[gstreamer.video.h264_encoders]]
+plugin_name = "vaapi"
+check_elements = ["vah264enc", "videoconvert"]
+video_params = """
+queue !
+videoconvert !
+video/x-raw, chroma-site={color_range}, width={width}, height={height}, format=NV12, colorimetry={color_space}
+\
+"""
+encoder_pipeline = """
+vah264enc aud=false b-frames=0 ref-frames=1 num-slices={slices_per_frame} bitrate={bitrate} target-usage=6 !
 h264parse !
 video/x-h264, profile=main, stream-format=byte-stream
 \
@@ -379,6 +337,54 @@ video/x-h264, profile=high, stream-format=byte-stream
 # AV1 encoders
 ###
 [[gstreamer.video.av1_encoders]]
+plugin_name = "qsv"
+check_elements = ["qsvav1enc", "videoconvert"]
+video_params = """
+queue !
+videoconvert !
+video/x-raw, chroma-site={color_range}, width={width}, height={height}, format=NV12, colorimetry={color_space}
+\
+"""
+encoder_pipeline = """
+qsvav1enc gop-size=0 ref-frames=1 bitrate={bitrate} rate-control=cbr low-latency=1 target-usage=6 !
+av1parse !
+video/x-av1, stream-format=obu-stream, alignment=frame, profile=main
+\
+"""
+
+[[gstreamer.video.av1_encoders]]
+plugin_name = "vaapi"
+check_elements = ["vaav1enc","videoconvert"]
+video_params = """
+queue !
+videoconvert !
+video/x-raw, chroma-site={color_range}, width={width}, height={height}, format=NV12, colorimetry={color_space}
+\
+"""
+encoder_pipeline = """
+vaav1enc gop-size=0 ref-frames=1 bitrate={bitrate} rate-control=cbr !
+av1parse !
+video/x-av1, stream-format=obu-stream, alignment=frame, profile=main
+\
+"""
+
+[[gstreamer.video.av1_encoders]]
+plugin_name = "vaapi"
+check_elements = ["vaav1lpenc","videoconvert"] # LP = Low Power
+video_params = """
+queue !
+videoconvert !
+video/x-raw, chroma-site={color_range}, width={width}, height={height}, format=NV12, colorimetry={color_space}
+\
+"""
+encoder_pipeline = """
+vaav1lpenc gop-size=0 ref-frames=1 bitrate={bitrate} rate-control=cbr !
+av1parse !
+video/x-av1, stream-format=obu-stream, alignment=frame, profile=main
+\
+"""
+
+[[gstreamer.video.av1_encoders]]
 plugin_name = "aom"
 check_elements = ["av1enc"]
 video_params = """
@@ -405,10 +411,10 @@ pulsesrc device="{sink_name}" server="{server_name}"
 \
 """
 
-default_audio_params = "audio/x-raw, channels={channels}"
+default_audio_params = "audio/x-raw, channels={channels}, rate=48000"
 
 default_opus_encoder = """
-opusenc bitrate={bitrate} bitrate-type=constrained-vbr frame-size={packet_duration} bandwidth=fullband
+opusenc bitrate={bitrate} bitrate-type=cbr frame-size={packet_duration} bandwidth=fullband
 audio-type=restricted-lowdelay max-payload-size=1400
 \
 """
