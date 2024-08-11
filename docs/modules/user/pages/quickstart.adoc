@@ -88,6 +88,8 @@ docker run \
     -e HOST_APPS_STATE_FOLDER=/etc/wolf \
     -v /etc/wolf:/etc/wolf:rw \
     -v /var/run/docker.sock:/var/run/docker.sock:rw \
+    -e NVIDIA_DRIVER_CAPABILITIES=all \
+    -e NVIDIA_VISIBLE_DEVICES=all \
     --gpus=all \
     --device /dev/dri/ \
     --device /dev/uinput \
@@ -109,6 +111,8 @@ services:
     environment:
       - XDG_RUNTIME_DIR=/tmp/sockets
       - HOST_APPS_STATE_FOLDER=/etc/wolf
+      - NVIDIA_DRIVER_CAPABILITIES=all
+      - NVIDIA_VISIBLE_DEVICES=all
     volumes:
       - /etc/wolf/:/etc/wolf
       - /tmp/sockets:/tmp/sockets:rw
