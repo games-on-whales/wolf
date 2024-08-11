@@ -232,7 +232,6 @@ Config load_or_default(const std::string &source, const std::shared_ptr<dp::even
   }
 
   auto hostname = toml::find_or(cfg, "hostname", "Wolf");
-  bool support_av1 = toml::find_or<bool>(cfg, "support_av1", false);
 
   GstVideoCfg default_gst_video_settings = toml::find<GstVideoCfg>(cfg, "gstreamer", "video");
   GstAudioCfg default_gst_audio_settings = toml::find<GstAudioCfg>(cfg, "gstreamer", "audio");
@@ -252,24 +251,31 @@ Config load_or_default(const std::string &source, const std::shared_ptr<dp::even
   logs::log(logs::info, "Default H264 encoder: {}", h264_encoder->plugin_name);
 
   /* Automatic pick best HEVC encoder */
+  bool support_hevc = false;
   auto hevc_encoder = std::find_if(default_gst_video_settings.hevc_encoders.begin(),
                                    default_gst_video_settings.hevc_encoders.end(),
                                    default_is_available);
-  if (hevc_encoder == std::end(default_gst_video_settings.hevc_encoders)) {
-    throw std::runtime_error("Unable to find a compatible HEVC encoder, please check [[gstreamer.video.hevc_encoders]] "
-                             "in your config.toml or your Gstreamer installation");
+  if (hevc_encoder != std::end(default_gst_video_settings.hevc_encoders)) {
+    support_hevc = encoder_type(*hevc_encoder) != SOFTWARE;
   }
-  logs::log(logs::info, "Default HEVC encoder: {}", hevc_encoder->plugin_name);
+  if (support_hevc) {
+    logs::log(logs::info, "Default HEVC encoder: {}", hevc_encoder->plugin_name);
+  } else {
+    logs::log(logs::warning, "HEVC encoder not available, disabling HEVC support");
+  }
 
   /* Automatic pick best AV1 encoder */
+  bool support_av1 = false;
   auto av1_encoder = std::find_if(default_gst_video_settings.av1_encoders.begin(),
                                   default_gst_video_settings.av1_encoders.end(),
                                   default_is_available);
-  if (support_av1 && av1_encoder == std::end(default_gst_video_settings.av1_encoders)) {
-    throw std::runtime_error("Unable to find a compatible AV1 encoder, please check [[gstreamer.video.av1_encoders]] "
-                             "in your config.toml or your Gstreamer installation");
-  } else if (support_av1) {
+  if (av1_encoder != std::end(default_gst_video_settings.av1_encoders)) {
+    support_av1 = encoder_type(*av1_encoder) != SOFTWARE;
+  }
+  if (support_av1) {
     logs::log(logs::info, "Default AV1 encoder: {}", av1_encoder->plugin_name);
+  } else {
+    logs::log(logs::warning, "AV1 encoder not available, disabling AV1 support");
   }
 
   /* Get paired clients */
@@ -354,7 +360,7 @@ Config load_or_default(const std::string &source, const std::shared_ptr<dp::even
   return Config{.uuid = uuid,
                 .hostname = hostname,
                 .config_source = source,
-                .support_hevc = toml::find_or<bool>(cfg, "support_hevc", false),
+                .support_hevc = support_hevc,
                 .support_av1 = support_av1,
                 .paired_clients = *clients_atom,
                 .apps = apps};

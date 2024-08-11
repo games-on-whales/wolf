@@ -182,7 +182,7 @@ TEST_CASE("Mocked serverinfo", "[MoonlightProtocol]") {
             "<GfeVersion>3.23.0.74</GfeVersion>"
             "<uniqueid>0000-1111-2222-3333</uniqueid>"
             "<MaxLumaPixelsHEVC>0</MaxLumaPixelsHEVC>"
-            "<ServerCodecModeSupport>4097</ServerCodecModeSupport>"
+            "<ServerCodecModeSupport>65537</ServerCodecModeSupport>"
             "<HttpsPort>0</HttpsPort>"
             "<ExternalPort>1</ExternalPort>"
             "<mac>AA:BB:CC:DD</mac>"

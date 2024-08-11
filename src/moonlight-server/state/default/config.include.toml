@@ -1,10 +1,6 @@
 R"for_c++_include(
 # The name that will be displayed in Moonlight
 hostname = "Wolf"
-# Set to false if this host doesn't support HEVC
-support_hevc = true
-# Set to true if this host supports AV1 (EXPERIMENTAL)
-support_av1 = false
 # The version of this config file
 config_version = 3
 
