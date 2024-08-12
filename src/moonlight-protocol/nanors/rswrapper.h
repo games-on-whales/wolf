@@ -1,8 +1,8 @@
 /**
-* @file src/rswrapper.h
-* @brief Wrappers for nanors vectorization
-* @details This is a drop-in replacement for nanors rs.h
-*/
+ * @file src/rswrapper.h
+ * @brief Wrappers for nanors vectorization
+ * @details This is a drop-in replacement for nanors rs.h
+ */
 #pragma once
 
 #include "rs.h"
