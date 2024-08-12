@@ -146,6 +146,31 @@ announce(const RTSP_PACKET &req,
     gst_pipeline = session.app->h264_gst_pipeline;
   }
 
+  auto audio_channels = args["x-nv-audio.surround.numChannels"].value_or(2);
+  auto fec_percentage = 20; // TODO: setting?
+
+  long bitrate = args["x-nv-vqos[0].bw.maximumBitrateKbps"].value_or(15500);
+  // If the client sent a configured bitrate adjust it (Moonlight extension)
+  if (auto configured_bitrate = args["x-ml-video.configuredBitrateKbps"]; configured_bitrate.has_value()) {
+    bitrate = *configured_bitrate;
+
+    // If the FEC percentage isn't too high, adjust the configured bitrate to ensure video
+    // traffic doesn't exceed the user's selected bitrate when the FEC shards are included.
+    if (fec_percentage <= 80) {
+      bitrate /= 100.f / (100 - fec_percentage);
+    }
+
+    // Adjust the bitrate to account for audio traffic bandwidth usage (capped at 20% reduction).
+    // The bitrate per channel is 256 Kbps for high quality mode and 96 Kbps for normal quality.
+    auto audioBitrateAdjustment = 96 * audio_channels;
+    bitrate -= std::min((std::int64_t)audioBitrateAdjustment, bitrate / 5);
+
+    // Reduce it by another 500Kbps to account for A/V packet overhead and control data
+    // traffic (capped at 10% reduction).
+    bitrate -= std::min((std::int64_t)500, bitrate / 10);
+    logs::log(logs::debug, "[RTSP] Adjusted video bitrate to {} Kbps", bitrate);
+  }
+
   // Video session
   unsigned short video_port = state::VIDEO_PING_PORT + number_of_sessions;
   state::VideoSession video = {
@@ -158,9 +183,9 @@ announce(const RTSP_PACKET &req,
       .timeout = std::chrono::milliseconds(args["x-nv-video[0].timeoutLengthMs"].value_or(7000)),
       .packet_size = args["x-nv-video[0].packetSize"].value_or(1024),
       .frames_with_invalid_ref_threshold = args["x-nv-video[0].framesWithInvalidRefThreshold"].value_or(0),
-      .fec_percentage = 20,
+      .fec_percentage = fec_percentage,
       .min_required_fec_packets = args["x-nv-vqos[0].fec.minRequiredFecPackets"].value_or(0),
-      .bitrate_kbps = args["x-nv-video[0].initialBitrateKbps"].value_or(15500),
+      .bitrate_kbps = bitrate,
       .slices_per_frame = args["x-nv-video[0].videoEncoderSlicesPerFrame"].value_or(1),
 
       .color_range = (csc & 0x1) ? state::JPEG : state::MPEG,
@@ -184,7 +209,7 @@ announce(const RTSP_PACKET &req,
       .client_ip = session.ip,
 
       .packet_duration = args["x-nv-aqos.packetDuration"].value_or(5),
-      .channels = args["x-nv-audio.surround.numChannels"].value_or(2)};
+      .channels = audio_channels};
   event_bus->fire_event(immer::box<state::AudioSession>(audio));
 
   return ok_msg(req.seq_number);

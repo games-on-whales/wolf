@@ -40,7 +40,7 @@ struct VideoSession {
   int frames_with_invalid_ref_threshold;
   int fec_percentage;
   int min_required_fec_packets;
-  int bitrate_kbps;
+  long bitrate_kbps;
   int slices_per_frame;
 
   ColorRange color_range;
