@@ -45,18 +45,20 @@ FetchContent_GetProperties(nanors)
 if (NOT nanors_POPULATED)
     FetchContent_Populate(nanors)
 
-    add_library(nanors STATIC ${nanors_SOURCE_DIR}/rs.c)
+    add_library(nanors)
     add_library(nanors::nanors ALIAS nanors)
-    target_include_directories(nanors PUBLIC ${nanors_SOURCE_DIR} ${nanors_SOURCE_DIR}/deps/obl/)
+    target_include_directories(nanors
+            PUBLIC
+            ./nanors
+            ${nanors_SOURCE_DIR}
+            ${nanors_SOURCE_DIR}/deps/obl/)
 
     target_sources(nanors
-            PRIVATE ${nanors_SOURCE_DIR}/rs.c
-            PUBLIC ${nanors_SOURCE_DIR}/rs.h)
+            PRIVATE ./nanors/rswrapper.c
+            PUBLIC ./nanors/rswrapper.h)
 
-    # TODO: There's a more advanced version of this with proper support for SSSE3,
-    # see: https://github.com/LizardByte/Sunshine/pull/2828
-    set_source_files_properties(${nanors_SOURCE_DIR}/rs.c
-            PROPERTIES COMPILE_FLAGS "-include deps/obl/autoshim.h -ftree-vectorize")
+    set_source_files_properties(./nanors/rswrapper.c
+            PROPERTIES COMPILE_FLAGS "-ftree-vectorize -funroll-loops")
 
     target_link_libraries_system(moonlight PUBLIC nanors::nanors)
 endif ()
