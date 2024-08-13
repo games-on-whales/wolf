@@ -1,0 +1,69 @@
+{
+  "name": "wolf-dev",
+  "build": {
+    "context": "..",
+    "dockerfile": "../docker/wolf.Dockerfile",
+    "target": "wolf-builder"
+  },
+  "postStartCommand": "bash /workspaces/wolf/.devcontainer/dev-setup.sh",
+  "features": {
+    "ghcr.io/nils-geistmann/devcontainers-features/zsh:0": {
+      "plugins": [
+        "git",
+        "zsh-autosuggestions",
+        "history",
+        "docker"
+      ]
+    },
+    "ghcr.io/devcontainers/features/docker-outside-of-docker:1": {
+      "moby": true,
+      "installDockerBuildx": false
+    }
+  },
+  "runArgs": [
+    "--network=host",
+    "-v",
+    "/tmp/sockets:/tmp/sockets:rw",
+    "-v",
+    "/etc/wolf:/etc/wolf:rw",
+    "-v",
+    "/run/udev:/run/udev:ro",
+    "--rm"
+  ],
+  "hostRequirements": {
+    "gpu": true
+  },
+  "privileged": true,
+  "containerEnv": {
+    "NVIDIA_DRIVER_CAPABILITIES": "all",
+    "NVIDIA_VISIBLE_DEVICES": "all"
+  },
+  "remoteEnv": {
+    "XDG_RUNTIME_DIR": "/tmp/sockets",
+    "WOLF_LOG_LEVEL": "DEBUG",
+    "HOST_APPS_STATE_FOLDER": "/etc/wolf",
+    "WOLF_CFG_FILE": "/etc/wolf/cfg/config.toml",
+    "WOLF_PRIVATE_KEY_FILE": "/etc/wolf/cfg/key.pem",
+    "WOLF_PRIVATE_CERT_FILE": "/etc/wolf/cfg/cert.pem",
+    "WOLF_PULSE_IMAGE": "ghcr.io/games-on-whales/pulseaudio:master",
+    "WOLF_RENDER_NODE": "/dev/dri/renderD128",
+    "WOLF_STOP_CONTAINER_ON_EXIT": "TRUE",
+    "WOLF_DOCKER_SOCKET": "/var/run/docker.sock",
+    "WOLF_DOCKER_FAKE_UDEV_PATH": "/wolf/fake-udev",
+    "RUST_BACKTRACE": "full",
+    "RUST_LOG": "INFO",
+    "GST_DEBUG": "2",
+    "CMAKE_GENERATOR": "Ninja"
+  },
+  "customizations": {
+    "vscode": {
+      "extensions": [
+        "ms-vscode.cpptools-extension-pack",
+        "ms-azuretools.vscode-docker",
+        "github.vscode-github-actions",
+        "jeff-hykin.better-cpp-syntax",
+        "tamasfe.even-better-toml"
+      ]
+    }
+  }
+}
