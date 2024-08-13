@@ -223,7 +223,7 @@ static void generate_fec_packets(const gst_rtp_moonlight_pay_video &rtpmoonlight
 
   // Reed Solomon encode the full stream of bytes
   auto rs = moonlight::fec::create(blocks.data_shards, blocks.parity_shards);
-  std::vector<unsigned char*> ptr(nr_shards);
+  std::vector<unsigned char *> ptr(nr_shards);
   for (int shard_idx = 0; shard_idx < nr_shards; shard_idx++) {
     ptr[shard_idx] = info.data + (shard_idx * blocks.block_size);
   }
