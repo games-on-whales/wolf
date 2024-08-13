@@ -291,7 +291,7 @@ TEST_CASE_METHOD(GStreamerTestsFixture, "Create RTP VIDEO packets", "[GSTPlugin]
       auto flatten_packets = gst_buffer_list_unfold(rtp_packets);
       auto packets_content = gst_buffer_copy_content(flatten_packets);
 
-      unsigned char *packets_ptr[total_shards];
+      std::vector<unsigned char*> packets_ptr(total_shards);
       for (int shard_idx = 0; shard_idx < total_shards; shard_idx++) {
         packets_ptr[shard_idx] = &packets_content.front() + (shard_idx * rtp_packet_size);
       }
@@ -300,7 +300,7 @@ TEST_CASE_METHOD(GStreamerTestsFixture, "Create RTP VIDEO packets", "[GSTPlugin]
         std::vector<unsigned char> marks = {0, 0, 0, 0};
 
         auto rs = moonlight::fec::create(data_shards, parity_shards);
-        auto result = moonlight::fec::decode(rs.get(), packets_ptr, &marks.front(), total_shards, rtp_packet_size);
+        auto result = moonlight::fec::decode(rs.get(), &packets_ptr.front(), &marks.front(), total_shards, rtp_packet_size);
 
         REQUIRE(result == 0);
         REQUIRE_THAT(packets_content, Equals(gst_buffer_copy_content(flatten_packets)));
@@ -312,7 +312,7 @@ TEST_CASE_METHOD(GStreamerTestsFixture, "Create RTP VIDEO packets", "[GSTPlugin]
         std::vector<unsigned char> marks = {1, 0, 0, 0};
 
         auto rs = moonlight::fec::create(data_shards, parity_shards);
-        auto result = moonlight::fec::decode(rs.get(), packets_ptr, &marks.front(), total_shards, rtp_packet_size);
+        auto result = moonlight::fec::decode(rs.get(), &packets_ptr.front(), &marks.front(), total_shards, rtp_packet_size);
 
         REQUIRE(result == 0);
 
