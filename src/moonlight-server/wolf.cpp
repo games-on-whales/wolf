@@ -46,8 +46,6 @@ immer::array<moonlight::DisplayMode> getDisplayModes() {
  * @brief Get the Audio Modes
  */
 immer::array<state::AudioMode> getAudioModes() {
-
-  // TODO: avoid duplication in endpoints.hpp
   return {// Stereo
           {.channels = 2,
            .streams = 1,
