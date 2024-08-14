@@ -249,7 +249,48 @@ create_run_session(const std::shared_ptr<typename SimpleWeb::Server<SimpleWeb::H
                                          state->config->support_av1};
 
   // forcing stereo, TODO: what should we select here?
-  state::AudioMode audio_mode = {2, 1, 1, {state::AudioMode::FRONT_LEFT, state::AudioMode::FRONT_RIGHT}};
+  auto surround_info = std::stoi(get_header(headers, "surroundAudioInfo").value_or("196610"));
+  int channelCount = surround_info & (65535);
+  state::AudioMode audio_mode;
+  switch (channelCount) {
+  case 2: // stereo
+    audio_mode = {.channels = 2,
+                  .streams = 1,
+                  .coupled_streams = 1,
+                  .speakers = {state::AudioMode::FRONT_LEFT, state::AudioMode::FRONT_RIGHT}};
+    break;
+  case 6: // 5.1
+    audio_mode = {.channels = 6,
+                  .streams = 4,
+                  .coupled_streams = 2,
+                  .speakers = {state::AudioMode::FRONT_LEFT,
+                               state::AudioMode::FRONT_RIGHT,
+                               state::AudioMode::FRONT_CENTER,
+                               state::AudioMode::LOW_FREQUENCY,
+                               state::AudioMode::BACK_LEFT,
+                               state::AudioMode::BACK_RIGHT}};
+    break;
+  case 8: // 7.1
+    audio_mode = {.channels = 8,
+                  .streams = 5,
+                  .coupled_streams = 3,
+                  .speakers = {state::AudioMode::FRONT_LEFT,
+                               state::AudioMode::FRONT_RIGHT,
+                               state::AudioMode::FRONT_CENTER,
+                               state::AudioMode::LOW_FREQUENCY,
+                               state::AudioMode::BACK_LEFT,
+                               state::AudioMode::BACK_RIGHT,
+                               state::AudioMode::SIDE_LEFT,
+                               state::AudioMode::SIDE_RIGHT}};
+    break;
+  default:
+    logs::log(logs::warning, "Moonlight sent an unsupported audio channel count: {}", channelCount);
+    audio_mode = {.channels = 2,
+                  .streams = 1,
+                  .coupled_streams = 1,
+                  .speakers = {state::AudioMode::FRONT_LEFT, state::AudioMode::FRONT_RIGHT}};
+    break;
+  }
 
   //  auto joypad_map = get_header(headers, "remoteControllersBitmap").value(); // TODO: decipher this (might be empty)
 

@@ -46,8 +46,35 @@ immer::array<moonlight::DisplayMode> getDisplayModes() {
  * @brief Get the Audio Modes
  */
 immer::array<state::AudioMode> getAudioModes() {
-  // Stereo
-  return {{2, 1, 1, {state::AudioMode::FRONT_LEFT, state::AudioMode::FRONT_RIGHT}}};
+
+  // TODO: avoid duplication in endpoints.hpp
+  return {// Stereo
+          {.channels = 2,
+           .streams = 1,
+           .coupled_streams = 1,
+           .speakers = {state::AudioMode::FRONT_LEFT, state::AudioMode::FRONT_RIGHT}},
+          // 5.1
+          {.channels = 6,
+           .streams = 4,
+           .coupled_streams = 2,
+           .speakers = {state::AudioMode::FRONT_LEFT,
+                        state::AudioMode::FRONT_RIGHT,
+                        state::AudioMode::FRONT_CENTER,
+                        state::AudioMode::LOW_FREQUENCY,
+                        state::AudioMode::BACK_LEFT,
+                        state::AudioMode::BACK_RIGHT}},
+          // 7.1
+          {.channels = 8,
+           .streams = 5,
+           .coupled_streams = 3,
+           .speakers = {state::AudioMode::FRONT_LEFT,
+                        state::AudioMode::FRONT_RIGHT,
+                        state::AudioMode::FRONT_CENTER,
+                        state::AudioMode::LOW_FREQUENCY,
+                        state::AudioMode::BACK_LEFT,
+                        state::AudioMode::BACK_RIGHT,
+                        state::AudioMode::SIDE_LEFT,
+                        state::AudioMode::SIDE_RIGHT}}};
 }
 
 state::Host get_host_config(std::string_view pkey_filename, std::string_view cert_filename) {
