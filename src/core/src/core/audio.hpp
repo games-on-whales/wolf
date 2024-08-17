@@ -40,7 +40,6 @@ struct AudioMode {
   int sample_rate = SAMPLE_RATE;
 };
 
-
 struct AudioDevice {
   std::string_view sink_name;
   AudioMode mode;
