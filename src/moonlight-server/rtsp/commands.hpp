@@ -37,6 +37,7 @@ RTSP_PACKET ok_msg(int sequence_number,
 // Additional feature supports
 constexpr uint32_t FS_PEN_TOUCH_EVENTS = 0x01;
 constexpr uint32_t FS_CONTROLLER_TOUCH_EVENTS = 0x02;
+using namespace wolf::core::audio;
 
 RTSP_PACKET
 describe(const RTSP_PACKET &req, const state::StreamSession &session) {
@@ -48,12 +49,38 @@ describe(const RTSP_PACKET &req, const state::StreamSession &session) {
     payloads.push_back({"a", "a=rtpmap:98 AV1/90000"});
   }
 
+  auto mapping_p = session.audio_mode.speakers;
+  // Opusenc forces a re-mapping to Vorbis; see
+  // https://gitlab.freedesktop.org/gstreamer/gstreamer/-/blob/main/subprojects/gst-plugins-base/ext/opus/gstopusenc.c#L549-572
+  if (session.audio_mode.channels == 6) { // 5.1
+    mapping_p = {
+        // The mapping for 5.1 is: [0 1 4 5 2 3]
+        AudioMode::FRONT_LEFT,
+        AudioMode::FRONT_RIGHT,
+        AudioMode::BACK_LEFT,
+        AudioMode::BACK_RIGHT,
+        AudioMode::FRONT_CENTER,
+        AudioMode::LOW_FREQUENCY,
+    };
+  } else if (session.audio_mode.channels == 8) { // 7.1
+    mapping_p = {
+        // The mapping for 7.1 is: [0 1 4 5 2 3 6 7]
+        AudioMode::FRONT_LEFT,
+        AudioMode::FRONT_RIGHT,
+        AudioMode::BACK_LEFT,
+        AudioMode::BACK_RIGHT,
+        AudioMode::FRONT_CENTER,
+        AudioMode::LOW_FREQUENCY,
+        AudioMode::SIDE_LEFT,
+        AudioMode::SIDE_RIGHT,
+    };
+  }
+
   /**
    * GFE advertises incorrect mapping for normal quality configurations,
    * as a result, Moonlight rotates all channels from index '3' to the right
    * To work around this, rotate channels to the left from index '3'
    */
-  auto mapping_p = session.audio_mode.speakers;
   if (session.audio_mode.channels > 2) { // 5.1 and 7.1
     std::rotate(mapping_p.begin() + 3, mapping_p.begin() + 4, mapping_p.end());
   }

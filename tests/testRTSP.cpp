@@ -12,6 +12,7 @@ using Catch::Matchers::Equals;
 using namespace std::string_literals;
 using namespace state;
 using namespace rtsp;
+using namespace wolf::core::audio;
 
 /**
  * In order to test rtsp::tcp_connection we create a derived class that does the opposite:
@@ -252,7 +253,7 @@ TEST_CASE("Custom Parser", "[RTSP]") {
 state::SessionsAtoms test_init_state() {
   StreamSession session = {
       .display_mode = {1920, 1080, 60},
-      .audio_mode = {2, 1, 1, {state::AudioMode::FRONT_LEFT, state::AudioMode::FRONT_RIGHT}},
+      .audio_mode = {2, 1, 1, {AudioMode::FRONT_LEFT, AudioMode::FRONT_RIGHT}},
       .app = std::make_shared<state::App>(state::App{.base = {},
                                                      .h264_gst_pipeline = "",
                                                      .hevc_gst_pipeline = "",
