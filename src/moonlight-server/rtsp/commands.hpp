@@ -48,16 +48,26 @@ describe(const RTSP_PACKET &req, const state::StreamSession &session) {
     payloads.push_back({"a", "a=rtpmap:98 AV1/90000"});
   }
 
-  std::string audio_speakers = session.audio_mode.speakers                                            //
+  /**
+   * GFE advertises incorrect mapping for normal quality configurations,
+   * as a result, Moonlight rotates all channels from index '3' to the right
+   * To work around this, rotate channels to the left from index '3'
+   */
+  auto mapping_p = session.audio_mode.speakers;
+  if (session.audio_mode.channels > 2) { // 5.1 and 7.1
+    std::rotate(mapping_p.begin() + 3, mapping_p.begin() + 4, mapping_p.end());
+  }
+  std::string audio_speakers = mapping_p                                                              //
                                | views::transform([](auto speaker) { return (char)(speaker + '0'); }) //
-                               | to<std::string>;                                                     //
+                               | to<std::string>;
+  auto surround_params = fmt::format("fmtp:97 surround-params={}{}{}{}",
+                                     session.audio_mode.channels,
+                                     session.audio_mode.streams,
+                                     session.audio_mode.coupled_streams,
+                                     audio_speakers);
 
-  payloads.push_back({"a",
-                      fmt::format("fmtp:97 surround-params={}{}{}{}",
-                                  session.audio_mode.channels,
-                                  session.audio_mode.streams,
-                                  session.audio_mode.coupled_streams,
-                                  audio_speakers)});
+  payloads.push_back({"a", surround_params});
+  logs::log(logs::debug, "[RTSP] Sending audio surround params: {}", surround_params);
 
   payloads.push_back(
       {"a", fmt::format("x-ss-general.featureFlags: {}", FS_PEN_TOUCH_EVENTS | FS_CONTROLLER_TOUCH_EVENTS)});
@@ -146,7 +156,7 @@ announce(const RTSP_PACKET &req,
     gst_pipeline = session.app->h264_gst_pipeline;
   }
 
-  auto audio_channels = args["x-nv-audio.surround.numChannels"].value_or(2);
+  auto audio_channels = args["x-nv-audio.surround.numChannels"].value_or(session.audio_mode.channels);
   auto fec_percentage = 20; // TODO: setting?
 
   long bitrate = args["x-nv-vqos[0].bw.maximumBitrateKbps"].value_or(15500);
@@ -209,7 +219,8 @@ announce(const RTSP_PACKET &req,
       .client_ip = session.ip,
 
       .packet_duration = args["x-nv-aqos.packetDuration"].value_or(5),
-      .channels = audio_channels};
+      .channels = audio_channels,
+      .bitrate = session.audio_mode.bitrate};
   event_bus->fire_event(immer::box<state::AudioSession>(audio));
 
   return ok_msg(req.seq_number);

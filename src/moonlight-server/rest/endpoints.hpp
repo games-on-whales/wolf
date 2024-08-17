@@ -247,10 +247,10 @@ create_run_session(const std::shared_ptr<typename SimpleWeb::Server<SimpleWeb::H
                                          std::stoi(display_mode_str[2].data()),
                                          state->config->support_hevc,
                                          state->config->support_av1};
-  // forcing stereo, TODO: what should we select here?
+
   auto surround_info = std::stoi(get_header(headers, "surroundAudioInfo").value_or("196610"));
   int channelCount = surround_info & (65535);
-  state::AudioMode audio_mode;
+  audio::AudioMode audio_mode;
   switch (channelCount) {
   case 2: // stereo
     audio_mode = state->host->audio_modes[0];
@@ -266,8 +266,6 @@ create_run_session(const std::shared_ptr<typename SimpleWeb::Server<SimpleWeb::H
     audio_mode = state->host->audio_modes[0];
     break;
   }
-
-  //  auto joypad_map = get_header(headers, "remoteControllersBitmap").value(); // TODO: decipher this (might be empty)
 
   std::string host_state_folder = utils::get_env("HOST_APPS_STATE_FOLDER", "/etc/wolf");
   auto full_path = std::filesystem::path(host_state_folder) / current_client.app_state_folder / run_app.base.title;

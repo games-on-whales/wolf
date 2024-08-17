@@ -45,34 +45,37 @@ immer::array<moonlight::DisplayMode> getDisplayModes() {
 /**
  * @brief Get the Audio Modes
  */
-immer::array<state::AudioMode> getAudioModes() {
+immer::array<audio::AudioMode> getAudioModes() {
   return {// Stereo
           {.channels = 2,
            .streams = 1,
            .coupled_streams = 1,
-           .speakers = {state::AudioMode::FRONT_LEFT, state::AudioMode::FRONT_RIGHT}},
+           .speakers = {audio::AudioMode::FRONT_LEFT, audio::AudioMode::FRONT_RIGHT},
+           .bitrate = 96000},
           // 5.1
           {.channels = 6,
            .streams = 4,
            .coupled_streams = 2,
-           .speakers = {state::AudioMode::FRONT_LEFT,
-                        state::AudioMode::FRONT_RIGHT,
-                        state::AudioMode::FRONT_CENTER,
-                        state::AudioMode::LOW_FREQUENCY,
-                        state::AudioMode::BACK_LEFT,
-                        state::AudioMode::BACK_RIGHT}},
+           .speakers = {audio::AudioMode::FRONT_LEFT,
+                        audio::AudioMode::FRONT_RIGHT,
+                        audio::AudioMode::FRONT_CENTER,
+                        audio::AudioMode::LOW_FREQUENCY,
+                        audio::AudioMode::BACK_LEFT,
+                        audio::AudioMode::BACK_RIGHT},
+           .bitrate = 256000},
           // 7.1
           {.channels = 8,
            .streams = 5,
            .coupled_streams = 3,
-           .speakers = {state::AudioMode::FRONT_LEFT,
-                        state::AudioMode::FRONT_RIGHT,
-                        state::AudioMode::FRONT_CENTER,
-                        state::AudioMode::LOW_FREQUENCY,
-                        state::AudioMode::BACK_LEFT,
-                        state::AudioMode::BACK_RIGHT,
-                        state::AudioMode::SIDE_LEFT,
-                        state::AudioMode::SIDE_RIGHT}}};
+           .speakers = {audio::AudioMode::FRONT_LEFT,
+                        audio::AudioMode::FRONT_RIGHT,
+                        audio::AudioMode::FRONT_CENTER,
+                        audio::AudioMode::LOW_FREQUENCY,
+                        audio::AudioMode::BACK_LEFT,
+                        audio::AudioMode::BACK_RIGHT,
+                        audio::AudioMode::SIDE_LEFT,
+                        audio::AudioMode::SIDE_RIGHT},
+           .bitrate = 450000}};
 }
 
 state::Host get_host_config(std::string_view pkey_filename, std::string_view cert_filename) {
@@ -228,10 +231,9 @@ auto setup_sessions_handlers(const immer::box<state::AppState> &app_state,
           auto pulse_sink_name = fmt::format("virtual_sink_{}", session->session_id);
           std::shared_ptr<audio::VSink> v_device;
           if (audio_server && audio_server->server) {
-            v_device = audio::create_virtual_sink(audio_server->server,
-                                                  audio::AudioDevice{.sink_name = pulse_sink_name,
-                                                                     .n_channels = session->audio_mode.channels,
-                                                                     .bitrate = 48000}); // TODO:
+            v_device = audio::create_virtual_sink(
+                audio_server->server,
+                audio::AudioDevice{.sink_name = pulse_sink_name, .mode = session->audio_mode});
           }
 
           /* Setup devices paths */

@@ -135,32 +135,12 @@ struct Config {
   immer::vector<App> apps;
 };
 
-struct AudioMode {
-
-  enum Speakers {
-    FRONT_LEFT,
-    FRONT_RIGHT,
-    FRONT_CENTER,
-    LOW_FREQUENCY,
-    BACK_LEFT,
-    BACK_RIGHT,
-    SIDE_LEFT,
-    SIDE_RIGHT,
-    MAX_SPEAKERS,
-  };
-
-  int channels{};
-  int streams{};
-  int coupled_streams{};
-  immer::array<Speakers> speakers;
-};
-
 /**
  * Host information like network, certificates and displays
  */
 struct Host {
   immer::array<moonlight::DisplayMode> display_modes;
-  immer::array<AudioMode> audio_modes;
+  immer::array<audio::AudioMode> audio_modes;
 
   const X509 *server_cert;
   const EVP_PKEY *server_pkey;
@@ -196,7 +176,7 @@ using JoypadList = immer::map<int /* controller number */, std::shared_ptr<Joypa
  */
 struct StreamSession {
   moonlight::DisplayMode display_mode;
-  AudioMode audio_mode;
+  audio::AudioMode audio_mode;
 
   std::shared_ptr<dp::event_bus> event_bus;
   std::shared_ptr<App> app;

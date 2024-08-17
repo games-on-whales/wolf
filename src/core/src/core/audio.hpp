@@ -8,6 +8,7 @@
 #include <functional>
 #include <memory>
 #include <string>
+#include <vector>
 
 namespace wolf::core::audio {
 
@@ -15,10 +16,34 @@ typedef struct Server Server;
 
 std::shared_ptr<Server> connect(std::string_view server = {});
 
+constexpr auto SAMPLE_RATE = 48000;
+
+struct AudioMode {
+
+  enum Speakers {
+    FRONT_LEFT,
+    FRONT_RIGHT,
+    FRONT_CENTER,
+    LOW_FREQUENCY,
+    BACK_LEFT,
+    BACK_RIGHT,
+    SIDE_LEFT,
+    SIDE_RIGHT,
+    MAX_SPEAKERS,
+  };
+
+  int channels{};
+  int streams{};
+  int coupled_streams{};
+  std::vector<Speakers> speakers;
+  int bitrate{};
+  int sample_rate = SAMPLE_RATE;
+};
+
+
 struct AudioDevice {
   std::string_view sink_name;
-  int n_channels;
-  int bitrate = 48000;
+  AudioMode mode;
 };
 
 struct VSink {
