@@ -250,22 +250,6 @@ create_run_session(const std::shared_ptr<typename SimpleWeb::Server<SimpleWeb::H
 
   auto surround_info = std::stoi(get_header(headers, "surroundAudioInfo").value_or("196610"));
   int channelCount = surround_info & (65535);
-  audio::AudioMode audio_mode;
-  switch (channelCount) {
-  case 2: // stereo
-    audio_mode = state->host->audio_modes[0];
-    break;
-  case 6: // 5.1
-    audio_mode = state->host->audio_modes[1];
-    break;
-  case 8: // 7.1
-    audio_mode = state->host->audio_modes[2];
-    break;
-  default:
-    logs::log(logs::warning, "Moonlight sent an unsupported audio channel count: {}", channelCount);
-    audio_mode = state->host->audio_modes[0];
-    break;
-  }
 
   std::string host_state_folder = utils::get_env("HOST_APPS_STATE_FOLDER", "/etc/wolf");
   auto full_path = std::filesystem::path(host_state_folder) / current_client.app_state_folder / run_app.base.title;
@@ -273,7 +257,7 @@ create_run_session(const std::shared_ptr<typename SimpleWeb::Server<SimpleWeb::H
   std::filesystem::create_directories(full_path);
 
   return state::StreamSession{.display_mode = display_mode,
-                              .audio_mode = audio_mode,
+                              .audio_channel_count = channelCount,
                               .event_bus = state->event_bus,
                               .app = std::make_shared<state::App>(run_app),
                               .app_state_folder = full_path.string(),

@@ -176,7 +176,7 @@ using JoypadList = immer::map<int /* controller number */, std::shared_ptr<Joypa
  */
 struct StreamSession {
   moonlight::DisplayMode display_mode;
-  audio::AudioMode audio_mode;
+  int audio_channel_count;
 
   std::shared_ptr<dp::event_bus> event_bus;
   std::shared_ptr<App> app;
@@ -243,5 +243,79 @@ struct AppState {
    */
   SessionsAtoms running_sessions;
 };
+
+const static immer::array<audio::AudioMode> AUDIO_CONFIGURATIONS = {
+    // TODO: opusenc doesn't allow us to set `coupled_streams` and `streams`
+    //       don't change these or Moonlight will not be able to decode audio
+    //       https://gitlab.freedesktop.org/gstreamer/gstreamer/-/blob/1.24.6/subprojects/gst-plugins-base/ext/opus/gstopusenc.c#L661-666
+    {// Stereo
+     {.channels = 2,
+      .streams = 1,
+      .coupled_streams = 1,
+      .speakers = {audio::AudioMode::FRONT_LEFT, audio::AudioMode::FRONT_RIGHT},
+      .bitrate = 96000},
+     // 5.1
+     {.channels = 6,
+      .streams = 4,
+      .coupled_streams = 2,
+      .speakers = {audio::AudioMode::FRONT_LEFT,
+                   audio::AudioMode::FRONT_RIGHT,
+                   audio::AudioMode::FRONT_CENTER,
+                   audio::AudioMode::LOW_FREQUENCY,
+                   audio::AudioMode::BACK_LEFT,
+                   audio::AudioMode::BACK_RIGHT},
+      .bitrate = 256000},
+     // 7.1
+     {.channels = 8,
+      .streams = 5,
+      .coupled_streams = 3,
+      .speakers = {audio::AudioMode::FRONT_LEFT,
+                   audio::AudioMode::FRONT_RIGHT,
+                   audio::AudioMode::FRONT_CENTER,
+                   audio::AudioMode::LOW_FREQUENCY,
+                   audio::AudioMode::BACK_LEFT,
+                   audio::AudioMode::BACK_RIGHT,
+                   audio::AudioMode::SIDE_LEFT,
+                   audio::AudioMode::SIDE_RIGHT},
+      .bitrate = 450000}}};
+
+static const audio::AudioMode &get_audio_mode(int channels, bool high_quality) {
+  int base_index = 0;
+  if (channels == 6) {
+    base_index = 2;
+  } else if (channels == 8) {
+    base_index = 4;
+  }
+
+  return AUDIO_CONFIGURATIONS[base_index]; // TODO: add high quality settings, it sounds bad if we can't change the
+                                           //       opusenc settings too..
+}
+
+/**
+ * Not many clients will actually look at this but the Nintendo Switch will flat out refuse to connect if the
+ * advertised display modes don't match
+ */
+const static immer::array<moonlight::DisplayMode> DISPLAY_CONFIGURATIONS = {{
+    // 720p
+    {.width = 1280, .height = 720, .refreshRate = 120},
+    {.width = 1280, .height = 720, .refreshRate = 60},
+    {.width = 1280, .height = 720, .refreshRate = 30},
+    // 1080p
+    {.width = 1920, .height = 1080, .refreshRate = 120},
+    {.width = 1920, .height = 1080, .refreshRate = 60},
+    {.width = 1920, .height = 1080, .refreshRate = 30},
+    // 1440p
+    {.width = 2560, .height = 1440, .refreshRate = 120},
+    {.width = 2560, .height = 1440, .refreshRate = 90},
+    {.width = 2560, .height = 1440, .refreshRate = 60},
+    // 2160p
+    {.width = 3840, .height = 2160, .refreshRate = 120},
+    {.width = 3840, .height = 2160, .refreshRate = 90},
+    {.width = 3840, .height = 2160, .refreshRate = 60},
+    // 8k
+    {.width = 7680, .height = 4320, .refreshRate = 120},
+    {.width = 7680, .height = 4320, .refreshRate = 90},
+    {.width = 7680, .height = 4320, .refreshRate = 60},
+}};
 
 } // namespace state

@@ -49,52 +49,55 @@ describe(const RTSP_PACKET &req, const state::StreamSession &session) {
     payloads.push_back({"a", "a=rtpmap:98 AV1/90000"});
   }
 
-  auto mapping_p = session.audio_mode.speakers;
-  // Opusenc forces a re-mapping to Vorbis; see
-  // https://gitlab.freedesktop.org/gstreamer/gstreamer/-/blob/main/subprojects/gst-plugins-base/ext/opus/gstopusenc.c#L549-572
-  if (session.audio_mode.channels == 6) { // 5.1
-    mapping_p = {
-        // The mapping for 5.1 is: [0 1 4 5 2 3]
-        AudioMode::FRONT_LEFT,
-        AudioMode::FRONT_RIGHT,
-        AudioMode::BACK_LEFT,
-        AudioMode::BACK_RIGHT,
-        AudioMode::FRONT_CENTER,
-        AudioMode::LOW_FREQUENCY,
-    };
-  } else if (session.audio_mode.channels == 8) { // 7.1
-    mapping_p = {
-        // The mapping for 7.1 is: [0 1 4 5 2 3 6 7]
-        AudioMode::FRONT_LEFT,
-        AudioMode::FRONT_RIGHT,
-        AudioMode::BACK_LEFT,
-        AudioMode::BACK_RIGHT,
-        AudioMode::FRONT_CENTER,
-        AudioMode::LOW_FREQUENCY,
-        AudioMode::SIDE_LEFT,
-        AudioMode::SIDE_RIGHT,
-    };
-  }
+  // Advertise all audio configurations
+  for (const auto audio_mode : state::AUDIO_CONFIGURATIONS) {
+    auto mapping_p = audio_mode.speakers;
+    // Opusenc forces a re-mapping to Vorbis; see
+    // https://gitlab.freedesktop.org/gstreamer/gstreamer/-/blob/1.24.6/subprojects/gst-plugins-base/ext/opus/gstopusenc.c#L549-572
+    if (audio_mode.channels == 6) { // 5.1
+      mapping_p = {
+          // The mapping for 5.1 is: [0 1 4 5 2 3]
+          AudioMode::FRONT_LEFT,
+          AudioMode::FRONT_RIGHT,
+          AudioMode::BACK_LEFT,
+          AudioMode::BACK_RIGHT,
+          AudioMode::FRONT_CENTER,
+          AudioMode::LOW_FREQUENCY,
+      };
+    } else if (audio_mode.channels == 8) { // 7.1
+      mapping_p = {
+          // The mapping for 7.1 is: [0 1 4 5 2 3 6 7]
+          AudioMode::FRONT_LEFT,
+          AudioMode::FRONT_RIGHT,
+          AudioMode::BACK_LEFT,
+          AudioMode::BACK_RIGHT,
+          AudioMode::FRONT_CENTER,
+          AudioMode::LOW_FREQUENCY,
+          AudioMode::SIDE_LEFT,
+          AudioMode::SIDE_RIGHT,
+      };
+    }
 
-  /**
-   * GFE advertises incorrect mapping for normal quality configurations,
-   * as a result, Moonlight rotates all channels from index '3' to the right
-   * To work around this, rotate channels to the left from index '3'
-   */
-  if (session.audio_mode.channels > 2) { // 5.1 and 7.1
-    std::rotate(mapping_p.begin() + 3, mapping_p.begin() + 4, mapping_p.end());
-  }
-  std::string audio_speakers = mapping_p                                                              //
-                               | views::transform([](auto speaker) { return (char)(speaker + '0'); }) //
-                               | to<std::string>;
-  auto surround_params = fmt::format("fmtp:97 surround-params={}{}{}{}",
-                                     session.audio_mode.channels,
-                                     session.audio_mode.streams,
-                                     session.audio_mode.coupled_streams,
-                                     audio_speakers);
+    /**
+     * GFE advertises incorrect mapping for normal quality configurations,
+     * as a result, Moonlight rotates all channels from index '3' to the right
+     * To work around this, rotate channels to the left from index '3'
+     */
+    if (audio_mode.channels > 2) { // 5.1 and 7.1
+      std::rotate(mapping_p.begin() + 3, mapping_p.begin() + 4, mapping_p.end());
+    }
+    std::string audio_speakers = mapping_p                                                              //
+                                 | views::transform([](auto speaker) { return (char)(speaker + '0'); }) //
+                                 | to<std::string>;
+    auto surround_params = fmt::format("fmtp:97 surround-params={}{}{}{}",
+                                       audio_mode.channels,
+                                       audio_mode.streams,
+                                       audio_mode.coupled_streams,
+                                       audio_speakers);
 
-  payloads.push_back({"a", surround_params});
-  logs::log(logs::debug, "[RTSP] Sending audio surround params: {}", surround_params);
+    payloads.push_back({"a", surround_params});
+    logs::log(logs::trace, "[RTSP] Sending audio surround params: {}", surround_params);
+  }
 
   payloads.push_back(
       {"a", fmt::format("x-ss-general.featureFlags: {}", FS_PEN_TOUCH_EVENTS | FS_CONTROLLER_TOUCH_EVENTS)});
@@ -183,7 +186,7 @@ announce(const RTSP_PACKET &req,
     gst_pipeline = session.app->h264_gst_pipeline;
   }
 
-  auto audio_channels = args["x-nv-audio.surround.numChannels"].value_or(session.audio_mode.channels);
+  auto audio_channels = args["x-nv-audio.surround.numChannels"].value_or(session.audio_channel_count);
   auto fec_percentage = 20; // TODO: setting?
 
   long bitrate = args["x-nv-vqos[0].bw.maximumBitrateKbps"].value_or(15500);
@@ -233,6 +236,8 @@ announce(const RTSP_PACKET &req,
 
   // Audio session
   unsigned short audio_port = state::AUDIO_PING_PORT + number_of_sessions;
+  auto high_quality_audio = args["x-nv-audio.surround.AudioQuality"].value_or(0) == 1;
+  auto audio_mode = state::get_audio_mode(audio_channels, high_quality_audio);
   state::AudioSession audio = {
       .gst_pipeline = session.app->opus_gst_pipeline,
 
@@ -246,8 +251,7 @@ announce(const RTSP_PACKET &req,
       .client_ip = session.ip,
 
       .packet_duration = args["x-nv-aqos.packetDuration"].value_or(5),
-      .channels = audio_channels,
-      .bitrate = session.audio_mode.bitrate};
+      .audio_mode = audio_mode};
   event_bus->fire_event(immer::box<state::AudioSession>(audio));
 
   return ok_msg(req.seq_number);

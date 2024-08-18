@@ -333,6 +333,23 @@ video/x-h264, profile=high, stream-format=byte-stream
 ##############
 # AV1 encoders
 ###
+
+[[gstreamer.video.av1_encoders]]
+plugin_name = "nvcodec"
+check_elements = ["nvav1enc", "cudaconvertscale", "cudaupload"]
+video_params = """
+queue ! cudaupload ! cudaconvertscale !
+video/x-raw(memory:CUDAMemory), width={width}, height={height},
+chroma-site={color_range}, format=NV12, colorimetry={color_space}, pixel-aspect-ratio=1/1
+\
+"""
+encoder_pipeline = """
+nvav1enc gop-size=-1 bitrate={bitrate} rc-mode=cbr zerolatency=true preset=p3 tune=low-latency !
+av1parse !
+video/x-av1, stream-format=obu-stream, alignment=frame, profile=main
+\
+"""
+
 [[gstreamer.video.av1_encoders]]
 plugin_name = "qsv"
 check_elements = ["qsvav1enc", "videoconvert"]
