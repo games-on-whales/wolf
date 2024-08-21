@@ -1,3 +1,5 @@
+cmake_minimum_required(VERSION 3.16...3.24)
+
 # Testing library
 FetchContent_Declare(
         Catch2

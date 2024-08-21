@@ -113,7 +113,7 @@ void start_streaming_video(const immer::box<state::VideoSession> &video_session,
                               fmt::arg("color_space", color_space),
                               fmt::arg("color_range", color_range),
                               fmt::arg("host_port", video_session->port));
-  logs::log(logs::debug, "Starting video pipeline: {}", pipeline);
+  logs::log(logs::debug, "Starting video pipeline: \n{}", pipeline);
 
   auto appsrc_state = custom_src::setup_app_src(video_session, std::move(wl_ptr));
 
@@ -219,7 +219,7 @@ void start_streaming_audio(const immer::box<state::AudioSession> &audio_session,
       fmt::arg("client_port", client_port),
       fmt::arg("client_ip", audio_session->client_ip),
       fmt::arg("host_port", audio_session->port));
-  logs::log(logs::debug, "Starting audio pipeline: {}", pipeline);
+  logs::log(logs::debug, "Starting audio pipeline: \n{}", pipeline);
 
   run_pipeline(pipeline, [session_id = audio_session->session_id, event_bus](auto pipeline, auto loop) {
     auto pause_handler = event_bus->register_handler<immer::box<control::PauseStreamEvent>>(

@@ -34,7 +34,7 @@ target_link_libraries_system(wolf_runner PUBLIC simple-web-server)
 FetchContent_Declare(
         toml
         GIT_REPOSITORY https://github.com/ToruNiina/toml11.git
-        GIT_TAG v3.7.1)
+        GIT_TAG v4.2.0)
 set(TOML11_COLORIZE_ERROR_MESSAGE, ON)
 set(TOML11_PRESERVE_COMMENTS_BY_DEFAULT, ON)
 FetchContent_MakeAvailable(toml)

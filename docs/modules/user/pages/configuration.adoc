@@ -293,7 +293,7 @@ video/x-raw, framerate={fps}/1
 """
 ....
 
-In case you have two GPUs that will use the same encoder pipeline (example: an AMD iGPU and an AMD GPU card) you can override the `encoder_pipeline` with the corresponding encoder plugin; see:
+In case you have two GPUs that will use the same encoder pipeline (example: an AMD iGPU and an AMD GPU card) you can override the `video_params` with the corresponding encoder plugin; see:
 https://gitlab.freedesktop.org/gstreamer/gstreamer/-/issues/1167[gstreamer/issues/1167].
 
 === App render node
