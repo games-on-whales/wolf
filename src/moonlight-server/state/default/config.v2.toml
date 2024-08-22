@@ -3,6 +3,7 @@ hostname = "Wolf"
 # The version of this config file
 config_version = 3
 
+support_av1 = true
 
 # A list of paired clients that will be allowed to stream
 paired_clients = []
@@ -332,6 +333,22 @@ video/x-h264, profile=high, stream-format=byte-stream
 ##############
 # AV1 encoders
 ###
+[[gstreamer.video.av1_encoders]]
+plugin_name = "nvcodec"
+check_elements = ["nvav1enc", "videoconvert"]
+video_params = """
+queue !
+videoconvert !
+video/x-raw, chroma-site={color_range}, width={width}, height={height}, format=NV12, colorimetry={color_space}
+\
+"""
+encoder_pipeline = """
+nvav1enc bitrate={bitrate} rc-mode=cbr gop-size=-1 strict-gop=True b-adapt=False rc-lookahead=0 bframes=0 zerolatency=True preset=p4 tune=ultra-low-latency multi-pass=two-pass-quarter !
+av1parse !
+video/x-av1, stream-format=obu-stream, alignment=frame, profile=main
+\
+"""
+
 [[gstreamer.video.av1_encoders]]
 plugin_name = "qsv"
 check_elements = ["qsvav1enc", "videoconvert"]

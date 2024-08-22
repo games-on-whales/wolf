@@ -24,11 +24,12 @@ RUN <<_ADD_NVRTC
 
     #Extra deps
     apt-get update -y
-    apt-get install -y unzip curl
+    apt-get install -y xz-utils curl
 
     cd /tmp
-    curl -fsSL -o nvidia_cuda_nvrtc_linux_x86_64.whl "https://developer.download.nvidia.com/compute/redist/nvidia-cuda-nvrtc/nvidia_cuda_nvrtc-11.0.221-cp36-cp36m-linux_x86_64.whl"
-    unzip -joq -d ./nvrtc nvidia_cuda_nvrtc_linux_x86_64.whl
+    mkdir nvrtc
+    curl -fsSL -o cuda_nvrtc-linux-x86_64-12.6.20-archive.tar.xz "https://developer.download.nvidia.com/compute/cuda/redist/cuda_nvrtc/linux-x86_64/cuda_nvrtc-linux-x86_64-12.6.20-archive.tar.xz"
+    tar -xJf "cuda_nvrtc-linux-x86_64-12.6.20-archive.tar.xz" -C ./nvrtc --strip-components=2
     cd nvrtc
     chmod 755 libnvrtc*
     find . -maxdepth 1 -type f -name "*libnvrtc.so.*" -exec sh -c 'ln -snf $(basename {}) libnvrtc.so' \;
@@ -40,7 +41,7 @@ RUN <<_ADD_NVRTC
     echo "/usr/local/nvidia/lib64" >> /etc/ld.so.conf.d/nvidia.conf
 
     # Cleanup
-    apt-get remove -y --purge unzip curl
+    apt-get remove -y --purge xz-utils curl
     rm -rf /var/lib/apt/lists/*
 _ADD_NVRTC
 

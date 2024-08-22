@@ -42,7 +42,7 @@ RUN <<_GSTREAMER_INSTALL
     apt-get install -y --no-install-recommends $DEV_PACKAGES
 
     # Build gstreamer
-    git clone -b $GSTREAMER_VERSION --depth=1 https://gitlab.freedesktop.org/gstreamer/gstreamer.git $SOURCE_PATH/gstreamer
+    git clone -b main --depth=1 https://gitlab.freedesktop.org/gstreamer/gstreamer.git $SOURCE_PATH/gstreamer
     cd ${SOURCE_PATH}/gstreamer
     # see the list of possible options here: https://gitlab.freedesktop.org/gstreamer/gstreamer/-/blob/main/meson_options.txt \
     meson setup \
