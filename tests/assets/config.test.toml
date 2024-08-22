@@ -6,7 +6,7 @@ uuid = "0000-1111-2222-3333"
 support_hevc = true
 support_av1 = false
 # The version of this config file
-config_version = 3
+config_version = 4
 
 
 # A list of paired clients that will be allowed to stream
@@ -68,6 +68,8 @@ source = "override DEFAULT SOURCE"
 default_source = "video_source"
 default_sink = "video_sink"
 
+defaults = { "coreelements" = { "video_params" = "default" } }
+
 ######################
 # AV1 encoders
 # Order here matters: Wolf will try them in order and pick the first one that's not failing
@@ -82,7 +84,7 @@ encoder_pipeline = ""
 plugin_name = "coreelements"
 check_elements = ["identity"]
 video_params = "params"
-encoder_pipeline = "h264_pipeline"
+encoder_pipeline = "av1_pipeline"
 
 ######################
 # HEVC encoders
@@ -97,7 +99,6 @@ encoder_pipeline = ""
 [[gstreamer.video.hevc_encoders]]
 plugin_name = "coreelements"
 check_elements = ["identity"]
-video_params = "params"
 encoder_pipeline = "hevc_pipeline"
 
 
@@ -114,7 +115,6 @@ encoder_pipeline = ""
 [[gstreamer.video.h264_encoders]]
 plugin_name = "coreelements"
 check_elements = ["identity"]
-video_params = "params"
 encoder_pipeline = "h264_pipeline"
 
 

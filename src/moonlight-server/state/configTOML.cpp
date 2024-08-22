@@ -230,9 +230,9 @@ Config load_or_default(const std::string &source, const std::shared_ptr<dp::even
   auto default_gst_audio_settings = toml::find<GstAudioCfg>(cfg, "gstreamer", "audio");
   auto default_gst_encoder_settings = default_gst_video_settings.defaults;
 
-  std::string default_app_render_node =
-      utils::get_env("WOLF_RENDER_NODE", "/dev/dri/renderD128"); // TODO: WOLF_ENCODER_NODE
-  auto vendor = get_vendor(default_app_render_node);
+  auto default_app_render_node = utils::get_env("WOLF_RENDER_NODE", "/dev/dri/renderD128");
+  auto default_gst_render_node = utils::get_env("WOLF_ENCODER_NODE", default_app_render_node);
+  auto vendor = get_vendor(default_gst_render_node);
 
   /* Automatic pick best encoders */
   auto h264_encoder = get_encoder("H264", default_gst_video_settings.h264_encoders, vendor);
@@ -260,14 +260,13 @@ Config load_or_default(const std::string &source, const std::shared_ptr<dp::even
         auto [idx, item] = pair;
         auto app_title = toml::find<std::string>(item, "title");
         auto app_render_node = toml::find_or(item, "render_node", default_app_render_node);
-        auto app_gpu_vendor = get_vendor(app_render_node);
-        if (app_gpu_vendor != vendor) {
+        if (app_render_node != default_gst_render_node) {
           logs::log(logs::warning,
-                    "App {} render node GPU vendor ({}) doesn't match the default GPU vendor ({})",
+                    "App {} render node ({}) doesn't match the default GPU ({})",
                     app_title,
-                    (int)app_gpu_vendor,
-                    (int)vendor);
-          // TODO: allow user to override the default GPU vendor for the gstreamer pipeline
+                    app_render_node,
+                    default_gst_render_node);
+          // TODO: allow user to override gst_render_node
         }
 
         auto h264_gst_pipeline =

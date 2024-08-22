@@ -19,7 +19,7 @@ using namespace ranges;
 
 TEST_CASE("LocalState load TOML", "[LocalState]") {
   auto event_bus = std::make_shared<dp::event_bus>();
-  auto state = state::load_or_default("config.v2.toml", event_bus);
+  auto state = state::load_or_default("config.test.toml", event_bus);
   REQUIRE(state.hostname == "Wolf");
   REQUIRE(state.uuid == "0000-1111-2222-3333");
   REQUIRE(state.support_hevc);
@@ -30,8 +30,9 @@ TEST_CASE("LocalState load TOML", "[LocalState]") {
     auto first_app = state.apps[0];
     REQUIRE_THAT(first_app.base.title, Equals("Firefox"));
     REQUIRE_THAT(first_app.base.id, Equals("1"));
-    REQUIRE_THAT(first_app.h264_gst_pipeline, Equals("video_source ! params ! h264_pipeline ! video_sink"));
-    REQUIRE_THAT(first_app.hevc_gst_pipeline, Equals("video_source ! params ! hevc_pipeline ! video_sink"));
+    REQUIRE_THAT(first_app.h264_gst_pipeline, Equals("video_source !\ndefault !\nh264_pipeline !\nvideo_sink"));
+    REQUIRE_THAT(first_app.hevc_gst_pipeline, Equals("video_source !\ndefault !\nhevc_pipeline !\nvideo_sink"));
+    REQUIRE_THAT(first_app.av1_gst_pipeline, Equals("video_source !\nparams !\nav1_pipeline !\nvideo_sink"));
     REQUIRE(first_app.joypad_type == moonlight::control::pkts::CONTROLLER_TYPE::AUTO);
     REQUIRE(first_app.start_virtual_compositor);
     REQUIRE(first_app.render_node == "/dev/dri/renderD128");
@@ -40,8 +41,12 @@ TEST_CASE("LocalState load TOML", "[LocalState]") {
     auto second_app = state.apps[1];
     REQUIRE_THAT(second_app.base.title, Equals("Test ball"));
     REQUIRE_THAT(second_app.base.id, Equals("2"));
-    REQUIRE_THAT(second_app.h264_gst_pipeline, Equals("override DEFAULT SOURCE ! params ! h264_pipeline ! video_sink"));
-    REQUIRE_THAT(second_app.hevc_gst_pipeline, Equals("override DEFAULT SOURCE ! params ! hevc_pipeline ! video_sink"));
+    REQUIRE_THAT(second_app.h264_gst_pipeline,
+                 Equals("override DEFAULT SOURCE !\ndefault !\nh264_pipeline !\nvideo_sink"));
+    REQUIRE_THAT(second_app.hevc_gst_pipeline,
+                 Equals("override DEFAULT SOURCE !\ndefault !\nhevc_pipeline !\nvideo_sink"));
+    REQUIRE_THAT(second_app.av1_gst_pipeline,
+                 Equals("override DEFAULT SOURCE !\nparams !\nav1_pipeline !\nvideo_sink"));
     REQUIRE(!second_app.start_virtual_compositor);
     REQUIRE(second_app.joypad_type == moonlight::control::pkts::CONTROLLER_TYPE::XBOX);
     REQUIRE(second_app.render_node == "/tmp/dead_beef");
@@ -60,7 +65,7 @@ TEST_CASE("LocalState load TOML", "[LocalState]") {
 TEST_CASE("LocalState pairing information", "[LocalState]") {
   auto event_bus = std::make_shared<dp::event_bus>();
   auto clients_atom = new immer::atom<state::PairedClientList>();
-  auto cfg = state::Config{.config_source = "config.v2.toml", .paired_clients = *clients_atom};
+  auto cfg = state::Config{.config_source = "config.test.toml", .paired_clients = *clients_atom};
   auto a_client_cert = "-----BEGIN CERTIFICATE-----\n"
                        "MIICvzCCAaegAwIBAgIBADANBgkqhkiG9w0BAQsFADAjMSEwHwYDVQQDDBhOVklE\n"
                        "SUEgR2FtZVN0cmVhbSBDbGllbnQwHhcNMjEwNzEwMDgzNjE3WhcNNDEwNzA1MDgz\n"
@@ -120,7 +125,7 @@ TEST_CASE("LocalState pairing information", "[LocalState]") {
 
 TEST_CASE("Mocked serverinfo", "[MoonlightProtocol]") {
   auto event_bus = std::make_shared<dp::event_bus>();
-  auto cfg = state::load_or_default("config.v2.toml", event_bus);
+  auto cfg = state::load_or_default("config.test.toml", event_bus);
   immer::array<DisplayMode> displayModes = {{1920, 1080, 60}, {1024, 768, 30}};
 
   SECTION("server_info conforms with the expected HEVC response") {
@@ -324,7 +329,7 @@ TEST_CASE("Pairing moonlight", "[MoonlightProtocol]") {
 
 TEST_CASE("applist", "[MoonlightProtocol]") {
   auto event_bus = std::make_shared<dp::event_bus>();
-  auto cfg = state::load_or_default("config.v2.toml", event_bus);
+  auto cfg = state::load_or_default("config.test.toml", event_bus);
   auto base_apps = cfg.apps | views::transform([](auto app) { return app.base; }) | to<immer::vector<moonlight::App>>();
   auto result = applist(base_apps);
   REQUIRE(xml_to_str(result) == "<?xml version=\"1.0\" encoding=\"utf-8\"?>\n"
@@ -336,7 +341,7 @@ TEST_CASE("applist", "[MoonlightProtocol]") {
 
 TEST_CASE("launch", "[MoonlightProtocol]") {
   auto event_bus = std::make_shared<dp::event_bus>();
-  auto cfg = state::load_or_default("config.v2.toml", event_bus);
+  auto cfg = state::load_or_default("config.test.toml", event_bus);
   auto result = launch_success("192.168.1.1", "3021");
   REQUIRE(xml_to_str(result) == "<?xml version=\"1.0\" encoding=\"utf-8\"?>\n"
                                 "<root status_code=\"200\">"

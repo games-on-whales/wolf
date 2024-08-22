@@ -1,4 +1,3 @@
-R"for_c++_include(
 # The name that will be displayed in Moonlight
 hostname = "Wolf"
 # The version of this config file
@@ -367,4 +366,3 @@ aes_key="{aes_key}" aes_iv="{aes_iv}" !
 udpsink bind-port={host_port} host={client_ip} port={client_port} sync=true\
 """
 
-)for_c++_include"

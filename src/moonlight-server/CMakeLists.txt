@@ -139,7 +139,7 @@ function(make_includable input_file output_file)
 endfunction(make_includable)
 
 make_includable(rest/html/pin.html rest/html/pin.include.html)
-make_includable(state/default/config.v2.toml state/default/config.include.toml)
+make_includable(state/default/config.v4.toml state/default/config.include.toml)
 
 # All users of this library will need at least C++17
 target_compile_features(wolf_runner PUBLIC cxx_std_17)
