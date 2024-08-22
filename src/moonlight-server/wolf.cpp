@@ -58,7 +58,12 @@ state::Host get_host_config(std::string_view pkey_filename, std::string_view cer
     mac_address = override_mac;
   }
 
-  return {state::DISPLAY_CONFIGURATIONS, state::AUDIO_CONFIGURATIONS, server_cert, server_pkey, internal_ip, mac_address};
+  return {state::DISPLAY_CONFIGURATIONS,
+          state::AUDIO_CONFIGURATIONS,
+          server_cert,
+          server_pkey,
+          internal_ip,
+          mac_address};
 }
 
 /**
