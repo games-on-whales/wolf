@@ -27,7 +27,7 @@ public:
            std::string_view render_node) override;
 
   toml::value serialise() override {
-    return {{"type", "process"}, {"run_cmd", this->run_cmd}};
+    return toml::table{{"type", "process"}, {"run_cmd", this->run_cmd}};
   }
 
 protected:

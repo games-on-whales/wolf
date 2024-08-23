@@ -1,6 +1,7 @@
 #pragma once
 
 #include <chrono>
+#include <core/audio.hpp>
 #include <core/input.hpp>
 #include <core/virtual-display.hpp>
 #include <eventbus/event_bus.hpp>
@@ -40,7 +41,7 @@ struct VideoSession {
   int frames_with_invalid_ref_threshold;
   int fec_percentage;
   int min_required_fec_packets;
-  int bitrate_kbps;
+  long bitrate_kbps;
   int slices_per_frame;
 
   ColorRange color_range;
@@ -48,6 +49,8 @@ struct VideoSession {
 
   std::string client_ip;
 };
+
+using namespace wolf::core::audio;
 
 struct AudioSession {
   std::string gst_pipeline;
@@ -63,8 +66,7 @@ struct AudioSession {
   std::string client_ip;
 
   int packet_duration;
-  int channels;
-  int bitrate = 48000;
+  AudioMode audio_mode;
 };
 
 /**

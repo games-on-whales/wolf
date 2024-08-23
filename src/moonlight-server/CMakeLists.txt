@@ -34,7 +34,7 @@ target_link_libraries_system(wolf_runner PUBLIC simple-web-server)
 FetchContent_Declare(
         toml
         GIT_REPOSITORY https://github.com/ToruNiina/toml11.git
-        GIT_TAG v3.7.1)
+        GIT_TAG v4.2.0)
 set(TOML11_COLORIZE_ERROR_MESSAGE, ON)
 set(TOML11_PRESERVE_COMMENTS_BY_DEFAULT, ON)
 FetchContent_MakeAvailable(toml)
@@ -139,7 +139,7 @@ function(make_includable input_file output_file)
 endfunction(make_includable)
 
 make_includable(rest/html/pin.html rest/html/pin.include.html)
-make_includable(state/default/config.v2.toml state/default/config.include.toml)
+make_includable(state/default/config.v4.toml state/default/config.include.toml)
 
 # All users of this library will need at least C++17
 target_compile_features(wolf_runner PUBLIC cxx_std_17)

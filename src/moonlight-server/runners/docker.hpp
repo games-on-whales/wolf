@@ -98,17 +98,18 @@ public:
            std::string_view render_node) override;
 
   toml::value serialise() override {
-    return {{"type", "docker"},
-            {"name", container.name},
-            {"image", container.image},
-            {"ports",
-             container.ports | transform([](const auto &el) { return fmt::format("{}", el); }) | ranges::to_vector},
-            {"mounts",
-             container.mounts | transform([](const auto &el) { return fmt::format("{}", el); }) | ranges::to_vector},
-            {"devices",
-             container.devices | transform([](const auto &el) { return fmt::format("{}", el); }) | ranges::to_vector},
-            {"env", container.env},
-            {"base_create_json", base_create_json}};
+    return toml::table{
+        {"type", "docker"},
+        {"name", container.name},
+        {"image", container.image},
+        {"ports",
+         container.ports | transform([](const auto &el) { return fmt::format("{}", el); }) | ranges::to_vector},
+        {"mounts",
+         container.mounts | transform([](const auto &el) { return fmt::format("{}", el); }) | ranges::to_vector},
+        {"devices",
+         container.devices | transform([](const auto &el) { return fmt::format("{}", el); }) | ranges::to_vector},
+        {"env", container.env},
+        {"base_create_json", base_create_json}};
   }
 
 protected:

@@ -3,6 +3,51 @@
 #include <memory>
 #include <pulse/pulseaudio.h>
 
+namespace fmt {
+template <> class formatter<wolf::core::audio::AudioMode::Speakers> {
+public:
+  template <typename ParseContext> constexpr auto parse(ParseContext &ctx) {
+    return ctx.begin();
+  }
+
+  template <typename FormatContext>
+  auto format(const wolf::core::audio::AudioMode::Speakers &speaker, FormatContext &ctx) const {
+    std::string speaker_name;
+    // Mapping taken from
+    // https://www.freedesktop.org/wiki/Software/PulseAudio/Documentation/User/Modules/#module-null-sink
+    switch (speaker) {
+    case wolf::core::audio::AudioMode::FRONT_LEFT:
+      speaker_name = "front-left";
+      break;
+    case wolf::core::audio::AudioMode::FRONT_RIGHT:
+      speaker_name = "front-right";
+      break;
+    case wolf::core::audio::AudioMode::FRONT_CENTER:
+      speaker_name = "front-center";
+      break;
+    case wolf::core::audio::AudioMode::LOW_FREQUENCY:
+      speaker_name = "lfe";
+      break;
+    case wolf::core::audio::AudioMode::BACK_LEFT:
+      speaker_name = "rear-left";
+      break;
+    case wolf::core::audio::AudioMode::BACK_RIGHT:
+      speaker_name = "rear-right";
+      break;
+    case wolf::core::audio::AudioMode::SIDE_LEFT:
+      speaker_name = "side-left";
+      break;
+    case wolf::core::audio::AudioMode::SIDE_RIGHT:
+      speaker_name = "side-right";
+      break;
+    case wolf::core::audio::AudioMode::MAX_SPEAKERS:
+      break;
+    }
+    return fmt::format_to(ctx.out(), "{}", speaker_name);
+  }
+};
+} // namespace fmt
+
 namespace wolf::core::audio {
 
 struct Server {
@@ -88,8 +133,11 @@ std::shared_ptr<VSink> create_virtual_sink(const std::shared_ptr<Server> &server
 
   queue_op(server, [server, vsink]() {
     auto device = vsink->device;
-    auto channel_spec =
-        fmt::format("rate={} sink_name={} channels={}", device.bitrate, device.sink_name, device.n_channels);
+    auto channel_spec = fmt::format("rate={} sink_name={} channels={} channel_map={}",
+                                    device.mode.sample_rate,
+                                    device.sink_name,
+                                    device.mode.channels,
+                                    fmt::join(device.mode.speakers, ","));
     auto operation = pa_context_load_module(
         server->ctx,
         "module-null-sink",

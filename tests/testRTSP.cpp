@@ -12,6 +12,7 @@ using Catch::Matchers::Equals;
 using namespace std::string_literals;
 using namespace state;
 using namespace rtsp;
+using namespace wolf::core::audio;
 
 /**
  * In order to test rtsp::tcp_connection we create a derived class that does the opposite:
@@ -252,7 +253,7 @@ TEST_CASE("Custom Parser", "[RTSP]") {
 state::SessionsAtoms test_init_state() {
   StreamSession session = {
       .display_mode = {1920, 1080, 60},
-      .audio_mode = {2, 1, 1, {state::AudioMode::FRONT_LEFT, state::AudioMode::FRONT_RIGHT}},
+      .audio_channel_count = 2,
       .app = std::make_shared<state::App>(state::App{.base = {},
                                                      .h264_gst_pipeline = "",
                                                      .hevc_gst_pipeline = "",
@@ -308,9 +309,13 @@ TEST_CASE("Commands", "[RTSP]") {
                        REQUIRE(response);
                        REQUIRE(response.value().response.status_code == 200);
                        REQUIRE(response.value().seq_number == 2);
+                       REQUIRE(response.value().payloads.size() == 5);
                        REQUIRE_THAT(response.value().payloads[0].first, Equals("sprop-parameter-sets"));
                        REQUIRE_THAT(response.value().payloads[0].second, Equals("AAAAAU"));
                        REQUIRE_THAT(response.value().payloads[1].second, Equals("fmtp:97 surround-params=21101"));
+                       REQUIRE_THAT(response.value().payloads[2].second, Equals("fmtp:97 surround-params=642014235"));
+                       REQUIRE_THAT(response.value().payloads[3].second, Equals("fmtp:97 surround-params=85301423675"));
+                       REQUIRE_THAT(response.value().payloads[4].second, Equals("x-ss-general.featureFlags: 3"));
                      });
   }
 

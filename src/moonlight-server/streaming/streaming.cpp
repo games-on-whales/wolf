@@ -113,7 +113,7 @@ void start_streaming_video(const immer::box<state::VideoSession> &video_session,
                               fmt::arg("color_space", color_space),
                               fmt::arg("color_range", color_range),
                               fmt::arg("host_port", video_session->port));
-  logs::log(logs::debug, "Starting video pipeline: {}", pipeline);
+  logs::log(logs::debug, "Starting video pipeline: \n{}", pipeline);
 
   auto appsrc_state = custom_src::setup_app_src(video_session, std::move(wl_ptr));
 
@@ -202,19 +202,24 @@ void start_streaming_audio(const immer::box<state::AudioSession> &audio_session,
                            unsigned short client_port,
                            const std::string &sink_name,
                            const std::string &server_name) {
-  auto pipeline = fmt::format(audio_session->gst_pipeline,
-                              fmt::arg("channels", audio_session->channels),
-                              fmt::arg("bitrate", audio_session->bitrate),
-                              fmt::arg("sink_name", sink_name),
-                              fmt::arg("server_name", server_name),
-                              fmt::arg("packet_duration", audio_session->packet_duration),
-                              fmt::arg("aes_key", audio_session->aes_key),
-                              fmt::arg("aes_iv", audio_session->aes_iv),
-                              fmt::arg("encrypt", audio_session->encrypt_audio),
-                              fmt::arg("client_port", client_port),
-                              fmt::arg("client_ip", audio_session->client_ip),
-                              fmt::arg("host_port", audio_session->port));
-  logs::log(logs::debug, "Starting audio pipeline: {}", pipeline);
+  auto pipeline = fmt::format(
+      audio_session->gst_pipeline,
+      fmt::arg("channels", audio_session->audio_mode.channels),
+      fmt::arg("bitrate", audio_session->audio_mode.bitrate),
+      // TODO: opusenc hardcodes those two
+      // https://gitlab.freedesktop.org/gstreamer/gstreamer/-/blob/1.24.6/subprojects/gst-plugins-base/ext/opus/gstopusenc.c#L661-666
+      fmt::arg("streams", audio_session->audio_mode.streams),
+      fmt::arg("coupled_streams", audio_session->audio_mode.coupled_streams),
+      fmt::arg("sink_name", sink_name),
+      fmt::arg("server_name", server_name),
+      fmt::arg("packet_duration", audio_session->packet_duration),
+      fmt::arg("aes_key", audio_session->aes_key),
+      fmt::arg("aes_iv", audio_session->aes_iv),
+      fmt::arg("encrypt", audio_session->encrypt_audio),
+      fmt::arg("client_port", client_port),
+      fmt::arg("client_ip", audio_session->client_ip),
+      fmt::arg("host_port", audio_session->port));
+  logs::log(logs::debug, "Starting audio pipeline: \n{}", pipeline);
 
   run_pipeline(pipeline, [session_id = audio_session->session_id, event_bus](auto pipeline, auto loop) {
     auto pause_handler = event_bus->register_handler<immer::box<control::PauseStreamEvent>>(

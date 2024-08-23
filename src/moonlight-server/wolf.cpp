@@ -35,21 +35,6 @@ auto load_config(std::string_view config_file, const std::shared_ptr<dp::event_b
   return state::load_or_default(config_file.data(), ev_bus);
 }
 
-/**
- * @brief Get the Display Modes
- */
-immer::array<moonlight::DisplayMode> getDisplayModes() {
-  return {{1920, 1080, 60}, {1280, 720, 60}, {1024, 768, 30}, {800, 600, 30}};
-}
-
-/**
- * @brief Get the Audio Modes
- */
-immer::array<state::AudioMode> getAudioModes() {
-  // Stereo
-  return {{2, 1, 1, {state::AudioMode::FRONT_LEFT, state::AudioMode::FRONT_RIGHT}}};
-}
-
 state::Host get_host_config(std::string_view pkey_filename, std::string_view cert_filename) {
   X509 *server_cert;
   EVP_PKEY *server_pkey;
@@ -73,7 +58,12 @@ state::Host get_host_config(std::string_view pkey_filename, std::string_view cer
     mac_address = override_mac;
   }
 
-  return {getDisplayModes(), getAudioModes(), server_cert, server_pkey, internal_ip, mac_address};
+  return {state::DISPLAY_CONFIGURATIONS,
+          state::AUDIO_CONFIGURATIONS,
+          server_cert,
+          server_pkey,
+          internal_ip,
+          mac_address};
 }
 
 /**
@@ -82,7 +72,6 @@ state::Host get_host_config(std::string_view pkey_filename, std::string_view cer
 auto initialize(std::string_view config_file, std::string_view pkey_filename, std::string_view cert_filename) {
   auto event_bus = std::make_shared<dp::event_bus>();
   auto config = load_config(config_file, event_bus);
-  auto display_modes = getDisplayModes();
 
   auto host = get_host_config(pkey_filename, cert_filename);
   auto state = state::AppState{
@@ -203,10 +192,10 @@ auto setup_sessions_handlers(const immer::box<state::AppState> &app_state,
           auto pulse_sink_name = fmt::format("virtual_sink_{}", session->session_id);
           std::shared_ptr<audio::VSink> v_device;
           if (audio_server && audio_server->server) {
-            v_device = audio::create_virtual_sink(audio_server->server,
-                                                  audio::AudioDevice{.sink_name = pulse_sink_name,
-                                                                     .n_channels = session->audio_mode.channels,
-                                                                     .bitrate = 48000}); // TODO:
+            v_device = audio::create_virtual_sink(
+                audio_server->server,
+                audio::AudioDevice{.sink_name = pulse_sink_name,
+                                   .mode = state::get_audio_mode(session->audio_channel_count, true)});
           }
 
           /* Setup devices paths */

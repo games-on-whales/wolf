@@ -4,8 +4,11 @@ ENV DEBIAN_FRONTEND=noninteractive
 ENV BUILD_ARCHITECTURE=amd64
 ENV DEB_BUILD_OPTIONS=noddebs
 
-ARG GSTREAMER_VERSION=1.22.7
+ARG GSTREAMER_VERSION=1.25.1
 ENV GSTREAMER_VERSION=$GSTREAMER_VERSION
+# Change this to 1.25.1 once released
+ARG GSTREAMER_SHA_COMMIT=671281d860899e9a236f604076831a9ce72186b8
+ENV GSTREAMER_SHA_COMMIT=$GSTREAMER_SHA_COMMIT
 
 ENV SOURCE_PATH=/sources/
 WORKDIR $SOURCE_PATH
@@ -42,8 +45,10 @@ RUN <<_GSTREAMER_INSTALL
     apt-get install -y --no-install-recommends $DEV_PACKAGES
 
     # Build gstreamer
-    git clone -b $GSTREAMER_VERSION --depth=1 https://gitlab.freedesktop.org/gstreamer/gstreamer.git $SOURCE_PATH/gstreamer
+    git clone https://gitlab.freedesktop.org/gstreamer/gstreamer.git $SOURCE_PATH/gstreamer
     cd ${SOURCE_PATH}/gstreamer
+    git checkout $GSTREAMER_SHA_COMMIT
+    git submodule update --recursive --remote
     # see the list of possible options here: https://gitlab.freedesktop.org/gstreamer/gstreamer/-/blob/main/meson_options.txt \
     meson setup \
         --buildtype=release \
