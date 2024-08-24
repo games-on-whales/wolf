@@ -135,4 +135,12 @@ inline json::value parse_json(std::string_view json) {
   }
 }
 
+template<typename T, typename K>
+auto get_optional(T&& map, K&& key)
+{
+  auto it = map.find(std::forward<K>(key));
+  if (it == map.end()) return std::optional<typename std::decay<T>::type::mapped_type>{};
+  return std::optional<typename std::decay<T>::type::mapped_type>{it->second};
+}
+
 } // namespace utils

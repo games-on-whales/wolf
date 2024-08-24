@@ -12,7 +12,7 @@
 namespace state {
 
 struct GstEncoderDefault {
-  std::string video_params;
+  std::string video_params = "";
 };
 
 struct GstEncoder {
@@ -251,6 +251,10 @@ Config load_or_default(const std::string &source, const std::shared_ptr<dp::even
       | ranges::views::transform([](const PairedClient &client) { return immer::box<PairedClient>{client}; }) //
       | ranges::to<immer::vector<immer::box<PairedClient>>>();
 
+  auto default_h264 = utils::get_optional(default_gst_encoder_settings, h264_encoder->plugin_name);
+  auto default_hevc = utils::get_optional(default_gst_encoder_settings, hevc_encoder->plugin_name);
+  auto default_av1 = utils::get_optional(default_gst_encoder_settings, av1_encoder->plugin_name);
+
   /* Get apps, here we'll merge the default gstreamer settings with the app specific overrides */
   auto cfg_apps = toml::find<std::vector<toml::value>>(cfg, "apps");
   auto apps =
@@ -271,11 +275,11 @@ Config load_or_default(const std::string &source, const std::shared_ptr<dp::even
 
         auto h264_gst_pipeline =
             toml::find_or(item, "video", "source", default_gst_video_settings.default_source) + " !\n" +
-            toml::find_or(item,
-                          "video",
-                          "video_params",
-                          h264_encoder->video_params.value_or(
-                              default_gst_encoder_settings.at(h264_encoder->plugin_name).video_params)) +
+            toml::find_or(
+                item,
+                "video",
+                "video_params",
+                h264_encoder->video_params.value_or(default_h264.value_or(GstEncoderDefault{}).video_params)) +
             " !\n" + toml::find_or(item, "video", "h264_encoder", h264_encoder->encoder_pipeline) + " !\n" +
             toml::find_or(item, "video", " sink ", default_gst_video_settings.default_sink);
 
@@ -286,7 +290,7 @@ Config load_or_default(const std::string &source, const std::shared_ptr<dp::even
                                     "video",
                                     "video_params",
                                     hevc_encoder->video_params.value_or(
-                                        default_gst_encoder_settings.at(hevc_encoder->plugin_name).video_params)) +
+                                        default_hevc.value_or(GstEncoderDefault{}).video_params)) +
                       " !\n" + toml::find_or(item, "video", "hevc_encoder", hevc_encoder->encoder_pipeline) + " !\n" +
                       toml::find_or(item, "video", " sink ", default_gst_video_settings.default_sink)
                 : "";
@@ -294,11 +298,11 @@ Config load_or_default(const std::string &source, const std::shared_ptr<dp::even
         auto av1_gst_pipeline =
             av1_encoder.has_value()
                 ? toml::find_or(item, "video", "source", default_gst_video_settings.default_source) + " !\n" +
-                      toml::find_or(item,
-                                    "video",
-                                    "video_params",
-                                    av1_encoder->video_params.value_or(
-                                        default_gst_encoder_settings.at(av1_encoder->plugin_name).video_params)) +
+                      toml::find_or(
+                          item,
+                          "video",
+                          "video_params",
+                          av1_encoder->video_params.value_or(default_av1.value_or(GstEncoderDefault{}).video_params)) +
                       " !\n" + toml::find_or(item, "video", "av1_encoder", av1_encoder->encoder_pipeline) + " !\n" +
                       toml::find_or(item, "video", " sink ", default_gst_video_settings.default_sink)
                 : "";
