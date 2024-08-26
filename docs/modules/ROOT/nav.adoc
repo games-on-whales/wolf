@@ -3,6 +3,7 @@
 ** xref:user:configuration.adoc[]
 ** xref:user:gstreamer.adoc[]
 ** xref:user:troubleshooting.adoc[]
+** xref:user:steam.adoc[]
 
 * Developer guide
 ** xref:dev:how-it-works.adoc[]

@@ -353,24 +353,4 @@ https://gitlab.freedesktop.org/gstreamer/gstreamer/-/issues/1167[gstreamer/issue
 
 == Directly launch a Steam game
 
-In order to directly launch a Steam game from Moonlight you can just copy the existing `[[apps]]` entry for Steam, change the name and just add the Steam app ID as env variable; example:
-
-[source,toml]
-....
-[[apps]]
-title = "Elden Ring"
-start_virtual_compositor = true
-
-[apps.runner]
-env = [
-  "PROTON_LOG=1",
-  "RUN_SWAY=true",
-  "GOW_REQUIRED_DEVICES=/dev/input/* /dev/dri/* /dev/nvidia*",
-  "STEAM_STARTUP_FLAGS=steam://rungameid/1245620"
-]
-# COPY EVERYTHING ELSE ...
-....
-
-You can get the app ID from https://steamdb.info/[]
-
-(Thanks to @nathanle1406 for the tip)
+This has been moved to the xref:steam.adoc[] page.

@@ -1,0 +1,54 @@
+= Steam =
+
+One of the pre-installed applications in the default Wolf configuration is Steam.
+Getting Steam to work in a headless container took some work, so this page lists some limitations
+and tips to get the most out of Steam.
+
+== Directly launch a Steam game ==
+
+In order to directly launch a Steam game from Moonlight you can just copy the existing `[[apps]]` entry for Steam, change the name and just add the Steam app ID as env variable; example:
+
+[source,toml]
+....
+[[apps]]
+title = "Elden Ring"
+start_virtual_compositor = true
+
+[apps.runner]
+env = [
+  "PROTON_LOG=1",
+  "RUN_SWAY=true",
+  "GOW_REQUIRED_DEVICES=/dev/input/* /dev/dri/* /dev/nvidia*",
+  "STEAM_STARTUP_FLAGS=steam://rungameid/1245620"
+]
+# COPY EVERYTHING ELSE ...
+....
+
+You can get the app ID from https://steamdb.info/[]
+
+(Thanks to @nathanle1406 for the tip)
+
+== MangoHud ==
+
+The steam overlay currently does not work in our headless container.
+So if you want to see FPS and other stats you can use FlightlessMango's excellent https://github.com/flightlessmango/MangoHud[MangoHud].
+
+image:ROOT:mangohud_example.gif[Mangohud screenshot]
+
+=== Proton (Steam Play) and other Vulkan games ===
+
+It's already installed and enabled in the default steam image for all Vulkan games (including Proton games).
+
+See below for how to activate it in game.
+
+=== OpenGL (Native Linux) games ===
+
+While mangohud is already installed, there's no way to globally enable it for all OpenGL games.
+You can still enable it on a per-game basis by adding `mangohud %command%` to the game's launch options in Steam.
+
+image:ROOT:steam_mangohud_config.png[Steam launch options]
+
+=== Activation and configuration ===
+
+In a game, you can press `Right Shift` + `F12` to make the overlay appear and disappear.
+You can also press `Right Shift` + `F11` to change the position of the overlay on screen.
