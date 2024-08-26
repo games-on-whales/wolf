@@ -111,7 +111,7 @@ void start_streaming_video(const immer::box<state::VideoSession> &video_session,
     break;
   }
 
-  auto pipeline = fmt::format(video_session->gst_pipeline,
+  auto pipeline = fmt::format(fmt::runtime(video_session->gst_pipeline),
                               fmt::arg("width", video_session->display_mode.width),
                               fmt::arg("height", video_session->display_mode.height),
                               fmt::arg("fps", video_session->display_mode.refreshRate),
@@ -216,7 +216,7 @@ void start_streaming_audio(const immer::box<state::AudioSession> &audio_session,
                            const std::string &sink_name,
                            const std::string &server_name) {
   auto pipeline = fmt::format(
-      audio_session->gst_pipeline,
+      fmt::runtime(audio_session->gst_pipeline),
       fmt::arg("channels", audio_session->audio_mode.channels),
       fmt::arg("bitrate", audio_session->audio_mode.bitrate),
       // TODO: opusenc hardcodes those two

@@ -82,10 +82,6 @@ static bool run_pipeline(const std::string &pipeline_desc,
   gst_element_set_state(pipeline.get(), GST_STATE_READY);
   gst_element_set_state(pipeline.get(), GST_STATE_NULL);
 
-  for (const auto &handler : handlers) {
-    handler->unregister();
-  }
-
   return true;
 }
 

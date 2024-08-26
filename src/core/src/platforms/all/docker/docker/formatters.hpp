@@ -30,7 +30,7 @@ public:
   }
   template <typename FormatContext>
   auto format(const docker::MountPoint &mount, FormatContext &ctx) const -> decltype(ctx.out()) {
-    return format_to(ctx.out(), "{}:{}:{}", mount.source, mount.destination, mount.mode);
+    return format_to(ctx.out(), fmt::runtime("{}:{}:{}"), mount.source, mount.destination, mount.mode);
   }
 };
 
@@ -41,7 +41,11 @@ public:
   }
   template <typename FormatContext>
   auto format(const docker::Device &dev, FormatContext &ctx) const -> decltype(ctx.out()) {
-    return format_to(ctx.out(), "{}:{}:{}", dev.path_on_host, dev.path_in_container, dev.cgroup_permission);
+    return format_to(ctx.out(),
+                     fmt::runtime("{}:{}:{}"),
+                     dev.path_on_host,
+                     dev.path_in_container,
+                     dev.cgroup_permission);
   }
 };
 
@@ -54,7 +58,8 @@ public:
   auto format(const docker::Container &container, FormatContext &ctx) const -> decltype(ctx.out()) {
     return format_to(
         ctx.out(),
-        "{{\n id: {}\n name: {}\n image: {}\n status: {}\n ports: {}\n mounts: {}\n devices: {}\n env: {}\n}}",
+        fmt::runtime(
+            "{{\n id: {}\n name: {}\n image: {}\n status: {}\n ports: {}\n mounts: {}\n devices: {}\n env: {}\n}}"),
         container.id,
         container.name,
         container.image,

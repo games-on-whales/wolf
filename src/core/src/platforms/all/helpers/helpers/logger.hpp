@@ -126,8 +126,9 @@ BOOST_LOG_INLINE_GLOBAL_LOGGER_INIT(my_logger, my_logger_mt) {
  * @param format_str: a valid fmt::format string
  * @param args: optional additional args to be formatted
  */
-template <typename S, typename... Args> inline void log(severity_level lvl, const S &format_str, const Args &...args) {
-  auto msg = fmt::format(format_str, args...);
+template <typename... Args>
+inline void log(severity_level lvl, fmt::format_string<Args...> format_str, Args &&...args) {
+  auto msg = fmt::format(format_str, std::forward<Args>(args)...);
   BOOST_LOG_SEV(my_logger::get(), lvl) << msg;
 }
 

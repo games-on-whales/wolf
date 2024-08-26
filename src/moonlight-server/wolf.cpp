@@ -442,6 +442,8 @@ void run() {
   auto p_key_file = utils::get_env("WOLF_PRIVATE_KEY_FILE", "key.pem");
   auto p_cert_file = utils::get_env("WOLF_PRIVATE_CERT_FILE", "cert.pem");
   auto local_state = initialize(config_file, p_key_file, p_cert_file);
+  auto global_ev_handler = local_state->event_bus->register_global_handler(
+      [](std::any ev) { logs::log(logs::trace, "Fired event: {}", ev.type().name()); });
 
   // HTTP APIs
   auto http_thread = std::thread([local_state]() {
@@ -480,10 +482,6 @@ void run() {
   auto sess_handlers = setup_sessions_handlers(local_state, runtime_dir, audio_server);
 
   http_thread.join(); // Let's park the main thread over here
-
-  for (const auto &handler : sess_handlers) {
-    handler->unregister();
-  }
 }
 
 int main(int argc, char *argv[]) try {

@@ -19,7 +19,9 @@ static std::string to_hex(const std::basic_string<char32_t> &str) {
   std::stringstream ss;
   ss << std::hex << std::setfill('0');
   for (const auto &ch : str) {
-    ss << ch;
+    ss << (char)(ch >> 16);
+    ss << (char)(ch >> 8);
+    ss << (char)ch;
   }
 
   std::string hex_unicode(ss.str());
