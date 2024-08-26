@@ -77,7 +77,7 @@ FetchContent_MakeAvailable(cpptrace)
 find_package(Threads REQUIRED)
 find_package(OpenSSL REQUIRED)
 
-find_package(Boost REQUIRED COMPONENTS log locale)
+find_package(Boost 1.77 REQUIRED COMPONENTS log locale)
 include_directories(${Boost_INCLUDE_DIRS})
 
 target_link_libraries(

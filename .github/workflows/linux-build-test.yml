@@ -64,7 +64,6 @@ jobs:
                 -H$GITHUB_WORKSPACE \
                 -DCMAKE_BUILD_TYPE=Debug \
                 -DCMAKE_CXX_EXTENSIONS=OFF \
-                -DCMAKE_CXX_STANDARD=17 \
                 -DTEST_VIRTUAL_INPUT=OFF \
                 -DTEST_DOCKER=ON \
                 -DTEST_RUST_WAYLAND=ON \
@@ -142,7 +141,7 @@ jobs:
           - clang++-14
         build_type: [ Release ]
         shared: [ true, false ]
-        std: [ 17 ]
+        std: [ 20 ]
         include:
           - cxx: g++-10
             other_pkgs: [ g++-10 ]
