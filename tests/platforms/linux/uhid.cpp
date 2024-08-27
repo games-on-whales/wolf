@@ -10,14 +10,14 @@ using Catch::Matchers::Equals;
 using Catch::Matchers::StartsWith;
 
 using namespace wolf::core::input;
+using namespace wolf::core;
 using namespace moonlight::control;
 using namespace std::string_literals;
 
 TEST_CASE("Create PS5 pad with CONTROLLER_ARRIVAL", "[UHID]") {
-  state::App app = {.joypad_type = moonlight::control::pkts::CONTROLLER_TYPE::AUTO};
-  auto session = state::StreamSession{
-      .event_bus = std::make_shared<dp::event_bus>(),
-      .app = std::make_shared<state::App>(app)};
+  events::App app = {.joypad_type = moonlight::control::pkts::CONTROLLER_TYPE::AUTO};
+  auto session =
+      events::StreamSession{.event_bus = std::make_shared<dp::event_bus>(), .app = std::make_shared<events::App>(app)};
   uint8_t controller_number = 1;
   auto c_pkt = pkts::CONTROLLER_ARRIVAL_PACKET{
       .controller_number = controller_number,

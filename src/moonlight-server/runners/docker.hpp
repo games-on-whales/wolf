@@ -4,6 +4,7 @@
 #include <control/control.hpp>
 #include <core/docker.hpp>
 #include <docker/formatters.hpp>
+#include <events/events.hpp>
 #include <fmt/core.h>
 #include <helpers/logger.hpp>
 #include <helpers/utils.hpp>
@@ -17,10 +18,9 @@ namespace wolf::core::docker {
 using namespace std::chrono_literals;
 using namespace ranges::views;
 using namespace utils;
-using namespace control;
 using namespace wolf::core;
 
-class RunDocker : public state::Runner {
+class RunDocker : public events::Runner {
 public:
   static RunDocker from_toml(std::shared_ptr<dp::event_bus> ev_bus, const toml::value &runner_obj) {
     std::vector<std::string> rec_mounts = toml::find_or<std::vector<std::string>>(runner_obj, "mounts", {});
@@ -91,7 +91,7 @@ public:
 
   void run(std::size_t session_id,
            std::string_view app_state_folder,
-           std::shared_ptr<state::devices_atom_queue> plugged_devices_queue,
+           std::shared_ptr<events::devices_atom_queue> plugged_devices_queue,
            const immer::array<std::string> &virtual_inputs,
            const immer::array<std::pair<std::string, std::string>> &paths,
            const immer::map<std::string, std::string> &env_variables,
@@ -139,7 +139,7 @@ void create_udev_hw_files(std::filesystem::path base_hw_db_path,
 
 void RunDocker::run(std::size_t session_id,
                     std::string_view app_state_folder,
-                    std::shared_ptr<state::devices_atom_queue> plugged_devices_queue,
+                    std::shared_ptr<events::devices_atom_queue> plugged_devices_queue,
                     const immer::array<std::string> &virtual_inputs,
                     const immer::array<std::pair<std::string, std::string>> &paths,
                     const immer::map<std::string, std::string> &env_variables,
@@ -251,15 +251,15 @@ void RunDocker::run(std::size_t session_id,
     logs::log(logs::info, "[DOCKER] Starting container: {}", docker_container->name);
     logs::log(logs::debug, "[DOCKER] Starting container: {}", *docker_container);
 
-    auto terminate_handler = this->ev_bus->register_handler<immer::box<StopStreamEvent>>(
-        [session_id, container_id, this](const immer::box<StopStreamEvent> &terminate_ev) {
+    auto terminate_handler = this->ev_bus->register_handler<immer::box<events::StopStreamEvent>>(
+        [session_id, container_id, this](const immer::box<events::StopStreamEvent> &terminate_ev) {
           if (terminate_ev->session_id == session_id) {
             docker_api.stop_by_id(container_id);
           }
         });
 
-    auto unplug_device_handler = this->ev_bus->register_handler<immer::box<state::UnplugDeviceEvent>>(
-        [session_id, container_id, hw_db_path, this](const immer::box<state::UnplugDeviceEvent> &ev) {
+    auto unplug_device_handler = this->ev_bus->register_handler<immer::box<events::UnplugDeviceEvent>>(
+        [session_id, container_id, hw_db_path, this](const immer::box<events::UnplugDeviceEvent> &ev) {
           if (ev->session_id == session_id) {
             for (const auto &[filename, content] : ev->udev_hw_db_entries) {
               std::filesystem::remove(hw_db_path / filename);

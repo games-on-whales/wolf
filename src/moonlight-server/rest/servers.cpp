@@ -1,4 +1,5 @@
 #include <boost/property_tree/json_parser.hpp>
+#include <events/events.hpp>
 #include <immer/atom.hpp>
 #include <rest/endpoints.hpp>
 
@@ -12,6 +13,7 @@ constexpr char const *pin_html =
     ;
 
 namespace bt = boost::property_tree;
+using namespace wolf::core;
 
 /**
  * @brief Start the generic server on the specified port
@@ -31,7 +33,7 @@ void startServer(HttpServer *server, const immer::box<state::AppState> state, in
     endpoints::pair<SimpleWeb::HTTP>(resp, req, state);
   };
 
-  auto pairing_atom = std::make_shared<immer::atom<immer::map<std::string, immer::box<state::PairSignal>>>>();
+  auto pairing_atom = std::make_shared<immer::atom<immer::map<std::string, immer::box<events::PairSignal>>>>();
 
   server->resource["^/pin/$"]["GET"] = [](auto resp, auto req) { resp->write(pin_html); };
   server->resource["^/pin/$"]["POST"] = [pairing_atom](auto resp, auto req) {
@@ -68,8 +70,8 @@ void startServer(HttpServer *server, const immer::box<state::AppState> state, in
     send_xml<SimpleWeb::HTTP>(resp, SimpleWeb::StatusCode::success_ok, xml);
   };
 
-  auto pair_handler = state->event_bus->register_handler<immer::box<state::PairSignal>>(
-      [pairing_atom](const immer::box<state::PairSignal> pair_sig) {
+  auto pair_handler = state->event_bus->register_handler<immer::box<events::PairSignal>>(
+      [pairing_atom](const immer::box<events::PairSignal> pair_sig) {
         pairing_atom->update([&pair_sig](auto m) {
           auto secret = crypto::str_to_hex(crypto::random(8));
           logs::log(logs::info, "Insert pin at http://{}:47989/pin/#{}", pair_sig->host_ip, secret);

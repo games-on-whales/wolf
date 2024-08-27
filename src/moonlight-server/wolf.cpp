@@ -3,6 +3,7 @@
 #include <control/control.hpp>
 #include <core/docker.hpp>
 #include <csignal>
+#include <events/events.hpp>
 #include <exceptions/exceptions.h>
 #include <filesystem>
 #include <immer/array.hpp>
@@ -24,7 +25,6 @@ namespace fs = std::filesystem;
 
 using namespace std::string_literals;
 using namespace std::chrono_literals;
-using namespace control;
 using namespace wolf::core;
 
 static constexpr int DEFAULT_SESSION_TIMEOUT_MILLIS = 4000;
@@ -81,7 +81,7 @@ auto initialize(std::string_view config_file, std::string_view pkey_filename, st
       .host = host,
       .pairing_cache = std::make_shared<immer::atom<immer::map<std::string, state::PairCache>>>(),
       .event_bus = event_bus,
-      .running_sessions = std::make_shared<immer::atom<immer::vector<state::StreamSession>>>()};
+      .running_sessions = std::make_shared<immer::atom<immer::vector<events::StreamSession>>>()};
   return immer::box<state::AppState>(state);
 }
 
@@ -136,7 +136,7 @@ std::optional<AudioServer> setup_audio_server(const std::string &runtime_dir) {
   return {};
 }
 
-using session_devices = immer::map<std::size_t /* session_id */, std::shared_ptr<state::devices_atom_queue>>;
+using session_devices = immer::map<std::size_t /* session_id */, std::shared_ptr<events::devices_atom_queue>>;
 
 auto setup_sessions_handlers(const immer::box<state::AppState> &app_state,
                              const std::string &runtime_dir,
@@ -152,10 +152,10 @@ auto setup_sessions_handlers(const immer::box<state::AppState> &app_state,
    */
   auto plugged_devices_queue = std::make_shared<immer::atom<session_devices>>();
 
-  handlers.push_back(app_state->event_bus->register_handler<immer::box<StopStreamEvent>>(
-      [&app_state, wayland_sessions, plugged_devices_queue](const immer::box<StopStreamEvent> &ev) {
+  handlers.push_back(app_state->event_bus->register_handler<immer::box<events::StopStreamEvent>>(
+      [&app_state, wayland_sessions, plugged_devices_queue](const immer::box<events::StopStreamEvent> &ev) {
         // Remove session from app state so that HTTP/S applist gets updated
-        app_state->running_sessions->update([&ev](const immer::vector<state::StreamSession> &ses_v) {
+        app_state->running_sessions->update([&ev](const immer::vector<events::StreamSession> &ses_v) {
           return remove_session(ses_v, {.session_id = ev->session_id});
         });
 
@@ -166,8 +166,8 @@ auto setup_sessions_handlers(const immer::box<state::AppState> &app_state,
         plugged_devices_queue->update([=](const auto map) { return map.erase(ev->session_id); });
       }));
 
-  handlers.push_back(app_state->event_bus->register_handler<immer::box<state::PlugDeviceEvent>>(
-      [plugged_devices_queue](const immer::box<state::PlugDeviceEvent> &hotplug_ev) {
+  handlers.push_back(app_state->event_bus->register_handler<immer::box<events::PlugDeviceEvent>>(
+      [plugged_devices_queue](const immer::box<events::PlugDeviceEvent> &hotplug_ev) {
         logs::log(logs::debug, "{} received hot-plug device event", hotplug_ev->session_id);
 
         if (auto session_devices_queue = plugged_devices_queue->load()->find(hotplug_ev->session_id)) {
@@ -178,8 +178,8 @@ auto setup_sessions_handlers(const immer::box<state::AppState> &app_state,
       }));
 
   // Run process and our custom wayland as soon as a new StreamSession is created
-  handlers.push_back(app_state->event_bus->register_handler<immer::box<state::StreamSession>>(
-      [=](const immer::box<state::StreamSession> &session) {
+  handlers.push_back(app_state->event_bus->register_handler<immer::box<events::StreamSession>>(
+      [=](const immer::box<events::StreamSession> &session) {
         auto wl_promise = std::make_shared<boost::promise<virtual_display::wl_state_ptr>>();
         if (session->app->start_virtual_compositor) {
           wayland_sessions->update([=](const auto map) {
@@ -298,7 +298,7 @@ auto setup_sessions_handlers(const immer::box<state::AppState> &app_state,
           }
 
           /* Initialise plugged device queue */
-          auto devices_q = std::make_shared<state::devices_atom_queue>();
+          auto devices_q = std::make_shared<events::devices_atom_queue>();
           plugged_devices_queue->update(
               [=](const session_devices map) { return map.set(session->session_id, devices_q); });
 
@@ -321,19 +321,19 @@ auto setup_sessions_handlers(const immer::box<state::AppState> &app_state,
 
           /* When the app closes there's no point in keeping the stream running */
           app_state->event_bus->fire_event(
-              immer::box<StopStreamEvent>(StopStreamEvent{.session_id = session->session_id}));
+              immer::box<events::StopStreamEvent>(events::StopStreamEvent{.session_id = session->session_id}));
         }).detach();
       }));
 
   // Video streaming pipeline
-  handlers.push_back(app_state->event_bus->register_handler<immer::box<state::VideoSession>>(
-      [=](const immer::box<state::VideoSession> &sess) {
+  handlers.push_back(app_state->event_bus->register_handler<immer::box<events::VideoSession>>(
+      [=](const immer::box<events::VideoSession> &sess) {
         std::thread([=]() {
           boost::promise<unsigned short> port_promise;
           auto port_fut = port_promise.get_future();
           std::once_flag called;
-          auto ev_handler = app_state->event_bus->register_handler<immer::box<state::RTPVideoPingEvent>>(
-              [pp = std::ref(port_promise), &called, sess](const immer::box<state::RTPVideoPingEvent> &ping_ev) {
+          auto ev_handler = app_state->event_bus->register_handler<immer::box<events::RTPVideoPingEvent>>(
+              [pp = std::ref(port_promise), &called, sess](const immer::box<events::RTPVideoPingEvent> &ping_ev) {
                 std::call_once(called, [=]() { // We'll keep receiving PING requests, but we only want the first one
                   if (ping_ev->client_ip == sess->client_ip) {
                     pp.get().set_value(ping_ev->client_port); // This throws when set multiple times
@@ -342,8 +342,8 @@ auto setup_sessions_handlers(const immer::box<state::AppState> &app_state,
               });
 
           std::shared_ptr<std::atomic_bool> cancel_job = std::make_shared<std::atomic<bool>>(false);
-          auto cancel_event = app_state->event_bus->register_handler<immer::box<state::VideoSession>>(
-              [=](const immer::box<state::VideoSession> &new_sess) {
+          auto cancel_event = app_state->event_bus->register_handler<immer::box<events::VideoSession>>(
+              [=](const immer::box<events::VideoSession> &new_sess) {
                 if (new_sess->session_id == sess->session_id) {
                   // A new VideoSession has been queued whilst we still haven't received a PING
                   *cancel_job = true;
@@ -375,14 +375,14 @@ auto setup_sessions_handlers(const immer::box<state::AppState> &app_state,
       }));
 
   // Audio streaming pipeline
-  handlers.push_back(app_state->event_bus->register_handler<immer::box<state::AudioSession>>(
-      [=](const immer::box<state::AudioSession> &sess) {
+  handlers.push_back(app_state->event_bus->register_handler<immer::box<events::AudioSession>>(
+      [=](const immer::box<events::AudioSession> &sess) {
         std::thread([=]() {
           boost::promise<unsigned short> port_promise;
           auto port_fut = port_promise.get_future();
           std::once_flag called;
-          auto ev_handler = app_state->event_bus->register_handler<immer::box<state::RTPAudioPingEvent>>(
-              [pp = std::ref(port_promise), &called, sess](const immer::box<state::RTPAudioPingEvent> &ping_ev) {
+          auto ev_handler = app_state->event_bus->register_handler<immer::box<events::RTPVideoPingEvent>>(
+              [pp = std::ref(port_promise), &called, sess](const immer::box<events::RTPVideoPingEvent> &ping_ev) {
                 std::call_once(called, [=]() { // We'll keep receiving PING requests, but we only want the first one
                   if (ping_ev->client_ip == sess->client_ip) {
                     pp.get().set_value(ping_ev->client_port); // This throws when set multiple times
@@ -391,8 +391,8 @@ auto setup_sessions_handlers(const immer::box<state::AppState> &app_state,
               });
 
           std::shared_ptr<std::atomic_bool> cancel_job = std::make_shared<std::atomic<bool>>(false);
-          auto cancel_event = app_state->event_bus->register_handler<immer::box<state::AudioSession>>(
-              [=](const immer::box<state::AudioSession> &new_sess) {
+          auto cancel_event = app_state->event_bus->register_handler<immer::box<events::AudioSession>>(
+              [=](const immer::box<events::AudioSession> &new_sess) {
                 if (new_sess->session_id == sess->session_id) {
                   // A new AudioSession has been queued whilst we still haven't received a PING
                   *cancel_job = true;

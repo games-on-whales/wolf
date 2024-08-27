@@ -6,8 +6,12 @@
 #include <crypto/crypto.hpp>
 #include <helpers/logger.hpp>
 #include <state/data-structures.hpp>
+#include <events/events.hpp>
 
 namespace state {
+
+using namespace wolf::core;
+
 /**
  * @brief Will load a configuration from the given source.
  *
@@ -58,8 +62,8 @@ inline std::optional<PairedClient> get_client_via_ssl(const Config &cfg, const s
 /**
  * Return the app with the given app_id, throws an exception if not found
  */
-inline immer::box<App> get_app_by_id(const Config &cfg, std::string_view app_id) {
-  auto search_result = std::find_if(cfg.apps.begin(), cfg.apps.end(), [&app_id](const state::App &app) {
+inline immer::box<events::App> get_app_by_id(const Config &cfg, std::string_view app_id) {
+  auto search_result = std::find_if(cfg.apps.begin(), cfg.apps.end(), [&app_id](const events::App &app) {
     return app.base.id == app_id;
   });
 

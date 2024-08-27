@@ -13,6 +13,7 @@ using namespace std::string_literals;
 using namespace state;
 using namespace rtsp;
 using namespace wolf::core::audio;
+using namespace wolf::core;
 
 /**
  * In order to test rtsp::tcp_connection we create a derived class that does the opposite:
@@ -159,26 +160,26 @@ TEST_CASE("Custom Parser", "[RTSP]") {
 
     SECTION("Incomplete packet") {
       // We no longer try to parse an incomplete packet, we still want to be robust to those cases
-      auto payload = u8"ANNOUNCE streamid=control/13/0 RTSP/1.0\n"
-                     "CSeq: 6\n"
-                     "X-GS-ClientVersion: 14\n"
-                     "Host: 192.168.1.227\n"
-                     "Session:  DEADBEEFCAFE\n"
-                     "Content-type: application/sdp\n"
-                     "Content-length: 1347\n"
-                     "\n"
-                     "v=0\n"
-                     "o=android 0 14 IN IPv4 192.168.1.227\n"
-                     "s=NVIDIA Streaming Client\n"
-                     "a=x-nv-video[0].clientViewportWd:1920 \n"
-                     "a=x-nv-video[0].clientViewportHt:1080 \n"
-                     "a=x-nv-video[0].maxFPS:60 \n"
-                     "a=x-nv-video[0].packetSize:1392 \n"
-                     "a=x-nv-video[0].rateControlMode:4 \n"
-                     "a=x-nv-video[0].timeoutLengthMs:7000 \n"
-                     "a=x-nv-video[0].framesWithInvalidRefThreshold:0 \n"
-                     "a\n\n\n\n"
-                     "💩🚽"; // We can now eat up all the extra rubbish at the end
+      std::string payload = "ANNOUNCE streamid=control/13/0 RTSP/1.0\n"
+                            "CSeq: 6\n"
+                            "X-GS-ClientVersion: 14\n"
+                            "Host: 192.168.1.227\n"
+                            "Session:  DEADBEEFCAFE\n"
+                            "Content-type: application/sdp\n"
+                            "Content-length: 1347\n"
+                            "\n"
+                            "v=0\n"
+                            "o=android 0 14 IN IPv4 192.168.1.227\n"
+                            "s=NVIDIA Streaming Client\n"
+                            "a=x-nv-video[0].clientViewportWd:1920 \n"
+                            "a=x-nv-video[0].clientViewportHt:1080 \n"
+                            "a=x-nv-video[0].maxFPS:60 \n"
+                            "a=x-nv-video[0].packetSize:1392 \n"
+                            "a=x-nv-video[0].rateControlMode:4 \n"
+                            "a=x-nv-video[0].timeoutLengthMs:7000 \n"
+                            "a=x-nv-video[0].framesWithInvalidRefThreshold:0 \n"
+                            "a\n\n\n\n"
+                            "💩🚽"; // We can now eat up all the extra rubbish at the end
       auto parsed = rtsp::parse(payload).value();
       REQUIRE_THAT(parsed.options["Content-length"], Equals("1347"));
       // Round trip
@@ -246,15 +247,15 @@ TEST_CASE("Custom Parser", "[RTSP]") {
 }
 
 state::SessionsAtoms test_init_state() {
-  StreamSession session = {
+  events::StreamSession session = {
       .display_mode = {1920, 1080, 60},
       .audio_channel_count = 2,
       .event_bus = std::make_shared<dp::event_bus>(),
-      .app = std::make_shared<state::App>(state::App{.base = {},
-                                                     .h264_gst_pipeline = "",
-                                                     .hevc_gst_pipeline = "",
-                                                     .opus_gst_pipeline = "",
-                                                     .runner = nullptr}),
+      .app = std::make_shared<events::App>(events::App{.base = {},
+                                                       .h264_gst_pipeline = "",
+                                                       .hevc_gst_pipeline = "",
+                                                       .opus_gst_pipeline = "",
+                                                       .runner = nullptr}),
       .aes_key = crypto::hex_to_str("9d804e47a6aa6624b7d4b502b32cc522", true),
       .aes_iv = crypto::hex_to_str("01234567890", true),
       .session_id = 1234,
@@ -262,7 +263,8 @@ state::SessionsAtoms test_init_state() {
       .video_stream_port = 1234,
       .audio_stream_port = 1235,
   };
-  return std::make_shared<immer::atom<immer::vector<StreamSession>>>(immer::vector<StreamSession>{session});
+  return std::make_shared<immer::atom<immer::vector<events::StreamSession>>>(
+      immer::vector<events::StreamSession>{session});
 }
 
 TEST_CASE("Commands", "[RTSP]") {

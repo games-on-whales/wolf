@@ -1,7 +1,7 @@
 #pragma once
 
-#include "streaming/data-structures.hpp"
 #include <chrono>
+#include <events/events.hpp>
 #include <helpers/logger.hpp>
 #include <helpers/utils.hpp>
 #include <rtp/udp-ping.hpp>
@@ -15,6 +15,7 @@ using namespace ranges;
 using namespace std::string_literals;
 using namespace std::chrono_literals;
 using namespace rtsp;
+using namespace wolf::core;
 
 RTSP_PACKET error_msg(unsigned short status_code, std::string_view error_msg, int sequence_number = 0) {
   return {.type = RESPONSE,
@@ -40,7 +41,7 @@ constexpr uint32_t FS_CONTROLLER_TOUCH_EVENTS = 0x02;
 using namespace wolf::core::audio;
 
 RTSP_PACKET
-describe(const RTSP_PACKET &req, const state::StreamSession &session) {
+describe(const RTSP_PACKET &req, const events::StreamSession &session) {
   std::vector<std::pair<std::string, std::string>> payloads;
   if (session.display_mode.hevc_supported) {
     payloads.push_back({"", "sprop-parameter-sets=AAAAAU"});
@@ -209,6 +210,7 @@ announce(const RTSP_PACKET &req, const state::StreamSession &session) {
   }
 
   // Video session
+  unsigned short video_port = state::VIDEO_PING_PORT + number_of_sessions;
   state::VideoSession video = {
       .display_mode = {.width = display.width, .height = display.height, .refreshRate = display.refreshRate},
       .gst_pipeline = gst_pipeline,
@@ -224,16 +226,16 @@ announce(const RTSP_PACKET &req, const state::StreamSession &session) {
       .bitrate_kbps = bitrate,
       .slices_per_frame = args["x-nv-video[0].videoEncoderSlicesPerFrame"].value_or(1),
 
-      .color_range = (csc & 0x1) ? state::JPEG : state::MPEG,
-      .color_space = state::ColorSpace(csc >> 1),
+      .color_range = (csc & 0x1) ? events::JPEG : events::MPEG,
+      .color_space = events::ColorSpace(csc >> 1),
 
       .client_ip = session.ip};
-  session.event_bus->fire_event(immer::box<state::VideoSession>(video));
+  event_bus->fire_event(immer::box<state::VideoSession>(video));
 
   // Audio session
   auto high_quality_audio = args["x-nv-audio.surround.AudioQuality"].value_or(0) == 1;
   auto audio_mode = state::get_audio_mode(audio_channels, high_quality_audio);
-  state::AudioSession audio = {
+  events::AudioSession audio = {
       .gst_pipeline = session.app->opus_gst_pipeline,
 
       .session_id = session.session_id,
@@ -247,13 +249,16 @@ announce(const RTSP_PACKET &req, const state::StreamSession &session) {
 
       .packet_duration = args["x-nv-aqos.packetDuration"].value_or(5),
       .audio_mode = audio_mode};
-  session.event_bus->fire_event(immer::box<state::AudioSession>(audio));
+  event_bus->fire_event(immer::box<state::AudioSession>(audio));
 
   return ok_msg(req.seq_number);
 }
 
 RTSP_PACKET
-message_handler(const RTSP_PACKET &req, const state::StreamSession &session) {
+message_handler(const RTSP_PACKET &req,
+                const state::StreamSession &session,
+                std::shared_ptr<dp::event_bus> event_bus,
+                unsigned short number_of_sessions) {
   auto cmd = req.request.cmd;
   logs::log(logs::debug, "[RTSP] received command {}", cmd);
 

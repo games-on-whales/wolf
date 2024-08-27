@@ -2,6 +2,7 @@
 
 #include <control/control.hpp>
 #include <crypto/crypto.hpp>
+#include <events/events.hpp>
 #include <filesystem>
 #include <functional>
 #include <helpers/utils.hpp>
@@ -106,7 +107,7 @@ void pair(const std::shared_ptr<typename SimpleWeb::Server<T>::Response> &respon
   if (client_id && salt && client_cert_str) {
     auto future_pin = std::make_shared<boost::promise<std::string>>();
     state->event_bus->fire_event( // Emit a signal and wait for the promise to be fulfilled
-        immer::box<state::PairSignal>(state::PairSignal{.client_ip = client_ip,
+        immer::box<events::PairSignal>(events::PairSignal{.client_ip = client_ip,
                                                         .host_ip = get_host_ip<T>(request, state),
                                                         .user_pin = future_pin}));
 
@@ -234,11 +235,11 @@ void applist(const std::shared_ptr<typename SimpleWeb::Server<SimpleWeb::HTTPS>:
   send_xml<SimpleWeb::HTTPS>(response, SimpleWeb::StatusCode::success_ok, xml);
 }
 
-state::StreamSession create_run_session(const SimpleWeb::CaseInsensitiveMultimap &headers,
+events::StreamSession create_run_session(const SimpleWeb::CaseInsensitiveMultimap &headers,
                                         const std::string &client_ip,
                                         const state::PairedClient &current_client,
                                         immer::box<state::AppState> state,
-                                        const state::App &run_app) {
+                                        const events::App &run_app) {
   auto display_mode_str = utils::split(get_header(headers, "mode").value_or("1920x1080x60"), 'x');
   moonlight::DisplayMode display_mode = {std::stoi(display_mode_str[0].data()),
                                          std::stoi(display_mode_str[1].data()),
@@ -257,10 +258,10 @@ state::StreamSession create_run_session(const SimpleWeb::CaseInsensitiveMultimap
   auto video_stream_port = get_next_available_port(state->running_sessions->load(), true);
   auto audio_stream_port = get_next_available_port(state->running_sessions->load(), false);
 
-  return state::StreamSession{.display_mode = display_mode,
+  return events::StreamSession{.display_mode = display_mode,
                               .audio_channel_count = channelCount,
                               .event_bus = state->event_bus,
-                              .app = std::make_shared<state::App>(run_app),
+                              .app = std::make_shared<events::App>(run_app),
                               .app_state_folder = full_path.string(),
 
                               // gcm encryption keys
@@ -274,22 +275,22 @@ state::StreamSession create_run_session(const SimpleWeb::CaseInsensitiveMultimap
                               .audio_stream_port = audio_stream_port};
 }
 
-void start_rtp_ping(const immer::box<state::StreamSession> &session) {
+void start_rtp_ping(const immer::box<events::StreamSession> &session) {
 
   // Video RTP Ping
   rtp::wait_for_ping(session->video_stream_port,
                      [ev_bus = session->event_bus](unsigned short client_port, const std::string &client_ip) {
                        logs::log(logs::trace, "[PING] video from {}:{}", client_ip, client_port);
-                       auto ev = state::RTPVideoPingEvent{.client_ip = client_ip, .client_port = client_port};
-                       ev_bus->fire_event(immer::box<state::RTPVideoPingEvent>(ev));
+                       auto ev = events::RTPVideoPingEvent{.client_ip = client_ip, .client_port = client_port};
+                       ev_bus->fire_event(immer::box<events::RTPVideoPingEvent>(ev));
                      });
 
   // Audio RTP Ping
   rtp::wait_for_ping(session->audio_stream_port,
                      [ev_bus = session->event_bus](unsigned short client_port, const std::string &client_ip) {
                        logs::log(logs::trace, "[PING] audio from {}:{}", client_ip, client_port);
-                       auto ev = state::RTPAudioPingEvent{.client_ip = client_ip, .client_port = client_port};
-                       ev_bus->fire_event(immer::box<state::RTPAudioPingEvent>(ev));
+                       auto ev = events::RTPAudioPingEvent{.client_ip = client_ip, .client_port = client_port};
+                       ev_bus->fire_event(immer::box<events::RTPAudioPingEvent>(ev));
                      });
 }
 
@@ -303,9 +304,9 @@ void launch(const std::shared_ptr<typename SimpleWeb::Server<SimpleWeb::HTTPS>::
   auto app = state::get_app_by_id(state->config, get_header(headers, "appid").value());
   auto client_ip = get_client_ip<SimpleWeb::HTTPS>(request);
   auto new_session = create_run_session(request->parse_query_string(), client_ip, current_client, state, app);
-  state->event_bus->fire_event(immer::box<state::StreamSession>(new_session));
+  state->event_bus->fire_event(immer::box<events::StreamSession>(new_session));
   state->running_sessions->update(
-      [&new_session](const immer::vector<state::StreamSession> &ses_v) { return ses_v.push_back(new_session); });
+      [&new_session](const immer::vector<events::StreamSession> &ses_v) { return ses_v.push_back(new_session); });
 
   start_rtp_ping(new_session);
 
@@ -336,7 +337,7 @@ void resume(const std::shared_ptr<typename SimpleWeb::Server<SimpleWeb::HTTPS>::
 
     start_rtp_ping(new_session);
 
-    state->running_sessions->update([&old_session, &new_session](const immer::vector<state::StreamSession> ses_v) {
+    state->running_sessions->update([&old_session, &new_session](const immer::vector<events::StreamSession> ses_v) {
       return remove_session(ses_v, old_session.value()).push_back(new_session);
     });
   } else {
@@ -361,9 +362,9 @@ void cancel(const std::shared_ptr<typename SimpleWeb::Server<SimpleWeb::HTTPS>::
   auto client_session = get_session_by_ip(state->running_sessions->load(), client_ip);
   if (client_session) {
     state->event_bus->fire_event(
-        immer::box<StopStreamEvent>(StopStreamEvent{.session_id = client_session->session_id}));
+        immer::box<events::StopStreamEvent>(events::StopStreamEvent{.session_id = client_session->session_id}));
 
-    state->running_sessions->update([&client_session](const immer::vector<state::StreamSession> &ses_v) {
+    state->running_sessions->update([&client_session](const immer::vector<events::StreamSession> &ses_v) {
       return remove_session(ses_v, client_session.value());
     });
   } else {

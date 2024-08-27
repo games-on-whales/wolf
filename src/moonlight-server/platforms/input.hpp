@@ -1,11 +1,12 @@
 #pragma once
 
+#include <codecvt>
 #include <core/input.hpp>
+#include <events/events.hpp>
 #include <iomanip>
 #include <locale>
 #include <memory>
 #include <sstream>
-#include <state/data-structures.hpp>
 
 namespace wolf::platforms::input {
 /**
@@ -15,13 +16,11 @@ namespace wolf::platforms::input {
  *
  * adapted from: https://stackoverflow.com/a/7639754
  */
-static std::string to_hex(const std::basic_string<char32_t> &str) {
+static std::string to_hex(const std::u32string &str) {
   std::stringstream ss;
-  ss << std::hex << std::setfill('0');
-  for (const auto &ch : str) {
-    ss << (char)(ch >> 16);
-    ss << (char)(ch >> 8);
-    ss << (char)ch;
+  ss << std::hex << std::setfill('0') << std::setw(4);
+  for (char32_t c : str) {
+    ss << static_cast<uint32_t>(c);
   }
 
   std::string hex_unicode(ss.str());
@@ -29,5 +28,7 @@ static std::string to_hex(const std::basic_string<char32_t> &str) {
   return hex_unicode;
 }
 
-void paste_utf(state::KeyboardTypes &keyboard, const std::basic_string<char32_t> &utf32);
+using namespace wolf::core;
+
+void paste_utf(events::KeyboardTypes &keyboard, const std::basic_string<char32_t> &utf32);
 } // namespace wolf::platforms::input

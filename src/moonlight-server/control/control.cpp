@@ -1,6 +1,7 @@
 #include "core/input.hpp"
 #include <control/control.hpp>
 #include <control/input_handler.hpp>
+#include <events/events.hpp>
 #include <immer/box.hpp>
 #include <state/sessions.hpp>
 #include <sys/socket.h>
@@ -9,6 +10,7 @@ namespace control {
 
 using namespace ranges;
 using namespace moonlight::control;
+using namespace wolf::core::events;
 
 void free_host(ENetHost *host) {
   std::for_each(host->peers, host->peers + host->peerCount, [](ENetPeer &peer_ref) {

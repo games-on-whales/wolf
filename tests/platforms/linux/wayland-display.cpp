@@ -11,7 +11,10 @@
 using Catch::Matchers::Contains;
 using Catch::Matchers::Equals;
 using Catch::Matchers::SizeIs;
+
+using namespace wolf::core;
 using namespace wolf::core::virtual_display;
+using namespace moonlight::control;
 
 TEST_CASE("Wayland C APIs", "[WAYLAND]") {
   auto w_state = create_wayland_display({});
@@ -52,16 +55,14 @@ TEST_CASE("Wayland C APIs", "[WAYLAND]") {
   }
 }
 
-using namespace moonlight::control;
-
 TEST_CASE("Wayland virtual inputs", "[WAYLAND]") {
   auto w_state = create_wayland_display({});
   const auto FPS = 60;
   set_resolution(*w_state, {WINDOW_WIDTH, WINDOW_HEIGHT, FPS});
   auto mouse = wolf::core::virtual_display::WaylandMouse(w_state);
   auto keyboard = wolf::core::virtual_display::WaylandKeyboard(w_state);
-  auto session = state::StreamSession{.mouse = std::make_shared<std::optional<state::MouseTypes>>(mouse),
-                                      .keyboard = std::make_shared<std::optional<state::KeyboardTypes>>(keyboard)};
+  auto session = events::StreamSession{.mouse = std::make_shared<std::optional<events::MouseTypes>>(mouse),
+                                       .keyboard = std::make_shared<std::optional<events::KeyboardTypes>>(keyboard)};
 
   auto wd = w_connect(w_state);
   auto w_objects = w_get_state(wd);

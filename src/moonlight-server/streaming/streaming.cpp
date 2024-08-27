@@ -1,5 +1,6 @@
 #include <control/control.hpp>
 #include <core/gstreamer.hpp>
+#include <events/events.hpp>
 #include <functional>
 #include <gst-plugin/video.hpp>
 #include <gstreamer-1.0/gst/app/gstappsink.h>
@@ -8,7 +9,6 @@
 #include <immer/array_transient.hpp>
 #include <immer/box.hpp>
 #include <memory>
-#include <streaming/data-structures.hpp>
 #include <streaming/streaming.hpp>
 
 namespace streaming {
@@ -24,7 +24,7 @@ struct GstAppDataState {
 
 namespace custom_src {
 
-std::shared_ptr<GstAppDataState> setup_app_src(const immer::box<state::VideoSession> &video_session,
+std::shared_ptr<GstAppDataState> setup_app_src(const immer::box<events::VideoSession> &video_session,
                                                wolf::core::virtual_display::wl_state_ptr wl_ptr) {
   return std::shared_ptr<GstAppDataState>(new GstAppDataState{.wayland_state = std::move(wl_ptr),
                                                               .source = nullptr,
@@ -88,25 +88,26 @@ static void app_src_enough_data(GstElement *pipeline, guint size, GstAppDataStat
 } // namespace custom_src
 
 using namespace wolf::core::gstreamer;
+using namespace wolf::core;
 
 /**
  * Start VIDEO pipeline
  */
-void start_streaming_video(const immer::box<state::VideoSession> &video_session,
+void start_streaming_video(const immer::box<events::VideoSession> &video_session,
                            const std::shared_ptr<dp::event_bus> &event_bus,
                            wolf::core::virtual_display::wl_state_ptr wl_ptr,
                            unsigned short client_port) {
-  std::string color_range = (static_cast<int>(video_session->color_range) == static_cast<int>(state::JPEG)) ? "jpeg"
-                                                                                                            : "mpeg2";
+  std::string color_range = (static_cast<int>(video_session->color_range) == static_cast<int>(events::JPEG)) ? "jpeg"
+                                                                                                             : "mpeg2";
   std::string color_space;
   switch (static_cast<int>(video_session->color_space)) {
-  case state::BT601:
+  case events::BT601:
     color_space = "bt601";
     break;
-  case state::BT709:
+  case events::BT709:
     color_space = "bt709";
     break;
-  case state::BT2020:
+  case events::BT2020:
     color_space = "bt2020";
     break;
   }
@@ -158,8 +159,8 @@ void start_streaming_video(const immer::box<state::VideoSession> &video_session,
      * We have to pass this back into the gstreamer pipeline
      * in order to force the encoder to produce a new IDR packet
      */
-    auto idr_handler = event_bus->register_handler<immer::box<control::ControlEvent>>(
-        [sess_id = video_session->session_id, pipeline](const immer::box<control::ControlEvent> &ctrl_ev) {
+    auto idr_handler = event_bus->register_handler<immer::box<events::ControlEvent>>(
+        [sess_id = video_session->session_id, pipeline](const immer::box<events::ControlEvent> &ctrl_ev) {
           if (ctrl_ev->session_id == sess_id) {
             if (ctrl_ev->type == moonlight::control::pkts::IDR_FRAME) {
               logs::log(logs::debug, "[GSTREAMER] Forcing IDR");
@@ -172,8 +173,8 @@ void start_streaming_video(const immer::box<state::VideoSession> &video_session,
           }
         });
 
-    auto pause_handler = event_bus->register_handler<immer::box<control::PauseStreamEvent>>(
-        [sess_id = video_session->session_id, loop](const immer::box<control::PauseStreamEvent> &ev) {
+    auto pause_handler = event_bus->register_handler<immer::box<events::PauseStreamEvent>>(
+        [sess_id = video_session->session_id, loop](const immer::box<events::PauseStreamEvent> &ev) {
           if (ev->session_id == sess_id) {
             logs::log(logs::debug, "[GSTREAMER] Pausing pipeline: {}", sess_id);
 
@@ -193,8 +194,8 @@ void start_streaming_video(const immer::box<state::VideoSession> &video_session,
           }
         });
 
-    auto stop_handler = event_bus->register_handler<immer::box<control::StopStreamEvent>>(
-        [sess_id = video_session->session_id, loop](const immer::box<control::StopStreamEvent> &ev) {
+    auto stop_handler = event_bus->register_handler<immer::box<events::StopStreamEvent>>(
+        [sess_id = video_session->session_id, loop](const immer::box<events::StopStreamEvent> &ev) {
           if (ev->session_id == sess_id) {
             logs::log(logs::debug, "[GSTREAMER] Stopping pipeline: {}", sess_id);
             g_main_loop_quit(loop.get());
@@ -210,7 +211,7 @@ void start_streaming_video(const immer::box<state::VideoSession> &video_session,
 /**
  * Start AUDIO pipeline
  */
-void start_streaming_audio(const immer::box<state::AudioSession> &audio_session,
+void start_streaming_audio(const immer::box<events::AudioSession> &audio_session,
                            const std::shared_ptr<dp::event_bus> &event_bus,
                            unsigned short client_port,
                            const std::string &sink_name,
@@ -235,8 +236,8 @@ void start_streaming_audio(const immer::box<state::AudioSession> &audio_session,
   logs::log(logs::debug, "Starting audio pipeline: \n{}", pipeline);
 
   run_pipeline(pipeline, [session_id = audio_session->session_id, event_bus](auto pipeline, auto loop) {
-    auto pause_handler = event_bus->register_handler<immer::box<control::PauseStreamEvent>>(
-        [session_id, loop](const immer::box<control::PauseStreamEvent> &ev) {
+    auto pause_handler = event_bus->register_handler<immer::box<events::PauseStreamEvent>>(
+        [session_id, loop](const immer::box<events::PauseStreamEvent> &ev) {
           if (ev->session_id == session_id) {
             logs::log(logs::debug, "[GSTREAMER] Pausing pipeline: {}", session_id);
 
@@ -256,8 +257,8 @@ void start_streaming_audio(const immer::box<state::AudioSession> &audio_session,
           }
         });
 
-    auto stop_handler = event_bus->register_handler<immer::box<control::StopStreamEvent>>(
-        [session_id, loop](const immer::box<control::StopStreamEvent> &ev) {
+    auto stop_handler = event_bus->register_handler<immer::box<events::StopStreamEvent>>(
+        [session_id, loop](const immer::box<events::StopStreamEvent> &ev) {
           if (ev->session_id == session_id) {
             logs::log(logs::debug, "[GSTREAMER] Stopping pipeline: {}", session_id);
             g_main_loop_quit(loop.get());

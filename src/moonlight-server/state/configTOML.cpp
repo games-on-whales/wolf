@@ -49,9 +49,9 @@ TOML11_DEFINE_CONVERSION_NON_INTRUSIVE(
 
 namespace toml {
 
-template <> struct into<state::App> {
+template <> struct into<events::App> {
 
-  static toml::value into_toml(const state::App &f) {
+  static toml::value into_toml(const events::App &f) {
     return toml::table{{"title", f.base.title}, {"support_hdr", f.base.support_hdr}, {"runner", f.runner->serialise()}};
   }
 };
@@ -107,7 +107,7 @@ void create_default(const std::string &source) {
   out_file.close();
 }
 
-std::shared_ptr<state::Runner> get_runner(const toml::value &item, const std::shared_ptr<dp::event_bus> &ev_bus) {
+std::shared_ptr<events::Runner> get_runner(const toml::value &item, const std::shared_ptr<dp::event_bus> &ev_bus) {
   auto runner_obj = toml::find_or(item, "runner", toml::value{toml::table{{"type", "process"}}});
   auto runner_type = toml::find_or(runner_obj, "type", "process");
   if (runner_type == "process") {
@@ -322,7 +322,7 @@ Config load_or_default(const std::string &source, const std::shared_ptr<dp::even
           logs::log(logs::warning, "Unknown joypad type: {}", joypad_type);
         }
 
-        return state::App{.base = {.title = app_title,
+        return events::App{.base = {.title = app_title,
                                    .id = std::to_string(idx + 1),
                                    .support_hdr = toml::find_or<bool>(item, "support_hdr", false)},
                           .h264_gst_pipeline = h264_gst_pipeline,
@@ -335,7 +335,7 @@ Config load_or_default(const std::string &source, const std::shared_ptr<dp::even
                           .runner = get_runner(item, ev_bus),
                           .joypad_type = joypad_type_enum};
       }) |                                     //
-      ranges::to<immer::vector<state::App>>(); //
+      ranges::to<immer::vector<events::App>>(); //
 
   auto clients_atom = std::make_shared<immer::atom<state::PairedClientList>>(paired_clients);
   return Config{.uuid = uuid,
