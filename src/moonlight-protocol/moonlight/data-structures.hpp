@@ -16,6 +16,7 @@ struct App {
   const std::string title;
   const std::string id;
   const bool support_hdr;
+  const std::string asset;
 };
 
 #define FLAG_EXTENSION 0x10

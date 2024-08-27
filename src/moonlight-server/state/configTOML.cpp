@@ -327,7 +327,8 @@ Config load_or_default(const std::string &source, const std::shared_ptr<dp::even
 
         return state::App{.base = {.title = app_title,
                                    .id = std::to_string(idx + 1),
-                                   .support_hdr = toml::find_or<bool>(item, "support_hdr", false)},
+                                   .support_hdr = toml::find_or<bool>(item, "support_hdr", false),
+                                   .asset = toml::find_or<std::string>(item, "asset", "")},
                           .h264_gst_pipeline = h264_gst_pipeline,
                           .hevc_gst_pipeline = hevc_gst_pipeline,
                           .av1_gst_pipeline = av1_gst_pipeline,

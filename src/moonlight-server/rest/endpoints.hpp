@@ -235,6 +235,37 @@ void applist(const std::shared_ptr<typename SimpleWeb::Server<SimpleWeb::HTTPS>:
   send_xml<SimpleWeb::HTTPS>(response, SimpleWeb::StatusCode::success_ok, xml);
 }
 
+void appasset(const std::shared_ptr<typename SimpleWeb::Server<SimpleWeb::HTTPS>::Response> &response,
+            const std::shared_ptr<typename SimpleWeb::Server<SimpleWeb::HTTPS>::Request> &request,
+            const immer::box<state::AppState> &state) {
+  log_req<SimpleWeb::HTTPS>(request);
+
+  SimpleWeb::CaseInsensitiveMultimap headers = request->parse_query_string();
+  auto app = state::get_app_by_id(state->config, get_header(headers, "appid").value());
+  if (app->base.asset.empty()) {
+      response->write(SimpleWeb::StatusCode::client_error_not_found, "undefined asset");
+      response->close_connection_after_response = true;
+      return;
+  }
+
+  std::string host_state_folder = utils::get_env("HOST_APPS_STATE_FOLDER", "/etc/wolf");
+  auto asset_path = std::filesystem::path(host_state_folder) / app->base.asset;
+
+  std::ifstream asset_file(asset_path, std::ios::binary);
+  if (!asset_file) {
+    logs::log(logs::warning, "Could not open configured asset: {}", asset_path.string());
+    response->write(SimpleWeb::StatusCode::client_error_not_found, "asset not found");
+    response->close_connection_after_response = true;
+    return;
+  }
+
+  SimpleWeb::CaseInsensitiveMultimap asset_headers;
+  asset_headers.emplace("Content-Type", "image/png");
+  logs::log(logs::trace, "Sending asset {}", asset_path.string());
+  response->write(SimpleWeb::StatusCode::success_ok, asset_file, asset_headers);
+  response->close_connection_after_response = true;
+}
+
 state::StreamSession
 create_run_session(const std::shared_ptr<typename SimpleWeb::Server<SimpleWeb::HTTPS>::Request> &request,
                    const state::PairedClient &current_client,
