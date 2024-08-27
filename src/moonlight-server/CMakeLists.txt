@@ -1,6 +1,8 @@
 add_library(wolf_runner)
 add_library(wolf::runner ALIAS wolf_runner)
 
+find_package(PkgConfig)
+
 ##############################
 # External deps via GIT
 ####
@@ -26,19 +28,22 @@ target_link_libraries_system(wolf_runner PUBLIC dp::eventbus)
 # Serialization
 FetchContent_Declare(
         reflect-cpp
-        GIT_REPOSITORY https://github.com/getml/reflect-cpp.git
+        GIT_REPOSITORY https://github.com/getml/reflect-cpp
         GIT_TAG v0.14.1
 )
 set(REFLECTCPP_BSON OFF)
 set(REFLECTCPP_CBOR OFF)
 set(REFLECTCPP_FLEXBUFFERS OFF)
-set(REFLECTCPP_MSGPACK OFF)
+set(REFLECTCPP_MSGPACK OFF) # Only works with vcpkg, doing it manually
 set(REFLECTCPP_TOML OFF)
 set(REFLECTCPP_XML OFF)
 set(REFLECTCPP_YAML OFF)
 
 FetchContent_MakeAvailable(reflect-cpp)
-target_link_libraries(wolf_runner PUBLIC reflectcpp)
+pkg_check_modules(MSGPACK REQUIRED IMPORTED_TARGET msgpack-c)
+
+target_link_libraries(wolf_runner PUBLIC PkgConfig::MSGPACK reflectcpp)
+
 
 # HTTP server library
 FetchContent_Declare(
@@ -48,7 +53,7 @@ FetchContent_Declare(
 FetchContent_MakeAvailable(simplewebserver)
 target_link_libraries_system(wolf_runner PUBLIC simple-web-server)
 
-# TOML parser (config file)
+# TOML parser (config file) TODO: use reflect-cpp instead
 FetchContent_Declare(
         toml
         GIT_REPOSITORY https://github.com/ToruNiina/toml11.git
@@ -81,7 +86,7 @@ FetchContent_Declare(
         GIT_REPOSITORY https://github.com/jeremy-rifkin/cpptrace.git
         GIT_TAG 448c325
 )
-find_package(PkgConfig)
+
 pkg_check_modules(LIBUNWIND QUIET libunwind)
 if (LIBUNWIND_FOUND)
     set(CPPTRACE_UNWIND_WITH_LIBUNWIND ON)

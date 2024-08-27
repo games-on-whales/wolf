@@ -4,6 +4,7 @@
 #include <events/reflectors.hpp>
 #include <rfl.hpp>
 #include <rfl/json.hpp>
+#include <rfl/msgpack.hpp>
 
 using Catch::Matchers::Equals;
 using namespace wolf::core;
@@ -38,4 +39,23 @@ TEST_CASE("Serialize to JSON", "[serialization]") {
   }
 
   // TODO: test the inverse operation, rfl::json::read
+}
+
+TEST_CASE("Serialize to msgpack", "[serialization]") {
+  SECTION("example from the README") {
+
+    struct Person {
+      std::string first_name;
+      std::string last_name;
+      int age;
+    };
+
+    const auto homer = Person{.first_name = "Homer", .last_name = "Simpson", .age = 45};
+
+    auto result = rfl::msgpack::read<Person>(rfl::msgpack::write(homer));
+
+    REQUIRE_THAT(result.value().first_name, Equals("Homer"));
+    REQUIRE_THAT(result.value().last_name, Equals("Simpson"));
+    REQUIRE(result.value().age == 45);
+  }
 }

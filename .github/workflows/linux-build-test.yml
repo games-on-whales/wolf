@@ -57,6 +57,16 @@ jobs:
             /usr/local/include/libgstwaylanddisplay/*
           if-no-files-found: error
 
+      - name: Install msgpack-c
+        run: |
+          git clone https://github.com/msgpack/msgpack-c.git
+          cd msgpack-c
+          git checkout c-6.1.0
+          mkdir build
+          cd build
+          cmake -DCMAKE_BUILD_TYPE=Release -DMSGPACK_BUILD_EXAMPLES=OFF -G Ninja ..
+          cmake --build . --target install --config Release
+
       - name: Configure build
         working-directory: ${{runner.workspace}}
         run: |

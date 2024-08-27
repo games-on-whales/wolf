@@ -42,6 +42,21 @@ RUN <<_GST_WAYLAND_DISPLAY
     cargo cinstall -p c-bindings --prefix=/usr/local --libdir=/usr/local/lib/
 _GST_WAYLAND_DISPLAY
 
+## Install msgpack-c
+RUN <<_MSGPACK
+    #!/bin/bash
+    set -e
+
+    git clone https://github.com/msgpack/msgpack-c.git
+    cd msgpack-c
+    git checkout c-6.1.0
+    mkdir build
+    cd build
+
+    cmake -DCMAKE_BUILD_TYPE=Release -DMSGPACK_BUILD_EXAMPLES=OFF -G Ninja ..
+    cmake --build . --target install --config Release
+_MSGPACK
+
 COPY . /wolf/
 WORKDIR /wolf
 
