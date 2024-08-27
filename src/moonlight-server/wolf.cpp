@@ -4,6 +4,7 @@
 #include <core/docker.hpp>
 #include <csignal>
 #include <events/events.hpp>
+#include <events/reflectors.hpp>
 #include <exceptions/exceptions.h>
 #include <filesystem>
 #include <immer/array.hpp>
@@ -15,6 +16,8 @@
 #include <memory>
 #include <platforms/hw.hpp>
 #include <rest/rest.hpp>
+#include <rfl.hpp>
+#include <rfl/json.hpp>
 #include <rtsp/net.hpp>
 #include <state/config.hpp>
 #include <streaming/streaming.hpp>
@@ -32,7 +35,7 @@ static constexpr int DEFAULT_SESSION_TIMEOUT_MILLIS = 4000;
 /**
  * @brief Will try to load the config file and fallback to defaults
  */
-auto load_config(std::string_view config_file, const std::shared_ptr<dp::event_bus> &ev_bus) {
+auto load_config(std::string_view config_file, const std::shared_ptr<dp::event_bus<events::EventTypes>> &ev_bus) {
   logs::log(logs::info, "Reading config file from: {}", config_file);
   return state::load_or_default(config_file.data(), ev_bus);
 }
@@ -72,7 +75,7 @@ state::Host get_host_config(std::string_view pkey_filename, std::string_view cer
  * @brief Local state initialization
  */
 auto initialize(std::string_view config_file, std::string_view pkey_filename, std::string_view cert_filename) {
-  auto event_bus = std::make_shared<dp::event_bus>();
+  auto event_bus = std::make_shared<dp::event_bus<events::EventTypes>>();
   auto config = load_config(config_file, event_bus);
 
   auto host = get_host_config(pkey_filename, cert_filename);
@@ -141,7 +144,7 @@ using session_devices = immer::map<std::size_t /* session_id */, std::shared_ptr
 auto setup_sessions_handlers(const immer::box<state::AppState> &app_state,
                              const std::string &runtime_dir,
                              const std::optional<AudioServer> &audio_server) {
-  immer::vector_transient<immer::box<dp::handler_registration>> handlers;
+  immer::vector_transient<immer::box<dp::handler_registration<events::EventTypes>>> handlers;
 
   auto wayland_sessions = std::make_shared<
       immer::atom<immer::map<std::size_t /* session_id */, boost::shared_future<virtual_display::wl_state_ptr>>>>();
@@ -443,7 +446,7 @@ void run() {
   auto p_cert_file = utils::get_env("WOLF_PRIVATE_CERT_FILE", "cert.pem");
   auto local_state = initialize(config_file, p_key_file, p_cert_file);
   auto global_ev_handler = local_state->event_bus->register_global_handler(
-      [](std::any ev) { logs::log(logs::trace, "Fired event: {}", ev.type().name()); });
+      [](auto ev) { logs::log(logs::debug, "Fired event: {}", rfl::json::write(ev)); });
 
   // HTTP APIs
   auto http_thread = std::thread([local_state]() {

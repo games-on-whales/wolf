@@ -99,7 +99,7 @@ bool encrypt_and_send(std::string_view payload,
 
 void run_control(int port,
                  const state::SessionsAtoms &running_sessions,
-                 const std::shared_ptr<dp::event_bus> &event_bus,
+                 const std::shared_ptr<dp::event_bus<events::EventTypes>> &event_bus,
                  int peers,
                  std::chrono::milliseconds timeout,
                  const std::string &host_ip) {
@@ -174,7 +174,8 @@ void run_control(int port,
               } else if (sub_type == INPUT_DATA) {
                 handle_input(client_session.value(), connected_clients, (INPUT_PKT *)decrypted.data());
               } else {
-                auto ev = ControlEvent{client_session->session_id, sub_type, decrypted};
+                auto ev =
+                    ControlEvent{.session_id = client_session->session_id, .type = sub_type, .raw_packet = decrypted};
                 event_bus->fire_event(immer::box<ControlEvent>{ev});
               }
             } catch (std::runtime_error &e) {

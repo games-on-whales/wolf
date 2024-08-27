@@ -107,7 +107,8 @@ void create_default(const std::string &source) {
   out_file.close();
 }
 
-std::shared_ptr<events::Runner> get_runner(const toml::value &item, const std::shared_ptr<dp::event_bus> &ev_bus) {
+std::shared_ptr<events::Runner> get_runner(const toml::value &item,
+                                           const std::shared_ptr<dp::event_bus<events::EventTypes>> &ev_bus) {
   auto runner_obj = toml::find_or(item, "runner", toml::value{toml::table{{"type", "process"}}});
   auto runner_type = toml::find_or(runner_obj, "type", "process");
   if (runner_type == "process") {
@@ -198,7 +199,7 @@ toml::value v3_to_v4(const toml::value &v3, const std::string &source) {
   return v4;
 }
 
-Config load_or_default(const std::string &source, const std::shared_ptr<dp::event_bus> &ev_bus) {
+Config load_or_default(const std::string &source, const std::shared_ptr<dp::event_bus<events::EventTypes>> &ev_bus) {
   if (!file_exist(source)) {
     logs::log(logs::warning, "Unable to open config file: {}, creating one using defaults", source);
     create_default(source);
@@ -323,18 +324,18 @@ Config load_or_default(const std::string &source, const std::shared_ptr<dp::even
         }
 
         return events::App{.base = {.title = app_title,
-                                   .id = std::to_string(idx + 1),
-                                   .support_hdr = toml::find_or<bool>(item, "support_hdr", false)},
-                          .h264_gst_pipeline = h264_gst_pipeline,
-                          .hevc_gst_pipeline = hevc_gst_pipeline,
-                          .av1_gst_pipeline = av1_gst_pipeline,
-                          .render_node = app_render_node,
+                                    .id = std::to_string(idx + 1),
+                                    .support_hdr = toml::find_or<bool>(item, "support_hdr", false)},
+                           .h264_gst_pipeline = h264_gst_pipeline,
+                           .hevc_gst_pipeline = hevc_gst_pipeline,
+                           .av1_gst_pipeline = av1_gst_pipeline,
+                           .render_node = app_render_node,
 
-                          .opus_gst_pipeline = opus_gst_pipeline,
-                          .start_virtual_compositor = toml::find_or<bool>(item, "start_virtual_compositor", true),
-                          .runner = get_runner(item, ev_bus),
-                          .joypad_type = joypad_type_enum};
-      }) |                                     //
+                           .opus_gst_pipeline = opus_gst_pipeline,
+                           .start_virtual_compositor = toml::find_or<bool>(item, "start_virtual_compositor", true),
+                           .runner = get_runner(item, ev_bus),
+                           .joypad_type = joypad_type_enum};
+      }) |                                      //
       ranges::to<immer::vector<events::App>>(); //
 
   auto clients_atom = std::make_shared<immer::atom<state::PairedClientList>>(paired_clients);

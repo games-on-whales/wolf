@@ -52,7 +52,7 @@ TEST_CASE("uinput - keyboard", "[UINPUT]") {
 }
 
 TEST_CASE("uinput - pen tablet", "[UINPUT]") {
-  auto session = events::StreamSession{.event_bus = std::make_shared<dp::event_bus>()};
+  auto session = events::StreamSession{.event_bus = std::make_shared<dp::event_bus<events::EventTypes>>()};
   auto packet = pkts::PEN_PACKET{.event_type = pkts::TOUCH_EVENT_HOVER,
                                  .tool_type = pkts::TOOL_TYPE_PEN,
                                  .pen_buttons = pkts::PEN_BUTTON_TYPE_PRIMARY,
@@ -127,7 +127,7 @@ TEST_CASE("uinput - pen tablet", "[UINPUT]") {
 }
 
 TEST_CASE("uinput - touch screen", "[UINPUT]") {
-  auto session = events::StreamSession{.event_bus = std::make_shared<dp::event_bus>()};
+  auto session = events::StreamSession{.event_bus = std::make_shared<dp::event_bus<events::EventTypes>>()};
 
   auto packet = pkts::TOUCH_PACKET{
       .event_type = pkts::TOUCH_EVENT_UP,
@@ -292,7 +292,7 @@ TEST_CASE("uinput - joypad", "[UINPUT]") {
   SECTION("OLD Moonlight: create joypad on first packet arrival") {
     events::App app = {.joypad_type = moonlight::control::pkts::CONTROLLER_TYPE::AUTO};
     auto session =
-        events::StreamSession{.event_bus = std::make_shared<dp::event_bus>(), .app = std::make_shared<events::App>(app)};
+        events::StreamSession{.event_bus = std::make_shared<dp::event_bus<events::EventTypes>>(), .app = std::make_shared<events::App>(app)};
     short controller_number = 1;
     auto c_pkt =
         pkts::CONTROLLER_MULTI_PACKET{.controller_number = controller_number, .button_flags = pkts::RIGHT_STICK};
@@ -308,7 +308,7 @@ TEST_CASE("uinput - joypad", "[UINPUT]") {
   SECTION("NEW Moonlight: create joypad with CONTROLLER_ARRIVAL") {
     events::App app = {.joypad_type = moonlight::control::pkts::CONTROLLER_TYPE::AUTO};
     auto session =
-        events::StreamSession{.event_bus = std::make_shared<dp::event_bus>(), .app = std::make_shared<events::App>(app)};
+        events::StreamSession{.event_bus = std::make_shared<dp::event_bus<events::EventTypes>>(), .app = std::make_shared<events::App>(app)};
     uint8_t controller_number = 1;
     auto c_pkt = pkts::CONTROLLER_ARRIVAL_PACKET{.controller_number = controller_number,
                                                  .controller_type = pkts::XBOX,

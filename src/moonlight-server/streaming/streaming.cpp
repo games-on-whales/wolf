@@ -94,20 +94,19 @@ using namespace wolf::core;
  * Start VIDEO pipeline
  */
 void start_streaming_video(const immer::box<events::VideoSession> &video_session,
-                           const std::shared_ptr<dp::event_bus> &event_bus,
+                           const std::shared_ptr<dp::event_bus<events::EventTypes>> &event_bus,
                            wolf::core::virtual_display::wl_state_ptr wl_ptr,
                            unsigned short client_port) {
-  std::string color_range = (static_cast<int>(video_session->color_range) == static_cast<int>(events::JPEG)) ? "jpeg"
-                                                                                                             : "mpeg2";
+  std::string color_range = (video_session->color_range == events::ColorRange::JPEG) ? "jpeg" : "mpeg2";
   std::string color_space;
-  switch (static_cast<int>(video_session->color_space)) {
-  case events::BT601:
+  switch (video_session->color_space) {
+  case events::ColorSpace::BT601:
     color_space = "bt601";
     break;
-  case events::BT709:
+  case events::ColorSpace::BT709:
     color_space = "bt709";
     break;
-  case events::BT2020:
+  case events::ColorSpace::BT2020:
     color_space = "bt2020";
     break;
   }
@@ -202,9 +201,9 @@ void start_streaming_video(const immer::box<events::VideoSession> &video_session
           }
         });
 
-    return immer::array<immer::box<dp::handler_registration>>{std::move(idr_handler),
-                                                              std::move(pause_handler),
-                                                              std::move(stop_handler)};
+    return immer::array<immer::box<dp::handler_registration<events::EventTypes>>>{std::move(idr_handler),
+                                                                                  std::move(pause_handler),
+                                                                                  std::move(stop_handler)};
   });
 }
 
@@ -212,7 +211,7 @@ void start_streaming_video(const immer::box<events::VideoSession> &video_session
  * Start AUDIO pipeline
  */
 void start_streaming_audio(const immer::box<events::AudioSession> &audio_session,
-                           const std::shared_ptr<dp::event_bus> &event_bus,
+                           const std::shared_ptr<dp::event_bus<events::EventTypes>> &event_bus,
                            unsigned short client_port,
                            const std::string &sink_name,
                            const std::string &server_name) {
@@ -265,7 +264,8 @@ void start_streaming_audio(const immer::box<events::AudioSession> &audio_session
           }
         });
 
-    return immer::array<immer::box<dp::handler_registration>>{std::move(pause_handler), std::move(stop_handler)};
+    return immer::array<immer::box<dp::handler_registration<events::EventTypes>>>{std::move(pause_handler),
+                                                                                  std::move(stop_handler)};
   });
 }
 

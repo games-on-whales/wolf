@@ -13,14 +13,32 @@ FetchContent_Declare(
 FetchContent_MakeAvailable(fmtlib) # Download and build
 target_link_libraries_system(wolf_runner PUBLIC fmt::fmt-header-only)
 
+# Event bus
 FetchContent_Declare(
         eventbus
         GIT_REPOSITORY https://github.com/games-on-whales/eventbus
-        GIT_TAG 8599ea2
+        GIT_TAG 5dcd39a
 )
 set(EVENTBUS_BUILD_TESTS OFF)
 FetchContent_MakeAvailable(eventbus)
 target_link_libraries_system(wolf_runner PUBLIC dp::eventbus)
+
+# Serialization
+FetchContent_Declare(
+        reflect-cpp
+        GIT_REPOSITORY https://github.com/getml/reflect-cpp.git
+        GIT_TAG v0.14.1
+)
+set(REFLECTCPP_BSON OFF)
+set(REFLECTCPP_CBOR OFF)
+set(REFLECTCPP_FLEXBUFFERS OFF)
+set(REFLECTCPP_MSGPACK OFF)
+set(REFLECTCPP_TOML OFF)
+set(REFLECTCPP_XML OFF)
+set(REFLECTCPP_YAML OFF)
+
+FetchContent_MakeAvailable(reflect-cpp)
+target_link_libraries(wolf_runner PUBLIC reflectcpp)
 
 # HTTP server library
 FetchContent_Declare(

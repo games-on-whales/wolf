@@ -77,6 +77,8 @@ if (UNIX AND NOT APPLE)
     endif ()
 endif ()
 
+list(APPEND SRC_LIST "testSerialization.cpp")
+
 option(TEST_DOCKER "Enable docker tests" ON)
 if (TEST_DOCKER)
     list(APPEND SRC_LIST "docker/testDocker.cpp")

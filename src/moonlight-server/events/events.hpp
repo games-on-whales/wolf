@@ -17,6 +17,8 @@
 #include <immer/vector.hpp>
 #include <moonlight/control.hpp>
 #include <moonlight/data-structures.hpp>
+#include <rfl.hpp>
+#include <rfl/json.hpp>
 #include <string_view>
 #include <toml.hpp>
 
@@ -75,53 +77,12 @@ using KeyboardTypes = std::variant<input::Keyboard, virtual_display::WaylandKeyb
 using JoypadTypes = std::variant<input::XboxOneJoypad, input::SwitchJoypad, input::PS5Joypad>;
 using JoypadList = immer::map<int /* controller number */, std::shared_ptr<JoypadTypes>>;
 
-/**
- * A StreamSession is created when a Moonlight user call `launch`
- *
- * This will then be fired up in the event_bus so that the rtsp, command, audio and video threads
- * can start working their magic.
- */
-struct StreamSession {
-  moonlight::DisplayMode display_mode;
-  int audio_channel_count;
-
-  std::shared_ptr<dp::event_bus> event_bus;
-  std::shared_ptr<App> app;
-  std::string app_state_folder;
-
-  // gcm encryption keys
-  std::string aes_key;
-  std::string aes_iv;
-
-  // client info
-  std::size_t session_id;
-  std::string ip;
-
-  /**
-   * Optional: the wayland display for the current session.
-   * Will be only set during an active streaming and destroyed on stream end.
-   */
-  std::shared_ptr<immer::atom<virtual_display::wl_state_ptr>> wayland_display =
-      std::make_shared<immer::atom<virtual_display::wl_state_ptr>>();
-
-  // virtual devices
-  std::shared_ptr<std::optional<MouseTypes>> mouse = std::make_shared<std::optional<MouseTypes>>();
-  std::shared_ptr<std::optional<KeyboardTypes>> keyboard = std::make_shared<std::optional<KeyboardTypes>>();
-
-  std::shared_ptr<immer::atom<JoypadList>> joypads = std::make_shared<immer::atom<JoypadList>>();
-
-  std::shared_ptr<std::optional<input::PenTablet>> pen_tablet =
-      std::make_shared<std::optional<input::PenTablet>>(); /* Optional, will be set on first use */
-  std::shared_ptr<std::optional<input::TouchScreen>> touch_screen =
-      std::make_shared<std::optional<input::TouchScreen>>(); /* Optional, will be set on first use */
-};
-
-enum ColorRange {
+enum class ColorRange {
   JPEG,
   MPEG
 };
 
-enum ColorSpace : int {
+enum class ColorSpace : int {
   BT601,
   BT709,
   BT2020
@@ -172,6 +133,7 @@ struct AudioSession {
 
 /**
  * Events received in the ENET Control Session
+ * TODO: break this down into more meaningful events
  */
 struct ControlEvent {
   // A unique ID that identifies this session
@@ -201,6 +163,62 @@ struct RTPVideoPingEvent {
 struct RTPAudioPingEvent {
   std::string client_ip;
   unsigned short client_port;
+};
+
+struct StreamSession;
+
+using EventTypes = std::variant<PlugDeviceEvent,
+                                PairSignal,
+                                UnplugDeviceEvent,
+                                StreamSession,
+                                VideoSession,
+                                AudioSession,
+                                ControlEvent,
+                                PauseStreamEvent,
+                                ResumeStreamEvent,
+                                StopStreamEvent,
+                                RTPVideoPingEvent,
+                                RTPAudioPingEvent>;
+
+/**
+ * A StreamSession is created when a Moonlight user call `launch`
+ *
+ * This will then be fired up in the event_bus so that the rtsp, command, audio and video threads
+ * can start working their magic.
+ */
+struct StreamSession {
+  moonlight::DisplayMode display_mode;
+  int audio_channel_count;
+
+  std::shared_ptr<dp::event_bus<EventTypes>> event_bus;
+  std::shared_ptr<App> app;
+  std::string app_state_folder;
+
+  // gcm encryption keys
+  std::string aes_key;
+  std::string aes_iv;
+
+  // client info
+  std::size_t session_id;
+  std::string ip;
+
+  /**
+   * Optional: the wayland display for the current session.
+   * Will be only set during an active streaming and destroyed on stream end.
+   */
+  std::shared_ptr<immer::atom<virtual_display::wl_state_ptr>> wayland_display =
+      std::make_shared<immer::atom<virtual_display::wl_state_ptr>>();
+
+  // virtual devices
+  std::shared_ptr<std::optional<MouseTypes>> mouse = std::make_shared<std::optional<MouseTypes>>();
+  std::shared_ptr<std::optional<KeyboardTypes>> keyboard = std::make_shared<std::optional<KeyboardTypes>>();
+
+  std::shared_ptr<immer::atom<JoypadList>> joypads = std::make_shared<immer::atom<JoypadList>>();
+
+  std::shared_ptr<std::optional<input::PenTablet>> pen_tablet =
+      std::make_shared<std::optional<input::PenTablet>>(); /* Optional, will be set on first use */
+  std::shared_ptr<std::optional<input::TouchScreen>> touch_screen =
+      std::make_shared<std::optional<input::TouchScreen>>(); /* Optional, will be set on first use */
 };
 
 } // namespace wolf::core::events

@@ -22,7 +22,7 @@ using namespace wolf::core;
 
 class RunDocker : public events::Runner {
 public:
-  static RunDocker from_toml(std::shared_ptr<dp::event_bus> ev_bus, const toml::value &runner_obj) {
+  static RunDocker from_toml(std::shared_ptr<dp::event_bus<events::EventTypes>> ev_bus, const toml::value &runner_obj) {
     std::vector<std::string> rec_mounts = toml::find_or<std::vector<std::string>>(runner_obj, "mounts", {});
     std::vector<MountPoint> mounts =
         rec_mounts                                  //
@@ -113,14 +113,14 @@ public:
   }
 
 protected:
-  RunDocker(std::shared_ptr<dp::event_bus> ev_bus,
+  RunDocker(std::shared_ptr<dp::event_bus<events::EventTypes>> ev_bus,
             std::string base_create_json,
             docker::Container base_container,
             std::string docker_socket)
       : ev_bus(std::move(ev_bus)), container(std::move(base_container)), base_create_json(std::move(base_create_json)),
         docker_api(std::move(docker_socket)) {}
 
-  std::shared_ptr<dp::event_bus> ev_bus;
+  std::shared_ptr<dp::event_bus<events::EventTypes>> ev_bus;
   docker::Container container;
   std::string base_create_json;
   docker::DockerAPI docker_api;

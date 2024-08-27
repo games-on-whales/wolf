@@ -16,12 +16,12 @@ namespace streaming {
 using namespace wolf::core;
 
 void start_streaming_video(const immer::box<events::VideoSession> &video_session,
-                           const std::shared_ptr<dp::event_bus> &event_bus,
+                           const std::shared_ptr<dp::event_bus<events::EventTypes>> &event_bus,
                            wolf::core::virtual_display::wl_state_ptr wl_state,
                            unsigned short client_port);
 
 void start_streaming_audio(const immer::box<events::AudioSession> &audio_session,
-                           const std::shared_ptr<dp::event_bus> &event_bus,
+                           const std::shared_ptr<dp::event_bus<events::EventTypes>> &event_bus,
                            unsigned short client_port,
                            const std::string &sink_name,
                            const std::string &server_name);

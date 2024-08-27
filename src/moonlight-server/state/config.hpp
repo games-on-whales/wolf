@@ -4,9 +4,9 @@
 #include <boost/uuid/uuid_generators.hpp> // generators
 #include <boost/uuid/uuid_io.hpp>         // streaming operators etc.
 #include <crypto/crypto.hpp>
+#include <events/events.hpp>
 #include <helpers/logger.hpp>
 #include <state/data-structures.hpp>
-#include <events/events.hpp>
 
 namespace state {
 
@@ -17,7 +17,7 @@ using namespace wolf::core;
  *
  * If the source is not present, it'll provide some sensible defaults
  */
-Config load_or_default(const std::string &source, const std::shared_ptr<dp::event_bus> &ev_bus);
+Config load_or_default(const std::string &source, const std::shared_ptr<dp::event_bus<events::EventTypes>> &ev_bus);
 
 /**
  * Side effect, will atomically update the paired clients list in cfg

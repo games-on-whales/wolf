@@ -57,7 +57,7 @@ TEST_CASE("Docker TOML", "DOCKER") {
   docker::init();
   docker::DockerAPI docker_api;
 
-  auto event_bus = std::make_shared<dp::event_bus>();
+  auto event_bus = std::make_shared<dp::event_bus<events::EventTypes>>();
   std::string toml_cfg = R"(
 
     type = "docker"

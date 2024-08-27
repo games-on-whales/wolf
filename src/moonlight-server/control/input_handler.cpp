@@ -16,10 +16,10 @@ using namespace std::string_literals;
 using namespace moonlight::control;
 
 std::shared_ptr<events::JoypadTypes> create_new_joypad(const events::StreamSession &session,
-                                                      const immer::atom<enet_clients_map> &connected_clients,
-                                                      int controller_number,
-                                                      CONTROLLER_TYPE type,
-                                                      uint8_t capabilities) {
+                                                       const immer::atom<enet_clients_map> &connected_clients,
+                                                       int controller_number,
+                                                       CONTROLLER_TYPE type,
+                                                       uint8_t capabilities) {
 
   auto on_rumble_fn = ([clients = &connected_clients,
                         controller_number,
@@ -170,8 +170,8 @@ bool create_pen_tablet(events::StreamSession &session) {
   auto tablet_ptr = std::make_shared<PenTablet>(std::move(*tablet));
   session.event_bus->fire_event(immer::box<events::PlugDeviceEvent>(
       events::PlugDeviceEvent{.session_id = session.session_id,
-                             .udev_events = tablet_ptr->get_udev_events(),
-                             .udev_hw_db_entries = tablet_ptr->get_udev_hw_db_entries()}));
+                              .udev_events = tablet_ptr->get_udev_events(),
+                              .udev_hw_db_entries = tablet_ptr->get_udev_hw_db_entries()}));
   if (auto wl = *session.wayland_display->load()) {
     for (const auto node : tablet_ptr->get_nodes()) {
       add_input_device(*wl, node);
@@ -195,8 +195,8 @@ bool create_touch_screen(events::StreamSession &session) {
   auto touch_screen = std::make_shared<TouchScreen>(std::move(*touch));
   session.event_bus->fire_event(immer::box<events::PlugDeviceEvent>(
       events::PlugDeviceEvent{.session_id = session.session_id,
-                             .udev_events = touch_screen->get_udev_events(),
-                             .udev_hw_db_entries = touch_screen->get_udev_hw_db_entries()}));
+                              .udev_events = touch_screen->get_udev_events(),
+                              .udev_hw_db_entries = touch_screen->get_udev_hw_db_entries()}));
   if (auto wl = *session.wayland_display->load()) {
     for (const auto node : touch_screen->get_nodes()) {
       add_input_device(*wl, node);

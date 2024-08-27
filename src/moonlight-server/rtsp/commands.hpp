@@ -152,7 +152,7 @@ std::pair<std::string, std::optional<int>> parse_arg_line(const std::pair<std::s
 }
 
 RTSP_PACKET
-announce(const RTSP_PACKET &req, const state::StreamSession &session) {
+announce(const RTSP_PACKET &req, const events::StreamSession &session) {
 
   auto args = req.payloads //
               | views::filter([](const std::pair<std::string, std::string> &line) {
@@ -226,7 +226,7 @@ announce(const RTSP_PACKET &req, const state::StreamSession &session) {
       .bitrate_kbps = bitrate,
       .slices_per_frame = args["x-nv-video[0].videoEncoderSlicesPerFrame"].value_or(1),
 
-      .color_range = (csc & 0x1) ? events::JPEG : events::MPEG,
+      .color_range = (csc & 0x1) ? events::ColorRange::JPEG : events::ColorRange::MPEG,
       .color_space = events::ColorSpace(csc >> 1),
 
       .client_ip = session.ip};
@@ -256,8 +256,8 @@ announce(const RTSP_PACKET &req, const state::StreamSession &session) {
 
 RTSP_PACKET
 message_handler(const RTSP_PACKET &req,
-                const state::StreamSession &session,
-                std::shared_ptr<dp::event_bus> event_bus,
+                const events::StreamSession &session,
+                std::shared_ptr<dp::event_bus<events::EventTypes>> event_bus,
                 unsigned short number_of_sessions) {
   auto cmd = req.request.cmd;
   logs::log(logs::debug, "[RTSP] received command {}", cmd);

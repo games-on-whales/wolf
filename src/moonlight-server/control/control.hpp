@@ -2,6 +2,7 @@
 
 #include <chrono>
 #include <enet/enet.h>
+#include <events/events.hpp>
 #include <helpers/logger.hpp>
 #include <moonlight/control.hpp>
 #include <range/v3/view.hpp>
@@ -11,10 +12,11 @@
 namespace control {
 
 using namespace std::chrono_literals;
+using namespace wolf::core;
 
 void run_control(int port,
                  const state::SessionsAtoms &running_sessions,
-                 const std::shared_ptr<dp::event_bus> &event_bus,
+                 const std::shared_ptr<dp::event_bus<events::EventTypes>> &event_bus,
                  int peers = 20,
                  std::chrono::milliseconds timeout = 1000ms,
                  const std::string &host_ip = "0.0.0.0");
