@@ -11,6 +11,7 @@
     "@types/node": "^17.0.25",
     "@types/react": "^18.0.6",
     "@types/react-dom": "^18.0.2",
+    "antd": "^5.20.3",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
     "react-redux": "^8.0.1",
@@ -41,5 +42,8 @@
       "last 1 firefox version",
       "last 1 safari version"
     ]
+  },
+  "devDependencies": {
+    "prettier": "^3.3.3"
   }
 }
