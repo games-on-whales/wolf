@@ -105,7 +105,7 @@ describe(const RTSP_PACKET &req, const state::StreamSession &session) {
   return ok_msg(req.seq_number, {}, payloads);
 }
 
-RTSP_PACKET setup(const RTSP_PACKET &req, unsigned short number_of_sessions) {
+RTSP_PACKET setup(const RTSP_PACKET &req, const state::StreamSession &session) {
 
   int service_port;
   auto type = req.request.stream.type;
@@ -113,10 +113,10 @@ RTSP_PACKET setup(const RTSP_PACKET &req, unsigned short number_of_sessions) {
 
   switch (utils::hash(type)) {
   case utils::hash("audio"):
-    service_port = state::AUDIO_PING_PORT + number_of_sessions;
+    service_port = session.audio_stream_port;
     break;
   case utils::hash("video"):
-    service_port = state::VIDEO_PING_PORT + number_of_sessions;
+    service_port = session.video_stream_port;
     break;
   case utils::hash("control"):
     service_port = state::CONTROL_PORT;
@@ -152,9 +152,7 @@ std::pair<std::string, std::optional<int>> parse_arg_line(const std::pair<std::s
 
 RTSP_PACKET
 announce(const RTSP_PACKET &req,
-         const state::StreamSession &session,
-         std::shared_ptr<dp::event_bus> event_bus,
-         unsigned short number_of_sessions) {
+         const state::StreamSession &session) {
 
   auto args = req.payloads //
               | views::filter([](const std::pair<std::string, std::string> &line) {
@@ -212,14 +210,13 @@ announce(const RTSP_PACKET &req,
   }
 
   // Video session
-  unsigned short video_port = state::VIDEO_PING_PORT + number_of_sessions;
   state::VideoSession video = {
       .display_mode = {.width = display.width, .height = display.height, .refreshRate = display.refreshRate},
       .gst_pipeline = gst_pipeline,
 
       .session_id = session.session_id,
 
-      .port = video_port,
+      .port = session.video_stream_port,
       .timeout = std::chrono::milliseconds(args["x-nv-video[0].timeoutLengthMs"].value_or(7000)),
       .packet_size = args["x-nv-video[0].packetSize"].value_or(1024),
       .frames_with_invalid_ref_threshold = args["x-nv-video[0].framesWithInvalidRefThreshold"].value_or(0),
@@ -232,10 +229,9 @@ announce(const RTSP_PACKET &req,
       .color_space = state::ColorSpace(csc >> 1),
 
       .client_ip = session.ip};
-  event_bus->fire_event(immer::box<state::VideoSession>(video));
+  session.event_bus->fire_event(immer::box<state::VideoSession>(video));
 
   // Audio session
-  unsigned short audio_port = state::AUDIO_PING_PORT + number_of_sessions;
   auto high_quality_audio = args["x-nv-audio.surround.AudioQuality"].value_or(0) == 1;
   auto audio_mode = state::get_audio_mode(audio_channels, high_quality_audio);
   state::AudioSession audio = {
@@ -247,21 +243,19 @@ announce(const RTSP_PACKET &req,
       .aes_key = session.aes_key,
       .aes_iv = session.aes_iv,
 
-      .port = audio_port,
+      .port = session.audio_stream_port,
       .client_ip = session.ip,
 
       .packet_duration = args["x-nv-aqos.packetDuration"].value_or(5),
       .audio_mode = audio_mode};
-  event_bus->fire_event(immer::box<state::AudioSession>(audio));
+  session.event_bus->fire_event(immer::box<state::AudioSession>(audio));
 
   return ok_msg(req.seq_number);
 }
 
 RTSP_PACKET
 message_handler(const RTSP_PACKET &req,
-                const state::StreamSession &session,
-                std::shared_ptr<dp::event_bus> event_bus,
-                unsigned short number_of_sessions) {
+                const state::StreamSession &session) {
   auto cmd = req.request.cmd;
   logs::log(logs::debug, "[RTSP] received command {}", cmd);
 
@@ -271,9 +265,9 @@ message_handler(const RTSP_PACKET &req,
   case utils::hash("DESCRIBE"):
     return describe(req, session);
   case utils::hash("SETUP"):
-    return setup(req, number_of_sessions);
+    return setup(req, session);
   case utils::hash("ANNOUNCE"):
-    return announce(req, session, event_bus, number_of_sessions);
+    return announce(req, session);
   case utils::hash("PLAY"):
     return ok_msg(req.seq_number);
   default:

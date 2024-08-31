@@ -39,6 +39,19 @@ inline std::optional<state::StreamSession> get_session_by_id(const immer::vector
   }
 }
 
+inline unsigned short get_next_available_port(const immer::vector<state::StreamSession> &sessions, bool video) {
+  auto ports = sessions |                                                              //
+               ranges::views::transform([video](const state::StreamSession &session) { //
+                 return video ? session.video_stream_port : session.audio_stream_port; //
+               })                                                                      //
+               | ranges::to_vector;
+  unsigned short port = video ? state::VIDEO_PING_PORT : state::AUDIO_PING_PORT;
+  while (std::find(ports.begin(), ports.end(), port) != ports.end()) {
+    port++;
+  }
+  return port;
+}
+
 inline immer::vector<state::StreamSession> remove_session(const immer::vector<state::StreamSession> &sessions,
                                                           const state::StreamSession &session) {
   return sessions                                                                                          //

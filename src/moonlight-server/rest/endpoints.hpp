@@ -256,6 +256,9 @@ create_run_session(const std::shared_ptr<typename SimpleWeb::Server<SimpleWeb::H
   logs::log(logs::debug, "Host app state folder: {}, creating paths", full_path.string());
   std::filesystem::create_directories(full_path);
 
+  auto video_stream_port = get_next_available_port(state->running_sessions->load(), true);
+  auto audio_stream_port = get_next_available_port(state->running_sessions->load(), false);
+
   return state::StreamSession{.display_mode = display_mode,
                               .audio_channel_count = channelCount,
                               .event_bus = state->event_bus,
@@ -268,28 +271,28 @@ create_run_session(const std::shared_ptr<typename SimpleWeb::Server<SimpleWeb::H
 
                               // client info
                               .session_id = get_client_id(current_client),
-                              .ip = get_client_ip<SimpleWeb::HTTPS>(request)};
+                              .ip = get_client_ip<SimpleWeb::HTTPS>(request),
+                              .video_stream_port = video_stream_port,
+                              .audio_stream_port = audio_stream_port};
 }
 
-void start_rtp_ping(const immer::box<state::AppState> &state) {
-  auto number_of_sessions = state->running_sessions->load()->size() - 1;
-  unsigned short video_port = state::VIDEO_PING_PORT + number_of_sessions;
+void start_rtp_ping(const immer::box<state::StreamSession> &session) {
 
   // Video RTP Ping
-  rtp::wait_for_ping(video_port, [state](unsigned short client_port, const std::string &client_ip) {
-    logs::log(logs::trace, "[PING] video from {}:{}", client_ip, client_port);
-    auto ev = state::RTPVideoPingEvent{.client_ip = client_ip, .client_port = client_port};
-    state->event_bus->fire_event(immer::box<state::RTPVideoPingEvent>(ev));
-  });
-
-  unsigned short audio_port = state::AUDIO_PING_PORT + number_of_sessions;
+  rtp::wait_for_ping(session->video_stream_port,
+                     [ev_bus = session->event_bus](unsigned short client_port, const std::string &client_ip) {
+                       logs::log(logs::trace, "[PING] video from {}:{}", client_ip, client_port);
+                       auto ev = state::RTPVideoPingEvent{.client_ip = client_ip, .client_port = client_port};
+                       ev_bus->fire_event(immer::box<state::RTPVideoPingEvent>(ev));
+                     });
 
   // Audio RTP Ping
-  rtp::wait_for_ping(audio_port, [state](unsigned short client_port, const std::string &client_ip) {
-    logs::log(logs::trace, "[PING] audio from {}:{}", client_ip, client_port);
-    auto ev = state::RTPAudioPingEvent{.client_ip = client_ip, .client_port = client_port};
-    state->event_bus->fire_event(immer::box<state::RTPAudioPingEvent>(ev));
-  });
+  rtp::wait_for_ping(session->audio_stream_port,
+                     [ev_bus = session->event_bus](unsigned short client_port, const std::string &client_ip) {
+                       logs::log(logs::trace, "[PING] audio from {}:{}", client_ip, client_port);
+                       auto ev = state::RTPAudioPingEvent{.client_ip = client_ip, .client_port = client_port};
+                       ev_bus->fire_event(immer::box<state::RTPAudioPingEvent>(ev));
+                     });
 }
 
 void launch(const std::shared_ptr<typename SimpleWeb::Server<SimpleWeb::HTTPS>::Response> &response,
@@ -305,7 +308,7 @@ void launch(const std::shared_ptr<typename SimpleWeb::Server<SimpleWeb::HTTPS>::
   state->running_sessions->update(
       [&new_session](const immer::vector<state::StreamSession> &ses_v) { return ses_v.push_back(new_session); });
 
-  start_rtp_ping(state);
+  start_rtp_ping(new_session);
 
   auto xml =
       moonlight::launch_success(get_host_ip<SimpleWeb::HTTPS>(request, state), std::to_string(state::RTSP_SETUP_PORT));
@@ -331,7 +334,7 @@ void resume(const std::shared_ptr<typename SimpleWeb::Server<SimpleWeb::HTTPS>::
     new_session.pen_tablet = std::move(old_session->pen_tablet);
     new_session.touch_screen = std::move(old_session->touch_screen);
 
-    start_rtp_ping(state);
+    start_rtp_ping(new_session);
 
     state->running_sessions->update([&old_session, &new_session](const immer::vector<state::StreamSession> ses_v) {
       return remove_session(ses_v, old_session.value()).push_back(new_session);
