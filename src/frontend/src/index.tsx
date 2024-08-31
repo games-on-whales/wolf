@@ -5,15 +5,25 @@ import { store } from "./app/store";
 import App from "./App";
 import reportWebVitals from "./reportWebVitals";
 import "@fontsource/inter";
-import { CssBaseline, CssVarsProvider } from "@mui/joy";
+import { CssBaseline, CssVarsProvider, extendTheme } from "@mui/joy";
 
 const container = document.getElementById("root")!;
 const root = createRoot(container);
 
+const theme = extendTheme({
+  radius: {
+    xl: "0",
+    lg: "0",
+    md: "0",
+    sm: "0",
+    xs: "0",
+  },
+});
+
 root.render(
   <React.StrictMode>
     <Provider store={store}>
-      <CssVarsProvider>
+      <CssVarsProvider theme={theme} defaultMode="dark" disableNestedContext>
         <CssBaseline />
         <App />
       </CssVarsProvider>
