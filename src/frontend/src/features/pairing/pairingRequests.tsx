@@ -1,10 +1,10 @@
-import { Card } from "antd";
 import { FC } from "react";
+import { Section } from "../sections/section";
 
 export const PairingRequests: FC = () => {
   return (
-    <Card title="Pairing Requests">
+    <Section title="Pairing Requests">
       There are no pairing requests at this time.
-    </Card>
+    </Section>
   );
 };

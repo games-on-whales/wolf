@@ -4,27 +4,19 @@ import { Provider } from "react-redux";
 import { store } from "./app/store";
 import App from "./App";
 import reportWebVitals from "./reportWebVitals";
-import { ConfigProvider, theme } from "antd";
+import "@fontsource/inter";
+import { CssBaseline, CssVarsProvider } from "@mui/joy";
 
 const container = document.getElementById("root")!;
 const root = createRoot(container);
 
-const { darkAlgorithm } = theme;
-
 root.render(
   <React.StrictMode>
     <Provider store={store}>
-      <ConfigProvider
-        theme={{
-          algorithm: darkAlgorithm,
-          token: {
-            colorPrimary: "#134990",
-            borderRadius: 0,
-          },
-        }}
-      >
+      <CssVarsProvider>
+        <CssBaseline />
         <App />
-      </ConfigProvider>
+      </CssVarsProvider>
     </Provider>
   </React.StrictMode>
 );

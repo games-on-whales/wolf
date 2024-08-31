@@ -1,18 +1,17 @@
-import { Flex, Space, Typography } from "antd";
 import { SessionsList } from "./features/sessions/sessionsList";
 import "./app.css";
 import { PairingRequests } from "./features/pairing/pairingRequests";
-
-const { Title } = Typography;
+import { Typography } from "@mui/joy";
+import { SectionsList } from "./features/sections/list";
 
 function App() {
   return (
     <main>
-      <Space direction="vertical" size="large" style={{ display: "flex" }}>
-        <Title level={2}>Wolf Admin Dashboard</Title>
+      <Typography level="h1">Wolf Admin Dashboard</Typography>
+      <SectionsList>
         <PairingRequests />
         <SessionsList />
-      </Space>
+      </SectionsList>
     </main>
   );
 }
