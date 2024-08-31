@@ -151,8 +151,7 @@ std::pair<std::string, std::optional<int>> parse_arg_line(const std::pair<std::s
 }
 
 RTSP_PACKET
-announce(const RTSP_PACKET &req,
-         const state::StreamSession &session) {
+announce(const RTSP_PACKET &req, const state::StreamSession &session) {
 
   auto args = req.payloads //
               | views::filter([](const std::pair<std::string, std::string> &line) {
@@ -254,8 +253,7 @@ announce(const RTSP_PACKET &req,
 }
 
 RTSP_PACKET
-message_handler(const RTSP_PACKET &req,
-                const state::StreamSession &session) {
+message_handler(const RTSP_PACKET &req, const state::StreamSession &session) {
   auto cmd = req.request.cmd;
   logs::log(logs::debug, "[RTSP] received command {}", cmd);
 

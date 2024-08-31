@@ -28,8 +28,7 @@ class tcp_connection : public boost::enable_shared_from_this<tcp_connection> {
 public:
   typedef boost::shared_ptr<tcp_connection> pointer;
 
-  static pointer create(boost::asio::io_context &io_context,
-                        const state::SessionsAtoms &stream_sessions) {
+  static pointer create(boost::asio::io_context &io_context, const state::SessionsAtoms &stream_sessions) {
     return pointer(new tcp_connection(io_context, stream_sessions));
   }
 
@@ -168,8 +167,7 @@ public:
   }
 
 protected:
-  explicit tcp_connection(boost::asio::io_context &io_context,
-                          state::SessionsAtoms stream_sessions)
+  explicit tcp_connection(boost::asio::io_context &io_context, state::SessionsAtoms stream_sessions)
       : socket_(io_context), streambuf_(max_msg_size), deadline_(io_context),
         stream_sessions(std::move(stream_sessions)), prev_read_bytes_(0) {}
   tcp::socket socket_;
@@ -191,9 +189,7 @@ protected:
  */
 class tcp_server {
 public:
-  tcp_server(boost::asio::io_context &io_context,
-             int port,
-             state::SessionsAtoms state)
+  tcp_server(boost::asio::io_context &io_context, int port, state::SessionsAtoms state)
       : io_context_(io_context), acceptor_(io_context, tcp::endpoint(tcp::v4(), port)),
         stream_sessions(std::move(state)) {
     acceptor_.set_option(boost::asio::socket_base::reuse_address{true});
@@ -234,8 +230,7 @@ private:
 /**
  * Starts a new RTSP server, calling this method will block execution.
  */
-void run_server(int port,
-                const state::SessionsAtoms &running_sessions) {
+void run_server(int port, const state::SessionsAtoms &running_sessions) {
   try {
     boost::asio::io_context io_context;
     tcp_server server(io_context, port, running_sessions);
