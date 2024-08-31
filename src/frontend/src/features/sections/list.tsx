@@ -6,6 +6,5 @@ interface ISectionsListProps {
 }
 
 export const SectionsList: FC<ISectionsListProps> = ({ children }) => {
-  //   return <Sheet sx={{ marginY: "1em" }}>{children}</Sheet>;
   return <>{children}</>;
 };
