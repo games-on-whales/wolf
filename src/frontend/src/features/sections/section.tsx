@@ -10,7 +10,7 @@ interface ISessionProps {
 export const Section: FC<ISessionProps> = ({ title, children }) => {
   return (
     <Card
-      sx={(theme) => ({
+      sx={{
         marginY: "2em",
         ":hover": {
           border: "5px solid",
@@ -19,7 +19,7 @@ export const Section: FC<ISessionProps> = ({ title, children }) => {
           animation: "borderRotate var(--d) linear infinite forwards",
           boxShadow: "0 0 10px 5px var(--c1)",
         },
-      })}
+      }}
     >
       {title && <Typography level="h3">{title}</Typography>}
       <Divider orientation="horizontal" />

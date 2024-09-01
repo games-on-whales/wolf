@@ -6,7 +6,7 @@ public class Session
 
     public DateTime CreatedAt { get; set; }
 
-    public required string RunningAppTitle { get; set; }
+    public required string ImageId { get; set; }
 
     public required string ClientName { get; set; }
 }
