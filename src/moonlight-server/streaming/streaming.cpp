@@ -40,18 +40,20 @@ std::shared_ptr<GstAppDataState> setup_app_src(const immer::box<state::VideoSess
 static bool push_data(GstAppDataState *data) {
   GstFlowReturn ret;
 
-  auto buffer = get_frame(*data->wayland_state);
-  if (GST_IS_BUFFER(buffer) && GST_IS_APP_SRC(data->app_src.get())) {
+  if (data->wayland_state && data->app_src) {
+    auto buffer = get_frame(*data->wayland_state);
+    if (GST_IS_BUFFER(buffer) && GST_IS_APP_SRC(data->app_src.get())) {
 
-    GST_BUFFER_PTS(buffer) = data->timestamp;
-    GST_BUFFER_DTS(buffer) = data->timestamp;
-    GST_BUFFER_DURATION(buffer) = gst_util_uint64_scale_int(1, GST_SECOND, data->framerate);
-    data->timestamp += GST_BUFFER_DURATION(buffer);
+      GST_BUFFER_PTS(buffer) = data->timestamp;
+      GST_BUFFER_DTS(buffer) = data->timestamp;
+      GST_BUFFER_DURATION(buffer) = gst_util_uint64_scale_int(1, GST_SECOND, data->framerate);
+      data->timestamp += GST_BUFFER_DURATION(buffer);
 
-    // gst_app_src_push_buffer takes ownership of the buffer
-    ret = gst_app_src_push_buffer(GST_APP_SRC(data->app_src.get()), buffer);
-    if (ret == GST_FLOW_OK) {
-      return true;
+      // gst_app_src_push_buffer takes ownership of the buffer
+      ret = gst_app_src_push_buffer(GST_APP_SRC(data->app_src.get()), buffer);
+      if (ret == GST_FLOW_OK) {
+        return true;
+      }
     }
   }
 
