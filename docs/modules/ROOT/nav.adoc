@@ -5,6 +5,11 @@
 ** xref:user:troubleshooting.adoc[]
 ** xref:user:steam.adoc[]
 
+*** Apps
+**** xref:Apps:index.adoc[]
+**** xref:Apps:steam.adoc[]
+**** xref:Apps:pegasus.adoc[]
+
 * Developer guide
 ** xref:dev:how-it-works.adoc[]
 ** xref:dev:manual_build.adoc[]
