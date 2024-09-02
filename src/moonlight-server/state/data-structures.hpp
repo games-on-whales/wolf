@@ -189,6 +189,8 @@ struct StreamSession {
   // client info
   std::size_t session_id;
   std::string ip;
+  unsigned short video_stream_port;
+  unsigned short audio_stream_port;
 
   /**
    * Optional: the wayland display for the current session.

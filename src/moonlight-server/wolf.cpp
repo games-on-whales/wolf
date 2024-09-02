@@ -454,8 +454,8 @@ void run() {
   }).detach();
 
   // RTSP
-  std::thread([sessions = local_state->running_sessions, ev_bus = local_state->event_bus]() {
-    rtsp::run_server(state::RTSP_SETUP_PORT, sessions, ev_bus);
+  std::thread([sessions = local_state->running_sessions]() {
+    rtsp::run_server(state::RTSP_SETUP_PORT, sessions);
   }).detach();
 
   // Control

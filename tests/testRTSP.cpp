@@ -21,11 +21,8 @@ using namespace wolf::core::audio;
 class tcp_tester : public tcp_connection {
 
 public:
-  static auto create_client(asio::io_context &io_context,
-                            int port,
-                            const state::SessionsAtoms state,
-                            const std::shared_ptr<dp::event_bus> event_bus) {
-    auto tester = new tcp_tester(io_context, state, event_bus);
+  static auto create_client(asio::io_context &io_context, int port, const state::SessionsAtoms state) {
+    auto tester = new tcp_tester(io_context, state);
 
     tcp::resolver resolver(io_context);
     asio::connect(tester->socket(), resolver.resolve("0.0.0.0", std::to_string(port)));
@@ -53,10 +50,8 @@ public:
   }
 
 protected:
-  explicit tcp_tester(asio::io_context &io_context,
-                      const state::SessionsAtoms state,
-                      const std::shared_ptr<dp::event_bus> event_bus)
-      : tcp_connection(io_context, state, event_bus), ioc(io_context) {}
+  explicit tcp_tester(asio::io_context &io_context, const state::SessionsAtoms state)
+      : tcp_connection(io_context, state), ioc(io_context) {}
 
   boost::asio::io_context &ioc;
 };
@@ -254,6 +249,7 @@ state::SessionsAtoms test_init_state() {
   StreamSession session = {
       .display_mode = {1920, 1080, 60},
       .audio_channel_count = 2,
+      .event_bus = std::make_shared<dp::event_bus>(),
       .app = std::make_shared<state::App>(state::App{.base = {},
                                                      .h264_gst_pipeline = "",
                                                      .hevc_gst_pipeline = "",
@@ -263,6 +259,8 @@ state::SessionsAtoms test_init_state() {
       .aes_iv = crypto::hex_to_str("01234567890", true),
       .session_id = 1234,
       .ip = "127.0.0.1",
+      .video_stream_port = 1234,
+      .audio_stream_port = 1235,
   };
   return std::make_shared<immer::atom<immer::vector<StreamSession>>>(immer::vector<StreamSession>{session});
 }
@@ -271,9 +269,8 @@ TEST_CASE("Commands", "[RTSP]") {
   constexpr int port = 8080;
   boost::asio::io_context ioc;
   auto state = test_init_state();
-  auto ev_bus = std::make_shared<dp::event_bus>();
-  auto wolf_server = tcp_server(ioc, port, state, ev_bus);
-  auto wolf_client = tcp_tester::create_client(ioc, port, state, ev_bus);
+  auto wolf_server = tcp_server(ioc, port, state);
+  auto wolf_client = tcp_tester::create_client(ioc, port, state);
 
   SECTION("MissingNo") {
     wolf_client->run("MissingNo rtsp://10.1.2.49:48010 RTSP/1.0\r\n"
@@ -333,8 +330,7 @@ TEST_CASE("Commands", "[RTSP]") {
                        REQUIRE(response.value().seq_number == 3);
 
                        REQUIRE_THAT(response.value().options["Session"], Equals("DEADBEEFCAFE;timeout = 90"));
-                       REQUIRE_THAT(response.value().options["Transport"],
-                                    Equals(fmt::format("server_port={}", (int)state::AUDIO_PING_PORT)));
+                       REQUIRE_THAT(response.value().options["Transport"], Equals(fmt::format("server_port={}", 1235)));
                      });
   }
 
@@ -353,8 +349,7 @@ TEST_CASE("Commands", "[RTSP]") {
                        REQUIRE(response.value().seq_number == 4);
 
                        REQUIRE_THAT(response.value().options["Session"], Equals("DEADBEEFCAFE;timeout = 90"));
-                       REQUIRE_THAT(response.value().options["Transport"],
-                                    Equals(fmt::format("server_port={}", (int)state::VIDEO_PING_PORT)));
+                       REQUIRE_THAT(response.value().options["Transport"], Equals(fmt::format("server_port={}", 1234)));
                      });
   }
 

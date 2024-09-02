@@ -83,6 +83,7 @@ jobs:
           RUST_BACKTRACE: FULL
           RUST_LOG: FATAL
           XDG_RUNTIME_DIR: /tmp
+          HOST_APPS_STATE_FOLDER: ${{runner.workspace}}
         run: ./wolftests --reporter JUnit::out=${{runner.workspace}}/report.xml --reporter console::out=-::colour-mode=ansi
 
       - name: Test Report
@@ -217,6 +218,8 @@ jobs:
 
       - name: Run tests
         working-directory: ${{runner.workspace}}/build/tests
+        env:
+          HOST_APPS_STATE_FOLDER: ${{runner.workspace}}
         run: ./wolftests --reporter JUnit::out=${{runner.workspace}}/report.xml --reporter console::out=-::colour-mode=ansi
 
       - name: Test Report
