@@ -1,4 +1,4 @@
-= Steam =
+= Steam
 
 One of the pre-installed applications in the default Wolf configuration is Steam.
 Getting Steam to work in a headless container took some work, so this page lists some limitations
