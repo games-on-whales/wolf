@@ -3,14 +3,9 @@ main {
   max-width: 66em;
 }
 
-/* Reference for after I've landed on a UI framework /*
-/* body {
-  background: rgb(2, 0, 36);
-  background: linear-gradient(
-    160deg,
-    rgb(24, 24, 24) 0%,
-    rgb(40, 40, 40) 35%,
-    rgb(0, 0, 0) 35.1%
-  );
+body {
+  background: url(http://localhost:3000/static/media/background.2451f8fef923db0bdead.png)
+    no-repeat center center;
+  background-size: cover;
   min-height: 100vh;
-} */
+}
