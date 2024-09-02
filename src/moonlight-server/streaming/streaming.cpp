@@ -16,7 +16,8 @@ namespace streaming {
 struct GstAppDataState {
   wolf::core::gstreamer::gst_element_ptr app_src;
   wolf::core::virtual_display::wl_state_ptr wayland_state;
-  guint source_id{};
+  GMainContext *context;
+  GSource *source;
   int framerate;
   GstClockTime timestamp = 0;
 };
@@ -26,12 +27,13 @@ namespace custom_src {
 std::shared_ptr<GstAppDataState> setup_app_src(const immer::box<state::VideoSession> &video_session,
                                                wolf::core::virtual_display::wl_state_ptr wl_ptr) {
   return std::shared_ptr<GstAppDataState>(new GstAppDataState{.wayland_state = std::move(wl_ptr),
-                                                              .source_id = 0,
+                                                              .source = nullptr,
                                                               .framerate = video_session->display_mode.refreshRate},
                                           [](const auto &app_data_state) {
                                             logs::log(logs::trace, "~GstAppDataState");
-                                            if (app_data_state->source_id != 0) {
-                                              g_source_remove(app_data_state->source_id);
+                                            if (app_data_state->source) {
+                                              g_source_destroy(app_data_state->source);
+                                              app_data_state->source = nullptr;
                                             }
                                             delete app_data_state;
                                           });
@@ -40,9 +42,13 @@ std::shared_ptr<GstAppDataState> setup_app_src(const immer::box<state::VideoSess
 static bool push_data(GstAppDataState *data) {
   GstFlowReturn ret;
 
-  if (data->wayland_state && data->app_src) {
+  if (data->wayland_state) {
     auto buffer = get_frame(*data->wayland_state);
-    if (GST_IS_BUFFER(buffer) && GST_IS_APP_SRC(data->app_src.get())) {
+    /**
+     * get_frame() will internally sleep until vsync or a new frame is available.
+     * we have to make sure that the pipeline is still running or we might access some invalid pointer
+     **/
+    if (GST_IS_BUFFER(buffer) && data->source && GST_IS_APP_SRC(data->app_src.get())) {
 
       GST_BUFFER_PTS(buffer) = data->timestamp;
       GST_BUFFER_DTS(buffer) = data->timestamp;
@@ -54,6 +60,8 @@ static bool push_data(GstAppDataState *data) {
       if (ret == GST_FLOW_OK) {
         return true;
       }
+    } else {
+      gst_buffer_unref(buffer);
     }
   }
 
@@ -62,17 +70,19 @@ static bool push_data(GstAppDataState *data) {
 }
 
 static void app_src_need_data(GstElement *pipeline, guint size, GstAppDataState *data) {
-  if (data->source_id == 0) {
+  if (!data->source) {
     logs::log(logs::debug, "[WAYLAND] Start feeding app-src");
-    data->source_id = g_idle_add((GSourceFunc)push_data, data);
+    data->source = g_idle_source_new();
+    g_source_attach(data->source, data->context);
+    g_source_set_callback(data->source, (GSourceFunc)push_data, data, NULL);
   }
 }
 
 static void app_src_enough_data(GstElement *pipeline, guint size, GstAppDataState *data) {
-  if (data->source_id != 0) {
-    logs::log(logs::debug, "[WAYLAND] Stop feeding app-src");
-    g_source_remove(data->source_id);
-    data->source_id = 0;
+  if (data->source) {
+    logs::log(logs::trace, "app_src_enough_data");
+    g_source_destroy(data->source);
+    data->source = nullptr;
   }
 }
 } // namespace custom_src
@@ -121,6 +131,7 @@ void start_streaming_video(const immer::box<state::VideoSession> &video_session,
 
   run_pipeline(pipeline, [video_session, event_bus, appsrc_state](auto pipeline, auto loop) {
     if (auto app_src_el = gst_bin_get_by_name(GST_BIN(pipeline.get()), "wolf_wayland_source")) {
+      appsrc_state->context = g_main_context_get_thread_default();
       logs::log(logs::debug, "Setting up wolf_wayland_source");
       g_assert(GST_IS_APP_SRC(app_src_el));
 

@@ -10,6 +10,7 @@ namespace wolf::core::gstreamer {
 
 using gst_element_ptr = std::shared_ptr<GstElement>;
 using gst_main_loop_ptr = std::shared_ptr<GMainLoop>;
+using gst_main_context_ptr = std::shared_ptr<GMainContext>;
 
 static void pipeline_error_handler(GstBus *bus, GstMessage *message, gpointer data) {
   auto loop = (GMainLoop *)data;
@@ -49,14 +50,9 @@ static bool run_pipeline(const std::string &pipeline_desc,
     g_error_free(error);
   }
 
-  /*
-   * create a mainloop that runs/iterates the default GLib main context
-   * (context NULL), in other words: makes the context check if anything
-   * it watches for has happened. When a message has been posted on the
-   * bus, the default main context will automatically call our
-   * my_bus_callback() function to notify us of that message.
-   */
-  gst_main_loop_ptr loop(g_main_loop_new(nullptr, FALSE), ::g_main_loop_unref);
+  gst_main_context_ptr context = {g_main_context_new(), ::g_main_context_unref};
+  g_main_context_push_thread_default(context.get());
+  gst_main_loop_ptr loop(g_main_loop_new(context.get(), FALSE), ::g_main_loop_unref);
 
   /*
    * adds a watch for new message on our pipeline's message bus to

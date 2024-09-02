@@ -235,12 +235,11 @@ void applist(const std::shared_ptr<typename SimpleWeb::Server<SimpleWeb::HTTPS>:
   send_xml<SimpleWeb::HTTPS>(response, SimpleWeb::StatusCode::success_ok, xml);
 }
 
-state::StreamSession
-create_run_session(const std::shared_ptr<typename SimpleWeb::Server<SimpleWeb::HTTPS>::Request> &request,
-                   const state::PairedClient &current_client,
-                   immer::box<state::AppState> state,
-                   const state::App &run_app) {
-  SimpleWeb::CaseInsensitiveMultimap headers = request->parse_query_string();
+state::StreamSession create_run_session(const SimpleWeb::CaseInsensitiveMultimap &headers,
+                                        const std::string &client_ip,
+                                        const state::PairedClient &current_client,
+                                        immer::box<state::AppState> state,
+                                        const state::App &run_app) {
   auto display_mode_str = utils::split(get_header(headers, "mode").value_or("1920x1080x60"), 'x');
   moonlight::DisplayMode display_mode = {std::stoi(display_mode_str[0].data()),
                                          std::stoi(display_mode_str[1].data()),
@@ -249,7 +248,7 @@ create_run_session(const std::shared_ptr<typename SimpleWeb::Server<SimpleWeb::H
                                          state->config->support_av1};
 
   auto surround_info = std::stoi(get_header(headers, "surroundAudioInfo").value_or("196610"));
-  int channelCount = surround_info & (65535);
+  int channelCount = surround_info & (0xffff /* last 16 bits */);
 
   std::string host_state_folder = utils::get_env("HOST_APPS_STATE_FOLDER", "/etc/wolf");
   auto full_path = std::filesystem::path(host_state_folder) / current_client.app_state_folder / run_app.base.title;
@@ -271,7 +270,7 @@ create_run_session(const std::shared_ptr<typename SimpleWeb::Server<SimpleWeb::H
 
                               // client info
                               .session_id = get_client_id(current_client),
-                              .ip = get_client_ip<SimpleWeb::HTTPS>(request),
+                              .ip = client_ip,
                               .video_stream_port = video_stream_port,
                               .audio_stream_port = audio_stream_port};
 }
@@ -303,7 +302,8 @@ void launch(const std::shared_ptr<typename SimpleWeb::Server<SimpleWeb::HTTPS>::
 
   SimpleWeb::CaseInsensitiveMultimap headers = request->parse_query_string();
   auto app = state::get_app_by_id(state->config, get_header(headers, "appid").value());
-  auto new_session = create_run_session(request, current_client, state, app);
+  auto client_ip = get_client_ip<SimpleWeb::HTTPS>(request);
+  auto new_session = create_run_session(request->parse_query_string(), client_ip, current_client, state, app);
   state->event_bus->fire_event(immer::box<state::StreamSession>(new_session));
   state->running_sessions->update(
       [&new_session](const immer::vector<state::StreamSession> &ses_v) { return ses_v.push_back(new_session); });
@@ -324,7 +324,8 @@ void resume(const std::shared_ptr<typename SimpleWeb::Server<SimpleWeb::HTTPS>::
   auto client_ip = get_client_ip<SimpleWeb::HTTPS>(request);
   auto old_session = get_session_by_ip(state->running_sessions->load(), client_ip);
   if (old_session) {
-    auto new_session = create_run_session(request, current_client, state, *old_session->app);
+    auto new_session =
+        create_run_session(request->parse_query_string(), client_ip, current_client, state, *old_session->app);
     // Carry over the old session display handle
     new_session.wayland_display = std::move(old_session->wayland_display);
     // Carry over the old session devices, they'll be already plugged into the container
