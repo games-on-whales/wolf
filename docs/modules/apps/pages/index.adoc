@@ -1,7 +1,8 @@
 = Apps
 
 == Overview
-Essentially Wolf launches a different docker containers that are preconfigured for different apps such steam, pegasus or firefox. Once the container is launched wolf streams
-the output to Moonlight client.
 
-See each sub page for further details on and additional configuration steps
+Wolf will start different Docker containers that are preconfigured for different apps such as Steam, Pegasus or Firefox.
+Once the container is launched, Wolf streams the output to the connected Moonlight client.
+
+See each subpage for further details and additional configuration steps.

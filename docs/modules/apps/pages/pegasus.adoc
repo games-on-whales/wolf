@@ -135,11 +135,11 @@ Pegasus supports extensive customization through themes. You can change the look
 * For a demonstration of different themes, watch this https://www.youtube.com/watch?v=WYAgfutLbVE[YouTube video].
 * Browse and download themes from the official https://pegasus-frontend.org/tools/themes/[Pegasus Themes Gallery].
 
-To install a theme, you need to launch the Pegasus app at least once, then download the theme and place in in:
+To install a theme, you need to launch the Pegasus app at least once, then download the theme and place in:
 
 `<hostapps_folder>/Pegasus/.config/pegasus-frontend/themes`
 
-On the next Pegasus launch you will be able to select the theme from within the settings.
+On the next Pegasus launch, you will be able to select the theme from within the settings.
 
 == Troubleshooting and Additional Resources
 
