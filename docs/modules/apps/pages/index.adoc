@@ -1,7 +1,7 @@
 = Apps
 
 == Overview
-Essentially wold launches different docker containers that are preconfigured for different apps such steam, pegasus or firefox. Once the container is launched wolf streams
-the output.
+Essentially Wolf launches a different docker containers that are preconfigured for different apps such steam, pegasus or firefox. Once the container is launched wolf streams
+the output to Moonlight client.
 
-See each section for further details on and additional configuration steps
+See each sub page for further details on and additional configuration steps
