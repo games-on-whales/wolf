@@ -6,7 +6,7 @@ on:
       - "docs"
       - "docker"
   pull_request:
-    paths:
+    paths-ignore:
       - "docs"
       - "docker"
 
