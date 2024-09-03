@@ -16,7 +16,7 @@ using namespace wolf::core;
 
 void run_control(int port,
                  const state::SessionsAtoms &running_sessions,
-                 const std::shared_ptr<dp::event_bus<events::EventTypes>> &event_bus,
+                 const std::shared_ptr<events::EventBusType> &event_bus,
                  int peers = 20,
                  std::chrono::milliseconds timeout = 1000ms,
                  const std::string &host_ip = "0.0.0.0");

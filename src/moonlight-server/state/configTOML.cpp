@@ -108,7 +108,7 @@ void create_default(const std::string &source) {
 }
 
 std::shared_ptr<events::Runner> get_runner(const toml::value &item,
-                                           const std::shared_ptr<dp::event_bus<events::EventTypes>> &ev_bus) {
+                                           const std::shared_ptr<events::EventBusType> &ev_bus) {
   auto runner_obj = toml::find_or(item, "runner", toml::value{toml::table{{"type", "process"}}});
   auto runner_type = toml::find_or(runner_obj, "type", "process");
   if (runner_type == "process") {
@@ -199,7 +199,7 @@ toml::value v3_to_v4(const toml::value &v3, const std::string &source) {
   return v4;
 }
 
-Config load_or_default(const std::string &source, const std::shared_ptr<dp::event_bus<events::EventTypes>> &ev_bus) {
+Config load_or_default(const std::string &source, const std::shared_ptr<events::EventBusType> &ev_bus) {
   if (!file_exist(source)) {
     logs::log(logs::warning, "Unable to open config file: {}, creating one using defaults", source);
     create_default(source);

@@ -17,7 +17,7 @@ using namespace wolf::core;
  *
  * If the source is not present, it'll provide some sensible defaults
  */
-Config load_or_default(const std::string &source, const std::shared_ptr<dp::event_bus<events::EventTypes>> &ev_bus);
+Config load_or_default(const std::string &source, const std::shared_ptr<events::EventBusType> &ev_bus);
 
 /**
  * Side effect, will atomically update the paired clients list in cfg

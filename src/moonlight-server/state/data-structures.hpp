@@ -131,7 +131,7 @@ struct AppState {
   /**
    * A shared bus of events so that we can decouple modules
    */
-  std::shared_ptr<dp::event_bus<events::EventTypes>> event_bus;
+  std::shared_ptr<events::EventBusType> event_bus;
 
   /**
    * A list of all currently running (and paused) streaming sessions

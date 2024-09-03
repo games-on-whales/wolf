@@ -19,7 +19,7 @@ using namespace state;
 using namespace ranges;
 
 TEST_CASE("LocalState load TOML", "[LocalState]") {
-  auto event_bus = std::make_shared<dp::event_bus<events::EventTypes>>();
+  auto event_bus = std::make_shared<events::EventBusType>();
   auto state = state::load_or_default("config.test.toml", event_bus);
   REQUIRE(state.hostname == "Wolf");
   REQUIRE(state.uuid == "0000-1111-2222-3333");
@@ -64,7 +64,7 @@ TEST_CASE("LocalState load TOML", "[LocalState]") {
 }
 
 TEST_CASE("LocalState pairing information", "[LocalState]") {
-  auto event_bus = std::make_shared<dp::event_bus<events::EventTypes>>();
+  auto event_bus = std::make_shared<events::EventBusType>();
   auto clients_atom = std::make_shared<immer::atom<state::PairedClientList>>();
   auto cfg = state::Config{.config_source = "config.test.toml", .paired_clients = clients_atom};
   auto a_client_cert = "-----BEGIN CERTIFICATE-----\n"
@@ -125,7 +125,7 @@ TEST_CASE("LocalState pairing information", "[LocalState]") {
 }
 
 TEST_CASE("Mocked serverinfo", "[MoonlightProtocol]") {
-  auto event_bus = std::make_shared<dp::event_bus<events::EventTypes>>();
+  auto event_bus = std::make_shared<events::EventBusType>();
   auto cfg = state::load_or_default("config.test.toml", event_bus);
   immer::array<DisplayMode> displayModes = {{1920, 1080, 60}, {1024, 768, 30}};
 
@@ -329,7 +329,7 @@ TEST_CASE("Pairing moonlight", "[MoonlightProtocol]") {
 }
 
 TEST_CASE("applist", "[MoonlightProtocol]") {
-  auto event_bus = std::make_shared<dp::event_bus<events::EventTypes>>();
+  auto event_bus = std::make_shared<events::EventBusType>();
   auto cfg = state::load_or_default("config.test.toml", event_bus);
   auto base_apps = cfg.apps | views::transform([](auto app) { return app.base; }) | to<immer::vector<moonlight::App>>();
   auto result = applist(base_apps);
@@ -341,7 +341,7 @@ TEST_CASE("applist", "[MoonlightProtocol]") {
 }
 
 TEST_CASE("launch", "[MoonlightProtocol]") {
-  auto event_bus = std::make_shared<dp::event_bus<events::EventTypes>>();
+  auto event_bus = std::make_shared<events::EventBusType>();
   auto cfg = state::load_or_default("config.test.toml", event_bus);
   auto result = launch_success("192.168.1.1", "3021");
   REQUIRE(xml_to_str(result) == "<?xml version=\"1.0\" encoding=\"utf-8\"?>\n"

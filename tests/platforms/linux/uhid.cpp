@@ -17,7 +17,7 @@ using namespace std::string_literals;
 TEST_CASE("Create PS5 pad with CONTROLLER_ARRIVAL", "[UHID]") {
   events::App app = {.joypad_type = moonlight::control::pkts::CONTROLLER_TYPE::AUTO};
   auto session =
-      events::StreamSession{.event_bus = std::make_shared<dp::event_bus<events::EventTypes>>(), .app = std::make_shared<events::App>(app)};
+      events::StreamSession{.event_bus = std::make_shared<events::EventBusType>(), .app = std::make_shared<events::App>(app)};
   uint8_t controller_number = 1;
   auto c_pkt = pkts::CONTROLLER_ARRIVAL_PACKET{
       .controller_number = controller_number,

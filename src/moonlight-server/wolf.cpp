@@ -35,7 +35,7 @@ static constexpr int DEFAULT_SESSION_TIMEOUT_MILLIS = 4000;
 /**
  * @brief Will try to load the config file and fallback to defaults
  */
-auto load_config(std::string_view config_file, const std::shared_ptr<dp::event_bus<events::EventTypes>> &ev_bus) {
+auto load_config(std::string_view config_file, const std::shared_ptr<events::EventBusType> &ev_bus) {
   logs::log(logs::info, "Reading config file from: {}", config_file);
   return state::load_or_default(config_file.data(), ev_bus);
 }
@@ -75,7 +75,7 @@ state::Host get_host_config(std::string_view pkey_filename, std::string_view cer
  * @brief Local state initialization
  */
 auto initialize(std::string_view config_file, std::string_view pkey_filename, std::string_view cert_filename) {
-  auto event_bus = std::make_shared<dp::event_bus<events::EventTypes>>();
+  auto event_bus = std::make_shared<events::EventBusType>();
   auto config = load_config(config_file, event_bus);
 
   auto host = get_host_config(pkey_filename, cert_filename);
@@ -144,7 +144,7 @@ using session_devices = immer::map<std::size_t /* session_id */, std::shared_ptr
 auto setup_sessions_handlers(const immer::box<state::AppState> &app_state,
                              const std::string &runtime_dir,
                              const std::optional<AudioServer> &audio_server) {
-  immer::vector_transient<immer::box<dp::handler_registration<events::EventTypes>>> handlers;
+  immer::vector_transient<immer::box<events::EventBusHandlers>> handlers;
 
   auto wayland_sessions = std::make_shared<
       immer::atom<immer::map<std::size_t /* session_id */, boost::shared_future<virtual_display::wl_state_ptr>>>>();
@@ -384,8 +384,8 @@ auto setup_sessions_handlers(const immer::box<state::AppState> &app_state,
           boost::promise<unsigned short> port_promise;
           auto port_fut = port_promise.get_future();
           std::once_flag called;
-          auto ev_handler = app_state->event_bus->register_handler<immer::box<events::RTPVideoPingEvent>>(
-              [pp = std::ref(port_promise), &called, sess](const immer::box<events::RTPVideoPingEvent> &ping_ev) {
+          auto ev_handler = app_state->event_bus->register_handler<immer::box<events::RTPAudioPingEvent>>(
+              [pp = std::ref(port_promise), &called, sess](const immer::box<events::RTPAudioPingEvent> &ping_ev) {
                 std::call_once(called, [=]() { // We'll keep receiving PING requests, but we only want the first one
                   if (ping_ev->client_ip == sess->client_ip) {
                     pp.get().set_value(ping_ev->client_port); // This throws when set multiple times
@@ -445,8 +445,10 @@ void run() {
   auto p_key_file = utils::get_env("WOLF_PRIVATE_KEY_FILE", "key.pem");
   auto p_cert_file = utils::get_env("WOLF_PRIVATE_CERT_FILE", "cert.pem");
   auto local_state = initialize(config_file, p_key_file, p_cert_file);
-  auto global_ev_handler = local_state->event_bus->register_global_handler(
-      [](auto ev) { logs::log(logs::debug, "Fired event: {}", rfl::json::write(ev)); });
+
+  auto global_ev_handler = local_state->event_bus->register_global_handler([](auto ev) {
+    std::visit([](auto &&arg) { logs::log(logs::debug, "Fired event: {}", rfl::json::write(*arg)); }, ev);
+  });
 
   // HTTP APIs
   auto http_thread = std::thread([local_state]() {

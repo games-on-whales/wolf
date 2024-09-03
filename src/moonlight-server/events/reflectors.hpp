@@ -9,6 +9,7 @@ using namespace wolf::core;
 
 template <> struct Reflector<events::PairSignal> {
   struct ReflType {
+    const std::string event_type = "pair";
     std::string client_ip;
     std::string host_ip;
   };
@@ -93,6 +94,8 @@ template <> struct Reflector<events::App> {
 
 template <> struct Reflector<events::StreamSession> {
   struct ReflType {
+    const std::string event_type = "stream_session";
+
     moonlight::DisplayMode display_mode;
     int audio_channel_count;
 
@@ -140,6 +143,7 @@ template <> struct Reflector<events::StreamSession> {
 
 template <> struct Reflector<events::ControlEvent> {
   struct ReflType {
+    const std::string event_type = "control_event";
     std::size_t session_id;
     int type;
   };

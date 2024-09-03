@@ -25,18 +25,21 @@
 namespace wolf::core::events {
 
 struct PairSignal {
+  const std::string event_type = "pair";
   std::string client_ip;
   std::string host_ip;
   std::shared_ptr<boost::promise<std::string>> user_pin;
 };
 
 struct PlugDeviceEvent {
+  const std::string event_type = "plug_device";
   std::size_t session_id;
   std::vector<std::map<std::string, std::string>> udev_events;
   std::vector<std::pair<std::string, std::vector<std::string>>> udev_hw_db_entries;
 };
 
 struct UnplugDeviceEvent {
+  const std::string event_type = "unplug_device";
   std::size_t session_id;
   std::vector<std::map<std::string, std::string>> udev_events;
   std::vector<std::pair<std::string, std::vector<std::string>>> udev_hw_db_entries;
@@ -92,6 +95,8 @@ enum class ColorSpace : int {
  * A VideoSession is created after the param exchange over RTSP
  */
 struct VideoSession {
+  const std::string event_type = "video_session";
+
   wolf::core::virtual_display::DisplayMode display_mode;
   std::string gst_pipeline;
 
@@ -115,6 +120,8 @@ struct VideoSession {
 };
 
 struct AudioSession {
+  const std::string event_type = "audio_session";
+
   std::string gst_pipeline;
 
   // A unique ID that identifies this session
@@ -136,6 +143,8 @@ struct AudioSession {
  * TODO: break this down into more meaningful events
  */
 struct ControlEvent {
+  const std::string event_type = "control";
+
   // A unique ID that identifies this session
   std::size_t session_id;
 
@@ -144,41 +153,58 @@ struct ControlEvent {
 };
 
 struct PauseStreamEvent {
+  const std::string event_type = "pause_stream";
   std::size_t session_id;
 };
 
 struct ResumeStreamEvent {
+  const std::string event_type = "resume_stream";
   std::size_t session_id;
 };
 
 struct StopStreamEvent {
+  const std::string event_type = "stop_stream";
   std::size_t session_id;
 };
 
 struct RTPVideoPingEvent {
+  const std::string event_type = "rtp_video_ping";
   std::string client_ip;
   unsigned short client_port;
 };
 
 struct RTPAudioPingEvent {
+  const std::string event_type = "rtp_audio_ping";
   std::string client_ip;
   unsigned short client_port;
 };
 
 struct StreamSession;
 
-using EventTypes = std::variant<PlugDeviceEvent,
-                                PairSignal,
-                                UnplugDeviceEvent,
-                                StreamSession,
-                                VideoSession,
-                                AudioSession,
-                                ControlEvent,
-                                PauseStreamEvent,
-                                ResumeStreamEvent,
-                                StopStreamEvent,
-                                RTPVideoPingEvent,
-                                RTPAudioPingEvent>;
+using EventBusHandlers = dp::handler_registration<immer::box<PlugDeviceEvent>,
+                                                  immer::box<PairSignal>,
+                                                  immer::box<UnplugDeviceEvent>,
+                                                  immer::box<StreamSession>,
+                                                  immer::box<VideoSession>,
+                                                  immer::box<AudioSession>,
+                                                  immer::box<ControlEvent>,
+                                                  immer::box<PauseStreamEvent>,
+                                                  immer::box<ResumeStreamEvent>,
+                                                  immer::box<StopStreamEvent>,
+                                                  immer::box<RTPVideoPingEvent>,
+                                                  immer::box<RTPAudioPingEvent>>;
+using EventBusType = dp::event_bus<immer::box<PlugDeviceEvent>,
+                                   immer::box<PairSignal>,
+                                   immer::box<UnplugDeviceEvent>,
+                                   immer::box<StreamSession>,
+                                   immer::box<VideoSession>,
+                                   immer::box<AudioSession>,
+                                   immer::box<ControlEvent>,
+                                   immer::box<PauseStreamEvent>,
+                                   immer::box<ResumeStreamEvent>,
+                                   immer::box<StopStreamEvent>,
+                                   immer::box<RTPVideoPingEvent>,
+                                   immer::box<RTPAudioPingEvent>>;
 
 /**
  * A StreamSession is created when a Moonlight user call `launch`
@@ -187,10 +213,11 @@ using EventTypes = std::variant<PlugDeviceEvent,
  * can start working their magic.
  */
 struct StreamSession {
+  const std::string event_type = "stream_session";
   moonlight::DisplayMode display_mode;
   int audio_channel_count;
 
-  std::shared_ptr<dp::event_bus<EventTypes>> event_bus;
+  std::shared_ptr<EventBusType> event_bus;
   std::shared_ptr<App> app;
   std::string app_state_folder;
 

@@ -19,7 +19,7 @@ target_link_libraries_system(wolf_runner PUBLIC fmt::fmt-header-only)
 FetchContent_Declare(
         eventbus
         GIT_REPOSITORY https://github.com/games-on-whales/eventbus
-        GIT_TAG 5dcd39a
+        GIT_TAG abb3a48
 )
 set(EVENTBUS_BUILD_TESTS OFF)
 FetchContent_MakeAvailable(eventbus)

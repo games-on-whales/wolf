@@ -24,18 +24,21 @@ TEST_CASE("Serialize to JSON", "[serialization]") {
   }
 
   SECTION("Wolf events") {
-    events::EventTypes event = events::PlugDeviceEvent{.session_id = 123,
-                                                       .udev_events = {{{"add", "usb"}}},
-                                                       .udev_hw_db_entries = {{"usb", {"usb1", "usb2"}}}};
+    auto event = events::PlugDeviceEvent{.session_id = 123,
+                                         .udev_events = {{{"add", "usb"}}},
+                                         .udev_hw_db_entries = {{"usb", {"usb1", "usb2"}}}};
 
     REQUIRE_THAT(rfl::json::write(event),
-                 Equals("{\"session_id\":123,"
+                 Equals("{\"event_type\":\"plug_device\","
+                        "\"session_id\":123,"
                         "\"udev_events\":[{\"add\":\"usb\"}],"
                         "\"udev_hw_db_entries\":[[\"usb\",[\"usb1\",\"usb2\"]]]}"));
 
-    event = events::PairSignal{.client_ip = "192.168.1.1", .host_ip = "0.0.0.0"};
+    auto event2 = events::PairSignal{.client_ip = "192.168.1.1", .host_ip = "0.0.0.0"};
 
-    REQUIRE_THAT(rfl::json::write(event), Equals("{\"client_ip\":\"192.168.1.1\",\"host_ip\":\"0.0.0.0\"}"));
+    REQUIRE_THAT(rfl::json::write(event2), Equals("{\"event_type\":\"pair\","
+                                                  "\"client_ip\":\"192.168.1.1\","
+                                                  "\"host_ip\":\"0.0.0.0\"}"));
   }
 
   // TODO: test the inverse operation, rfl::json::read
