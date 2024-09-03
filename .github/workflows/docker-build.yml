@@ -3,8 +3,8 @@ name: Docker build
 on:
   push:
     paths-ignore:
-      - "docs"
-      - ".github"
+      - "docs/**"
+      - ".github/**"
 
 jobs:
   buildx:

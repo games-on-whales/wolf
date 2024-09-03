@@ -1,5 +1,5 @@
 = Wolf
 
-WIP documentation for Wolf and Moonlight.
+Documentation for Wolf.
 
-Uses https://docs.antora.org/antora/latest/[Antora] for building, hosted at https://games-on-whales.github.io/wolf/[https://games-on-whales.github.io/wolf/]
+Use https://docs.antora.org/antora/latest/[Antora] for building, hosted at https://games-on-whales.github.io/wolf/[https://games-on-whales.github.io/wolf/]
