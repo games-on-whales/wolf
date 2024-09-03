@@ -4,8 +4,7 @@ main {
 }
 
 body {
-  background: url(http://localhost:3000/static/media/background.2451f8fef923db0bdead.png)
-    no-repeat center center;
+  background: url(./background.png) no-repeat center center;
   background-size: cover;
   min-height: 100vh;
 }
