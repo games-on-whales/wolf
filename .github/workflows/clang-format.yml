@@ -3,14 +3,14 @@ name: Run clang-format Linter
 on:
   push:
     paths-ignore:
-      - "docs"
-      - "docker"
-      - ".github"
+      - "docs/**"
+      - "docker/**"
+      - ".github/**"
   pull_request:
     paths:
-      - "docs"
-      - "docker"
-      - ".github"
+      - "docs/**"
+      - "docker/**"
+      - ".github/**"
 
 jobs:
   build:

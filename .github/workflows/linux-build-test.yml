@@ -3,12 +3,12 @@ name: Linux build and test
 on:
   push:
     paths-ignore:
-      - "docs"
-      - "docker"
+      - "docs/**"
+      - "docker/**"
   pull_request:
     paths-ignore:
-      - "docs"
-      - "docker"
+      - "docs/**"
+      - "docker/**"
 
 jobs:
   test-arm:

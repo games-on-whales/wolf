@@ -1,11 +1,11 @@
-name: build-docs.yml
+name: Build docs
 on:
   push:
     paths:
-      - "docs"
+      - "docs/**"
   pull_request:
     paths:
-      - "docs"
+      - "docs/**"
 
 jobs:
   build-docs:

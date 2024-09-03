@@ -2,4 +2,4 @@
 
 Documentation for Wolf and Moonlight.
 
-Uses https://docs.antora.org/antora/latest/[Antora] for building, hosted at https://games-on-whales.github.io/wolf/[https://games-on-whales.github.io/wolf/]
+Use https://docs.antora.org/antora/latest/[Antora] for building, hosted at https://games-on-whales.github.io/wolf/[https://games-on-whales.github.io/wolf/]
