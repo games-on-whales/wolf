@@ -7,6 +7,8 @@ import reportWebVitals from "./reportWebVitals";
 import "@fontsource/inter";
 import { CssBaseline, CssVarsProvider, extendTheme } from "@mui/joy";
 
+import "./features/controller/navigation";
+
 const container = document.getElementById("root")!;
 const root = createRoot(container);
 

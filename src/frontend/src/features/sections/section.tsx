@@ -1,6 +1,7 @@
 import { Card, Divider, Link, Typography } from "@mui/joy";
 import { FC, ReactNode } from "react";
 import "./section.css";
+import { FOCUS_SECTION_CLASS } from "../controller/navigation";
 
 interface ISessionProps {
   title?: string;
@@ -8,8 +9,11 @@ interface ISessionProps {
 }
 
 export const Section: FC<ISessionProps> = ({ title, children }) => {
+  const sectionSlug = title?.toLowerCase().replace(/\s/g, "-");
   return (
     <Card
+      className={FOCUS_SECTION_CLASS}
+      data-section-id={sectionSlug}
       variant="plain"
       sx={{
         marginY: "2em",
@@ -36,8 +40,9 @@ export const Section: FC<ISessionProps> = ({ title, children }) => {
             },
           },
         }}
-        href="#title"
+        href={"#" + sectionSlug}
         overlay
+        data-section-overlay
       />
     </Card>
   );
