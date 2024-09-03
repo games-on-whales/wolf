@@ -93,7 +93,9 @@ start_virtual_compositor = true
 type = "docker"
 name = "WolfEmulators"
 image = "ghcr.io/games-on-whales/pegasus:edge"
-mounts = []
+mounts = [
+    "/mnt/PATH_TO_ROMS_IN_YOUR_HOST/:/ROMs/:rw" # <-- EDIT HERE
+]
 env = [
 "RUN_SWAY=1",
 "GOW_REQUIRED_DEVICES=/dev/input/event* /dev/dri/* /dev/nvidia*",
@@ -103,9 +105,7 @@ ports = []
 base_create_json = """
 {
   "HostConfig": {
-    "Binds": [
-        "/path/to/roms:/ROMs"
-    ],
+    "Binds": [],
     "IpcMode": "host",
     "CapAdd": ["NET_RAW", "MKNOD", "NET_ADMIN", "SYS_ADMIN", "SYS_NICE"],
     "Privileged": false,
