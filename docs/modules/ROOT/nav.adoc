@@ -4,9 +4,9 @@
 ** xref:user:gstreamer.adoc[]
 ** xref:user:troubleshooting.adoc[]
 
-** xref:Apps:index.adoc[]
-*** xref:Apps:steam.adoc[]
-*** xref:Apps:pegasus.adoc[]
+** xref:apps:index.adoc[]
+*** xref:apps:steam.adoc[]
+*** xref:apps:pegasus.adoc[]
 
 * Developer guide
 ** xref:dev:how-it-works.adoc[]
