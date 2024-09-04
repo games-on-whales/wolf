@@ -352,17 +352,17 @@ TEST_CASE("launch", "[MoonlightProtocol]") {
 }
 
 TEST_CASE("Multiple users", "[HTTP]") {
-  auto event_bus = std::make_shared<dp::event_bus>();
+  auto event_bus = std::make_shared<events::EventBusType>();
   auto paired_clients = std::shared_ptr<immer::atom<state::PairedClientList>>();
   auto app_state = state::AppState{
       .config = state::Config{.paired_clients = paired_clients},
       .host = {},
       .pairing_cache = std::make_shared<immer::atom<immer::map<std::string, state::PairCache>>>(),
       .event_bus = event_bus,
-      .running_sessions = std::make_shared<immer::atom<immer::vector<state::StreamSession>>>()};
+      .running_sessions = std::make_shared<immer::atom<immer::vector<events::StreamSession>>>()};
 
   auto client1 = state::PairedClient{.app_state_folder = "test"};
-  auto app1 = state::App{.base = moonlight::App{.title = "test_app"}};
+  auto app1 = events::App{.base = moonlight::App{.title = "test_app"}};
   auto client1_ip = "0.0.0.0";
   auto client1_headers = SimpleWeb::CaseInsensitiveMultimap{{"rikey", "1234"}, {"rikeyid", "5678"}};
   auto session1 = endpoints::https::create_run_session(client1_headers, client1_ip, client1, app_state, app1);
@@ -378,7 +378,7 @@ TEST_CASE("Multiple users", "[HTTP]") {
 
   // Saving only the second session
   app_state.running_sessions->update(
-      [session2](auto &sessions) { return immer::vector<state::StreamSession>{session2}; });
+      [session2](auto &sessions) { return immer::vector<events::StreamSession>{session2}; });
   // We should now assign back the now available [48100, 48200] ports
   auto session3 = endpoints::https::create_run_session(client1_headers, client1_ip, client1, app_state, app1);
 
@@ -387,7 +387,7 @@ TEST_CASE("Multiple users", "[HTTP]") {
 
   // Saving all 3 sessions (even if one is a duplicate)
   app_state.running_sessions->update([session1, session2, session3](auto &sessions) {
-    return immer::vector<state::StreamSession>{session1, session2, session3};
+    return immer::vector<events::StreamSession>{session1, session2, session3};
   });
   // We should now assign the 2nd port (even if we have 3 sessions) because of port clash
   auto session4 = endpoints::https::create_run_session(client1_headers, client1_ip, client1, app_state, app1);

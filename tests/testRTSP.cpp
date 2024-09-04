@@ -250,7 +250,7 @@ state::SessionsAtoms test_init_state() {
   events::StreamSession session = {
       .display_mode = {1920, 1080, 60},
       .audio_channel_count = 2,
-      .event_bus = std::make_shared<dp::event_bus>(),
+      .event_bus = std::make_shared<events::EventBusType>(),
       .app = std::make_shared<events::App>(events::App{.base = {},
                                                        .h264_gst_pipeline = "",
                                                        .hevc_gst_pipeline = "",
