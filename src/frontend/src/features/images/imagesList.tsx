@@ -2,6 +2,7 @@ import { AspectRatio, Card, CardContent, Chip, Link } from "@mui/joy";
 import { FC } from "react";
 import { useGetApiContainerImagesQuery } from "../backend/wolfBackend.generated";
 import { Section } from "../sections/section";
+import { OVERLAY_SX } from "../sections/overlay";
 
 export const ImagesList: FC = () => {
   const { data: imagesList } = useGetApiContainerImagesQuery();
@@ -18,7 +19,7 @@ export const ImagesList: FC = () => {
                 key={image.id}
                 sx={{ alignItems: "center" }}
               >
-                <Link href={"#" + image.id} overlay>
+                <Link href={"#"} overlay sx={OVERLAY_SX}>
                   {image.state === "OutOfDate" ? (
                     <Chip variant="solid" color="warning" size="sm">
                       Update Required

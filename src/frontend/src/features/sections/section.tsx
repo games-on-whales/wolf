@@ -2,6 +2,7 @@ import { Card, Divider, Link, Typography } from "@mui/joy";
 import { FC, ReactNode } from "react";
 import "./section.css";
 import { FOCUS_SECTION_CLASS } from "../controller/navigation";
+import { OVERLAY_SX } from "./overlay";
 
 interface ISessionProps {
   title?: string;
@@ -26,18 +27,7 @@ export const Section: FC<ISessionProps> = ({ title, children }) => {
       <Divider orientation="horizontal" />
       {children}
       <Link
-        sx={{
-          ":focus-visible": {
-            ":after": {
-              border: "5px solid",
-              borderImage:
-                "conic-gradient(from var(--angle), var(--c2), var(--c1) 0.1turn, var(--c1) 0.15turn, var(--c2) 0.25turn) 30",
-              animation: "borderRotate var(--d) linear infinite forwards",
-              outline: "none",
-              outlineOffset: "none",
-            },
-          },
-        }}
+        sx={OVERLAY_SX}
         href={"#" + sectionSlug}
         overlay
         data-section-overlay
