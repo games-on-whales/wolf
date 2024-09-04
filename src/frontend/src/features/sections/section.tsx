@@ -17,12 +17,7 @@ export const Section: FC<ISessionProps> = ({ title, children }) => {
       variant="plain"
       sx={{
         marginY: "2em",
-        border: "5px solid transparent",
         ":focus-within": {
-          border: "5px solid",
-          borderImage:
-            "conic-gradient(from var(--angle), var(--c2), var(--c1) 0.1turn, var(--c1) 0.15turn, var(--c2) 0.25turn) 30",
-          animation: "borderRotate var(--d) linear infinite forwards",
           boxShadow: "0 0 10px 5px var(--c1)",
         },
       }}
@@ -34,7 +29,10 @@ export const Section: FC<ISessionProps> = ({ title, children }) => {
         sx={{
           ":focus-visible": {
             ":after": {
-              border: "none",
+              border: "5px solid",
+              borderImage:
+                "conic-gradient(from var(--angle), var(--c2), var(--c1) 0.1turn, var(--c1) 0.15turn, var(--c2) 0.25turn) 30",
+              animation: "borderRotate var(--d) linear infinite forwards",
               outline: "none",
               outlineOffset: "none",
             },

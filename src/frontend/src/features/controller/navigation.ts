@@ -1,8 +1,14 @@
-const DIRECTION_KEYS = ["ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight"];
+const DIRECTION_KEYS = [
+  "ArrowUp",
+  "ArrowDown",
+  "ArrowLeft",
+  "ArrowRight",
+  "Escape",
+];
 
 export const FOCUS_SECTION_CLASS = "focus-section";
 
-const listener = (event: KeyboardEvent) => {
+const keyDownListener = (event: KeyboardEvent) => {
   if (!DIRECTION_KEYS.includes(event.key)) {
     return;
   }
@@ -15,18 +21,22 @@ const listener = (event: KeyboardEvent) => {
   const isSectionActive =
     focusedSection instanceof HTMLElement &&
     focusedSection.dataset.sectionId === window.location.hash.slice(1);
-  console.log("isSectionActive", isSectionActive);
 
   let nextElement: Element | null;
   if (isSectionActive) {
-    const elements = focusedSection.querySelectorAll(
-      "a[href]:not([data-section-overlay])"
-    );
-    nextElement = getNextFocusableElement(
-      event.key,
-      focusedElement,
-      Array.from(elements)
-    );
+    if (event.key === "Escape") {
+      window.location.hash = "";
+      nextElement = focusedSection.querySelector(`a[data-section-overlay]`);
+    } else {
+      const elements = focusedSection.querySelectorAll(
+        "a[href]:not([data-section-overlay])"
+      );
+      nextElement = getNextFocusableElement(
+        event.key,
+        focusedElement,
+        Array.from(elements)
+      );
+    }
   } else {
     // Clear the hash if the focus has somehow escaped the section
     if (window.location.hash) {
@@ -36,9 +46,6 @@ const listener = (event: KeyboardEvent) => {
     const elements = document.querySelectorAll(
       `.${FOCUS_SECTION_CLASS} a[data-section-overlay]`
     );
-
-    console.log("elements", elements.length);
-    console.log("focusedSection", focusedSection);
 
     nextElement =
       focusedSection === null
@@ -51,16 +58,6 @@ const listener = (event: KeyboardEvent) => {
     nextElement.focus();
   }
 };
-window.addEventListener("keydown", listener);
-
-// Hot Module Replacement so the whole page doesn't reload
-if (module.hot) {
-  module.hot.dispose(() => {
-    window.removeEventListener("keydown", listener);
-  });
-
-  module.hot.accept();
-}
 
 function getNextFocusableElement(
   direction: string,
@@ -99,9 +96,28 @@ function getNextFocusableElement(
     }
   }
 
-  console.log("currentFocus", currentFocus);
-  console.log("direction", direction);
-  console.log("closestElement", closestElement);
-
   return closestElement;
+}
+
+const hashChangeHandler = () => {
+  const sectionId = window.location.hash.slice(1);
+  const section = document.querySelector(
+    `[data-section-id="${sectionId}"] a[href]:not([data-section-overlay])`
+  );
+  if (section instanceof HTMLElement) {
+    section.focus();
+  }
+};
+
+window.addEventListener("hashchange", hashChangeHandler);
+window.addEventListener("keydown", keyDownListener);
+
+// Hot Module Replacement so the whole page doesn't reload
+if (module.hot) {
+  module.hot.dispose(() => {
+    window.removeEventListener("keydown", keyDownListener);
+    window.removeEventListener("hashchange", hashChangeHandler);
+  });
+
+  module.hot.accept();
 }
