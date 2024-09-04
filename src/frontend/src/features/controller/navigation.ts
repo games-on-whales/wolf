@@ -29,7 +29,9 @@ const listener = (event: KeyboardEvent) => {
     );
   } else {
     // Clear the hash if the focus has somehow escaped the section
-    window.location.hash = "";
+    if (window.location.hash) {
+      window.location.hash = "";
+    }
 
     const elements = document.querySelectorAll(
       `.${FOCUS_SECTION_CLASS} a[data-section-overlay]`
