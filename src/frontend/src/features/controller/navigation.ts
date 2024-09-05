@@ -79,10 +79,10 @@ function getNextFocusableElement(
     const candidateRect = element.getBoundingClientRect();
     let distance = -1;
 
-    if (direction === "ArrowDown") {
-      distance = candidateRect.bottom - focusRect.top;
-    } else if (direction === "ArrowUp") {
-      distance = focusRect.bottom - candidateRect.top;
+    if (direction === "ArrowUp") {
+      distance = focusRect.top - candidateRect.bottom;
+    } else if (direction === "ArrowDown") {
+      distance = candidateRect.top - focusRect.bottom;
     } else if (direction === "ArrowLeft") {
       distance = focusRect.left - candidateRect.right;
     } else if (direction === "ArrowRight") {
