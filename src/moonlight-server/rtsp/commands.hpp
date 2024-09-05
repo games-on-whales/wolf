@@ -254,8 +254,7 @@ announce(const RTSP_PACKET &req, const events::StreamSession &session) {
 }
 
 RTSP_PACKET
-message_handler(const RTSP_PACKET &req,
-                const events::StreamSession &session) {
+message_handler(const RTSP_PACKET &req, const events::StreamSession &session) {
   auto cmd = req.request.cmd;
   logs::log(logs::debug, "[RTSP] received command {}", cmd);
 

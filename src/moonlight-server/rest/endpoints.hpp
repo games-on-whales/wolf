@@ -108,8 +108,8 @@ void pair(const std::shared_ptr<typename SimpleWeb::Server<T>::Response> &respon
     auto future_pin = std::make_shared<boost::promise<std::string>>();
     state->event_bus->fire_event( // Emit a signal and wait for the promise to be fulfilled
         immer::box<events::PairSignal>(events::PairSignal{.client_ip = client_ip,
-                                                        .host_ip = get_host_ip<T>(request, state),
-                                                        .user_pin = future_pin}));
+                                                          .host_ip = get_host_ip<T>(request, state),
+                                                          .user_pin = future_pin}));
 
     future_pin->get_future().then(
         [state, salt, client_cert_str, cache_key, client_id, response](boost::future<std::string> fut_pin) {
@@ -236,10 +236,10 @@ void applist(const std::shared_ptr<typename SimpleWeb::Server<SimpleWeb::HTTPS>:
 }
 
 events::StreamSession create_run_session(const SimpleWeb::CaseInsensitiveMultimap &headers,
-                                        const std::string &client_ip,
-                                        const state::PairedClient &current_client,
-                                        immer::box<state::AppState> state,
-                                        const events::App &run_app) {
+                                         const std::string &client_ip,
+                                         const state::PairedClient &current_client,
+                                         immer::box<state::AppState> state,
+                                         const events::App &run_app) {
   auto display_mode_str = utils::split(get_header(headers, "mode").value_or("1920x1080x60"), 'x');
   moonlight::DisplayMode display_mode = {std::stoi(display_mode_str[0].data()),
                                          std::stoi(display_mode_str[1].data()),
@@ -259,20 +259,20 @@ events::StreamSession create_run_session(const SimpleWeb::CaseInsensitiveMultima
   auto audio_stream_port = get_next_available_port(state->running_sessions->load(), false);
 
   return events::StreamSession{.display_mode = display_mode,
-                              .audio_channel_count = channelCount,
-                              .event_bus = state->event_bus,
-                              .app = std::make_shared<events::App>(run_app),
-                              .app_state_folder = full_path.string(),
+                               .audio_channel_count = channelCount,
+                               .event_bus = state->event_bus,
+                               .app = std::make_shared<events::App>(run_app),
+                               .app_state_folder = full_path.string(),
 
-                              // gcm encryption keys
-                              .aes_key = get_header(headers, "rikey").value(),
-                              .aes_iv = get_header(headers, "rikeyid").value(),
+                               // gcm encryption keys
+                               .aes_key = get_header(headers, "rikey").value(),
+                               .aes_iv = get_header(headers, "rikeyid").value(),
 
-                              // client info
-                              .session_id = get_client_id(current_client),
-                              .ip = client_ip,
-                              .video_stream_port = video_stream_port,
-                              .audio_stream_port = audio_stream_port};
+                               // client info
+                               .session_id = get_client_id(current_client),
+                               .ip = client_ip,
+                               .video_stream_port = video_stream_port,
+                               .audio_stream_port = audio_stream_port};
 }
 
 void start_rtp_ping(const immer::box<events::StreamSession> &session) {

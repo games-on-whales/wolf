@@ -1,13 +1,11 @@
+#include <api/api.hpp>
 #include <boost/asio.hpp>
 #include <chrono>
 #include <control/control.hpp>
 #include <core/docker.hpp>
 #include <csignal>
-#include <events/events.hpp>
-#include <events/reflectors.hpp>
 #include <exceptions/exceptions.h>
 #include <filesystem>
-#include <immer/array.hpp>
 #include <immer/array_transient.hpp>
 #include <immer/map_transient.hpp>
 #include <immer/vector_transient.hpp>
@@ -16,8 +14,6 @@
 #include <memory>
 #include <platforms/hw.hpp>
 #include <rest/rest.hpp>
-#include <rfl.hpp>
-#include <rfl/json.hpp>
 #include <rtsp/net.hpp>
 #include <state/config.hpp>
 #include <streaming/streaming.hpp>
@@ -446,10 +442,6 @@ void run() {
   auto p_cert_file = utils::get_env("WOLF_PRIVATE_CERT_FILE", "cert.pem");
   auto local_state = initialize(config_file, p_key_file, p_cert_file);
 
-  auto global_ev_handler = local_state->event_bus->register_global_handler([](auto ev) {
-    std::visit([](auto &&arg) { logs::log(logs::debug, "Fired event: {}", rfl::json::write(*arg)); }, ev);
-  });
-
   // HTTP APIs
   auto http_thread = std::thread([local_state]() {
     HttpServer server = HttpServer();
@@ -471,6 +463,9 @@ void run() {
   std::thread([sessions = local_state->running_sessions, ev_bus = local_state->event_bus]() {
     control::run_control(state::CONTROL_PORT, sessions, ev_bus);
   }).detach();
+
+  // Wolf API server
+  std::thread([local_state]() { wolf::api::start_server(local_state); }).detach();
 
   // mDNS
   mdns_cpp::Logger::setLoggerSink([](const std::string &msg) {

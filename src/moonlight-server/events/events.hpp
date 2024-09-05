@@ -205,6 +205,18 @@ using EventBusType = dp::event_bus<immer::box<PlugDeviceEvent>,
                                    immer::box<StopStreamEvent>,
                                    immer::box<RTPVideoPingEvent>,
                                    immer::box<RTPAudioPingEvent>>;
+using EventsVariant = std::variant<immer::box<PlugDeviceEvent>,
+                                   immer::box<PairSignal>,
+                                   immer::box<UnplugDeviceEvent>,
+                                   immer::box<StreamSession>,
+                                   immer::box<VideoSession>,
+                                   immer::box<AudioSession>,
+                                   immer::box<ControlEvent>,
+                                   immer::box<PauseStreamEvent>,
+                                   immer::box<ResumeStreamEvent>,
+                                   immer::box<StopStreamEvent>,
+                                   immer::box<RTPVideoPingEvent>,
+                                   immer::box<RTPAudioPingEvent>>;
 
 /**
  * A StreamSession is created when a Moonlight user call `launch`
