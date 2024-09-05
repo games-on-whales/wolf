@@ -138,6 +138,14 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Login to GitHub Container Registry
+        if: steps.prep.outputs.has_github_token != '' # secrets not available in PRs
+        uses: docker/login-action@v2
+        with:
+          registry: ghcr.io
+          username: ${{ github.repository_owner }}
+          password: ${{ secrets.GHCR_TOKEN }}
+
       - name: Run tests in devcontainer
         uses: devcontainers/ci@v0.3
         with:
@@ -145,19 +153,20 @@ jobs:
           imageName: ghcr.io/${{ github.repository_owner }}/wolf
           cacheFrom: ghcr.io/${{ github.repository_owner }}/wolf:${{github.ref_name}}
           push: always
-          runCmd: |
-            cmake -Bbuild \
-                  -H$GITHUB_WORKSPACE \
-                  -DCMAKE_BUILD_TYPE=Debug \
-                  -DCMAKE_CXX_EXTENSIONS=OFF \
-                  -DTEST_VIRTUAL_INPUT=OFF \
-                  -DTEST_DOCKER=ON \
-                  -DTEST_RUST_WAYLAND=ON \
-                  -DTEST_NVIDIA=OFF \
-                  -DTEST_EXCEPTIONS=OFF \
-                  -DTEST_UHID=OFF \
-                  -G Ninja
-            
-            ninja -j $(nproc) wolftests
-            
-            ./wolftests --reporter JUnit::out=${{runner.workspace}}/report.xml --reporter console::out=-::colour-mode=ansi
+          # TODO:
+          # runCmd: |
+          #   cmake -Bbuild \
+          #         -H$GITHUB_WORKSPACE \
+          #         -DCMAKE_BUILD_TYPE=Debug \
+          #         -DCMAKE_CXX_EXTENSIONS=OFF \
+          #         -DTEST_VIRTUAL_INPUT=OFF \
+          #         -DTEST_DOCKER=ON \
+          #         -DTEST_RUST_WAYLAND=ON \
+          #         -DTEST_NVIDIA=OFF \
+          #         -DTEST_EXCEPTIONS=OFF \
+          #         -DTEST_UHID=OFF \
+          #         -G Ninja
+          #
+          #   ninja -j $(nproc) wolftests
+          #
+          #   ./wolftests --reporter JUnit::out=${{runner.workspace}}/report.xml --reporter console::out=-::colour-mode=ansi

@@ -139,28 +139,22 @@ jobs:
           if-no-files-found: error
 
   test:
-    runs-on: ubuntu-22.04
+    runs-on: ubuntu-24.04
     needs: build-gst-wayland
     strategy:
       fail-fast: false
       matrix:
         cxx:
-          - g++-10
           - g++-12
-          - clang++-11
-          - clang++-14
+          - clang++-16
         build_type: [ Release ]
         shared: [ true, false ]
         std: [ 20 ]
         include:
-          - cxx: g++-10
-            other_pkgs: [ g++-10 ]
           - cxx: g++-12
             other_pkgs: [ g++-12 ]
-          - cxx: clang++-11
-            other_pkgs: [ clang-11 ]
-          - cxx: clang++-14
-            other_pkgs: [ clang-14 ]
+          - cxx: clang++-16
+            other_pkgs: [ clang-16 ]
 
 
     steps:
@@ -197,6 +191,16 @@ jobs:
               libpci-dev \
               libunwind-dev \
               ${{ join(matrix.other_pkgs, ' ') }}
+
+      - name: Install msgpack-c
+        run: |
+          git clone https://github.com/msgpack/msgpack-c.git
+          cd msgpack-c
+          git checkout c-6.1.0
+          mkdir build
+          cd build
+          cmake -DCMAKE_BUILD_TYPE=Release -DMSGPACK_BUILD_EXAMPLES=OFF -G Ninja ..
+          sudo cmake --build . --target install --config Release
 
       - name: Configure build
         working-directory: ${{runner.workspace}}
