@@ -24,6 +24,7 @@ struct HTTPRequest {
   std::string query_string{};
   std::string http_version{};
   SimpleWeb::CaseInsensitiveMultimap headers{};
+  std::string body{};
 };
 
 std::string to_str(boost::asio::streambuf &streambuf) {
@@ -32,12 +33,15 @@ std::string to_str(boost::asio::streambuf &streambuf) {
 
 class UnixSocketServer {
 public:
-  UnixSocketServer(boost::asio::io_context &io_context, const std::string &socket_path)
-      : io_context_(io_context), acceptor_(io_context, boost::asio::local::stream_protocol::endpoint(socket_path)) {
+  UnixSocketServer(boost::asio::io_context &io_context,
+                   const std::string &socket_path,
+                   std::shared_ptr<events::EventBusType> event_bus)
+      : io_context_(io_context), event_bus_(event_bus),
+        acceptor_(io_context, boost::asio::local::stream_protocol::endpoint(socket_path)) {
     start_accept();
   }
 
-  void send_event(const std::string &event_json) {
+  void broadcast_event(const std::string &event_json) {
     logs::log(logs::trace, "[API] Sending event: {}", event_json);
     for (auto &socket : sockets_) {
       boost::asio::async_write(socket->socket,
@@ -58,15 +62,55 @@ public:
   }
 
 private:
+  void send_http(std::shared_ptr<UnixSocket> socket, int status_code, std::string_view body) {
+    auto http_reply = fmt::format("HTTP/1.0 {} OK\r\nContent-Length: {}\r\n\r\n{}", status_code, body.size(), body);
+    boost::asio::async_write(socket->socket,
+                             boost::asio::buffer(http_reply),
+                             [this, socket](const boost::system::error_code &ec, std::size_t /*length*/) {
+                               if (ec) {
+                                 logs::log(logs::error, "[API] Error sending HTTP: {}", ec.message());
+                                 close(*socket);
+                               }
+                             });
+  }
+
   void handle_request(HTTPRequest &req, std::shared_ptr<UnixSocket> socket) {
-    logs::log(logs::debug, "[API] Received request: {} {}", req.method, req.path);
+    logs::log(logs::debug, "[API] Received request: {} {} - {}", req.method, req.path, req.body);
     if (req.method == "GET" && req.path == "/api/v1/events") {
-      // Test with: curl -v --http0.9 --unix-socket /tmp/wolf.sock http://localhost/api/v1/events
+      // curl -v --http0.9 --unix-socket /tmp/wolf.sock http://localhost/api/v1/events
       sockets_.push_back(socket);
-    } else {
-      logs::log(logs::warning, "[API] Invalid request: {} {}", req.method, req.path);
-      close(*socket);
+      return; // We don't send a reply, and we keep the connection open
     }
+
+    if (req.method == "GET" && req.path == "/api/v1/pending-pair-requests") {
+      // curl -v --http1.0 --unix-socket /tmp/wolf.sock http://localhost/api/v1/pending-pair-requests
+      auto res = rfl::Generic::Object();
+      res["success"] = true;
+      // TODO: res["requests"] = pairing_atom->load();
+      send_http(socket, 200, rfl::json::write(res));
+      return;
+    }
+
+    if (req.method == "POST" && req.path == "/api/v1/pair-client") {
+      // curl -v --http1.0 --unix-socket /tmp/wolf.sock -d '{"pair_secret": "xxxx", "pin": "1234"}'
+      // http://localhost/api/v1/pair-client
+      if (auto event = rfl::json::read<rfl::Generic>(req.body)) {
+        // TODO: auto pair_request = pairing_atom->load()->at(secret);
+        // TODO: pair_request->user_pin->set_value(pin);
+        auto res = rfl::Generic::Object();
+        res["success"] = true;
+        send_http(socket, 200, rfl::json::write(res));
+      } else {
+        logs::log(logs::warning, "[API] Invalid event: {}", req.body);
+        send_http(socket, 500, "");
+      }
+
+      return;
+    }
+
+    logs::log(logs::warning, "[API] Invalid request: {} {}", req.method, req.path);
+    send_http(socket, 404, "");
+    close(*socket);
   }
 
   void start_connection(std::shared_ptr<UnixSocket> socket) {
@@ -84,7 +128,39 @@ private:
           HTTPRequest req = {};
           std::istream is(request_buf.get());
           SimpleWeb::RequestMessage::parse(is, req.method, req.path, req.query_string, req.http_version, req.headers);
-          handle_request(req, socket);
+
+          if (req.headers.contains("Transfer-Encoding") && req.headers.find("Transfer-Encoding")->second == "chunked") {
+            logs::log(logs::error, "[API] Chunked encoding not supported, use HTTP/1.0 instead");
+            close(*socket);
+            return;
+          }
+
+          // Get the body payload
+          if (req.headers.contains("Content-Length")) {
+            auto content_length = std::stoul(req.headers.find("Content-Length")->second);
+            std::size_t num_additional_bytes = request_buf->size() - bytes_transferred;
+            if (content_length > num_additional_bytes) {
+              boost::asio::async_read(socket->socket,
+                                      *request_buf,
+                                      boost::asio::transfer_exactly(content_length - bytes_transferred),
+                                      [this, socket, request_buf, req = std::make_unique<HTTPRequest>(req)](
+                                          const boost::system::error_code &ec,
+                                          std::size_t /*bytes_transferred*/) {
+                                        if (ec) {
+                                          logs::log(logs::error, "[API] Error reading request body: {}", ec.message());
+                                          close(*socket);
+                                          return;
+                                        }
+                                        req->body = to_str(*request_buf);
+                                        handle_request(*req, socket);
+                                      });
+            } else {
+              req.body = to_str(*request_buf);
+              handle_request(req, socket);
+            }
+          } else {
+            handle_request(req, socket);
+          }
         });
   }
 
@@ -110,6 +186,7 @@ private:
   boost::asio::io_context &io_context_;
   boost::asio::local::stream_protocol::acceptor acceptor_;
   std::vector<std::shared_ptr<UnixSocket>> sockets_;
+  std::shared_ptr<events::EventBusType> event_bus_;
 };
 
 void start_server(immer::box<state::AppState> app_state) {
@@ -129,13 +206,13 @@ void start_server(immer::box<state::AppState> app_state) {
 
   ::unlink(socket_path);
   boost::asio::io_context io_context;
-  UnixSocketServer server(io_context, socket_path);
+  UnixSocketServer server(io_context, socket_path, app_state->event_bus);
 
   while (true) {
     io_context.run_for(std::chrono::milliseconds(100));
     server.cleanup_sockets();
     while (auto ev = event_queue->pop(std::chrono::milliseconds(0))) {
-      std::visit([&server](auto &&arg) { server.send_event(rfl::json::write(*arg)); }, *ev);
+      std::visit([&server](auto &&arg) { server.broadcast_event(rfl::json::write(*arg)); }, *ev);
     }
   }
 }
