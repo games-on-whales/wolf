@@ -123,10 +123,15 @@ struct AppState {
   immer::box<Host> host;
 
   /**
-   * Mutable temporary results in order to achieve the multistep pairing process
+   * Mutable, temporary results in order to achieve the multistep pairing process
    * It's shared between the two HTTP/HTTPS threads
    */
   std::shared_ptr<immer::atom<immer::map<std::string, PairCache>>> pairing_cache;
+
+  /**
+   * Mutable, temporary promises to be resolved when the client sends the correct pin
+   */
+  std::shared_ptr<immer::atom<immer::map<std::string, immer::box<events::PairSignal>>>> pairing_atom;
 
   /**
    * A shared bus of events so that we can decouple modules

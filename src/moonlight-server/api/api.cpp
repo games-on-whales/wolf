@@ -35,8 +35,8 @@ class UnixSocketServer {
 public:
   UnixSocketServer(boost::asio::io_context &io_context,
                    const std::string &socket_path,
-                   std::shared_ptr<events::EventBusType> event_bus)
-      : io_context_(io_context), event_bus_(event_bus),
+                   immer::box<state::AppState> app_state)
+      : io_context_(io_context), app_state(app_state),
         acceptor_(io_context, boost::asio::local::stream_protocol::endpoint(socket_path)) {
     start_accept();
   }
@@ -86,7 +86,14 @@ private:
       // curl -v --http1.0 --unix-socket /tmp/wolf.sock http://localhost/api/v1/pending-pair-requests
       auto res = rfl::Generic::Object();
       res["success"] = true;
-      // TODO: res["requests"] = pairing_atom->load();
+      auto requests = std::vector<rfl::Generic>();
+      for (auto [secret, pair_request] : *app_state->pairing_atom->load()) {
+        auto pair_request_obj = rfl::Generic::Object();
+        pair_request_obj["pair_secret"] = secret;
+        pair_request_obj["client_ip"] = pair_request->client_ip;
+        requests.push_back(pair_request_obj);
+      }
+      res["requests"] = requests;
       send_http(socket, 200, rfl::json::write(res));
       return;
     }
@@ -94,12 +101,16 @@ private:
     if (req.method == "POST" && req.path == "/api/v1/pair-client") {
       // curl -v --http1.0 --unix-socket /tmp/wolf.sock -d '{"pair_secret": "xxxx", "pin": "1234"}'
       // http://localhost/api/v1/pair-client
-      if (auto event = rfl::json::read<rfl::Generic>(req.body)) {
-        // TODO: auto pair_request = pairing_atom->load()->at(secret);
-        // TODO: pair_request->user_pin->set_value(pin);
-        auto res = rfl::Generic::Object();
-        res["success"] = true;
-        send_http(socket, 200, rfl::json::write(res));
+      if (auto event = rfl::json::read<PairClient>(req.body)) {
+        if (auto pair_request = app_state->pairing_atom->load()->find(event.value().pair_secret)) {
+          pair_request->get().user_pin->set_value(event.value().pin); // Resolve the promise
+          auto res = rfl::Generic::Object();
+          res["success"] = true;
+          send_http(socket, 200, rfl::json::write(res));
+        } else {
+          logs::log(logs::warning, "[API] Invalid pair secret: {}", event.value().pair_secret);
+          send_http(socket, 404, "");
+        }
       } else {
         logs::log(logs::warning, "[API] Invalid event: {}", req.body);
         send_http(socket, 500, "");
@@ -186,7 +197,7 @@ private:
   boost::asio::io_context &io_context_;
   boost::asio::local::stream_protocol::acceptor acceptor_;
   std::vector<std::shared_ptr<UnixSocket>> sockets_;
-  std::shared_ptr<events::EventBusType> event_bus_;
+  immer::box<state::AppState> app_state;
 };
 
 void start_server(immer::box<state::AppState> app_state) {
@@ -206,7 +217,7 @@ void start_server(immer::box<state::AppState> app_state) {
 
   ::unlink(socket_path);
   boost::asio::io_context io_context;
-  UnixSocketServer server(io_context, socket_path, app_state->event_bus);
+  UnixSocketServer server(io_context, socket_path, app_state);
 
   while (true) {
     io_context.run_for(std::chrono::milliseconds(100));

@@ -33,7 +33,7 @@ void startServer(HttpServer *server, const immer::box<state::AppState> state, in
     endpoints::pair<SimpleWeb::HTTP>(resp, req, state);
   };
 
-  auto pairing_atom = std::make_shared<immer::atom<immer::map<std::string, immer::box<events::PairSignal>>>>();
+  auto pairing_atom = state->pairing_atom;
 
   server->resource["^/pin/$"]["GET"] = [](auto resp, auto req) { resp->write(pin_html); };
   server->resource["^/pin/$"]["POST"] = [pairing_atom](auto resp, auto req) {

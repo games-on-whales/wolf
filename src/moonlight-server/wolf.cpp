@@ -79,6 +79,7 @@ auto initialize(std::string_view config_file, std::string_view pkey_filename, st
       .config = config,
       .host = host,
       .pairing_cache = std::make_shared<immer::atom<immer::map<std::string, state::PairCache>>>(),
+      .pairing_atom = std::make_shared<immer::atom<immer::map<std::string, immer::box<events::PairSignal>>>>(),
       .event_bus = event_bus,
       .running_sessions = std::make_shared<immer::atom<immer::vector<events::StreamSession>>>()};
   return immer::box<state::AppState>(state);
