@@ -73,9 +73,10 @@ void Server<HTTPS>::accept() {
   });
 }
 
-x509_st *Server<HTTPS>::get_client_cert(const std::shared_ptr<typename ServerBase<HTTPS>::Request> &request) {
+x509::x509_ptr Server<HTTPS>::get_client_cert(const std::shared_ptr<typename ServerBase<HTTPS>::Request> &request) {
   auto connection = request->connection.lock();
-  return SSL_get_peer_certificate(connection->socket->native_handle());
+  auto cert = SSL_get_peer_certificate(connection->socket->native_handle());
+  return x509::x509_ptr(cert, X509_free);
 }
 
 } // namespace SimpleWeb

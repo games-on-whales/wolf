@@ -142,8 +142,8 @@ struct Host {
   immer::array<moonlight::DisplayMode> display_modes;
   immer::array<audio::AudioMode> audio_modes;
 
-  const X509 *server_cert;
-  const EVP_PKEY *server_pkey;
+  x509::x509_ptr server_cert;
+  x509::pkey_ptr server_pkey;
 
   // Network information can be manually set by users, if not, we'll automatically gather them
   std::optional<std::string> internal_ip;

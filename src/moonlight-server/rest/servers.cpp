@@ -87,7 +87,7 @@ std::optional<state::PairedClient>
 get_client_if_paired(const immer::box<state::AppState> state,
                      const std::shared_ptr<typename SimpleWeb::ServerBase<SimpleWeb::HTTPS>::Request> &request) {
   auto client_cert = SimpleWeb::Server<SimpleWeb::HTTPS>::get_client_cert(request);
-  return state::get_client_via_ssl(state->config, client_cert);
+  return state::get_client_via_ssl(state->config, std::move(client_cert));
 }
 
 void reply_unauthorized(const std::shared_ptr<typename SimpleWeb::ServerBase<SimpleWeb::HTTPS>::Request> &request,

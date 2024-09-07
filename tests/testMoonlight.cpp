@@ -288,7 +288,7 @@ TEST_CASE("Pairing moonlight", "[MoonlightProtocol]") {
                      "-----END PRIVATE KEY-----";
 
   // PHASE 1
-  auto server_cert_pem = x509::get_cert_pem(*server_cert);
+  auto server_cert_pem = x509::get_cert_pem(server_cert);
   auto [xml_p1, aes_key] = moonlight::pair::get_server_cert(pin, salt, server_cert_pem);
   REQUIRE(crypto::str_to_hex(aes_key) == "8A0191F59F31950D5DE3396901AA585D");
 

@@ -112,7 +112,7 @@ void pair(const std::shared_ptr<typename SimpleWeb::Server<T>::Response> &respon
 
     future_pin->get_future().then(
         [state, salt, client_cert_str, cache_key, client_id, response](boost::future<std::string> fut_pin) {
-          auto server_pem = x509::get_cert_pem(*state->host->server_cert);
+          auto server_pem = x509::get_cert_pem(state->host->server_cert);
           auto result = moonlight::pair::get_server_cert(fut_pin.get(), salt.value(), server_pem);
 
           auto client_cert_parsed = crypto::hex_to_str(client_cert_str.value(), true);
@@ -157,11 +157,10 @@ void pair(const std::shared_ptr<typename SimpleWeb::Server<T>::Response> &respon
   auto server_challenge = get_header(headers, "serverchallengeresp");
   if (server_challenge && client_cache.server_secret) {
 
-    auto [xml, client_hash] = moonlight::pair::get_client_hash(
-        client_cache.aes_key,
-        client_cache.server_secret.value(),
-        server_challenge.value(),
-        x509::get_pkey_content(const_cast<EVP_PKEY *>(state->host->server_pkey)));
+    auto [xml, client_hash] = moonlight::pair::get_client_hash(client_cache.aes_key,
+                                                               client_cache.server_secret.value(),
+                                                               server_challenge.value(),
+                                                               x509::get_pkey_content(state->host->server_pkey));
 
     client_cache.client_hash = client_hash;
 

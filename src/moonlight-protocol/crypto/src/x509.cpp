@@ -1,3 +1,4 @@
+#include <crypto/crypto.hpp>
 #include <cstdio>
 #include <cstring>
 #include <fstream>
@@ -10,7 +11,7 @@
 
 namespace x509 {
 
-EVP_PKEY *generate_key() {
+pkey_ptr generate_key() {
   auto pkey = EVP_PKEY_new();
   if (!pkey) {
     throw std::runtime_error("Unable to create EVP_PKEY structure.");
@@ -31,10 +32,10 @@ EVP_PKEY *generate_key() {
   }
   EVP_PKEY_CTX_free(ctx);
 
-  return pkey;
+  return pkey_ptr(pkey, EVP_PKEY_free);
 }
 
-X509 *generate_x509(EVP_PKEY *pkey) {
+x509_ptr generate_x509(pkey_ptr pkey) {
   /* Allocate memory for the X509 structure. */
   X509 *x509 = X509_new();
   if (!x509) {
@@ -50,7 +51,7 @@ X509 *generate_x509(EVP_PKEY *pkey) {
   X509_gmtime_adj(X509_get_notAfter(x509), valid_years);
 
   /* Set the public key for our certificate. */
-  X509_set_pubkey(x509, pkey);
+  X509_set_pubkey(x509, pkey.get());
 
   /* We want to copy the subject name to the issuer name. */
   X509_NAME *name = X509_get_subject_name(x509);
@@ -62,14 +63,14 @@ X509 *generate_x509(EVP_PKEY *pkey) {
   X509_set_issuer_name(x509, name);
 
   /* Actually sign the certificate with our key. */
-  if (!X509_sign(x509, pkey, EVP_sha256())) {
+  if (!X509_sign(x509, pkey.get(), EVP_sha256())) {
     throw std::runtime_error("Error signing certificate.");
   }
 
-  return x509;
+  return x509_ptr(x509, X509_free);
 }
 
-X509 *cert_from_string(std::string_view cert) {
+x509_ptr cert_from_string(std::string_view cert) {
   BIO *bio;
   X509 *certificate;
 
@@ -78,10 +79,10 @@ X509 *cert_from_string(std::string_view cert) {
   certificate = PEM_read_bio_X509(bio, nullptr, nullptr, nullptr);
 
   BIO_free(bio);
-  return certificate;
+  return x509_ptr(certificate, X509_free);
 }
 
-X509 *cert_from_file(std::string_view cert_path) {
+x509_ptr cert_from_file(std::string_view cert_path) {
   X509 *certificate;
   BIO *bio;
 
@@ -92,10 +93,10 @@ X509 *cert_from_file(std::string_view cert_path) {
   certificate = PEM_read_bio_X509(bio, nullptr, nullptr, nullptr);
 
   BIO_free(bio);
-  return certificate;
+  return x509_ptr(certificate, X509_free);
 }
 
-EVP_PKEY *pkey_from_file(std::string_view pkey_path) {
+pkey_ptr pkey_from_file(std::string_view pkey_path) {
   EVP_PKEY *pkey;
   BIO *bio;
 
@@ -106,10 +107,10 @@ EVP_PKEY *pkey_from_file(std::string_view pkey_path) {
   pkey = PEM_read_bio_PrivateKey(bio, nullptr, nullptr, nullptr);
 
   BIO_free(bio);
-  return pkey;
+  return pkey_ptr(pkey, EVP_PKEY_free);
 }
 
-bool write_to_disk(EVP_PKEY *pkey, std::string_view pkey_filename, X509 *x509, std::string_view cert_filename) {
+bool write_to_disk(pkey_ptr pkey, std::string_view pkey_filename, x509_ptr x509, std::string_view cert_filename) {
   /* Open the PEM file for writing the key to disk. */
   FILE *pkey_file = fopen(pkey_filename.data(), "wb");
   if (!pkey_file) {
@@ -117,7 +118,7 @@ bool write_to_disk(EVP_PKEY *pkey, std::string_view pkey_filename, X509 *x509, s
   }
 
   /* Write the key to disk. */
-  bool ret = PEM_write_PrivateKey(pkey_file, pkey, nullptr, nullptr, 0, nullptr, nullptr);
+  bool ret = PEM_write_PrivateKey(pkey_file, pkey.get(), nullptr, nullptr, 0, nullptr, nullptr);
   fclose(pkey_file);
 
   if (!ret) {
@@ -131,7 +132,7 @@ bool write_to_disk(EVP_PKEY *pkey, std::string_view pkey_filename, X509 *x509, s
   }
 
   /* Write the certificate to disk. */
-  ret = PEM_write_X509(x509_file, x509);
+  ret = PEM_write_X509(x509_file, x509.get());
   fclose(x509_file);
 
   if (!ret) {
@@ -147,17 +148,16 @@ bool cert_exists(std::string_view pkey_filename, std::string_view cert_filename)
   return pkey_fs.good() && cert_fs.good();
 }
 
-std::string get_cert_signature(const X509 *cert) {
+std::string get_cert_signature(x509_ptr cert) {
   const ASN1_BIT_STRING *asn1 = nullptr;
-  X509_get0_signature(&asn1, nullptr, cert);
+  X509_get0_signature(&asn1, nullptr, cert.get());
 
   return {(const char *)asn1->data, (std::size_t)asn1->length};
 }
 
-std::string get_cert_pem(const X509 &x509) {
-  X509 *cert_ptr = const_cast<X509 *>(&x509);
+std::string get_cert_pem(x509_ptr cert) {
   BIO *bio_out = BIO_new(BIO_s_mem());
-  PEM_write_bio_X509(bio_out, cert_ptr);
+  PEM_write_bio_X509(bio_out, cert.get());
   BUF_MEM *bio_buf;
   BIO_get_mem_ptr(bio_out, &bio_buf);
   std::string pem = std::string(bio_buf->data, bio_buf->length);
@@ -165,15 +165,15 @@ std::string get_cert_pem(const X509 &x509) {
   return pem;
 }
 
-std::string get_key_content(EVP_PKEY *pkey, bool private_key) {
+std::string get_key_content(pkey_ptr pkey, bool private_key) {
   BIO *bio;
 
   bio = BIO_new(BIO_s_mem());
 
   if (private_key) {
-    PEM_write_bio_PrivateKey(bio, pkey, nullptr, nullptr, 0, nullptr, nullptr);
+    PEM_write_bio_PrivateKey(bio, pkey.get(), nullptr, nullptr, 0, nullptr, nullptr);
   } else {
-    PEM_write_bio_PUBKEY(bio, pkey);
+    PEM_write_bio_PUBKEY(bio, pkey.get());
   }
 
   const int keylen = BIO_pending(bio);
@@ -186,18 +186,13 @@ std::string get_key_content(EVP_PKEY *pkey, bool private_key) {
   return result;
 }
 
-std::string get_pkey_content(EVP_PKEY *pkey) {
-  return get_key_content(pkey, true);
+std::string get_pkey_content(pkey_ptr pkey) {
+  return get_key_content(std::move(pkey), true);
 }
 
-std::string get_cert_public_key(X509 *cert) {
-  auto pkey = X509_get_pubkey(cert);
-  return get_key_content(pkey, false);
-}
-
-void cleanup(EVP_PKEY *pkey, X509 *cert) {
-  EVP_PKEY_free(pkey);
-  X509_free(cert);
+std::string get_cert_public_key(x509_ptr cert) {
+  auto pkey = X509_get_pubkey(cert.get());
+  return get_key_content(pkey_ptr(pkey, EVP_PKEY_free), false);
 }
 
 /**
@@ -227,13 +222,13 @@ static int openssl_verify_cb(int ok, X509_STORE_CTX *ctx) {
 /**
  * @brief: adapted from Sunshine
  */
-std::optional<std::string> verification_error(X509 *paired_cert, X509 *untrusted_cert) {
+std::optional<std::string> verification_error(x509_ptr paired_cert, x509_ptr untrusted_cert) {
   auto x509_store{X509_STORE_new()};
-  X509_STORE_add_cert(x509_store, paired_cert);
+  X509_STORE_add_cert(x509_store, paired_cert.get());
 
   auto _cert_ctx{X509_STORE_CTX_new()};
 
-  X509_STORE_CTX_init(_cert_ctx, x509_store, untrusted_cert, nullptr);
+  X509_STORE_CTX_init(_cert_ctx, x509_store, untrusted_cert.get(), nullptr);
   X509_STORE_CTX_set_verify_cb(_cert_ctx, openssl_verify_cb);
 
   // We don't care to validate the entire chain for the purposes of client auth.

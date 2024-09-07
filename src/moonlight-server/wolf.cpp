@@ -36,8 +36,8 @@ auto load_config(std::string_view config_file, const std::shared_ptr<dp::event_b
 }
 
 state::Host get_host_config(std::string_view pkey_filename, std::string_view cert_filename) {
-  X509 *server_cert;
-  EVP_PKEY *server_pkey;
+  x509::x509_ptr server_cert;
+  x509::pkey_ptr server_pkey;
   if (x509::cert_exists(pkey_filename, cert_filename)) {
     logs::log(logs::debug, "Loading server certificates from disk: {} {}", cert_filename, pkey_filename);
     server_cert = x509::cert_from_file(cert_filename);

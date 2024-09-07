@@ -34,7 +34,7 @@ protected:
 
 public:
   Server(const std::string &certification_file, const std::string &private_key_file);
-  static x509_st *get_client_cert(const std::shared_ptr<typename ServerBase<HTTPS>::Request> &request);
+  static x509::x509_ptr get_client_cert(const std::shared_ptr<typename ServerBase<HTTPS>::Request> &request);
 };
 } // namespace SimpleWeb
 

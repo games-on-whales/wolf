@@ -27,18 +27,18 @@ wl_state_ptr create_wayland_display(const immer::array<std::string> &input_devic
   }
 
   { // c-style get devices list
-    auto n_devices = display_get_devices_len(w_display);
-    const char *strs[n_devices];
-    display_get_devices(w_display, strs, n_devices);
+    const unsigned int n_devices = display_get_devices_len(w_display);
+    auto strs = std::vector<const char *>(n_devices);
+    display_get_devices(w_display, strs.data(), n_devices);
     for (int i = 0; i < n_devices; ++i) {
       final_devices.push_back(strs[i]);
     }
   }
 
   { // c-style get env list
-    auto n_envs = display_get_envvars_len(w_display);
-    const char *strs[n_envs];
-    display_get_envvars(w_display, strs, n_envs);
+    const auto n_envs = display_get_envvars_len(w_display);
+    auto strs = std::vector<const char *>(n_envs);
+    display_get_envvars(w_display, strs.data(), n_envs);
     for (int i = 0; i < n_envs; ++i) {
       final_env.push_back(strs[i]);
     }
