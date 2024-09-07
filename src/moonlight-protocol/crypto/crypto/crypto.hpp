@@ -1,10 +1,10 @@
 #pragma once
 
+#include <memory>
 #include <openssl/aes.h>
 #include <openssl/x509.h>
 #include <optional>
 #include <string>
-#include <memory>
 
 namespace crypto {
 
@@ -144,7 +144,6 @@ namespace x509 {
 
 using x509_ptr = std::shared_ptr<X509>;
 using pkey_ptr = std::shared_ptr<EVP_PKEY>;
-
 
 /**
  * @brief Generates a 2048-bit RSA key.
