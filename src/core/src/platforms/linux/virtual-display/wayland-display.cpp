@@ -90,6 +90,7 @@ GstBuffer *get_frame(WaylandState &w_state) {
 static void destroy(WaylandState *w_state) {
   logs::log(logs::trace, "~WaylandState");
   display_finish(w_state->display);
+  delete (w_state);
 }
 
 bool add_input_device(WaylandState &w_state, const std::string &device_path) {

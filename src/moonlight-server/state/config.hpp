@@ -29,7 +29,7 @@ void unpair(const Config &cfg, const PairedClient &client);
  * Returns the first PairedClient with the given client_cert
  */
 inline std::optional<PairedClient> get_client_via_ssl(const Config &cfg, x509::x509_ptr client_cert) {
-  auto paired_clients = cfg.paired_clients.load();
+  auto paired_clients = cfg.paired_clients->load();
   auto search_result =
       std::find_if(paired_clients->begin(), paired_clients->end(), [&client_cert](const PairedClient &pair_client) {
         auto paired_cert = x509::cert_from_string(pair_client.client_cert);

@@ -148,27 +148,24 @@ static bool is_available(const GPU_VENDOR &gpu_vendor, const GstEncoder &setting
         settings.check_elements.begin(),
         settings.check_elements.end(),
         [settings, gpu_vendor](const auto &el_name) {
-          // Can we instantiate the plugin?
-          if (auto el = gst_element_factory_make(el_name.c_str(), nullptr)) {
-            gst_object_unref(el);
-            // Is the selected GPU vendor compatible with the encoder?
-            // (Particularly useful when using multiple GPUs, e.g. nvcodec might be available but user
-            // wants to encode using the Intel GPU)
-            auto encoder_vendor = encoder_type(settings);
-            if (encoder_vendor == NVIDIA && gpu_vendor != GPU_VENDOR::NVIDIA) {
-              logs::log(logs::debug, "Skipping NVIDIA encoder, not a NVIDIA GPU ({})", (int)gpu_vendor);
-              return false;
-            } else if (encoder_vendor == VAAPI && (gpu_vendor != GPU_VENDOR::INTEL && gpu_vendor != GPU_VENDOR::AMD)) {
-              logs::log(logs::debug, "Skipping VAAPI encoder, not an Intel or AMD GPU ({})", (int)gpu_vendor);
-              return false;
-            } else if (encoder_vendor == QUICKSYNC && gpu_vendor != GPU_VENDOR::INTEL) {
-              logs::log(logs::debug, "Skipping QUICKSYNC encoder, not an Intel GPU ({})", (int)gpu_vendor);
-              return false;
-            }
-            return true;
-          } else {
-            return false;
+          // Is the selected GPU vendor compatible with the encoder?
+          // (Particularly useful when using multiple GPUs, e.g. nvcodec might be available but user
+          // wants to encode using the Intel GPU)
+          auto encoder_vendor = encoder_type(settings);
+          if (encoder_vendor == NVIDIA && gpu_vendor != GPU_VENDOR::NVIDIA) {
+            logs::log(logs::debug, "Skipping NVIDIA encoder, not a NVIDIA GPU ({})", (int)gpu_vendor);
+          } else if (encoder_vendor == VAAPI && (gpu_vendor != GPU_VENDOR::INTEL && gpu_vendor != GPU_VENDOR::AMD)) {
+            logs::log(logs::debug, "Skipping VAAPI encoder, not an Intel or AMD GPU ({})", (int)gpu_vendor);
+          } else if (encoder_vendor == QUICKSYNC && gpu_vendor != GPU_VENDOR::INTEL) {
+            logs::log(logs::debug, "Skipping QUICKSYNC encoder, not an Intel GPU ({})", (int)gpu_vendor);
           }
+          // Can Gstreamer instantiate the element? This will only work if all the drivers are in place
+          else if (auto el = gst_element_factory_make(el_name.c_str(), nullptr)) {
+            gst_object_unref(el);
+            return true;
+          }
+
+          return false;
         });
   }
   return false;
@@ -340,19 +337,19 @@ Config load_or_default(const std::string &source, const std::shared_ptr<dp::even
       }) |                                     //
       ranges::to<immer::vector<state::App>>(); //
 
-  auto clients_atom = new immer::atom<state::PairedClientList>(paired_clients);
+  auto clients_atom = std::make_shared<immer::atom<state::PairedClientList>>(paired_clients);
   return Config{.uuid = uuid,
                 .hostname = hostname,
                 .config_source = source,
                 .support_hevc = hevc_encoder.has_value(),
                 .support_av1 = av1_encoder.has_value() && encoder_type(*av1_encoder) != SOFTWARE,
-                .paired_clients = *clients_atom,
+                .paired_clients = clients_atom,
                 .apps = apps};
 }
 
 void pair(const Config &cfg, const PairedClient &client) {
   // Update CFG
-  cfg.paired_clients.update(
+  cfg.paired_clients->update(
       [&client](const state::PairedClientList &paired_clients) { return paired_clients.push_back(client); });
 
   // Update TOML
@@ -364,7 +361,7 @@ void pair(const Config &cfg, const PairedClient &client) {
 
 void unpair(const Config &cfg, const PairedClient &client) {
   // Update CFG
-  cfg.paired_clients.update([&client](const state::PairedClientList &paired_clients) {
+  cfg.paired_clients->update([&client](const state::PairedClientList &paired_clients) {
     return paired_clients                                               //
            | ranges::views::filter([&client](auto paired_client) {      //
                return paired_client->client_cert != client.client_cert; //

@@ -55,18 +55,18 @@ TEST_CASE("LocalState load TOML", "[LocalState]") {
   }
 
   SECTION("Paired Clients") {
-    REQUIRE_THAT(state.paired_clients.load().get(), Catch::Matchers::SizeIs(1));
-    REQUIRE_THAT(state.paired_clients.load().get()[0]->client_cert, Equals("A VERY VALID CERTIFICATE"));
-    REQUIRE(state.paired_clients.load().get()[0]->run_uid == 1234);
-    REQUIRE(state.paired_clients.load().get()[0]->run_gid == 5678);
-    REQUIRE_THAT(state.paired_clients.load().get()[0]->app_state_folder, Equals("some/folder"));
+    REQUIRE_THAT(state.paired_clients->load().get(), Catch::Matchers::SizeIs(1));
+    REQUIRE_THAT(state.paired_clients->load().get()[0]->client_cert, Equals("A VERY VALID CERTIFICATE"));
+    REQUIRE(state.paired_clients->load().get()[0]->run_uid == 1234);
+    REQUIRE(state.paired_clients->load().get()[0]->run_gid == 5678);
+    REQUIRE_THAT(state.paired_clients->load().get()[0]->app_state_folder, Equals("some/folder"));
   }
 }
 
 TEST_CASE("LocalState pairing information", "[LocalState]") {
   auto event_bus = std::make_shared<dp::event_bus>();
-  auto clients_atom = new immer::atom<state::PairedClientList>();
-  auto cfg = state::Config{.config_source = "config.test.toml", .paired_clients = *clients_atom};
+  auto clients_atom = std::make_shared<immer::atom<state::PairedClientList>>();
+  auto cfg = state::Config{.config_source = "config.test.toml", .paired_clients = clients_atom};
   auto a_client_cert = "-----BEGIN CERTIFICATE-----\n"
                        "MIICvzCCAaegAwIBAgIBADANBgkqhkiG9w0BAQsFADAjMSEwHwYDVQQDDBhOVklE\n"
                        "SUEgR2FtZVN0cmVhbSBDbGllbnQwHhcNMjEwNzEwMDgzNjE3WhcNNDEwNzA1MDgz\n"
@@ -112,15 +112,15 @@ TEST_CASE("LocalState pairing information", "[LocalState]") {
     REQUIRE(state::get_client_via_ssl(cfg, another_cert).has_value() == false);
     state::pair(cfg, {another_cert});
     REQUIRE(state::get_client_via_ssl(cfg, another_cert).has_value() == true);
-    REQUIRE_THAT(cfg.paired_clients.load().get(), Catch::Matchers::SizeIs(2));
+    REQUIRE_THAT(cfg.paired_clients->load().get(), Catch::Matchers::SizeIs(2));
 
     state::unpair(cfg, {a_client_cert});
     REQUIRE(state::get_client_via_ssl(cfg, a_client_cert).has_value() == false);
     REQUIRE(state::get_client_via_ssl(cfg, another_cert).has_value() == true);
-    REQUIRE_THAT(cfg.paired_clients.load().get(), Catch::Matchers::SizeIs(1));
+    REQUIRE_THAT(cfg.paired_clients->load().get(), Catch::Matchers::SizeIs(1));
 
     state::unpair(cfg, {another_cert});
-    REQUIRE_THAT(cfg.paired_clients.load().get(), Catch::Matchers::SizeIs(0));
+    REQUIRE_THAT(cfg.paired_clients->load().get(), Catch::Matchers::SizeIs(0));
   }
 }
 
@@ -353,7 +353,7 @@ TEST_CASE("launch", "[MoonlightProtocol]") {
 
 TEST_CASE("Multiple users", "[HTTP]") {
   auto event_bus = std::make_shared<dp::event_bus>();
-  auto paired_clients = immer::atom<state::PairedClientList>();
+  auto paired_clients = std::shared_ptr<immer::atom<state::PairedClientList>>();
   auto app_state = state::AppState{
       .config = state::Config{.paired_clients = paired_clients},
       .host = {},

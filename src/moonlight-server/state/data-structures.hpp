@@ -127,7 +127,7 @@ struct Config {
    * Mutable, paired_clients will be loaded up on startup
    * but can be added at runtime
    */
-  immer::atom<PairedClientList> &paired_clients;
+  std::shared_ptr<immer::atom<PairedClientList>> paired_clients;
 
   /**
    * List of available Apps

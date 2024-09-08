@@ -1,8 +1,8 @@
 #include <catch2/catch_test_macros.hpp>
-#include <catch2/matchers/catch_matchers_string.hpp>
-#include <catch2/matchers/catch_matchers_vector.hpp>
 #include <catch2/matchers/catch_matchers_container_properties.hpp>
 #include <catch2/matchers/catch_matchers_contains.hpp>
+#include <catch2/matchers/catch_matchers_string.hpp>
+#include <catch2/matchers/catch_matchers_vector.hpp>
 
 using Catch::Matchers::Equals;
 
@@ -291,7 +291,7 @@ TEST_CASE_METHOD(GStreamerTestsFixture, "Create RTP VIDEO packets", "[GSTPlugin]
       auto flatten_packets = gst_buffer_list_unfold(rtp_packets);
       auto packets_content = gst_buffer_copy_content(flatten_packets);
 
-      std::vector<unsigned char*> packets_ptr(total_shards);
+      std::vector<unsigned char *> packets_ptr(total_shards);
       for (int shard_idx = 0; shard_idx < total_shards; shard_idx++) {
         packets_ptr[shard_idx] = &packets_content.front() + (shard_idx * rtp_packet_size);
       }
@@ -300,7 +300,8 @@ TEST_CASE_METHOD(GStreamerTestsFixture, "Create RTP VIDEO packets", "[GSTPlugin]
         std::vector<unsigned char> marks = {0, 0, 0, 0};
 
         auto rs = moonlight::fec::create(data_shards, parity_shards);
-        auto result = moonlight::fec::decode(rs.get(), &packets_ptr.front(), &marks.front(), total_shards, rtp_packet_size);
+        auto result =
+            moonlight::fec::decode(rs.get(), &packets_ptr.front(), &marks.front(), total_shards, rtp_packet_size);
 
         REQUIRE(result == 0);
         REQUIRE_THAT(packets_content, Equals(gst_buffer_copy_content(flatten_packets)));
@@ -312,7 +313,8 @@ TEST_CASE_METHOD(GStreamerTestsFixture, "Create RTP VIDEO packets", "[GSTPlugin]
         std::vector<unsigned char> marks = {1, 0, 0, 0};
 
         auto rs = moonlight::fec::create(data_shards, parity_shards);
-        auto result = moonlight::fec::decode(rs.get(), &packets_ptr.front(), &marks.front(), total_shards, rtp_packet_size);
+        auto result =
+            moonlight::fec::decode(rs.get(), &packets_ptr.front(), &marks.front(), total_shards, rtp_packet_size);
 
         REQUIRE(result == 0);
 
@@ -345,7 +347,9 @@ TEST_CASE_METHOD(GStreamerTestsFixture, "Create RTP VIDEO packets", "[GSTPlugin]
  * AUDIO
  */
 TEST_CASE_METHOD(GStreamerTestsFixture, "Audio RTP packet creation", "[GSTPlugin]") {
-  auto rtpmoonlightpay = (gst_rtp_moonlight_pay_audio *)g_object_new(gst_TYPE_rtp_moonlight_pay_audio, nullptr);
+  auto rtpmoonlightpay = std::shared_ptr<gst_rtp_moonlight_pay_audio>(
+      (gst_rtp_moonlight_pay_audio *)g_object_new(gst_TYPE_rtp_moonlight_pay_audio, nullptr),
+      g_object_unref);
 
   rtpmoonlightpay->encrypt = true;
   rtpmoonlightpay->aes_key = "0123456789012345";
@@ -353,7 +357,7 @@ TEST_CASE_METHOD(GStreamerTestsFixture, "Audio RTP packet creation", "[GSTPlugin
 
   auto payload_str = "TUNZ TUNZ TUMP TUMP!"s;
   auto payload = gst_buffer_new_and_fill(payload_str.size(), payload_str.c_str());
-  auto rtp_packets = audio::split_into_rtp(rtpmoonlightpay, payload);
+  auto rtp_packets = audio::split_into_rtp(rtpmoonlightpay.get(), payload);
 
   REQUIRE(gst_buffer_list_length(rtp_packets) == 1);
   REQUIRE(rtpmoonlightpay->cur_seq_number == 1);
@@ -377,7 +381,7 @@ TEST_CASE_METHOD(GStreamerTestsFixture, "Audio RTP packet creation", "[GSTPlugin
     REQUIRE_THAT(decrypted, Equals(payload_str));
   }
 
-  rtp_packets = audio::split_into_rtp(rtpmoonlightpay, payload);
+  rtp_packets = audio::split_into_rtp(rtpmoonlightpay.get(), payload);
   REQUIRE(gst_buffer_list_length(rtp_packets) == 1);
   REQUIRE(rtpmoonlightpay->cur_seq_number == 2);
   auto second_pkt = gst_buffer_list_get(rtp_packets, 0);
@@ -400,7 +404,7 @@ TEST_CASE_METHOD(GStreamerTestsFixture, "Audio RTP packet creation", "[GSTPlugin
     REQUIRE_THAT(decrypted, Equals(payload_str));
   }
 
-  rtp_packets = audio::split_into_rtp(rtpmoonlightpay, payload);
+  rtp_packets = audio::split_into_rtp(rtpmoonlightpay.get(), payload);
   REQUIRE(gst_buffer_list_length(rtp_packets) == 1);
   REQUIRE(rtpmoonlightpay->cur_seq_number == 3);
   auto third_pkt = gst_buffer_list_get(rtp_packets, 0);
@@ -426,7 +430,7 @@ TEST_CASE_METHOD(GStreamerTestsFixture, "Audio RTP packet creation", "[GSTPlugin
   /* When the 4th packet arrives, we'll also FEC encode all the previous and return
    * the data packet + 2 more FEC packets
    */
-  rtp_packets = audio::split_into_rtp(rtpmoonlightpay, payload);
+  rtp_packets = audio::split_into_rtp(rtpmoonlightpay.get(), payload);
   REQUIRE(gst_buffer_list_length(rtp_packets) == 3); // One data packet + 2 FEC packets
   REQUIRE(rtpmoonlightpay->cur_seq_number == 4);
 
@@ -478,7 +482,7 @@ TEST_CASE_METHOD(GStreamerTestsFixture, "Audio RTP packet creation", "[GSTPlugin
     SECTION("Missing one packet should still lead to successful reconstruct") {
       auto original_pkt = gst_buffer_copy_content(first_pkt, sizeof(audio::AudioRTPHeaders));
       auto missing_pkt = std::vector<unsigned char>(packet_size);
-      rtpmoonlightpay->packets_buffer[0] = &missing_pkt[0];
+      std::copy(missing_pkt.begin(), missing_pkt.end(), rtpmoonlightpay->packets_buffer[0]);
       std::vector<unsigned char> marks = {1, 0, 0, 0, 0, 0};
 
       auto result = moonlight::fec::decode(rtpmoonlightpay->rs.get(),
@@ -488,10 +492,9 @@ TEST_CASE_METHOD(GStreamerTestsFixture, "Audio RTP packet creation", "[GSTPlugin
                                            packet_size);
 
       REQUIRE(result == 0);
-      REQUIRE_THAT(std::string(missing_pkt.begin() + sizeof(audio::AudioRTPHeaders), missing_pkt.end()),
+      REQUIRE_THAT(std::string(rtpmoonlightpay->packets_buffer[0] + sizeof(audio::AudioRTPHeaders),
+                               rtpmoonlightpay->packets_buffer[0] + packet_size),
                    Equals(std::string(original_pkt.begin(), original_pkt.end())));
     }
-
-    g_object_unref(rtpmoonlightpay);
   }
 }

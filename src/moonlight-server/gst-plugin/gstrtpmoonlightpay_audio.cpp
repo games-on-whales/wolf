@@ -208,6 +208,12 @@ void gst_rtp_moonlight_pay_audio_dispose(GObject *object) {
 
   GST_DEBUG_OBJECT(rtpmoonlightpay_audio, "dispose");
 
+  // free rtpmoonlightpay_audio->packets_buffer matrix
+  for (int i = 0; i < AUDIO_TOTAL_SHARDS; i++) {
+    delete[] rtpmoonlightpay_audio->packets_buffer[i];
+  }
+  delete[] rtpmoonlightpay_audio->packets_buffer;
+
   G_OBJECT_CLASS(gst_rtp_moonlight_pay_audio_parent_class)->dispose(object);
 }
 
