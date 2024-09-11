@@ -25,34 +25,6 @@ template <> struct Reflector<events::PairSignal> {
   }
 };
 
-template <> struct Reflector<std::chrono::milliseconds> {
-  struct ReflType {
-    int64_t milliseconds;
-  };
-
-  static std::chrono::milliseconds to(const ReflType &v) noexcept {
-    return std::chrono::milliseconds(v.milliseconds);
-  }
-
-  static ReflType from(const std::chrono::milliseconds &v) {
-    return {.milliseconds = v.count()};
-  }
-};
-
-template <> struct Reflector<wolf::core::audio::AudioMode::Speakers> {
-  struct ReflType {
-    int speakers;
-  };
-
-  static wolf::core::audio::AudioMode::Speakers to(const ReflType &v) noexcept {
-    return static_cast<wolf::core::audio::AudioMode::Speakers>(v.speakers);
-  }
-
-  static ReflType from(const wolf::core::audio::AudioMode::Speakers &v) {
-    return {.speakers = static_cast<int>(v)};
-  }
-};
-
 template <> struct Reflector<events::App> {
   struct ReflType {
     moonlight::App base;
@@ -138,23 +110,6 @@ template <> struct Reflector<events::StreamSession> {
             .aes_iv = v.aes_iv,
             .session_id = v.session_id,
             .ip = v.ip};
-  }
-};
-
-template <> struct Reflector<events::ControlEvent> {
-  struct ReflType {
-    const std::string event_type = "control_event";
-    std::size_t session_id;
-    int type;
-  };
-
-  static events::ControlEvent to(const ReflType &v) noexcept {
-    return {.session_id = v.session_id, .type = static_cast<moonlight::control::pkts::PACKET_TYPE>(v.type)};
-  }
-
-  // TODO: this doesn't make sense without raw_packet
-  static ReflType from(const events::ControlEvent &v) {
-    return {.session_id = v.session_id, .type = static_cast<int>(v.type)};
   }
 };
 

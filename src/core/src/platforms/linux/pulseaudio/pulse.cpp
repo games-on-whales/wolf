@@ -16,31 +16,31 @@ public:
     // Mapping taken from
     // https://www.freedesktop.org/wiki/Software/PulseAudio/Documentation/User/Modules/#module-null-sink
     switch (speaker) {
-    case wolf::core::audio::AudioMode::FRONT_LEFT:
+    case wolf::core::audio::AudioMode::Speakers::FRONT_LEFT:
       speaker_name = "front-left";
       break;
-    case wolf::core::audio::AudioMode::FRONT_RIGHT:
+    case wolf::core::audio::AudioMode::Speakers::FRONT_RIGHT:
       speaker_name = "front-right";
       break;
-    case wolf::core::audio::AudioMode::FRONT_CENTER:
+    case wolf::core::audio::AudioMode::Speakers::FRONT_CENTER:
       speaker_name = "front-center";
       break;
-    case wolf::core::audio::AudioMode::LOW_FREQUENCY:
+    case wolf::core::audio::AudioMode::Speakers::LOW_FREQUENCY:
       speaker_name = "lfe";
       break;
-    case wolf::core::audio::AudioMode::BACK_LEFT:
+    case wolf::core::audio::AudioMode::Speakers::BACK_LEFT:
       speaker_name = "rear-left";
       break;
-    case wolf::core::audio::AudioMode::BACK_RIGHT:
+    case wolf::core::audio::AudioMode::Speakers::BACK_RIGHT:
       speaker_name = "rear-right";
       break;
-    case wolf::core::audio::AudioMode::SIDE_LEFT:
+    case wolf::core::audio::AudioMode::Speakers::SIDE_LEFT:
       speaker_name = "side-left";
       break;
-    case wolf::core::audio::AudioMode::SIDE_RIGHT:
+    case wolf::core::audio::AudioMode::Speakers::SIDE_RIGHT:
       speaker_name = "side-right";
       break;
-    case wolf::core::audio::AudioMode::MAX_SPEAKERS:
+    case wolf::core::audio::AudioMode::Speakers::MAX_SPEAKERS:
       break;
     }
     return fmt::format_to(ctx.out(), "{}", speaker_name);

@@ -58,24 +58,24 @@ describe(const RTSP_PACKET &req, const events::StreamSession &session) {
     if (audio_mode.channels == 6) { // 5.1
       mapping_p = {
           // The mapping for 5.1 is: [0 1 4 5 2 3]
-          AudioMode::FRONT_LEFT,
-          AudioMode::FRONT_RIGHT,
-          AudioMode::BACK_LEFT,
-          AudioMode::BACK_RIGHT,
-          AudioMode::FRONT_CENTER,
-          AudioMode::LOW_FREQUENCY,
+          AudioMode::Speakers::FRONT_LEFT,
+          AudioMode::Speakers::FRONT_RIGHT,
+          AudioMode::Speakers::BACK_LEFT,
+          AudioMode::Speakers::BACK_RIGHT,
+          AudioMode::Speakers::FRONT_CENTER,
+          AudioMode::Speakers::LOW_FREQUENCY,
       };
     } else if (audio_mode.channels == 8) { // 7.1
       mapping_p = {
           // The mapping for 7.1 is: [0 1 4 5 2 3 6 7]
-          AudioMode::FRONT_LEFT,
-          AudioMode::FRONT_RIGHT,
-          AudioMode::BACK_LEFT,
-          AudioMode::BACK_RIGHT,
-          AudioMode::FRONT_CENTER,
-          AudioMode::LOW_FREQUENCY,
-          AudioMode::SIDE_LEFT,
-          AudioMode::SIDE_RIGHT,
+          AudioMode::Speakers::FRONT_LEFT,
+          AudioMode::Speakers::FRONT_RIGHT,
+          AudioMode::Speakers::BACK_LEFT,
+          AudioMode::Speakers::BACK_RIGHT,
+          AudioMode::Speakers::FRONT_CENTER,
+          AudioMode::Speakers::LOW_FREQUENCY,
+          AudioMode::Speakers::SIDE_LEFT,
+          AudioMode::Speakers::SIDE_RIGHT,
       };
     }
 
@@ -87,9 +87,10 @@ describe(const RTSP_PACKET &req, const events::StreamSession &session) {
     if (audio_mode.channels > 2) { // 5.1 and 7.1
       std::rotate(mapping_p.begin() + 3, mapping_p.begin() + 4, mapping_p.end());
     }
-    std::string audio_speakers = mapping_p                                                              //
-                                 | views::transform([](auto speaker) { return (char)(speaker + '0'); }) //
-                                 | to<std::string>;
+    std::string audio_speakers =
+        mapping_p                                                                                //
+        | views::transform([](auto speaker) { return (char)(static_cast<int>(speaker) + '0'); }) //
+        | to<std::string>;
     auto surround_params = fmt::format("fmtp:97 surround-params={}{}{}{}",
                                        audio_mode.channels,
                                        audio_mode.streams,
@@ -217,7 +218,7 @@ announce(const RTSP_PACKET &req, const events::StreamSession &session) {
       .session_id = session.session_id,
 
       .port = session.video_stream_port,
-      .timeout = std::chrono::milliseconds(args["x-nv-video[0].timeoutLengthMs"].value_or(7000)),
+      .timeout_ms = args["x-nv-video[0].timeoutLengthMs"].value_or(7000),
       .packet_size = args["x-nv-video[0].packetSize"].value_or(1024),
       .frames_with_invalid_ref_threshold = args["x-nv-video[0].framesWithInvalidRefThreshold"].value_or(0),
       .fec_percentage = fec_percentage,

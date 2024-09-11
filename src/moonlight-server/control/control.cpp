@@ -173,10 +173,9 @@ void run_control(int port,
                     immer::box<PauseStreamEvent>(PauseStreamEvent{.session_id = client_session->session_id}));
               } else if (sub_type == INPUT_DATA) {
                 handle_input(client_session.value(), connected_clients, (INPUT_PKT *)decrypted.data());
-              } else {
-                auto ev =
-                    ControlEvent{.session_id = client_session->session_id, .type = sub_type, .raw_packet = decrypted};
-                event_bus->fire_event(immer::box<ControlEvent>{ev});
+              } else if (sub_type == IDR_FRAME) {
+                auto ev = IDRRequestEvent{.session_id = client_session->session_id};
+                event_bus->fire_event(immer::box<IDRRequestEvent>{ev});
               }
             } catch (std::runtime_error &e) {
               logs::log(logs::warning, "[ENET] Unable to decrypt incoming packet: {}", e.what());

@@ -104,7 +104,7 @@ struct VideoSession {
   std::size_t session_id;
 
   std::uint16_t port;
-  std::chrono::milliseconds timeout;
+  int timeout_ms;
 
   int packet_size;
   int frames_with_invalid_ref_threshold;
@@ -138,18 +138,12 @@ struct AudioSession {
   wolf::core::audio::AudioMode audio_mode;
 };
 
-/**
- * Events received in the ENET Control Session
- * TODO: break this down into more meaningful events
- */
-struct ControlEvent {
-  const std::string event_type = "control";
+
+struct IDRRequestEvent {
+  const std::string event_type = "idr_request";
 
   // A unique ID that identifies this session
   std::size_t session_id;
-
-  moonlight::control::pkts::PACKET_TYPE type;
-  std::string_view raw_packet;
 };
 
 struct PauseStreamEvent {
@@ -187,7 +181,7 @@ using EventBusHandlers = dp::handler_registration<immer::box<PlugDeviceEvent>,
                                                   immer::box<StreamSession>,
                                                   immer::box<VideoSession>,
                                                   immer::box<AudioSession>,
-                                                  immer::box<ControlEvent>,
+                                                  immer::box<IDRRequestEvent>,
                                                   immer::box<PauseStreamEvent>,
                                                   immer::box<ResumeStreamEvent>,
                                                   immer::box<StopStreamEvent>,
@@ -199,7 +193,7 @@ using EventBusType = dp::event_bus<immer::box<PlugDeviceEvent>,
                                    immer::box<StreamSession>,
                                    immer::box<VideoSession>,
                                    immer::box<AudioSession>,
-                                   immer::box<ControlEvent>,
+                                   immer::box<IDRRequestEvent>,
                                    immer::box<PauseStreamEvent>,
                                    immer::box<ResumeStreamEvent>,
                                    immer::box<StopStreamEvent>,
@@ -211,7 +205,7 @@ using EventsVariant = std::variant<immer::box<PlugDeviceEvent>,
                                    immer::box<StreamSession>,
                                    immer::box<VideoSession>,
                                    immer::box<AudioSession>,
-                                   immer::box<ControlEvent>,
+                                   immer::box<IDRRequestEvent>,
                                    immer::box<PauseStreamEvent>,
                                    immer::box<ResumeStreamEvent>,
                                    immer::box<StopStreamEvent>,

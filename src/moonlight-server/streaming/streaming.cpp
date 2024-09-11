@@ -158,17 +158,15 @@ void start_streaming_video(const immer::box<events::VideoSession> &video_session
      * We have to pass this back into the gstreamer pipeline
      * in order to force the encoder to produce a new IDR packet
      */
-    auto idr_handler = event_bus->register_handler<immer::box<events::ControlEvent>>(
-        [sess_id = video_session->session_id, pipeline](const immer::box<events::ControlEvent> &ctrl_ev) {
+    auto idr_handler = event_bus->register_handler<immer::box<events::IDRRequestEvent>>(
+        [sess_id = video_session->session_id, pipeline](const immer::box<events::IDRRequestEvent> &ctrl_ev) {
           if (ctrl_ev->session_id == sess_id) {
-            if (ctrl_ev->type == moonlight::control::pkts::IDR_FRAME) {
-              logs::log(logs::debug, "[GSTREAMER] Forcing IDR");
-              // Force IDR event, see: https://github.com/centricular/gstwebrtc-demos/issues/186
-              // https://gstreamer.freedesktop.org/documentation/additional/design/keyframe-force.html?gi-language=c
-              wolf::core::gstreamer::send_message(
-                  pipeline.get(),
-                  gst_structure_new("GstForceKeyUnit", "all-headers", G_TYPE_BOOLEAN, TRUE, NULL));
-            }
+            logs::log(logs::debug, "[GSTREAMER] Forcing IDR");
+            // Force IDR event, see: https://github.com/centricular/gstwebrtc-demos/issues/186
+            // https://gstreamer.freedesktop.org/documentation/additional/design/keyframe-force.html?gi-language=c
+            wolf::core::gstreamer::send_message(
+                pipeline.get(),
+                gst_structure_new("GstForceKeyUnit", "all-headers", G_TYPE_BOOLEAN, TRUE, NULL));
           }
         });
 
