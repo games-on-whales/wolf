@@ -249,8 +249,10 @@ Config load_or_default(const std::string &source, const std::shared_ptr<events::
       | ranges::views::transform([](const PairedClient &client) { return immer::box<PairedClient>{client}; }) //
       | ranges::to<immer::vector<immer::box<PairedClient>>>();
 
-  auto default_h264 = utils::get_optional(default_gst_encoder_settings, h264_encoder.value_or(GstEncoder{}).plugin_name);
-  auto default_hevc = utils::get_optional(default_gst_encoder_settings, hevc_encoder.value_or(GstEncoder{}).plugin_name);
+  auto default_h264 =
+      utils::get_optional(default_gst_encoder_settings, h264_encoder.value_or(GstEncoder{}).plugin_name);
+  auto default_hevc =
+      utils::get_optional(default_gst_encoder_settings, hevc_encoder.value_or(GstEncoder{}).plugin_name);
   auto default_av1 = utils::get_optional(default_gst_encoder_settings, av1_encoder.value_or(GstEncoder{}).plugin_name);
 
   /* Get apps, here we'll merge the default gstreamer settings with the app specific overrides */

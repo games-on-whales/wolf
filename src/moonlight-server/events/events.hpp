@@ -138,7 +138,6 @@ struct AudioSession {
   wolf::core::audio::AudioMode audio_mode;
 };
 
-
 struct IDRRequestEvent {
   const std::string event_type = "idr_request";
 
