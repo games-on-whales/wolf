@@ -216,8 +216,9 @@ static inline float deg2rad(float degree) {
 
 void mouse_move_rel(const MOUSE_MOVE_REL_PACKET &pkt, events::StreamSession &session) {
   if (session.mouse->has_value()) {
-    short delta_x = boost::endian::big_to_native(pkt.delta_x);
-    short delta_y = boost::endian::big_to_native(pkt.delta_y);
+    auto pointer_acceleration = std::stof(utils::get_env("WOLF_POINTER_ACCELERATION", "1.0"));
+    short delta_x = boost::endian::big_to_native(pkt.delta_x) * pointer_acceleration;
+    short delta_y = boost::endian::big_to_native(pkt.delta_y) * pointer_acceleration;
     std::visit([delta_x, delta_y](auto &mouse) { mouse.move(delta_x, delta_y); }, session.mouse->value());
   } else {
     logs::log(logs::warning, "Received MOUSE_MOVE_REL_PACKET but no mouse device is present");
@@ -226,8 +227,9 @@ void mouse_move_rel(const MOUSE_MOVE_REL_PACKET &pkt, events::StreamSession &ses
 
 void mouse_move_abs(const MOUSE_MOVE_ABS_PACKET &pkt, events::StreamSession &session) {
   if (session.mouse->has_value()) {
-    float x = boost::endian::big_to_native(pkt.x);
-    float y = boost::endian::big_to_native(pkt.y);
+    auto pointer_acceleration = std::stof(utils::get_env("WOLF_POINTER_ACCELERATION", "1.0"));
+    float x = boost::endian::big_to_native(pkt.x) * pointer_acceleration;
+    float y = boost::endian::big_to_native(pkt.y) * pointer_acceleration;
     float width = boost::endian::big_to_native(pkt.width);
     float height = boost::endian::big_to_native(pkt.height);
     std::visit([x, y, width, height](auto &mouse) { mouse.move_abs(x, y, width, height); }, session.mouse->value());
