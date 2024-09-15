@@ -263,6 +263,39 @@ In order to automatically pick up the right encoder at runtime based on the user
 
 You can read more about gstreamer and custom pipelines in the xref:gstreamer.adoc[] page.
 
+=== Set Window compositor
+
+Wolf support both [Sway](https://swaywm.org/) and [Gamescope](https://github.com/ValveSoftware/gamescope) compositor. 
+
+Usage is controlled by environment variables on `[apps.runner]` configs:
+
+- `RUN_SWAY=1` - enable Sway (Default for newer Wolf installation)
+- `RUN_GAMESCOPE=1` - enable Gamescope
+
+Examples:
+
+.Enable Sway
+[source,toml]
+....
+[apps.runner]
+env = [
+    "RUN_SWAY=1",
+    # ...
+]
+....
+
+.Enable Gamescope
+[source,toml]
+....
+[apps.runner]
+env = [
+    "RUN_GAMESCOPE=1",
+    # ...
+]
+....
+
+If both are defined, Gamescoped is used. (see [launch-comp.sh](https://github.com/games-on-whales/gow/blob/master/images/base-app/scripts/launch-comp.sh) for details)
+
 [#_multiple_gpu]
 == Multiple GPUs
 
