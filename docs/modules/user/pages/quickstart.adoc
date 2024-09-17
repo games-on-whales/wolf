@@ -364,6 +364,255 @@ docker run \
 --
 ======
 
+--
+Proxmox LXC + Nvidia (manual)::
++
+--
+
+[WARNING,caption=WARNING]
+====
+At the moment it is only possible to run Wolf inside a privileged LXC.
+====
+First you need to make sure your Nvidia drivers (version >= 530.30.02) are properly installed and loaded on your host.
+
+`nvidia-smi`
+```
++-----------------------------------------------------------------------------------------+
+| NVIDIA-SMI 550.107.02             Driver Version: 550.107.02     CUDA Version: 12.4     |
+|-----------------------------------------+------------------------+----------------------+
+| GPU  Name                 Persistence-M | Bus-Id          Disp.A | Volatile Uncorr. ECC |
+| Fan  Temp   Perf          Pwr:Usage/Cap |           Memory-Usage | GPU-Util  Compute M. |
+|                                         |                        |               MIG M. |
+|=========================================+========================+======================|
+|   0  NVIDIA GeForce RTX 4060 Ti     On  |   00000000:01:00.0 Off |                  N/A |
+|  0%   39C    P8              9W /  165W |       2MiB /  16380MiB |      0%      Default |
+|                                         |                        |                  N/A |
++-----------------------------------------+------------------------+----------------------+
+                                                                                         
++-----------------------------------------------------------------------------------------+
+| Processes:                                                                              |
+|  GPU   GI   CI        PID   Type   Process name                              GPU Memory |
+|        ID   ID                                                               Usage      |
+|=========================================================================================|
+|   No running processes found                                                            |
++-----------------------------------------------------------------------------------------+
+```
+
+`ls -l /dev/nividia*`
+```
+crw-rw-rw- 1 root root 195,   0 Aug 15 10:44 /dev/nvidia0
+crw-rw-rw- 1 root root 195, 255 Aug 15 10:44 /dev/nvidiactl
+crw-rw-rw- 1 root root 195, 254 Aug 15 10:44 /dev/nvidia-modeset
+crw-rw-rw- 1 root root 506,   0 Aug 15 10:44 /dev/nvidia-uvm
+crw-rw-rw- 1 root root 506,   1 Aug 15 10:44 /dev/nvidia-uvm-tools
+
+/dev/nvidia-caps:
+total 0
+cr-------- 1 root root 509, 1 Aug 15 10:44 nvidia-cap1
+cr--r--r-- 1 root root 509, 2 Aug 15 10:44 nvidia-cap2
+```
+
+.I am not able to see all the Nvidia devices
+[%collapsible]
+====
+You may need to setup your host to automatically load the NVIDIA GPU Kernel modules at boot time.
+
+First, create a new file `nvidia.conf` in the `/etc/modules-load.d/` directory and open it with a text editor.
+
+`nano /etc/modules-load.d/nvidia.conf`
+
+paste the following content to the file:
+```
+nvidia
+nvidia_uvm
+```
+
+For the changes to take effect, update the `initramfs` file with the following command:
+`update-initramfs -u`
+
+Add udev rules to add missing Nvidia devices in PVE 8
+`nano /etc/udev/rules.d/70-nvidia.rules`
+paste the following content to the file:
+
+```
+# create necessary NVIDIA device files in /dev/*
+KERNEL=="nvidia", RUN+="/bin/bash -c '/usr/bin/nvidia-smi -L && /bin/chmod 0666 /dev/nvidia*'"
+KERNEL=="nvidia_uvm", RUN+="/bin/bash -c '/usr/bin/nvidia-modprobe -c0 -u && /bin/chmod 0666 /dev/nvidia-uvm*'"
+```
+
+`reboot` you PVE host and try running `ls -l /dev/nividia*` again.
+====
+
+
+Add the udev rules to the host as explained in the xref:quickstart.adoc#_virtual_devices_support[Virtual devices support] section.
+
+One last final check on the host: we have to make sure that the `nvidia-drm` module has been loaded and that the module is loaded with the flag `modeset=1`.
+
+[source,bash]
+....
+cat /sys/module/nvidia_drm/parameters/modeset
+Y
+....
+
+.I get `N` or the file is not present, how do I set the flag?
+[%collapsible]
+====
+
+The easiest way to make the change persistent is to add `nvidia-drm.modeset=1` to the `GRUB_CMDLINE_LINUX_DEFAULT` line in `/etc/default/grub` ex:
+
+....
+GRUB_CMDLINE_LINUX_DEFAULT="quiet nvidia-drm.modeset=1"
+....
+
+Then `sudo update-grub` and `reboot`.
+====
+
+Now, we need to edit LXC config file to passtrough the GPU.
+
+.I don't have a LXC yet
+[%collapsible]
+====
+
+The easiest way to create an LXC to run Wolf is to use https://tteck.github.io/Proxmox/#docker-lxc[tteck's PVE docker script], this will create you a LXC with docker already good to go. (Make sure you choose privileged LXC and install docker-compose when prompted)
+
+====
+
+Enter the LXC config file: `nano /etc/pve/lxc/1XX.conf`
+
+it should look similar to this:
+
+```
+arch: amd64
+cores: 8
+features: nesting=1
+hostname: wolf
+memory: 8192
+net0: name=eth0,bridge=vmbr0,hwaddr=BC:24:11:B7:90:5D,ip=dhcp,type=veth
+onboot: 1
+ostype: debian
+rootfs: local-lvm:vm-118-disk-0,size=4G
+swap: 512
+tags: proxmox-helper-scripts
+lxc.cgroup2.devices.allow: a
+lxc.cap.drop:
+lxc.cgroup2.devices.allow: c 188:* rwm
+lxc.cgroup2.devices.allow: c 189:* rwm
+lxc.mount.entry: /dev/serial/by-id  dev/serial/by-id  none bind,optional,create=dir
+lxc.mount.entry: /dev/ttyUSB0       dev/ttyUSB0       none bind,optional,create=file
+lxc.mount.entry: /dev/ttyUSB1       dev/ttyUSB1       none bind,optional,create=file
+lxc.mount.entry: /dev/ttyACM0       dev/ttyACM0       none bind,optional,create=file
+lxc.mount.entry: /dev/ttyACM1       dev/ttyACM1       none bind,optional,create=file
+```
+
+remove the following lines from the bottom, they are not needed:
+
+```
+lxc.cgroup2.devices.allow: c 188:* rwm
+lxc.cgroup2.devices.allow: c 189:* rwm
+lxc.mount.entry: /dev/serial/by-id  dev/serial/by-id  none bind,optional,create=dir
+lxc.mount.entry: /dev/ttyUSB0       dev/ttyUSB0       none bind,optional,create=file
+lxc.mount.entry: /dev/ttyUSB1       dev/ttyUSB1       none bind,optional,create=file
+lxc.mount.entry: /dev/ttyACM0       dev/ttyACM0       none bind,optional,create=file
+lxc.mount.entry: /dev/ttyACM1       dev/ttyACM1       none bind,optional,create=file
+```
+
+add these to the bottom of the file:
+
+```
+dev0: /dev/uinput
+dev1: /dev/uhid
+dev2: /dev/nvidia0
+dev3: /dev/nvidiactl
+dev4: /dev/nvidia-modeset
+dev5: /dev/nvidia-uvm
+dev6: /dev/nvidia-uvm-tools
+dev7: /dev/nvidia-caps/nvidia-cap1
+dev8: /dev/nvidia-caps/nvidia-cap2
+lxc.mount.entry: /dev/dri dev/dri none bind,optional,create=dir
+lxc.mount.entry: /dev/input dev/input none bind,optional,create=dir
+lxc.mount.entry: /run/udev mnt/udev none bind,optional,create=dir
+```
+
+save the file, exit, and restart your LXC.
+
+From now on, we will work inside the LXC.
+
+First, let's build an additional docker image that will contain the Nvidia driver files:
+
+[source,bash]
+....
+curl https://raw.githubusercontent.com/games-on-whales/gow/master/images/nvidia-driver/Dockerfile | docker build -t gow/nvidia-driver:latest -f - --build-arg NV_VERSION=$(cat /sys/module/nvidia/version) .
+....
+
+This will create `gow/nvidia-driver:latest` locally.
+
+Unfortunately, docker doesn't seem to support directly mounting images, but you can https://docs.docker.com/storage/volumes/#populate-a-volume-using-a-container[pre-polulate volumes] by running:
+
+[source,bash]
+....
+docker create --rm --mount source=nvidia-driver-vol,destination=/usr/nvidia gow/nvidia-driver:latest sh
+....
+
+It will create a Docker container, populate `nvidia-driver-vol` with Nvidia driver if it wasn't already done and remove the container.
+
+Check volume exists with:
+
+[source,bash]
+....
+docker volume ls | grep nvidia-driver
+
+local     nvidia-driver-vol
+....
+
+By now we have all the setup in place, let's create our docker-compose.yml:
+
+```
+services:
+  wolf:
+    image: ghcr.io/games-on-whales/wolf:stable
+    environment:
+      - XDG_RUNTIME_DIR=/tmp/sockets
+      - NVIDIA_DRIVER_VOLUME_NAME=nvidia-driver-vol
+      - HOST_APPS_STATE_FOLDER=/etc/wolf
+      # This one below is only for multi GPU setup
+      #- WOLF_RENDER_NODE=/dev/dri/renderD129 
+    volumes:
+      - /etc/wolf/:/etc/wolf:rw
+      - /tmp/sockets:/tmp/sockets:rw
+      - /var/run/docker.sock:/var/run/docker.sock:rw
+      - /dev/:/dev/:rw
+      # This one below uses the /mnt/udev path we created in the LXC config file
+      - /mnt/udev:/run/udev:rw 
+      - nvidia-driver-vol:/usr/nvidia:rw
+    devices:
+      - /dev/dri
+      - /dev/uhid
+      - /dev/uinput
+      - /dev/nvidia-uvm
+      - /dev/nvidia-uvm-tools
+      - /dev/nvidia-caps/nvidia-cap1
+      - /dev/nvidia-caps/nvidia-cap2
+      - /dev/nvidiactl
+      - /dev/nvidia0
+      - /dev/nvidia-modeset
+    device_cgroup_rules:
+      - 'c 13:* rmw'
+    network_mode: host
+    restart: always
+
+volumes:
+  nvidia-driver-vol:
+    external: true
+```
+
+save, exit.
+
+It is time to try it out 🥳
+
+`docker compose up`
+======
+
+
 .Which ports are used by Wolf?
 [%collapsible]
 ====
@@ -467,4 +716,3 @@ Reload the udev rules either by rebooting or run:
 ....
 udevadm control --reload-rules && udevadm trigger
 ....
-
