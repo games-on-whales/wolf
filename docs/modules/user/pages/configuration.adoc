@@ -274,6 +274,15 @@ Usage is controlled by environment variables on `[apps.runner]` configs:
 - `RUN_SWAY=1` - enable Sway (Default for newer Wolf installation)
 - `RUN_GAMESCOPE=1` - enable Gamescope
 
+[WARNING]
+====
+Gamescope have some known issues:
+- It may be unstable with some Nvidia driver versions. See [#60](https://github.com/games-on-whales/wolf/issues/60). 
+- It doesn't support multiple windows which may cause issues with multi-window applications like Steam desktop UI.
+
+Switch to Gamescope only if you encounter issues with Sway.
+====
+
 Examples:
 
 .Enable Sway
