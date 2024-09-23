@@ -265,7 +265,7 @@ You can read more about gstreamer and custom pipelines in the xref:gstreamer.ado
 
 === Set Window compositor
 
-Wolf support both [Sway](https://swaywm.org/) and [Gamescope](https://github.com/ValveSoftware/gamescope) compositor. 
+Wolf support both https://swaywm.org/[Sway] and https://github.com/ValveSoftware/gamescope[Gamescope] compositor. 
 
 Sway is used by default, but some game may work better with one or the other.
 
@@ -277,7 +277,7 @@ Usage is controlled by environment variables on `[apps.runner]` configs:
 [WARNING]
 ====
 Gamescope have some known issues:
-- It may be unstable with some Nvidia driver versions. See [#60](https://github.com/games-on-whales/wolf/issues/60). 
+- It may be unstable with some Nvidia driver versions. See https://github.com/games-on-whales/wolf/issues/60[#60]. 
 - It doesn't support multiple windows which may cause issues with multi-window applications like Steam desktop UI.
 
 Switch to Gamescope only if you encounter issues with Sway.
@@ -305,7 +305,7 @@ env = [
 ]
 ....
 
-If both are defined, Gamescoped is used. (see [launch-comp.sh](https://github.com/games-on-whales/gow/blob/master/images/base-app/scripts/launch-comp.sh) for details)
+If both are defined, Gamescoped is used. (see https://github.com/games-on-whales/gow/blob/master/images/base-app/scripts/launch-comp.sh[launch-comp.sh] for details)
 
 [#_multiple_gpu]
 == Multiple GPUs
