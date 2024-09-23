@@ -263,6 +263,50 @@ In order to automatically pick up the right encoder at runtime based on the user
 
 You can read more about gstreamer and custom pipelines in the xref:gstreamer.adoc[] page.
 
+=== Set Window compositor
+
+Wolf support both https://swaywm.org/[Sway] and https://github.com/ValveSoftware/gamescope[Gamescope] compositor. 
+
+Sway is used by default, but some game may work better with one or the other.
+
+Usage is controlled by environment variables on `[apps.runner]` configs:
+
+- `RUN_SWAY=1` - enable Sway (Default for newer Wolf installation)
+- `RUN_GAMESCOPE=1` - enable Gamescope
+
+[WARNING]
+====
+Gamescope have some known issues:
+- It may be unstable with some Nvidia driver versions. See https://github.com/games-on-whales/wolf/issues/60[#60]. 
+- It doesn't support multiple windows which may cause issues with multi-window applications like Steam desktop UI.
+
+Switch to Gamescope only if you encounter issues with Sway.
+====
+
+Examples:
+
+.Enable Sway
+[source,toml]
+....
+[apps.runner]
+env = [
+    "RUN_SWAY=1",
+    # ...
+]
+....
+
+.Enable Gamescope
+[source,toml]
+....
+[apps.runner]
+env = [
+    "RUN_GAMESCOPE=1",
+    # ...
+]
+....
+
+If both are defined, Gamescoped is used. (see https://github.com/games-on-whales/gow/blob/master/images/base-app/scripts/launch-comp.sh[launch-comp.sh] for details)
+
 [#_multiple_gpu]
 == Multiple GPUs
 
@@ -359,7 +403,29 @@ This has been moved to the xref:steam.adoc[] page.
 
 This guide demonstrates how to change the default keyboard layout and switch between multiple layouts in Docker containers.
 
-=== Create a Configuration File
+For Layout and Variant codes see: https://man.archlinux.org/man/xkeyboard-config.7#LAYOUTS
+
+=== Using environment variable
+
+Add environment variable `XKB_DEFAULT_LAYOUT=<layout>` and `XKB_DEFAULT_VARIANT=<variant>` to `[apps.runner]` config.
+
+.Keyboard layout environment variable example
+....
+[apps.runner]
+env = [
+    # ...
+    "XKB_DEFAULT_LAYOUT=fr",
+    "XKB_DEFAULT_VARIANT=azerty",
+]
+....
+
+=== Using configuration file
+
+Using configuration file allow more layouts to be configured. 
+
+.Note: configuration file is only supported for Sway compositor and won't have any effect wih Gamescope.
+
+==== Create a Configuration File
 
 Create a config file at `${HOST_APPS_STATE_FOLDER}/cfg/90-custom.conf` with the following content:
 ....
@@ -368,10 +434,10 @@ input type:keyboard {
     xkb_numlock "enable"
 }
 ....
-* xkb_layout : The first layout code you set will be the default layout. Add other layouts separated by commas. For more layout codes, see: https://man.archlinux.org/man/xkeyboard-config.7#LAYOUTS
+* xkb_layout : The first layout code you set will be the default layout. Add other layouts separated by commas.
 * xkb_numlock "enable" turns on NumLock by default.
 
-=== Configure Container Mounts
+==== Configure Container Mounts
 
 In the same folder, edit `${HOST_APPS_STATE_FOLDER}/cfg/config.toml`
 For each container where you want to use the custom layout, edit the "mounts" variable as follows:
@@ -383,9 +449,9 @@ mounts = [
 
 This ensures that the config is not overwritten. On the next app restart, the keyboard layout will be set to the default one specified.
 
-=== Switching Layouts
+==== Switching Layouts
 
-==== Switching layout from the console in moonlight
+===== Switching layout from the console in moonlight
 
 Start the console in Moonlight.
 Use the command:
@@ -393,7 +459,7 @@ Use the command:
 swaymsg input type:keyboard xkb_switch_layout next
 ....
 
-==== Creating a Steam Shortcut for Layout Switching
+===== Creating a Steam Shortcut for Layout Switching
 In Steam, add a "Non-Steam Game", and select anything as the target.
 Once the game is created in Steam, Right-click on it and select "Properties".
 In the "Target" field, enter:
