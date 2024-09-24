@@ -156,6 +156,7 @@ Then `sudo update-grub` and *reboot*.
 
 
 --
+[[nvidia-manual-tab]]
 Nvidia (Manual)::
 +
 --
@@ -398,7 +399,7 @@ First you need to make sure your Nvidia drivers (version >= 530.30.02) are prope
 +-----------------------------------------------------------------------------------------+
 ```
 
-`ls -l /dev/nividia*`
+`ls -l /dev/nvidia*`
 ```
 crw-rw-rw- 1 root root 195,   0 Aug 15 10:44 /dev/nvidia0
 crw-rw-rw- 1 root root 195, 255 Aug 15 10:44 /dev/nvidiactl
@@ -440,7 +441,7 @@ KERNEL=="nvidia", RUN+="/bin/bash -c '/usr/bin/nvidia-smi -L && /bin/chmod 0666 
 KERNEL=="nvidia_uvm", RUN+="/bin/bash -c '/usr/bin/nvidia-modprobe -c0 -u && /bin/chmod 0666 /dev/nvidia-uvm*'"
 ```
 
-`reboot` you PVE host and try running `ls -l /dev/nividia*` again.
+`reboot` you PVE host and try running `ls -l /dev/nvidia*` again.
 ====
 
 
@@ -535,83 +536,21 @@ lxc.mount.entry: /run/udev mnt/udev none bind,optional,create=dir
 
 save the file, exit, and restart your LXC.
 
-From now on, we will work inside the LXC.
+Our PVE host setup is now complete, you must follow the normal instructions inside your LXC to run Wolf.
+xref:#nvidia-manual-tab[Nvidia Manual]
 
-First, let's build an additional docker image that will contain the Nvidia driver files:
-
-[source,bash]
-....
-curl https://raw.githubusercontent.com/games-on-whales/gow/master/images/nvidia-driver/Dockerfile | docker build -t gow/nvidia-driver:latest -f - --build-arg NV_VERSION=$(cat /sys/module/nvidia/version) .
-....
-
-This will create `gow/nvidia-driver:latest` locally.
-
-Unfortunately, docker doesn't seem to support directly mounting images, but you can https://docs.docker.com/storage/volumes/#populate-a-volume-using-a-container[pre-polulate volumes] by running:
-
-[source,bash]
-....
-docker create --rm --mount source=nvidia-driver-vol,destination=/usr/nvidia gow/nvidia-driver:latest sh
-....
-
-It will create a Docker container, populate `nvidia-driver-vol` with Nvidia driver if it wasn't already done and remove the container.
-
-Check volume exists with:
-
-[source,bash]
-....
-docker volume ls | grep nvidia-driver
-
-local     nvidia-driver-vol
-....
-
-By now we have all the setup in place, let's create our docker-compose.yml:
-
+Remarks:
+When creating your docker-compose.yml don't forget to modify the volume mapping for `/run/udev` path, as we mounted it on `/mnt/udev` inside our LXC
 ```
-services:
-  wolf:
-    image: ghcr.io/games-on-whales/wolf:stable
-    environment:
-      - XDG_RUNTIME_DIR=/tmp/sockets
-      - NVIDIA_DRIVER_VOLUME_NAME=nvidia-driver-vol
-      - HOST_APPS_STATE_FOLDER=/etc/wolf
-      # This one below is only for multi GPU setup
-      #- WOLF_RENDER_NODE=/dev/dri/renderD129 
-    volumes:
-      - /etc/wolf/:/etc/wolf:rw
-      - /tmp/sockets:/tmp/sockets:rw
-      - /var/run/docker.sock:/var/run/docker.sock:rw
-      - /dev/:/dev/:rw
-      # This one below uses the /mnt/udev path we created in the LXC config file
-      - /mnt/udev:/run/udev:rw 
-      - nvidia-driver-vol:/usr/nvidia:rw
-    devices:
-      - /dev/dri
-      - /dev/uhid
-      - /dev/uinput
-      - /dev/nvidia-uvm
-      - /dev/nvidia-uvm-tools
-      - /dev/nvidia-caps/nvidia-cap1
-      - /dev/nvidia-caps/nvidia-cap2
-      - /dev/nvidiactl
-      - /dev/nvidia0
-      - /dev/nvidia-modeset
-    device_cgroup_rules:
-      - 'c 13:* rmw'
-    network_mode: host
-    restart: always
-
 volumes:
-  nvidia-driver-vol:
-    external: true
+    - /mnt/udev:/run/udev:rw 
 ```
 
-save, exit.
-
-It is time to try it out 🥳
-
-`docker compose up`
-======
-
+And if you have a multi GPU setup, don't forget to set the below env variable
+```
+environment:
+    - WOLF_RENDER_NODE=/dev/dri/renderD12X
+```
 
 .Which ports are used by Wolf?
 [%collapsible]
