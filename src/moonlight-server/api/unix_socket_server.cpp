@@ -52,6 +52,15 @@ UnixSocketServer::UnixSocketServer(boost::asio::io_context &io_context,
                    });
 
   state_->http.add(HTTPMethod::GET,
+                   "/api/v1/apps",
+                   {
+                       .summary = "Get all apps",
+                       .description = "This endpoint returns a list of all apps.",
+                       .response_description = {{200, {.json_schema = rfl::json::to_schema<AppListResponse>()}}},
+                       .handler = [this](auto req, auto socket) { endpoint_Apps(req, socket); },
+                   });
+
+  state_->http.add(HTTPMethod::GET,
                    "/api/v1/openapi-schema",
                    {.summary = "Return this OpenAPI schema as JSON", .handler = [this](auto req, auto socket) {
                       send_http(socket, 200, state_->http.openapi_schema());

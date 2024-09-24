@@ -18,7 +18,7 @@
 #include <moonlight/data-structures.hpp>
 #include <openssl/x509.h>
 #include <optional>
-#include <toml.hpp>
+#include <state/serialised_config.hpp>
 #include <utility>
 
 namespace state {
@@ -38,14 +38,7 @@ enum STANDARD_PORTS_MAPPING {
   RTSP_SETUP_PORT = 48010
 };
 
-struct PairedClient {
-  std::string client_cert;
-  std::string app_state_folder;
-  uint run_uid = 1000;
-  uint run_gid = 1000;
-};
-
-using PairedClientList = immer::vector<immer::box<PairedClient>>;
+using PairedClientList = immer::vector<immer::box<wolf::config::PairedClient>>;
 
 enum Encoder {
   NVIDIA,

@@ -37,7 +37,8 @@ TEST_CASE("LocalState load TOML", "[LocalState]") {
     REQUIRE(first_app.joypad_type == moonlight::control::pkts::CONTROLLER_TYPE::AUTO);
     REQUIRE(first_app.start_virtual_compositor);
     REQUIRE(first_app.render_node == "/dev/dri/renderD128");
-    REQUIRE_THAT(toml::find(first_app.runner->serialise(), "type").as_string(), Equals("docker"));
+    auto first_app_runner = rfl::get<AppDocker>(first_app.runner->serialize().variant());
+    REQUIRE_THAT(first_app_runner.image, Equals("ghcr.io/games-on-whales/firefox:master"));
 
     auto second_app = state.apps[1];
     REQUIRE_THAT(second_app.base.title, Equals("Test ball"));
@@ -51,7 +52,8 @@ TEST_CASE("LocalState load TOML", "[LocalState]") {
     REQUIRE(!second_app.start_virtual_compositor);
     REQUIRE(second_app.joypad_type == moonlight::control::pkts::CONTROLLER_TYPE::XBOX);
     REQUIRE(second_app.render_node == "/tmp/dead_beef");
-    REQUIRE_THAT(toml::find(second_app.runner->serialise(), "type").as_string(), Equals("process"));
+    auto second_app_runner = rfl::get<AppCMD>(second_app.runner->serialize().variant());
+    REQUIRE_THAT(second_app_runner.run_cmd, Equals("destroy_computer_now"));
   }
 
   SECTION("Paired Clients") {

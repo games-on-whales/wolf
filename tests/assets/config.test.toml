@@ -51,7 +51,7 @@ base_create_json = """
 title = "Test ball"
 start_virtual_compositor = false
 render_node = "/tmp/dead_beef"
-joypad_type = "xbox"
+joypad_type = "XBOX"
 
 [apps.runner]
 type = "process"

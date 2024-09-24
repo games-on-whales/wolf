@@ -41,4 +41,13 @@ void UnixSocketServer::endpoint_Pair(const HTTPRequest &req, std::shared_ptr<Uni
   }
 }
 
+void UnixSocketServer::endpoint_Apps(const HTTPRequest &req, std::shared_ptr<UnixSocket> socket) {
+  // curl -v --http1.0 --unix-socket /tmp/wolf.sock http://localhost/api/v1/apps
+  auto res = AppListResponse{.success = true};
+  for (auto &app : state_->app_state->config->apps) {
+    res.apps.push_back(rfl::Reflector<events::App>::from(app));
+  }
+  send_http(socket, 200, rfl::json::write(res));
+}
+
 } // namespace wolf::api

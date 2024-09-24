@@ -7,7 +7,6 @@
 #include <state/data-structures.hpp>
 #include <string>
 #include <thread>
-#include <toml.hpp>
 
 namespace process {
 
@@ -26,8 +25,8 @@ public:
            const immer::map<std::string, std::string> &env_variables,
            std::string_view render_node) override;
 
-  toml::value serialise() override {
-    return toml::table{{"type", "process"}, {"run_cmd", this->run_cmd}};
+  rfl::TaggedUnion<"type", wolf::config::AppCMD, wolf::config::AppDocker> serialize() override {
+    return wolf::config::AppCMD{.run_cmd = run_cmd};
   }
 
 protected:

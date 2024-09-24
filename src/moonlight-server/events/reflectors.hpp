@@ -2,10 +2,12 @@
 
 #include <events/events.hpp>
 #include <rfl.hpp>
+#include <state/serialised_config.hpp>
 
 namespace rfl {
 
 using namespace wolf::core;
+using namespace wolf::config;
 
 template <> struct Reflector<events::PairSignal> {
   struct ReflType {
@@ -27,7 +29,9 @@ template <> struct Reflector<events::PairSignal> {
 
 template <> struct Reflector<events::App> {
   struct ReflType {
-    moonlight::App base;
+    const std::string title;
+    const std::string id;
+    const bool support_hdr;
 
     std::string h264_gst_pipeline;
     std::string hevc_gst_pipeline;
@@ -37,30 +41,38 @@ template <> struct Reflector<events::App> {
 
     std::string opus_gst_pipeline;
     bool start_virtual_compositor;
-    // TODO: Runner
-    int joypad_type;
+    rfl::TaggedUnion<"type", AppCMD, AppDocker> runner;
+    ControllerType joypad_type;
   };
 
-  static events::App to(const ReflType &v) noexcept {
-    return {.base = v.base,
-            .h264_gst_pipeline = v.h264_gst_pipeline,
-            .hevc_gst_pipeline = v.hevc_gst_pipeline,
-            .av1_gst_pipeline = v.av1_gst_pipeline,
-            .render_node = v.render_node,
-            .opus_gst_pipeline = v.opus_gst_pipeline,
-            .start_virtual_compositor = v.start_virtual_compositor,
-            .joypad_type = static_cast<moonlight::control::pkts::CONTROLLER_TYPE>(v.joypad_type)};
-  }
-
   static ReflType from(const events::App &v) {
-    return {.base = v.base,
+    ControllerType ctrl_type;
+    switch (v.joypad_type) {
+    case moonlight::control::pkts::CONTROLLER_TYPE::XBOX:
+      ctrl_type = ControllerType::XBOX;
+      break;
+    case moonlight::control::pkts::CONTROLLER_TYPE::PS:
+      ctrl_type = ControllerType::PS;
+      break;
+    case moonlight::control::pkts::CONTROLLER_TYPE::NINTENDO:
+      ctrl_type = ControllerType::NINTENDO;
+      break;
+    case moonlight::control::pkts::CONTROLLER_TYPE::AUTO:
+    case moonlight::control::pkts::UNKNOWN:
+      ctrl_type = ControllerType::AUTO;
+      break;
+    }
+    return {.title = v.base.title,
+            .id = v.base.id,
+            .support_hdr = v.base.support_hdr,
             .h264_gst_pipeline = v.h264_gst_pipeline,
             .hevc_gst_pipeline = v.hevc_gst_pipeline,
             .av1_gst_pipeline = v.av1_gst_pipeline,
             .render_node = v.render_node,
             .opus_gst_pipeline = v.opus_gst_pipeline,
             .start_virtual_compositor = v.start_virtual_compositor,
-            .joypad_type = v.joypad_type};
+            .runner = v.runner->serialize(),
+            .joypad_type = ctrl_type};
   }
 };
 
@@ -83,24 +95,6 @@ template <> struct Reflector<events::StreamSession> {
     std::string ip;
   };
 
-  static events::StreamSession to(const ReflType &v) noexcept {
-    return {.display_mode = v.display_mode,
-            .audio_channel_count = v.audio_channel_count,
-            .app = v.app,
-            .app_state_folder = v.app_state_folder,
-            .aes_key = v.aes_key,
-            .aes_iv = v.aes_iv,
-            .session_id = v.session_id,
-            .ip = v.ip,
-            .wayland_display = std::make_shared<immer::atom<virtual_display::wl_state_ptr>>(),
-            .mouse = std::make_shared<std::optional<events::MouseTypes>>(),
-            .keyboard = std::make_shared<std::optional<events::KeyboardTypes>>(),
-            .joypads = std::make_shared<immer::atom<events::JoypadList>>(),
-            .pen_tablet = std::make_shared<std::optional<input::PenTablet>>(),
-            .touch_screen = std::make_shared<std::optional<input::TouchScreen>>()};
-  }
-
-  // TODO: can't use this in practice, missing event_bus and App.runner
   static ReflType from(const events::StreamSession &v) {
     return {.display_mode = v.display_mode,
             .audio_channel_count = v.audio_channel_count,

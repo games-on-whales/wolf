@@ -2,9 +2,12 @@
 
 #include <api/http_server.hpp>
 #include <events/events.hpp>
+#include <events/reflectors.hpp>
 #include <state/data-structures.hpp>
 
 namespace wolf::api {
+
+using namespace wolf::core;
 
 void start_server(immer::box<state::AppState> app_state);
 
@@ -27,6 +30,11 @@ struct PendingPairRequestsResponse {
   std::vector<PairRequest> requests;
 };
 
+struct AppListResponse {
+  bool success = true;
+  std::vector<rfl::Reflector<wolf::core::events::App>::ReflType> apps;
+};
+
 struct UnixSocket {
   boost::asio::local::stream_protocol::socket socket;
   bool is_alive = true;
@@ -46,6 +54,7 @@ private:
   void endpoint_Events(const HTTPRequest &req, std::shared_ptr<UnixSocket> socket);
   void endpoint_PendingPairRequest(const HTTPRequest &req, std::shared_ptr<UnixSocket> socket);
   void endpoint_Pair(const HTTPRequest &req, std::shared_ptr<UnixSocket> socket);
+  void endpoint_Apps(const HTTPRequest &req, std::shared_ptr<UnixSocket> socket);
 
   void sse_broadcast(const std::string &payload);
   void sse_keepalive(const boost::system::error_code &e);

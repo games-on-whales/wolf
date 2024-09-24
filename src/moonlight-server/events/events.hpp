@@ -19,8 +19,8 @@
 #include <moonlight/data-structures.hpp>
 #include <rfl.hpp>
 #include <rfl/json.hpp>
+#include <state/serialised_config.hpp>
 #include <string_view>
-#include <toml.hpp>
 
 namespace wolf::core::events {
 
@@ -57,7 +57,7 @@ struct Runner {
                    const immer::map<std::string, std::string> &env_variables,
                    std::string_view render_node) = 0;
 
-  virtual toml::value serialise() = 0;
+  virtual rfl::TaggedUnion<"type", wolf::config::AppCMD, wolf::config::AppDocker> serialize() = 0;
 };
 
 struct App {

@@ -25,6 +25,15 @@ set(EVENTBUS_BUILD_TESTS OFF)
 FetchContent_MakeAvailable(eventbus)
 target_link_libraries_system(wolf_runner PUBLIC dp::eventbus)
 
+# TOML
+FetchContent_Declare(
+        tomlplusplus
+        GIT_REPOSITORY https://github.com/marzer/tomlplusplus.git
+        GIT_TAG        v3.4.0
+)
+FetchContent_MakeAvailable(tomlplusplus)
+target_link_libraries(wolf_runner PUBLIC tomlplusplus::tomlplusplus)
+
 # Serialization
 FetchContent_Declare(
         reflect-cpp
@@ -53,22 +62,13 @@ FetchContent_Declare(
 FetchContent_MakeAvailable(simplewebserver)
 target_link_libraries_system(wolf_runner PUBLIC simple-web-server)
 
-# TOML parser (config file) TODO: use reflect-cpp instead
-FetchContent_Declare(
-        toml
-        GIT_REPOSITORY https://github.com/ToruNiina/toml11.git
-        GIT_TAG v4.2.0)
-set(TOML11_COLORIZE_ERROR_MESSAGE, ON)
-set(TOML11_PRESERVE_COMMENTS_BY_DEFAULT, ON)
-FetchContent_MakeAvailable(toml)
-target_link_libraries_system(wolf_runner PUBLIC toml11::toml11)
-
 # mDNS
 FetchContent_Declare(
         mdns_cpp
         GIT_REPOSITORY https://github.com/gocarlos/mdns_cpp.git)
 FetchContent_MakeAvailable(mdns_cpp)
 target_link_libraries_system(wolf_runner PUBLIC mdns_cpp::mdns_cpp)
+
 
 # Enet
 set(CMAKE_PROJECT_INCLUDE_BEFORE "${PROJECT_SOURCE_DIR}/cmake/EnableCMP0048.cmake")

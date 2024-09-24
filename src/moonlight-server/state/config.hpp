@@ -6,11 +6,14 @@
 #include <crypto/crypto.hpp>
 #include <events/events.hpp>
 #include <helpers/logger.hpp>
+#include <runners/docker.hpp>
+#include <runners/process.hpp>
 #include <state/data-structures.hpp>
 
 namespace state {
 
 using namespace wolf::core;
+using namespace wolf::config;
 
 /**
  * @brief Will load a configuration from the given source.
@@ -81,5 +84,19 @@ inline bool file_exist(const std::string &filename) {
 inline std::string gen_uuid() {
   auto uuid = boost::uuids::random_generator()();
   return boost::lexical_cast<std::string>(uuid);
+}
+
+static std::shared_ptr<events::Runner> get_runner(const rfl::TaggedUnion<"type", AppCMD, AppDocker> &runner,
+                                                  const std::shared_ptr<events::EventBusType> &ev_bus) {
+  if (rfl::holds_alternative<AppCMD>(runner.variant())) {
+    auto run_cmd = rfl::get<AppCMD>(runner.variant()).run_cmd;
+    return std::make_shared<process::RunProcess>(ev_bus, run_cmd);
+  } else if (rfl::holds_alternative<AppDocker>(runner.variant())) {
+    return std::make_shared<docker::RunDocker>(
+        docker::RunDocker::from_cfg(ev_bus, rfl::get<AppDocker>(runner.variant())));
+  } else {
+    logs::log(logs::error, "Found runner of unknown type");
+    throw std::runtime_error("Unknown runner type");
+  }
 }
 } // namespace state
