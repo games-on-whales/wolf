@@ -215,43 +215,29 @@ Config load_or_default(const std::string &source, const std::shared_ptr<events::
                 .opus_encoder.value_or(default_gst_audio_settings.default_opus_encoder),
             app.audio.value_or(BaseAppAudioOverride{}).sink.value_or(default_gst_audio_settings.default_sink));
 
-        moonlight::control::pkts::CONTROLLER_TYPE joypad_type;
-        switch (app.joypad_type.value_or(ControllerType::AUTO)) {
-        case ControllerType::XBOX:
-          joypad_type = moonlight::control::pkts::CONTROLLER_TYPE::XBOX;
-          break;
-        case ControllerType::PS:
-          joypad_type = moonlight::control::pkts::CONTROLLER_TYPE::PS;
-          break;
-        case ControllerType::NINTENDO:
-          joypad_type = moonlight::control::pkts::CONTROLLER_TYPE::NINTENDO;
-          break;
-        case ControllerType::AUTO:
-          joypad_type = moonlight::control::pkts::CONTROLLER_TYPE::AUTO;
-          break;
-        }
+        return immer::box<events::App>{
+            events::App{.base = {.title = app.title, .id = std::to_string(idx + 1), .support_hdr = false},
+                        .h264_gst_pipeline = h264_gst_pipeline,
+                        .hevc_gst_pipeline = hevc_gst_pipeline,
+                        .av1_gst_pipeline = av1_gst_pipeline,
+                        .render_node = app_render_node,
 
-        return events::App{.base = {.title = app.title, .id = std::to_string(idx + 1), .support_hdr = false},
-                           .h264_gst_pipeline = h264_gst_pipeline,
-                           .hevc_gst_pipeline = hevc_gst_pipeline,
-                           .av1_gst_pipeline = av1_gst_pipeline,
-                           .render_node = app_render_node,
-
-                           .opus_gst_pipeline = opus_gst_pipeline,
-                           .start_virtual_compositor = app.start_virtual_compositor.value_or(true),
-                           .runner = get_runner(app.runner, ev_bus),
-                           .joypad_type = joypad_type};
-      }) |                                      //
-      ranges::to<immer::vector<events::App>>(); //
+                        .opus_gst_pipeline = opus_gst_pipeline,
+                        .start_virtual_compositor = app.start_virtual_compositor.value_or(true),
+                        .runner = get_runner(app.runner, ev_bus),
+                        .joypad_type = get_controller_type(app.joypad_type.value_or(ControllerType::AUTO))}};
+      }) |                                                  //
+      ranges::to<immer::vector<immer::box<events::App>>>(); //
 
   auto clients_atom = std::make_shared<immer::atom<state::PairedClientList>>(paired_clients);
+  auto apps_atom = std::make_shared<immer::atom<immer::vector<immer::box<events::App>>>>(apps);
   return Config{.uuid = cfg.uuid,
                 .hostname = cfg.hostname,
                 .config_source = source,
                 .support_hevc = hevc_encoder.has_value(),
                 .support_av1 = av1_encoder.has_value() && encoder_type(*av1_encoder) != SOFTWARE,
                 .paired_clients = clients_atom,
-                .apps = apps};
+                .apps = apps_atom};
 }
 
 void pair(const Config &cfg, const PairedClient &client) {

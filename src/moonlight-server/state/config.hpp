@@ -66,11 +66,11 @@ inline std::optional<PairedClient> get_client_via_ssl(const Config &cfg, const s
  * Return the app with the given app_id, throws an exception if not found
  */
 inline immer::box<events::App> get_app_by_id(const Config &cfg, std::string_view app_id) {
-  auto search_result = std::find_if(cfg.apps.begin(), cfg.apps.end(), [&app_id](const events::App &app) {
-    return app.base.id == app_id;
-  });
+  auto apps = cfg.apps->load();
+  auto search_result =
+      std::find_if(apps->begin(), apps->end(), [&app_id](const events::App &app) { return app.base.id == app_id; });
 
-  if (search_result != cfg.apps.end())
+  if (search_result != apps->end())
     return *search_result;
   else
     throw std::runtime_error(fmt::format("Unable to find app with id: {}", app_id));
@@ -97,6 +97,19 @@ static std::shared_ptr<events::Runner> get_runner(const rfl::TaggedUnion<"type",
   } else {
     logs::log(logs::error, "Found runner of unknown type");
     throw std::runtime_error("Unknown runner type");
+  }
+}
+
+static moonlight::control::pkts::CONTROLLER_TYPE get_controller_type(const ControllerType &ctrl_type) {
+  switch (ctrl_type) {
+  case ControllerType::XBOX:
+    return moonlight::control::pkts::CONTROLLER_TYPE::XBOX;
+  case ControllerType::PS:
+    return moonlight::control::pkts::CONTROLLER_TYPE::PS;
+  case ControllerType::NINTENDO:
+    return moonlight::control::pkts::CONTROLLER_TYPE::NINTENDO;
+  case ControllerType::AUTO:
+    return moonlight::control::pkts::CONTROLLER_TYPE::AUTO;
   }
 }
 } // namespace state

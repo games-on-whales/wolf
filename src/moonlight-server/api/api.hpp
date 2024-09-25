@@ -16,11 +16,11 @@ struct PairRequest {
   rfl::Description<"The PIN created by the remote Moonlight client", std::string> pin;
 };
 
-struct PairResponse {
+struct GenericSuccessResponse {
   bool success = true;
 };
 
-struct PairResponseError {
+struct GenericErrorResponse {
   bool success = false;
   std::string error;
 };
@@ -33,6 +33,10 @@ struct PendingPairRequestsResponse {
 struct AppListResponse {
   bool success = true;
   std::vector<rfl::Reflector<wolf::core::events::App>::ReflType> apps;
+};
+
+struct AppDeleteRequest {
+  std::string id;
 };
 
 struct UnixSocket {
@@ -55,6 +59,8 @@ private:
   void endpoint_PendingPairRequest(const HTTPRequest &req, std::shared_ptr<UnixSocket> socket);
   void endpoint_Pair(const HTTPRequest &req, std::shared_ptr<UnixSocket> socket);
   void endpoint_Apps(const HTTPRequest &req, std::shared_ptr<UnixSocket> socket);
+  void endpoint_AddApp(const HTTPRequest &req, std::shared_ptr<UnixSocket> socket);
+  void endpoint_RemoveApp(const HTTPRequest &req, std::shared_ptr<UnixSocket> socket);
 
   void sse_broadcast(const std::string &payload);
   void sse_keepalive(const boost::system::error_code &e);

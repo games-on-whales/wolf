@@ -68,7 +68,7 @@ struct Config {
   /**
    * List of available Apps
    */
-  immer::vector<events::App> apps;
+  std::shared_ptr<immer::atom<immer::vector<immer::box<events::App>>>> apps;
 };
 
 /**

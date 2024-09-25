@@ -33,7 +33,7 @@ UnixSocketServer::UnixSocketServer(boost::asio::io_context &io_context,
 
   state_->http.add(
       HTTPMethod::GET,
-      "/api/v1/pending-pair-requests",
+      "/api/v1/pair/pending",
       {
           .summary = "Get pending pair requests",
           .description = "This endpoint returns a list of Moonlight clients that are currently waiting to be paired.",
@@ -42,12 +42,12 @@ UnixSocketServer::UnixSocketServer(boost::asio::io_context &io_context,
       });
 
   state_->http.add(HTTPMethod::POST,
-                   "/api/v1/pair-client",
+                   "/api/v1/pair/client",
                    {
                        .summary = "Pair a client",
                        .request_description = APIDescription{.json_schema = rfl::json::to_schema<PairRequest>()},
-                       .response_description = {{200, {.json_schema = rfl::json::to_schema<PairResponse>()}},
-                                                {500, {.json_schema = rfl::json::to_schema<PairResponseError>()}}},
+                       .response_description = {{200, {.json_schema = rfl::json::to_schema<GenericSuccessResponse>()}},
+                                                {500, {.json_schema = rfl::json::to_schema<GenericErrorResponse>()}}},
                        .handler = [this](auto req, auto socket) { endpoint_Pair(req, socket); },
                    });
 
@@ -59,6 +59,26 @@ UnixSocketServer::UnixSocketServer(boost::asio::io_context &io_context,
                        .response_description = {{200, {.json_schema = rfl::json::to_schema<AppListResponse>()}}},
                        .handler = [this](auto req, auto socket) { endpoint_Apps(req, socket); },
                    });
+
+  state_->http.add(
+      HTTPMethod::POST,
+      "/api/v1/apps/add",
+      {
+          .summary = "Add an app",
+          .request_description =
+              APIDescription{.json_schema = rfl::json::to_schema<rfl::Reflector<wolf::core::events::App>::ReflType>()},
+          .response_description = {{200, {.json_schema = rfl::json::to_schema<GenericSuccessResponse>()}},
+                                   {500, {.json_schema = rfl::json::to_schema<GenericErrorResponse>()}}},
+          .handler = [this](auto req, auto socket) { endpoint_AddApp(req, socket); },
+      });
+
+  state_->http.add(HTTPMethod::POST,
+                   "/api/v1/apps/delete",
+                   {.summary = "Remove an app",
+                    .request_description = APIDescription{.json_schema = rfl::json::to_schema<AppDeleteRequest>()},
+                    .response_description = {{200, {.json_schema = rfl::json::to_schema<GenericSuccessResponse>()}},
+                                             {404, {.json_schema = rfl::json::to_schema<GenericErrorResponse>()}}},
+                    .handler = [this](auto req, auto socket) { endpoint_RemoveApp(req, socket); }});
 
   state_->http.add(HTTPMethod::GET,
                    "/api/v1/openapi-schema",

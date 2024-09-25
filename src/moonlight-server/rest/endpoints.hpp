@@ -227,8 +227,8 @@ void applist(const std::shared_ptr<typename SimpleWeb::Server<SimpleWeb::HTTPS>:
              const immer::box<state::AppState> &state) {
   log_req<SimpleWeb::HTTPS>(request);
 
-  auto base_apps = state->config->apps                                           //
-                   | ranges::views::transform([](auto app) { return app.base; }) //
+  auto base_apps = state->config->apps->load().get()                                     //
+                   | ranges::views::transform([](const auto &app) { return app->base; }) //
                    | ranges::to<immer::vector<moonlight::App>>();
   auto xml = moonlight::applist(base_apps);
 

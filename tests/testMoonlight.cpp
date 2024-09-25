@@ -26,33 +26,34 @@ TEST_CASE("LocalState load TOML", "[LocalState]") {
   REQUIRE(state.support_hevc);
 
   SECTION("Apps") {
-    REQUIRE_THAT(state.apps, Catch::Matchers::SizeIs(2));
+    auto apps = state.apps->load().get();
+    REQUIRE_THAT(apps, Catch::Matchers::SizeIs(2));
 
-    auto first_app = state.apps[0];
-    REQUIRE_THAT(first_app.base.title, Equals("Firefox"));
-    REQUIRE_THAT(first_app.base.id, Equals("1"));
-    REQUIRE_THAT(first_app.h264_gst_pipeline, Equals("video_source !\ndefault !\nh264_pipeline !\nvideo_sink"));
-    REQUIRE_THAT(first_app.hevc_gst_pipeline, Equals("video_source !\ndefault !\nhevc_pipeline !\nvideo_sink"));
-    REQUIRE_THAT(first_app.av1_gst_pipeline, Equals("video_source !\nparams !\nav1_pipeline !\nvideo_sink"));
-    REQUIRE(first_app.joypad_type == moonlight::control::pkts::CONTROLLER_TYPE::AUTO);
-    REQUIRE(first_app.start_virtual_compositor);
-    REQUIRE(first_app.render_node == "/dev/dri/renderD128");
-    auto first_app_runner = rfl::get<AppDocker>(first_app.runner->serialize().variant());
+    auto first_app = apps[0];
+    REQUIRE_THAT(first_app->base.title, Equals("Firefox"));
+    REQUIRE_THAT(first_app->base.id, Equals("1"));
+    REQUIRE_THAT(first_app->h264_gst_pipeline, Equals("video_source !\ndefault !\nh264_pipeline !\nvideo_sink"));
+    REQUIRE_THAT(first_app->hevc_gst_pipeline, Equals("video_source !\ndefault !\nhevc_pipeline !\nvideo_sink"));
+    REQUIRE_THAT(first_app->av1_gst_pipeline, Equals("video_source !\nparams !\nav1_pipeline !\nvideo_sink"));
+    REQUIRE(first_app->joypad_type == moonlight::control::pkts::CONTROLLER_TYPE::AUTO);
+    REQUIRE(first_app->start_virtual_compositor);
+    REQUIRE(first_app->render_node == "/dev/dri/renderD128");
+    auto first_app_runner = rfl::get<AppDocker>(first_app->runner->serialize().variant());
     REQUIRE_THAT(first_app_runner.image, Equals("ghcr.io/games-on-whales/firefox:master"));
 
-    auto second_app = state.apps[1];
-    REQUIRE_THAT(second_app.base.title, Equals("Test ball"));
-    REQUIRE_THAT(second_app.base.id, Equals("2"));
-    REQUIRE_THAT(second_app.h264_gst_pipeline,
+    auto second_app = apps[1];
+    REQUIRE_THAT(second_app->base.title, Equals("Test ball"));
+    REQUIRE_THAT(second_app->base.id, Equals("2"));
+    REQUIRE_THAT(second_app->h264_gst_pipeline,
                  Equals("override DEFAULT SOURCE !\ndefault !\nh264_pipeline !\nvideo_sink"));
-    REQUIRE_THAT(second_app.hevc_gst_pipeline,
+    REQUIRE_THAT(second_app->hevc_gst_pipeline,
                  Equals("override DEFAULT SOURCE !\ndefault !\nhevc_pipeline !\nvideo_sink"));
-    REQUIRE_THAT(second_app.av1_gst_pipeline,
+    REQUIRE_THAT(second_app->av1_gst_pipeline,
                  Equals("override DEFAULT SOURCE !\nparams !\nav1_pipeline !\nvideo_sink"));
-    REQUIRE(!second_app.start_virtual_compositor);
-    REQUIRE(second_app.joypad_type == moonlight::control::pkts::CONTROLLER_TYPE::XBOX);
-    REQUIRE(second_app.render_node == "/tmp/dead_beef");
-    auto second_app_runner = rfl::get<AppCMD>(second_app.runner->serialize().variant());
+    REQUIRE(!second_app->start_virtual_compositor);
+    REQUIRE(second_app->joypad_type == moonlight::control::pkts::CONTROLLER_TYPE::XBOX);
+    REQUIRE(second_app->render_node == "/tmp/dead_beef");
+    auto second_app_runner = rfl::get<AppCMD>(second_app->runner->serialize().variant());
     REQUIRE_THAT(second_app_runner.run_cmd, Equals("destroy_computer_now"));
   }
 
@@ -333,7 +334,8 @@ TEST_CASE("Pairing moonlight", "[MoonlightProtocol]") {
 TEST_CASE("applist", "[MoonlightProtocol]") {
   auto event_bus = std::make_shared<events::EventBusType>();
   auto cfg = state::load_or_default("config.test.toml", event_bus);
-  auto base_apps = cfg.apps | views::transform([](auto app) { return app.base; }) | to<immer::vector<moonlight::App>>();
+  auto base_apps = cfg.apps->load().get() | views::transform([](auto app) { return app->base; }) |
+                   to<immer::vector<moonlight::App>>();
   auto result = applist(base_apps);
   REQUIRE(xml_to_str(result) == "<?xml version=\"1.0\" encoding=\"utf-8\"?>\n"
                                 "<root status_code=\"200\">"
