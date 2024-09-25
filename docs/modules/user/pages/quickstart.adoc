@@ -330,6 +330,37 @@ fi
 ....
 ====
 
+.I am still not able to see all the Nvidia devices
+[%collapsible]
+====
+You may need to setup your host to automatically load the NVIDIA GPU Kernel modules at boot time.
+
+First, create a new file `nvidia.conf` in the `/etc/modules-load.d/` directory and open it with a text editor.
+
+`nano /etc/modules-load.d/nvidia.conf`
+
+paste the following content to the file:
+```
+nvidia
+nvidia_uvm
+```
+
+For the changes to take effect, update the `initramfs` file with the following command:
+`update-initramfs -u`
+
+Add udev rules to add missing Nvidia devices
+`nano /etc/udev/rules.d/70-nvidia.rules`
+paste the following content to the file:
+
+```
+# create necessary NVIDIA device files in /dev/*
+KERNEL=="nvidia", RUN+="/bin/bash -c '/usr/bin/nvidia-smi -L && /bin/chmod 0666 /dev/nvidia*'"
+KERNEL=="nvidia_uvm", RUN+="/bin/bash -c '/usr/bin/nvidia-modprobe -c0 -u && /bin/chmod 0666 /dev/nvidia-uvm*'"
+```
+
+`reboot` you host and try running `ls -l /dev/nvidia*` again.
+====
+
 --
 WSL2::
 +
@@ -366,7 +397,7 @@ docker run \
 ======
 
 --
-Proxmox LXC + Nvidia (manual)::
+Proxmox LXC::
 +
 --
 
@@ -374,99 +405,9 @@ Proxmox LXC + Nvidia (manual)::
 ====
 At the moment it is only possible to run Wolf inside a privileged LXC.
 ====
-First you need to make sure your Nvidia drivers (version >= 530.30.02) are properly installed and loaded on your host.
+First you need to make sure your GPU drivers are installed and loaded on your PVE host.
 
-`nvidia-smi`
-```
-+-----------------------------------------------------------------------------------------+
-| NVIDIA-SMI 550.107.02             Driver Version: 550.107.02     CUDA Version: 12.4     |
-|-----------------------------------------+------------------------+----------------------+
-| GPU  Name                 Persistence-M | Bus-Id          Disp.A | Volatile Uncorr. ECC |
-| Fan  Temp   Perf          Pwr:Usage/Cap |           Memory-Usage | GPU-Util  Compute M. |
-|                                         |                        |               MIG M. |
-|=========================================+========================+======================|
-|   0  NVIDIA GeForce RTX 4060 Ti     On  |   00000000:01:00.0 Off |                  N/A |
-|  0%   39C    P8              9W /  165W |       2MiB /  16380MiB |      0%      Default |
-|                                         |                        |                  N/A |
-+-----------------------------------------+------------------------+----------------------+
-                                                                                         
-+-----------------------------------------------------------------------------------------+
-| Processes:                                                                              |
-|  GPU   GI   CI        PID   Type   Process name                              GPU Memory |
-|        ID   ID                                                               Usage      |
-|=========================================================================================|
-|   No running processes found                                                            |
-+-----------------------------------------------------------------------------------------+
-```
-
-`ls -l /dev/nvidia*`
-```
-crw-rw-rw- 1 root root 195,   0 Aug 15 10:44 /dev/nvidia0
-crw-rw-rw- 1 root root 195, 255 Aug 15 10:44 /dev/nvidiactl
-crw-rw-rw- 1 root root 195, 254 Aug 15 10:44 /dev/nvidia-modeset
-crw-rw-rw- 1 root root 506,   0 Aug 15 10:44 /dev/nvidia-uvm
-crw-rw-rw- 1 root root 506,   1 Aug 15 10:44 /dev/nvidia-uvm-tools
-
-/dev/nvidia-caps:
-total 0
-cr-------- 1 root root 509, 1 Aug 15 10:44 nvidia-cap1
-cr--r--r-- 1 root root 509, 2 Aug 15 10:44 nvidia-cap2
-```
-
-.I am not able to see all the Nvidia devices
-[%collapsible]
-====
-You may need to setup your host to automatically load the NVIDIA GPU Kernel modules at boot time.
-
-First, create a new file `nvidia.conf` in the `/etc/modules-load.d/` directory and open it with a text editor.
-
-`nano /etc/modules-load.d/nvidia.conf`
-
-paste the following content to the file:
-```
-nvidia
-nvidia_uvm
-```
-
-For the changes to take effect, update the `initramfs` file with the following command:
-`update-initramfs -u`
-
-Add udev rules to add missing Nvidia devices in PVE 8
-`nano /etc/udev/rules.d/70-nvidia.rules`
-paste the following content to the file:
-
-```
-# create necessary NVIDIA device files in /dev/*
-KERNEL=="nvidia", RUN+="/bin/bash -c '/usr/bin/nvidia-smi -L && /bin/chmod 0666 /dev/nvidia*'"
-KERNEL=="nvidia_uvm", RUN+="/bin/bash -c '/usr/bin/nvidia-modprobe -c0 -u && /bin/chmod 0666 /dev/nvidia-uvm*'"
-```
-
-`reboot` you PVE host and try running `ls -l /dev/nvidia*` again.
-====
-
-
-Add the udev rules to the host as explained in the xref:quickstart.adoc#_virtual_devices_support[Virtual devices support] section.
-
-One last final check on the host: we have to make sure that the `nvidia-drm` module has been loaded and that the module is loaded with the flag `modeset=1`.
-
-[source,bash]
-....
-cat /sys/module/nvidia_drm/parameters/modeset
-Y
-....
-
-.I get `N` or the file is not present, how do I set the flag?
-[%collapsible]
-====
-
-The easiest way to make the change persistent is to add `nvidia-drm.modeset=1` to the `GRUB_CMDLINE_LINUX_DEFAULT` line in `/etc/default/grub` ex:
-
-....
-GRUB_CMDLINE_LINUX_DEFAULT="quiet nvidia-drm.modeset=1"
-....
-
-Then `sudo update-grub` and `reboot`.
-====
+Also make sure to add the virtual devices udev rules to the PVE host as explained in the xref:quickstart.adoc#_virtual_devices_support[Virtual devices support] section.
 
 Now, we need to edit LXC config file to passtrough the GPU.
 
@@ -491,7 +432,7 @@ memory: 8192
 net0: name=eth0,bridge=vmbr0,hwaddr=BC:24:11:B7:90:5D,ip=dhcp,type=veth
 onboot: 1
 ostype: debian
-rootfs: local-lvm:vm-118-disk-0,size=4G
+rootfs: local-lvm:vm-118-disk-0,size=128G
 swap: 512
 tags: proxmox-helper-scripts
 lxc.cgroup2.devices.allow: a
@@ -517,8 +458,9 @@ lxc.mount.entry: /dev/ttyACM0       dev/ttyACM0       none bind,optional,create=
 lxc.mount.entry: /dev/ttyACM1       dev/ttyACM1       none bind,optional,create=file
 ```
 
-add these to the bottom of the file:
+add these lines to the bottom of the file:
 
+For Nvidia
 ```
 dev0: /dev/uinput
 dev1: /dev/uhid
@@ -534,12 +476,21 @@ lxc.mount.entry: /dev/input dev/input none bind,optional,create=dir
 lxc.mount.entry: /run/udev mnt/udev none bind,optional,create=dir
 ```
 
+For Intel/AMD
+```
+dev0: /dev/uinput
+dev1: /dev/uhid
+lxc.mount.entry: /dev/dri dev/dri none bind,optional,create=dir
+lxc.mount.entry: /dev/input dev/input none bind,optional,create=dir
+lxc.mount.entry: /run/udev mnt/udev none bind,optional,create=dir
+```
+
 save the file, exit, and restart your LXC.
 
-Our PVE host setup is now complete, you must follow the normal instructions inside your LXC to run Wolf.
-xref:#nvidia-manual-tab[Nvidia Manual]
+Your LXC is good to go, complete the installation based on the GPU following the other tabs.
 
-Remarks:
+[WARNING,caption=Remarks]
+====
 When creating your docker-compose.yml don't forget to modify the volume mapping for `/run/udev` path, as we mounted it on `/mnt/udev` inside our LXC
 ```
 volumes:
@@ -551,6 +502,7 @@ And if you have a multi GPU setup, don't forget to set the below env variable
 environment:
     - WOLF_RENDER_NODE=/dev/dri/renderD12X
 ```
+====
 
 .Which ports are used by Wolf?
 [%collapsible]
