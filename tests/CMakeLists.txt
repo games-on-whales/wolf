@@ -20,7 +20,8 @@ set(SRC_LIST
         testCrypto.cpp
         testGSTPlugin.cpp
         testMoonlight.cpp
-        testRTSP.cpp)
+        testRTSP.cpp
+        testWolfAPI.cpp)
 
 if (UNIX AND NOT APPLE)
     option(TEST_RUST_WAYLAND "Enable custom wayland test" ON)
@@ -76,6 +77,9 @@ if (UNIX AND NOT APPLE)
                 "platforms/linux/inputtino.cpp")
     endif ()
 endif ()
+
+find_package(CURL)
+target_link_libraries(wolftests PUBLIC CURL::libcurl)
 
 list(APPEND SRC_LIST "testSerialization.cpp")
 

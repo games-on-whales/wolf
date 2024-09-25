@@ -13,12 +13,11 @@ void UnixSocketServer::endpoint_Events(const HTTPRequest &req, std::shared_ptr<U
 }
 
 void UnixSocketServer::endpoint_PendingPairRequest(const HTTPRequest &req, std::shared_ptr<UnixSocket> socket) {
-  auto res = PendingPairRequestsResponse{.success = true};
   auto requests = std::vector<PairRequest>();
   for (auto [secret, pair_request] : *(state_->app_state)->pairing_atom->load()) {
     requests.push_back({.pair_secret = secret, .pin = pair_request->client_ip});
   }
-  send_http(socket, 200, rfl::json::write(res));
+  send_http(socket, 200, rfl::json::write(PendingPairRequestsResponse{.requests = requests}));
 }
 
 void UnixSocketServer::endpoint_Pair(const HTTPRequest &req, std::shared_ptr<UnixSocket> socket) {

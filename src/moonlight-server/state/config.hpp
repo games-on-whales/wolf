@@ -111,5 +111,6 @@ static moonlight::control::pkts::CONTROLLER_TYPE get_controller_type(const Contr
   case ControllerType::AUTO:
     return moonlight::control::pkts::CONTROLLER_TYPE::AUTO;
   }
+  return moonlight::control::pkts::CONTROLLER_TYPE::AUTO;
 }
 } // namespace state
