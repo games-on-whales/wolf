@@ -153,10 +153,9 @@ GRUB_CMDLINE_LINUX_DEFAULT="quiet nvidia-drm.modeset=1"
 ....
 
 Then `sudo update-grub` and *reboot*.
-
+====
 
 --
-[[nvidia-manual-tab]]
 Nvidia (Manual)::
 +
 --
@@ -394,9 +393,6 @@ docker run \
 ....
 
 --
-======
-
---
 Proxmox LXC::
 +
 --
@@ -461,7 +457,9 @@ lxc.mount.entry: /dev/ttyACM1       dev/ttyACM1       none bind,optional,create=
 add these lines to the bottom of the file:
 
 For Nvidia
-```
+
+[source]
+----
 dev0: /dev/uinput
 dev1: /dev/uhid
 dev2: /dev/nvidia0
@@ -474,16 +472,18 @@ dev8: /dev/nvidia-caps/nvidia-cap2
 lxc.mount.entry: /dev/dri dev/dri none bind,optional,create=dir
 lxc.mount.entry: /dev/input dev/input none bind,optional,create=dir
 lxc.mount.entry: /run/udev mnt/udev none bind,optional,create=dir
-```
+----
 
 For Intel/AMD
-```
+
+[source]
+----
 dev0: /dev/uinput
 dev1: /dev/uhid
 lxc.mount.entry: /dev/dri dev/dri none bind,optional,create=dir
 lxc.mount.entry: /dev/input dev/input none bind,optional,create=dir
 lxc.mount.entry: /run/udev mnt/udev none bind,optional,create=dir
-```
+----
 
 save the file, exit, and restart your LXC.
 
@@ -492,17 +492,23 @@ Your LXC is good to go, complete the installation based on the GPU following the
 [WARNING,caption=Remarks]
 ====
 When creating your docker-compose.yml don't forget to modify the volume mapping for `/run/udev` path, as we mounted it on `/mnt/udev` inside our LXC
-```
+====
+
+[source]
+----
 volumes:
-    - /mnt/udev:/run/udev:rw 
-```
+    - /mnt/udev:/run/udev:rw
+----
 
 And if you have a multi GPU setup, don't forget to set the below env variable
-```
+
+[source]
+----
 environment:
     - WOLF_RENDER_NODE=/dev/dri/renderD12X
-```
-====
+----
+--
+======
 
 .Which ports are used by Wolf?
 [%collapsible]
