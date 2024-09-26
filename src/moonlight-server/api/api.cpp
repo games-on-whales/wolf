@@ -18,7 +18,10 @@ void start_server(immer::box<state::AppState> app_state) {
   auto server_ptr = std::make_shared<UnixSocketServer>(server);
 
   auto global_ev_handler = app_state->event_bus->register_global_handler([server_ptr](events::EventsVariant ev) {
-    std::visit([server_ptr](auto &&arg) { server_ptr->broadcast_event(arg->event_type, rfl::json::write(*arg)); }, ev);
+    std::visit([server_ptr](auto &&arg) {
+      const auto event_type = rfl::type_name_t<std::decay_t<decltype(*arg)>>().str();
+      server_ptr->broadcast_event(event_type, rfl::json::write(*arg));
+    }, ev);
   });
 
   io_context.run();

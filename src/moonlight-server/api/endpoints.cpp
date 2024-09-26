@@ -91,4 +91,13 @@ void UnixSocketServer::endpoint_RemoveApp(const HTTPRequest &req, std::shared_pt
   }
 }
 
+void UnixSocketServer::endpoint_StreamSessions(const HTTPRequest &req, std::shared_ptr<UnixSocket> socket) {
+  auto res = StreamSessionListResponse{.success = true};
+  auto sessions = state_->app_state->running_sessions->load();
+  for (const auto &session : sessions.get()) {
+    res.sessions.push_back(rfl::Reflector<events::StreamSession>::from(session));
+  }
+  send_http(socket, 200, rfl::json::write(res));
+}
+
 } // namespace wolf::api

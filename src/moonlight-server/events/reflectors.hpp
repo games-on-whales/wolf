@@ -11,7 +11,6 @@ using namespace wolf::config;
 
 template <> struct Reflector<events::PairSignal> {
   struct ReflType {
-    const std::string event_type = "pair";
     std::string client_ip;
     std::string host_ip;
   };
@@ -78,32 +77,29 @@ template <> struct Reflector<events::App> {
 
 template <> struct Reflector<events::StreamSession> {
   struct ReflType {
-    const std::string event_type = "stream_session";
+    std::size_t session_id;
+    std::string client_ip;
 
     moonlight::DisplayMode display_mode;
     int audio_channel_count;
 
-    std::shared_ptr<events::App> app;
+    std::string app_id;
     std::string app_state_folder;
 
     // gcm encryption keys
     std::string aes_key;
     std::string aes_iv;
-
-    // client info
-    std::size_t session_id;
-    std::string ip;
   };
 
   static ReflType from(const events::StreamSession &v) {
-    return {.display_mode = v.display_mode,
+    return {.session_id = v.session_id,
+            .client_ip = v.ip,
+            .display_mode = v.display_mode,
             .audio_channel_count = v.audio_channel_count,
-            .app = v.app,
+            .app_id = v.app->base.id,
             .app_state_folder = v.app_state_folder,
             .aes_key = v.aes_key,
-            .aes_iv = v.aes_iv,
-            .session_id = v.session_id,
-            .ip = v.ip};
+            .aes_iv = v.aes_iv};
   }
 };
 

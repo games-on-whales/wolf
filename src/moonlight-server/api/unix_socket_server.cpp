@@ -35,6 +35,10 @@ UnixSocketServer::UnixSocketServer(boost::asio::io_context &io_context,
        // TODO: json_schema = rfl::json::to_schema<EventsVariant>()
        .handler = [this](auto req, auto socket) { endpoint_Events(req, socket); }});
 
+  /**
+   * Pairing API
+   */
+
   state_->http.add(
       HTTPMethod::GET,
       "/api/v1/pair/pending",
@@ -54,6 +58,10 @@ UnixSocketServer::UnixSocketServer(boost::asio::io_context &io_context,
                                                 {500, {.json_schema = rfl::json::to_schema<GenericErrorResponse>()}}},
                        .handler = [this](auto req, auto socket) { endpoint_Pair(req, socket); },
                    });
+
+  /**
+   * Apps API
+   */
 
   state_->http.add(HTTPMethod::GET,
                    "/api/v1/apps",
@@ -81,8 +89,26 @@ UnixSocketServer::UnixSocketServer(boost::asio::io_context &io_context,
                    {.summary = "Remove an app",
                     .request_description = APIDescription{.json_schema = rfl::json::to_schema<AppDeleteRequest>()},
                     .response_description = {{200, {.json_schema = rfl::json::to_schema<GenericSuccessResponse>()}},
-                                             {404, {.json_schema = rfl::json::to_schema<GenericErrorResponse>()}}},
+                                             {500, {.json_schema = rfl::json::to_schema<GenericErrorResponse>()}}},
                     .handler = [this](auto req, auto socket) { endpoint_RemoveApp(req, socket); }});
+
+  /**
+   * Stream session API
+   */
+
+  state_->http.add(
+      HTTPMethod::GET,
+      "/api/v1/sessions",
+      {
+          .summary = "Get all stream sessions",
+          .description = "This endpoint returns a list of all active stream sessions.",
+          .response_description = {{200, {.json_schema = rfl::json::to_schema<StreamSessionListResponse>()}}},
+          .handler = [this](auto req, auto socket) { endpoint_StreamSessions(req, socket); },
+      });
+
+  /**
+   * OpenAPI schema
+   */
 
   state_->http.add(HTTPMethod::GET,
                    "/api/v1/openapi-schema",

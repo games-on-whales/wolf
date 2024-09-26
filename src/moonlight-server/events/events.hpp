@@ -25,21 +25,18 @@
 namespace wolf::core::events {
 
 struct PairSignal {
-  const std::string event_type = "pair";
   std::string client_ip;
   std::string host_ip;
   std::shared_ptr<boost::promise<std::string>> user_pin;
 };
 
 struct PlugDeviceEvent {
-  const std::string event_type = "plug_device";
   std::size_t session_id;
   std::vector<std::map<std::string, std::string>> udev_events;
   std::vector<std::pair<std::string, std::vector<std::string>>> udev_hw_db_entries;
 };
 
 struct UnplugDeviceEvent {
-  const std::string event_type = "unplug_device";
   std::size_t session_id;
   std::vector<std::map<std::string, std::string>> udev_events;
   std::vector<std::pair<std::string, std::vector<std::string>>> udev_hw_db_entries;
@@ -95,8 +92,6 @@ enum class ColorSpace : int {
  * A VideoSession is created after the param exchange over RTSP
  */
 struct VideoSession {
-  const std::string event_type = "video_session";
-
   wolf::core::virtual_display::DisplayMode display_mode;
   std::string gst_pipeline;
 
@@ -120,8 +115,6 @@ struct VideoSession {
 };
 
 struct AudioSession {
-  const std::string event_type = "audio_session";
-
   std::string gst_pipeline;
 
   // A unique ID that identifies this session
@@ -139,35 +132,28 @@ struct AudioSession {
 };
 
 struct IDRRequestEvent {
-  const std::string event_type = "idr_request";
-
   // A unique ID that identifies this session
   std::size_t session_id;
 };
 
 struct PauseStreamEvent {
-  const std::string event_type = "pause_stream";
   std::size_t session_id;
 };
 
 struct ResumeStreamEvent {
-  const std::string event_type = "resume_stream";
   std::size_t session_id;
 };
 
 struct StopStreamEvent {
-  const std::string event_type = "stop_stream";
   std::size_t session_id;
 };
 
 struct RTPVideoPingEvent {
-  const std::string event_type = "rtp_video_ping";
   std::string client_ip;
   unsigned short client_port;
 };
 
 struct RTPAudioPingEvent {
-  const std::string event_type = "rtp_audio_ping";
   std::string client_ip;
   unsigned short client_port;
 };
@@ -218,7 +204,6 @@ using EventsVariant = std::variant<immer::box<PlugDeviceEvent>,
  * can start working their magic.
  */
 struct StreamSession {
-  const std::string event_type = "stream_session";
   moonlight::DisplayMode display_mode;
   int audio_channel_count;
 

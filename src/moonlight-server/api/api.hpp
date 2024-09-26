@@ -39,6 +39,11 @@ struct AppDeleteRequest {
   std::string id;
 };
 
+struct StreamSessionListResponse {
+  bool success = true;
+  std::vector<rfl::Reflector<wolf::core::events::StreamSession>::ReflType> sessions;
+};
+
 struct UnixSocket {
   boost::asio::local::stream_protocol::socket socket;
   bool is_alive = true;
@@ -61,6 +66,8 @@ private:
   void endpoint_Apps(const HTTPRequest &req, std::shared_ptr<UnixSocket> socket);
   void endpoint_AddApp(const HTTPRequest &req, std::shared_ptr<UnixSocket> socket);
   void endpoint_RemoveApp(const HTTPRequest &req, std::shared_ptr<UnixSocket> socket);
+  void endpoint_StreamSessions(const HTTPRequest &req, std::shared_ptr<UnixSocket> socket);
+
 
   void sse_broadcast(const std::string &payload);
   void sse_keepalive(const boost::system::error_code &e);
