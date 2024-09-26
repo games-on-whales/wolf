@@ -6,8 +6,12 @@ using namespace wolf::core;
 
 constexpr auto SSE_KEEPALIVE_INTERVAL = std::chrono::seconds(15);
 
-std::string to_str(boost::asio::streambuf &streambuf) {
-  return {buffers_begin(streambuf.data()), buffers_end(streambuf.data())};
+std::string to_str(boost::asio::streambuf &streambuf, std::size_t start, std::size_t end) {
+  return {buffers_begin(streambuf.data()) + start, buffers_begin(streambuf.data()) + start + end};
+}
+
+std::string to_str(boost::asio::streambuf &streambuf, std::size_t end) {
+  return to_str(streambuf, 0, end);
 }
 
 UnixSocketServer::UnixSocketServer(boost::asio::io_context &io_context,
@@ -167,7 +171,8 @@ void UnixSocketServer::start_connection(std::shared_ptr<UnixSocket> socket) {
         }
         HTTPRequest req = {};
         std::string method;
-        std::istream is(request_buf.get());
+        auto headers = to_str(*request_buf, bytes_transferred);
+        std::istringstream is(headers);
         SimpleWeb::RequestMessage::parse(is, method, req.path, req.query_string, req.http_version, req.headers);
         if (method == "GET")
           req.method = HTTPMethod::GET;
@@ -190,23 +195,30 @@ void UnixSocketServer::start_connection(std::shared_ptr<UnixSocket> socket) {
         if (req.headers.contains("Content-Length")) {
           auto content_length = std::stoul(req.headers.find("Content-Length")->second);
           std::size_t num_additional_bytes = request_buf->size() - bytes_transferred;
-          if (content_length > num_additional_bytes) {
+          if (content_length > request_buf->max_size()) {
+            send_http(socket, 413, "Payload Too Large");
+            return;
+          } else if (content_length > num_additional_bytes) {
             boost::asio::async_read(socket->socket,
                                     *request_buf,
-                                    boost::asio::transfer_exactly(content_length - bytes_transferred),
-                                    [this, socket, request_buf, req = std::make_unique<HTTPRequest>(req)](
-                                        const boost::system::error_code &ec,
-                                        std::size_t /*bytes_transferred*/) {
+                                    boost::asio::transfer_exactly(content_length - num_additional_bytes),
+                                    [this,
+                                     content_length,
+                                     bytes_transferred,
+                                     socket,
+                                     request_buf,
+                                     req = std::make_unique<HTTPRequest>(req)](const boost::system::error_code &ec,
+                                                                               std::size_t /*bytes_transferred*/) {
                                       if (ec) {
                                         logs::log(logs::error, "[API] Error reading request body: {}", ec.message());
                                         close(*socket);
                                         return;
                                       }
-                                      req->body = to_str(*request_buf);
+                                      req->body = to_str(*request_buf, bytes_transferred, content_length);
                                       handle_request(*req, socket);
                                     });
           } else {
-            req.body = to_str(*request_buf);
+            req.body = to_str(*request_buf, bytes_transferred, content_length);
             handle_request(req, socket);
           }
         } else {

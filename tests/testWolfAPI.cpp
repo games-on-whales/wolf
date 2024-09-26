@@ -79,7 +79,7 @@ req(CURL *handle,
   }
 }
 
-TEST_CASE("Test pair APIs", "[API]") {
+TEST_CASE("Pair APIs", "[API]") {
   auto event_bus = std::make_shared<events::EventBusType>();
   auto config = immer::box<state::Config>(state::load_or_default("config.test.toml", event_bus));
   auto app_state = immer::box<state::AppState>(state::AppState{
@@ -94,7 +94,6 @@ TEST_CASE("Test pair APIs", "[API]") {
   server_thread.detach();
   std::this_thread::sleep_for(std::chrono::milliseconds(42)); // Wait for the server to start
 
-  curl_global_init(CURL_GLOBAL_ALL);
   auto curl = curl_ptr(curl_easy_init(), ::curl_easy_cleanup);
 
   curl_easy_setopt(curl.get(), CURLOPT_UNIX_SOCKET_PATH, "/tmp/wolf.sock");
@@ -126,4 +125,76 @@ TEST_CASE("Test pair APIs", "[API]") {
   REQUIRE(response);
   REQUIRE_THAT(response->second, Equals("{\"success\":true}"));
   REQUIRE(pair_promise->get_future().get() == "1234");
+}
+
+TEST_CASE("APPs APIs", "[API]") {
+  auto event_bus = std::make_shared<events::EventBusType>();
+  auto config = immer::box<state::Config>(state::load_or_default("config.test.toml", event_bus));
+  auto app_state = immer::box<state::AppState>(state::AppState{
+      .config = config,
+      .pairing_cache = std::make_shared<immer::atom<immer::map<std::string, state::PairCache>>>(),
+      .pairing_atom = std::make_shared<immer::atom<immer::map<std::string, immer::box<events::PairSignal>>>>(),
+      .event_bus = event_bus,
+      .running_sessions = std::make_shared<immer::atom<immer::vector<events::StreamSession>>>()});
+
+  // Start the server
+  std::thread server_thread([app_state]() { wolf::api::start_server(app_state); });
+  server_thread.detach();
+  std::this_thread::sleep_for(std::chrono::milliseconds(42)); // Wait for the server to start
+
+  auto curl = curl_ptr(curl_easy_init(), ::curl_easy_cleanup);
+
+  curl_easy_setopt(curl.get(), CURLOPT_UNIX_SOCKET_PATH, "/tmp/wolf.sock");
+  curl_easy_setopt(curl.get(), CURLOPT_HTTP_VERSION, CURL_HTTP_VERSION_1_0);
+
+  // Test that the initial list of apps matches what's in the test config file
+  auto response = req(curl.get(), HTTPMethod::GET, "http://localhost/api/v1/apps");
+  REQUIRE(response);
+  auto apps = rfl::json::read<AppListResponse>(response->second).value();
+  REQUIRE(apps.success);
+  REQUIRE(apps.apps.size() == 2);
+  REQUIRE(apps.apps[0].title == "Firefox");
+  REQUIRE(apps.apps[1].title == "Test ball");
+
+  // Test that we can add an app
+  auto app = rfl::Reflector<wolf::core::events::App>::ReflType{
+      .title = "Test app",
+      .id = "test",
+      .support_hdr = false,
+      .h264_gst_pipeline = "h264",
+      .hevc_gst_pipeline = "hevc",
+      .av1_gst_pipeline = "av1",
+      .render_node = "render",
+      .opus_gst_pipeline = "opus",
+      .start_virtual_compositor = false,
+      .runner = wolf::config::AppDocker{.name = "test",
+                                        .image = "test",
+                                        .mounts = {"/tmp:/tmp"},
+                                        .env = {"LOG_LEVEL=1234"},
+                                        .devices = {"/dev/input:/dev/input"},
+                                        .ports = {"8080:8080"}}};
+  response = req(curl.get(), HTTPMethod::POST, "http://localhost/api/v1/apps/add", rfl::json::write(app));
+  REQUIRE(response);
+  REQUIRE_THAT(response->second, Equals("{\"success\":true}"));
+
+  // Test that the new app is in the list
+  response = req(curl.get(), HTTPMethod::GET, "http://localhost/api/v1/apps");
+  REQUIRE(response);
+  auto apps2 = rfl::json::read<AppListResponse>(response->second).value();
+  REQUIRE(apps2.success);
+  REQUIRE(apps2.apps.size() == 3);
+  REQUIRE(apps2.apps[2].title == "Test app");
+  REQUIRE(app_state->config->apps->load()->at(2)->base.title == "Test app");
+
+  // Test that we can remove an app
+  auto app_delete = AppDeleteRequest{.id = "test"};
+  response = req(curl.get(), HTTPMethod::POST, "http://localhost/api/v1/apps/delete", rfl::json::write(app_delete));
+  REQUIRE(response);
+  REQUIRE_THAT(response->second, Equals("{\"success\":true}"));
+
+  response = req(curl.get(), HTTPMethod::GET, "http://localhost/api/v1/apps");
+  REQUIRE(response);
+  auto apps3 = rfl::json::read<AppListResponse>(response->second).value();
+  REQUIRE(apps3.success);
+  REQUIRE(apps3.apps.size() == 2);
 }
