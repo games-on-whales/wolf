@@ -77,29 +77,25 @@ template <> struct Reflector<events::App> {
 
 template <> struct Reflector<events::StreamSession> {
   struct ReflType {
-    std::size_t session_id;
+    std::string app_id;
+    std::string client_id;
     std::string client_ip;
 
-    moonlight::DisplayMode display_mode;
+    int video_width;
+    int video_height;
+    int video_refresh_rate;
+
     int audio_channel_count;
-
-    std::string app_id;
-    std::string app_state_folder;
-
-    // gcm encryption keys
-    std::string aes_key;
-    std::string aes_iv;
   };
 
   static ReflType from(const events::StreamSession &v) {
-    return {.session_id = v.session_id,
+    return {.app_id = v.app->base.id,
+            .client_id = std::to_string(v.session_id),
             .client_ip = v.ip,
-            .display_mode = v.display_mode,
-            .audio_channel_count = v.audio_channel_count,
-            .app_id = v.app->base.id,
-            .app_state_folder = v.app_state_folder,
-            .aes_key = v.aes_key,
-            .aes_iv = v.aes_iv};
+            .video_width = v.display_mode.width,
+            .video_height = v.display_mode.height,
+            .video_refresh_rate = v.display_mode.refreshRate,
+            .audio_channel_count = v.audio_channel_count};
   }
 };
 

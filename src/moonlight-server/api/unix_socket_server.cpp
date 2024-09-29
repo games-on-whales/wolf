@@ -59,6 +59,15 @@ UnixSocketServer::UnixSocketServer(boost::asio::io_context &io_context,
                        .handler = [this](auto req, auto socket) { endpoint_Pair(req, socket); },
                    });
 
+  state_->http.add(HTTPMethod::GET,
+                   "/api/v1/clients",
+                   {
+                       .summary = "Get paired clients",
+                       .description = "This endpoint returns a list of all paired clients.",
+                       .response_description = {{200, {.json_schema = rfl::json::to_schema<PairedClientsResponse>()}}},
+                       .handler = [this](auto req, auto socket) { endpoint_PairedClients(req, socket); },
+                   });
+
   /**
    * Apps API
    */
@@ -104,6 +113,41 @@ UnixSocketServer::UnixSocketServer(boost::asio::io_context &io_context,
           .description = "This endpoint returns a list of all active stream sessions.",
           .response_description = {{200, {.json_schema = rfl::json::to_schema<StreamSessionListResponse>()}}},
           .handler = [this](auto req, auto socket) { endpoint_StreamSessions(req, socket); },
+      });
+
+  state_->http.add(
+      HTTPMethod::POST,
+      "/api/v1/sessions/add",
+      {
+          .summary = "Create a new stream session",
+          .request_description =
+              APIDescription{
+                  .json_schema = rfl::json::to_schema<rfl::Reflector<wolf::core::events::StreamSession>::ReflType>()},
+          .response_description = {{200, {.json_schema = rfl::json::to_schema<GenericSuccessResponse>()}},
+                                   {500, {.json_schema = rfl::json::to_schema<GenericErrorResponse>()}}},
+          .handler = [this](auto req, auto socket) { endpoint_StreamSessionAdd(req, socket); },
+      });
+
+  state_->http.add(
+      HTTPMethod::POST,
+      "/api/v1/sessions/pause",
+      {
+          .summary = "Pause a stream session",
+          .request_description = APIDescription{.json_schema = rfl::json::to_schema<StreamSessionPauseRequest>()},
+          .response_description = {{200, {.json_schema = rfl::json::to_schema<GenericSuccessResponse>()}},
+                                   {500, {.json_schema = rfl::json::to_schema<GenericErrorResponse>()}}},
+          .handler = [this](auto req, auto socket) { endpoint_StreamSessionPause(req, socket); },
+      });
+
+  state_->http.add(
+      HTTPMethod::POST,
+      "/api/v1/sessions/stop",
+      {
+          .summary = "Stop a stream session",
+          .request_description = APIDescription{.json_schema = rfl::json::to_schema<StreamSessionStopRequest>()},
+          .response_description = {{200, {.json_schema = rfl::json::to_schema<GenericSuccessResponse>()}},
+                                   {500, {.json_schema = rfl::json::to_schema<GenericErrorResponse>()}}},
+          .handler = [this](auto req, auto socket) { endpoint_StreamSessionStop(req, socket); },
       });
 
   /**

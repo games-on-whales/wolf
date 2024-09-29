@@ -62,18 +62,37 @@ inline std::optional<PairedClient> get_client_via_ssl(const Config &cfg, const s
   return get_client_via_ssl(cfg, x509::cert_from_string(client_cert));
 }
 
+inline std::size_t get_client_id(const PairedClient &current_client) {
+  return std::hash<std::string>{}(current_client.client_cert);
+}
+
+inline std::optional<PairedClient> get_client_by_id(const Config &cfg, std::size_t client_id) {
+  auto paired_clients = cfg.paired_clients->load();
+  auto search_result =
+      std::find_if(paired_clients->begin(), paired_clients->end(), [client_id](const PairedClient &pair_client) {
+        return get_client_id(pair_client) == client_id;
+      });
+  if (search_result != paired_clients->end()) {
+    return *search_result;
+  } else {
+    return std::nullopt;
+  }
+}
+
 /**
- * Return the app with the given app_id, throws an exception if not found
+ * Return the app with the given app_id (if it exists)
  */
-inline immer::box<events::App> get_app_by_id(const Config &cfg, std::string_view app_id) {
+inline std::optional<immer::box<events::App>> get_app_by_id(const Config &cfg, std::string_view app_id) {
   auto apps = cfg.apps->load();
   auto search_result =
-      std::find_if(apps->begin(), apps->end(), [&app_id](const events::App &app) { return app.base.id == app_id; });
+      std::find_if(apps->begin(), apps->end(), [&app_id](const events::App &app) {
+        return app.base.id == app_id;
+      });
 
   if (search_result != apps->end())
-    return *search_result;
+    return {*search_result};
   else
-    throw std::runtime_error(fmt::format("Unable to find app with id: {}", app_id));
+    return std::nullopt;
 }
 
 inline bool file_exist(const std::string &filename) {

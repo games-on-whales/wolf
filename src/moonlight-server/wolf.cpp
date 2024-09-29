@@ -156,7 +156,7 @@ auto setup_sessions_handlers(const immer::box<state::AppState> &app_state,
       [&app_state, wayland_sessions, plugged_devices_queue](const immer::box<events::StopStreamEvent> &ev) {
         // Remove session from app state so that HTTP/S applist gets updated
         app_state->running_sessions->update([&ev](const immer::vector<events::StreamSession> &ses_v) {
-          return remove_session(ses_v, {.session_id = ev->session_id});
+          return state::remove_session(ses_v, {.session_id = ev->session_id});
         });
 
         // On termination cleanup the WaylandSession; since this is the only reference to it

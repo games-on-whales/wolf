@@ -113,7 +113,7 @@ void run_control(int port,
 
   auto stop_ev = event_bus->register_handler<immer::box<StopStreamEvent>>(
       [&connected_clients, &running_sessions](const immer::box<StopStreamEvent> &ev) {
-        auto client_session = get_session_by_id(running_sessions->load(), ev->session_id);
+        auto client_session = state::get_session_by_id(running_sessions->load(), ev->session_id);
         auto terminate_pkt = ControlTerminatePacket{};
         std::string plaintext = {(char *)&terminate_pkt, sizeof(terminate_pkt)};
         encrypt_and_send(plaintext, client_session->aes_key, connected_clients, ev->session_id);
@@ -122,7 +122,7 @@ void run_control(int port,
   while (true) {
     if (enet_host_service(host.get(), &event, timeout.count()) > 0) {
       auto [client_ip, client_port] = get_ip((sockaddr *)&event.peer->address.address);
-      auto client_session = get_session_by_ip(running_sessions->load(), client_ip);
+      auto client_session = state::get_session_by_ip(running_sessions->load(), client_ip);
       if (client_session) {
         switch (event.type) {
         case ENET_EVENT_TYPE_NONE:

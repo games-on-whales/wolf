@@ -23,10 +23,6 @@ namespace endpoints {
 using namespace control;
 using namespace wolf::core;
 
-static std::size_t get_client_id(const state::PairedClient &current_client) {
-  return std::hash<std::string>{}(current_client.client_cert);
-}
-
 template <class T> void server_error(const std::shared_ptr<typename SimpleWeb::Server<T>::Response> &response) {
   XML xml;
   xml.put("root.<xmlattr>.status_code", 400);
@@ -61,7 +57,7 @@ void serverinfo(const std::shared_ptr<typename SimpleWeb::Server<T>::Response> &
   auto host = state->host;
   bool is_https = std::is_same_v<SimpleWeb::HTTPS, T>;
 
-  auto session = get_session_by_ip(state->running_sessions->load(), get_client_ip<T>(request));
+  auto session = state::get_session_by_ip(state->running_sessions->load(), get_client_ip<T>(request));
   bool is_busy = session.has_value();
   int app_id = session.has_value() ? std::stoi(session->app->base.id) : 0;
 
@@ -235,11 +231,11 @@ void applist(const std::shared_ptr<typename SimpleWeb::Server<SimpleWeb::HTTPS>:
   send_xml<SimpleWeb::HTTPS>(response, SimpleWeb::StatusCode::success_ok, xml);
 }
 
-events::StreamSession create_run_session(const SimpleWeb::CaseInsensitiveMultimap &headers,
-                                         const std::string &client_ip,
-                                         const state::PairedClient &current_client,
-                                         immer::box<state::AppState> state,
-                                         const events::App &run_app) {
+auto create_run_session(const SimpleWeb::CaseInsensitiveMultimap &headers,
+                        const std::string &client_ip,
+                        const state::PairedClient &current_client,
+                        immer::box<state::AppState> state,
+                        const events::App &run_app) {
   auto display_mode_str = utils::split(get_header(headers, "mode").value_or("1920x1080x60"), 'x');
   moonlight::DisplayMode display_mode = {std::stoi(display_mode_str[0].data()),
                                          std::stoi(display_mode_str[1].data()),
@@ -250,44 +246,27 @@ events::StreamSession create_run_session(const SimpleWeb::CaseInsensitiveMultima
   auto surround_info = std::stoi(get_header(headers, "surroundAudioInfo").value_or("196610"));
   int channelCount = surround_info & (0xffff /* last 16 bits */);
 
-  std::string host_state_folder = utils::get_env("HOST_APPS_STATE_FOLDER", "/etc/wolf");
-  auto full_path = std::filesystem::path(host_state_folder) / current_client.app_state_folder / run_app.base.title;
-  logs::log(logs::debug, "Host app state folder: {}, creating paths", full_path.string());
-  std::filesystem::create_directories(full_path);
+  auto base_session = create_stream_session(state, run_app, current_client, display_mode, channelCount);
 
-  auto video_stream_port = get_next_available_port(state->running_sessions->load(), true);
-  auto audio_stream_port = get_next_available_port(state->running_sessions->load(), false);
-
-  return events::StreamSession{.display_mode = display_mode,
-                               .audio_channel_count = channelCount,
-                               .event_bus = state->event_bus,
-                               .app = std::make_shared<events::App>(run_app),
-                               .app_state_folder = full_path.string(),
-
-                               // gcm encryption keys
-                               .aes_key = get_header(headers, "rikey").value(),
-                               .aes_iv = get_header(headers, "rikeyid").value(),
-
-                               // client info
-                               .session_id = get_client_id(current_client),
-                               .ip = client_ip,
-                               .video_stream_port = video_stream_port,
-                               .audio_stream_port = audio_stream_port};
+  base_session->ip = client_ip;
+  base_session->aes_key = get_header(headers, "rikey").value();
+  base_session->aes_iv = get_header(headers, "rikeyid").value();
+  return std::move(base_session);
 }
 
-void start_rtp_ping(const immer::box<events::StreamSession> &session) {
+void start_rtp_ping(const events::StreamSession &session) {
 
   // Video RTP Ping
-  rtp::wait_for_ping(session->video_stream_port,
-                     [ev_bus = session->event_bus](unsigned short client_port, const std::string &client_ip) {
+  rtp::wait_for_ping(session.video_stream_port,
+                     [ev_bus = session.event_bus](unsigned short client_port, const std::string &client_ip) {
                        logs::log(logs::trace, "[PING] video from {}:{}", client_ip, client_port);
                        auto ev = events::RTPVideoPingEvent{.client_ip = client_ip, .client_port = client_port};
                        ev_bus->fire_event(immer::box<events::RTPVideoPingEvent>(ev));
                      });
 
   // Audio RTP Ping
-  rtp::wait_for_ping(session->audio_stream_port,
-                     [ev_bus = session->event_bus](unsigned short client_port, const std::string &client_ip) {
+  rtp::wait_for_ping(session.audio_stream_port,
+                     [ev_bus = session.event_bus](unsigned short client_port, const std::string &client_ip) {
                        logs::log(logs::trace, "[PING] audio from {}:{}", client_ip, client_port);
                        auto ev = events::RTPAudioPingEvent{.client_ip = client_ip, .client_port = client_port};
                        ev_bus->fire_event(immer::box<events::RTPAudioPingEvent>(ev));
@@ -302,13 +281,18 @@ void launch(const std::shared_ptr<typename SimpleWeb::Server<SimpleWeb::HTTPS>::
 
   SimpleWeb::CaseInsensitiveMultimap headers = request->parse_query_string();
   auto app = state::get_app_by_id(state->config, get_header(headers, "appid").value());
+  if (!app) {
+    logs::log(logs::warning, "[HTTP] Requested wrong app_id: not found");
+    server_error<SimpleWeb::HTTPS>(response);
+    return;
+  }
   auto client_ip = get_client_ip<SimpleWeb::HTTPS>(request);
-  auto new_session = create_run_session(request->parse_query_string(), client_ip, current_client, state, app);
-  state->event_bus->fire_event(immer::box<events::StreamSession>(new_session));
+  auto new_session = create_run_session(request->parse_query_string(), client_ip, current_client, state, app.value());
+  state->event_bus->fire_event(immer::box<events::StreamSession>(*new_session));
   state->running_sessions->update(
-      [&new_session](const immer::vector<events::StreamSession> &ses_v) { return ses_v.push_back(new_session); });
+      [new_session](const immer::vector<events::StreamSession> &ses_v) { return ses_v.push_back(*new_session); });
 
-  start_rtp_ping(new_session);
+  start_rtp_ping(*new_session);
 
   auto xml =
       moonlight::launch_success(get_host_ip<SimpleWeb::HTTPS>(request, state), std::to_string(state::RTSP_SETUP_PORT));
@@ -322,23 +306,23 @@ void resume(const std::shared_ptr<typename SimpleWeb::Server<SimpleWeb::HTTPS>::
   log_req<SimpleWeb::HTTPS>(request);
 
   auto client_ip = get_client_ip<SimpleWeb::HTTPS>(request);
-  auto old_session = get_session_by_ip(state->running_sessions->load(), client_ip);
+  auto old_session = state::get_session_by_client(state->running_sessions->load(), current_client);
   if (old_session) {
     auto new_session =
         create_run_session(request->parse_query_string(), client_ip, current_client, state, *old_session->app);
     // Carry over the old session display handle
-    new_session.wayland_display = std::move(old_session->wayland_display);
+    new_session->wayland_display = std::move(old_session->wayland_display);
     // Carry over the old session devices, they'll be already plugged into the container
-    new_session.mouse = std::move(old_session->mouse);
-    new_session.keyboard = std::move(old_session->keyboard);
-    new_session.joypads = std::move(old_session->joypads);
-    new_session.pen_tablet = std::move(old_session->pen_tablet);
-    new_session.touch_screen = std::move(old_session->touch_screen);
+    new_session->mouse = std::move(old_session->mouse);
+    new_session->keyboard = std::move(old_session->keyboard);
+    new_session->joypads = std::move(old_session->joypads);
+    new_session->pen_tablet = std::move(old_session->pen_tablet);
+    new_session->touch_screen = std::move(old_session->touch_screen);
 
-    start_rtp_ping(new_session);
+    start_rtp_ping(*new_session);
 
-    state->running_sessions->update([&old_session, &new_session](const immer::vector<events::StreamSession> ses_v) {
-      return remove_session(ses_v, old_session.value()).push_back(new_session);
+    state->running_sessions->update([&old_session, new_session](const immer::vector<events::StreamSession> ses_v) {
+      return state::remove_session(ses_v, old_session.value()).push_back(*new_session);
     });
   } else {
     logs::log(logs::warning, "[HTTPS] Received resume event from an unregistered session, ip: {}", client_ip);
@@ -358,16 +342,16 @@ void cancel(const std::shared_ptr<typename SimpleWeb::Server<SimpleWeb::HTTPS>::
             const immer::box<state::AppState> &state) {
   log_req<SimpleWeb::HTTPS>(request);
 
-  auto client_ip = get_client_ip<SimpleWeb::HTTPS>(request);
-  auto client_session = get_session_by_ip(state->running_sessions->load(), client_ip);
+  auto client_session = state::get_session_by_client(state->running_sessions->load(), current_client);
   if (client_session) {
     state->event_bus->fire_event(
         immer::box<events::StopStreamEvent>(events::StopStreamEvent{.session_id = client_session->session_id}));
 
     state->running_sessions->update([&client_session](const immer::vector<events::StreamSession> &ses_v) {
-      return remove_session(ses_v, client_session.value());
+      return state::remove_session(ses_v, client_session.value());
     });
   } else {
+    auto client_ip = get_client_ip<SimpleWeb::HTTPS>(request);
     logs::log(logs::warning, "[HTTPS] Received resume event from an unregistered session, ip: {}", client_ip);
   }
 

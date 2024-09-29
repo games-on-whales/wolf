@@ -30,6 +30,16 @@ struct PendingPairRequestsResponse {
   std::vector<PairRequest> requests;
 };
 
+struct PairedClient {
+  std::size_t client_id;
+  std::string app_state_folder;
+};
+
+struct PairedClientsResponse {
+  bool success = true;
+  std::vector<PairedClient> clients;
+};
+
 struct AppListResponse {
   bool success = true;
   std::vector<rfl::Reflector<wolf::core::events::App>::ReflType> apps;
@@ -42,6 +52,14 @@ struct AppDeleteRequest {
 struct StreamSessionListResponse {
   bool success = true;
   std::vector<rfl::Reflector<wolf::core::events::StreamSession>::ReflType> sessions;
+};
+
+struct StreamSessionPauseRequest {
+  std::string session_id;
+};
+
+struct StreamSessionStopRequest {
+  std::string session_id;
 };
 
 struct UnixSocket {
@@ -61,13 +79,19 @@ public:
 
 private:
   void endpoint_Events(const HTTPRequest &req, std::shared_ptr<UnixSocket> socket);
+
   void endpoint_PendingPairRequest(const HTTPRequest &req, std::shared_ptr<UnixSocket> socket);
   void endpoint_Pair(const HTTPRequest &req, std::shared_ptr<UnixSocket> socket);
+  void endpoint_PairedClients(const HTTPRequest &req, std::shared_ptr<UnixSocket> socket);
+
   void endpoint_Apps(const HTTPRequest &req, std::shared_ptr<UnixSocket> socket);
   void endpoint_AddApp(const HTTPRequest &req, std::shared_ptr<UnixSocket> socket);
   void endpoint_RemoveApp(const HTTPRequest &req, std::shared_ptr<UnixSocket> socket);
-  void endpoint_StreamSessions(const HTTPRequest &req, std::shared_ptr<UnixSocket> socket);
 
+  void endpoint_StreamSessions(const HTTPRequest &req, std::shared_ptr<UnixSocket> socket);
+  void endpoint_StreamSessionAdd(const HTTPRequest &req, std::shared_ptr<UnixSocket> socket);
+  void endpoint_StreamSessionPause(const HTTPRequest &req, std::shared_ptr<UnixSocket> socket);
+  void endpoint_StreamSessionStop(const HTTPRequest &req, std::shared_ptr<UnixSocket> socket);
 
   void sse_broadcast(const std::string &payload);
   void sse_keepalive(const boost::system::error_code &e);

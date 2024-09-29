@@ -104,6 +104,13 @@ TEST_CASE("Pair APIs", "[API]") {
   REQUIRE(response);
   REQUIRE_THAT(response->second, Equals("{\"success\":true,\"requests\":[]}"));
 
+  // Checkout the list of paired clients (there will be one in the test config file)
+  response = req(curl.get(), HTTPMethod::GET, "http://localhost/api/v1/clients");
+  REQUIRE(response);
+  REQUIRE_THAT(response->second,
+               Equals("{\"success\":true,\"clients\":[{\"client_id\":10594003729173467913,\"app_state_folder\":\"some/"
+                      "folder\"}]}"));
+
   auto pair_promise = std::make_shared<boost::promise<std::string>>();
 
   // Simulate a Moonlight pairing request
@@ -198,6 +205,63 @@ TEST_CASE("APPs APIs", "[API]") {
   auto apps3 = rfl::json::read<AppListResponse>(response->second).value();
   REQUIRE(apps3.success);
   REQUIRE(apps3.apps.size() == 2);
+}
+
+TEST_CASE("Sessions APIs", "[API]") {
+  auto event_bus = std::make_shared<events::EventBusType>();
+  auto config = immer::box<state::Config>(state::load_or_default("config.test.toml", event_bus));
+  auto app_state = immer::box<state::AppState>(state::AppState{
+      .config = config,
+      .pairing_cache = std::make_shared<immer::atom<immer::map<std::string, state::PairCache>>>(),
+      .pairing_atom = std::make_shared<immer::atom<immer::map<std::string, immer::box<events::PairSignal>>>>(),
+      .event_bus = event_bus,
+      .running_sessions = std::make_shared<immer::atom<immer::vector<events::StreamSession>>>()});
+
+  // Start the server
+  std::thread server_thread([app_state]() { wolf::api::start_server(app_state); });
+  server_thread.detach();
+  std::this_thread::sleep_for(std::chrono::milliseconds(42)); // Wait for the server to start
+
+  auto curl = curl_ptr(curl_easy_init(), ::curl_easy_cleanup);
+
+  curl_easy_setopt(curl.get(), CURLOPT_UNIX_SOCKET_PATH, "/tmp/wolf.sock");
+  curl_easy_setopt(curl.get(), CURLOPT_HTTP_VERSION, CURL_HTTP_VERSION_1_0);
+
+  // Test that the initial list of sessions is empty
+  auto response = req(curl.get(), HTTPMethod::GET, "http://localhost/api/v1/sessions");
+  REQUIRE(response);
+  auto sessions = rfl::json::read<StreamSessionListResponse>(response->second).value();
+  REQUIRE(sessions.success);
+  REQUIRE(sessions.sessions.size() == 0);
+
+  // Test that we can add a session
+  auto session = rfl::Reflector<wolf::core::events::StreamSession>::ReflType{
+      .app_id = "1",                       // test cfg file
+      .client_id = "10594003729173467913", // test cfg file
+      .client_ip = "127.0.0.1"};
+  response = req(curl.get(), HTTPMethod::POST, "http://localhost/api/v1/sessions/add", rfl::json::write(session));
+  REQUIRE(response);
+  REQUIRE_THAT(response->second, Equals("{\"success\":true}"));
+
+  // Test that the new session is in the list
+  response = req(curl.get(), HTTPMethod::GET, "http://localhost/api/v1/sessions");
+  REQUIRE(response);
+  auto sessions2 = rfl::json::read<StreamSessionListResponse>(response->second).value();
+  REQUIRE(sessions2.success);
+  REQUIRE(sessions2.sessions.size() == 1);
+
+  // Test that we can pause a session
+  auto pause_request = StreamSessionPauseRequest{.session_id = "10594003729173467913"};
+  response =
+      req(curl.get(), HTTPMethod::POST, "http://localhost/api/v1/sessions/pause", rfl::json::write(pause_request));
+  REQUIRE(response);
+  REQUIRE_THAT(response->second, Equals("{\"success\":true}"));
+
+  // Test that we can stop a session
+  auto stop_request = StreamSessionStopRequest{.session_id = "10594003729173467913"};
+  response = req(curl.get(), HTTPMethod::POST, "http://localhost/api/v1/sessions/stop", rfl::json::write(stop_request));
+  REQUIRE(response);
+  REQUIRE_THAT(response->second, Equals("{\"success\":true}"));
 }
 
 struct SSEEvent {
