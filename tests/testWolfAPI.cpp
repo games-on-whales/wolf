@@ -2,6 +2,7 @@
 #include <catch2/catch_test_macros.hpp>
 #include <catch2/matchers/catch_matchers_string.hpp>
 #include <curl/curl.h>
+#include <helpers/tsqueue.hpp>
 #include <state/config.hpp>
 
 using Catch::Matchers::Equals;
@@ -197,4 +198,69 @@ TEST_CASE("APPs APIs", "[API]") {
   auto apps3 = rfl::json::read<AppListResponse>(response->second).value();
   REQUIRE(apps3.success);
   REQUIRE(apps3.apps.size() == 2);
+}
+
+struct SSEEvent {
+  std::string event;
+  std::string data;
+};
+
+void listen_sse(CURL *handle, std::shared_ptr<TSQueue<SSEEvent>> queue, std::string_view api_endpoint) {
+  curl_easy_setopt(handle, CURLOPT_URL, api_endpoint.data());
+  curl_easy_setopt(handle, CURLOPT_HTTP_VERSION, CURL_HTTP_VERSION_1_0);
+
+  curl_easy_setopt(
+      handle,
+      CURLOPT_WRITEFUNCTION,
+      static_cast<size_t (*)(char *, size_t, size_t, void *)>([](char *ptr, size_t size, size_t nmemb, void *tsqueue) {
+        std::string data{ptr, size * nmemb};
+        logs::log(logs::debug, "[CURL] Received: {}", data);
+
+        auto ts_queue = static_cast<TSQueue<SSEEvent> *>(tsqueue);
+        auto lines = utils::split(data, '\n');
+        if (lines.size() >= 2 && lines[0].starts_with("event: ") && lines[1].starts_with("data: ")) {
+          ts_queue->push(SSEEvent{.event = std::string(lines[0].substr(7)), .data = std::string(lines[1].substr(6))});
+        } else {
+          logs::log(logs::warning, "[CURL] Invalid SSE event: {}", data);
+        }
+
+        return size * nmemb;
+      }));
+  curl_easy_setopt(handle, CURLOPT_WRITEDATA, reinterpret_cast<void *>(queue.get()));
+
+  curl_easy_perform(handle);
+}
+
+TEST_CASE("SSE APIs", "[API]") {
+  auto event_bus = std::make_shared<events::EventBusType>();
+  auto config = immer::box<state::Config>(state::load_or_default("config.test.toml", event_bus));
+  auto app_state = immer::box<state::AppState>(state::AppState{
+      .config = config,
+      .pairing_cache = std::make_shared<immer::atom<immer::map<std::string, state::PairCache>>>(),
+      .pairing_atom = std::make_shared<immer::atom<immer::map<std::string, immer::box<events::PairSignal>>>>(),
+      .event_bus = event_bus,
+      .running_sessions = std::make_shared<immer::atom<immer::vector<events::StreamSession>>>()});
+
+  // Start the server
+  std::thread server_thread([app_state]() { wolf::api::start_server(app_state); });
+  server_thread.detach();
+  std::this_thread::sleep_for(std::chrono::milliseconds(42)); // Wait for the server to start
+
+  auto curl = curl_ptr(curl_easy_init(), ::curl_easy_cleanup);
+
+  curl_easy_setopt(curl.get(), CURLOPT_UNIX_SOCKET_PATH, "/tmp/wolf.sock");
+
+  auto queue = std::make_shared<TSQueue<SSEEvent>>();
+
+  std::thread sse_thread(listen_sse, curl.get(), queue, "http://localhost/api/v1/events");
+  sse_thread.detach();
+  std::this_thread::sleep_for(std::chrono::milliseconds(42)); // Wait for the SSE client to start
+
+  // Test out one of the events
+  event_bus->fire_event(events::IDRRequestEvent{.session_id = 42});
+
+  auto event = queue->pop();
+  REQUIRE(event.has_value());
+  REQUIRE_THAT(event->event, Equals("wolf::core::events::IDRRequestEvent"));
+  REQUIRE_THAT(event->data, Equals("{\"session_id\":42}"));
 }
