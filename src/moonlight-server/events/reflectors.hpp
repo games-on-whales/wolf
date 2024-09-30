@@ -40,7 +40,7 @@ template <> struct Reflector<events::App> {
 
     std::string opus_gst_pipeline;
     bool start_virtual_compositor;
-    rfl::TaggedUnion<"type", AppCMD, AppDocker> runner;
+    rfl::TaggedUnion<"type", AppCMD, AppDocker, AppChildSession> runner;
     ControllerType joypad_type;
   };
 

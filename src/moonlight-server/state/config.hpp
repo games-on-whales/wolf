@@ -6,6 +6,7 @@
 #include <crypto/crypto.hpp>
 #include <events/events.hpp>
 #include <helpers/logger.hpp>
+#include <runners/child_session.hpp>
 #include <runners/docker.hpp>
 #include <runners/process.hpp>
 #include <state/data-structures.hpp>
@@ -85,9 +86,7 @@ inline std::optional<PairedClient> get_client_by_id(const Config &cfg, std::size
 inline std::optional<immer::box<events::App>> get_app_by_id(const Config &cfg, std::string_view app_id) {
   auto apps = cfg.apps->load();
   auto search_result =
-      std::find_if(apps->begin(), apps->end(), [&app_id](const events::App &app) {
-        return app.base.id == app_id;
-      });
+      std::find_if(apps->begin(), apps->end(), [&app_id](const events::App &app) { return app.base.id == app_id; });
 
   if (search_result != apps->end())
     return {*search_result};
@@ -105,7 +104,7 @@ inline std::string gen_uuid() {
   return boost::lexical_cast<std::string>(uuid);
 }
 
-static std::shared_ptr<events::Runner> get_runner(const rfl::TaggedUnion<"type", AppCMD, AppDocker> &runner,
+static std::shared_ptr<events::Runner> get_runner(const rfl::TaggedUnion<"type", AppCMD, AppDocker, AppChildSession> &runner,
                                                   const std::shared_ptr<events::EventBusType> &ev_bus) {
   if (rfl::holds_alternative<AppCMD>(runner.variant())) {
     auto run_cmd = rfl::get<AppCMD>(runner.variant()).run_cmd;
@@ -113,6 +112,8 @@ static std::shared_ptr<events::Runner> get_runner(const rfl::TaggedUnion<"type",
   } else if (rfl::holds_alternative<AppDocker>(runner.variant())) {
     return std::make_shared<docker::RunDocker>(
         docker::RunDocker::from_cfg(ev_bus, rfl::get<AppDocker>(runner.variant())));
+  } else if (rfl::holds_alternative<AppChildSession>(runner.variant())) {
+    return std::make_shared<coop::RunChildSession>(rfl::get<AppChildSession>(runner.variant()).parent_session_id, ev_bus);
   } else {
     logs::log(logs::error, "Found runner of unknown type");
     throw std::runtime_error("Unknown runner type");

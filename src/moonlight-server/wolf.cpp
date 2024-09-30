@@ -200,6 +200,11 @@ auto setup_sessions_handlers(const immer::box<state::AppState> &app_state,
                                    .mode = state::get_audio_mode(session->audio_channel_count, true)});
           }
 
+          /* Initialise plugged device queue */
+          auto devices_q = std::make_shared<events::devices_atom_queue>();
+          plugged_devices_queue->update(
+              [=](const session_devices map) { return map.set(session->session_id, devices_q); });
+
           /* Setup devices paths */
           auto all_devices = immer::array_transient<std::string>();
 
@@ -263,20 +268,24 @@ auto setup_sessions_handlers(const immer::box<state::AppState> &app_state,
             if (!mouse) {
               logs::log(logs::error, "Failed to create mouse: {}", mouse.getErrorMessage());
             } else {
-              for (auto &path : (*mouse).get_nodes()) {
-                all_devices.push_back(path);
-              }
-              session->mouse->emplace(std::move(*mouse));
+              auto mouse_ptr = input::Mouse(std::move(*mouse));
+              devices_q->push(immer::box<events::PlugDeviceEvent>(
+                  events::PlugDeviceEvent{.session_id = session->session_id,
+                                          .udev_events = mouse_ptr.get_udev_events(),
+                                          .udev_hw_db_entries = mouse_ptr.get_udev_hw_db_entries()}));
+              session->mouse->emplace(std::move(mouse_ptr));
             }
 
             auto keyboard = input::Keyboard::create();
             if (!keyboard) {
               logs::log(logs::error, "Failed to create keyboard: {}", keyboard.getErrorMessage());
             } else {
-              for (auto &path : (*keyboard).get_nodes()) {
-                all_devices.push_back(path);
-              }
-              session->keyboard->emplace(std::move(*keyboard));
+              auto keyboard_ptr = input::Keyboard(std::move(*keyboard));
+              devices_q->push(immer::box<events::PlugDeviceEvent>(
+                  events::PlugDeviceEvent{.session_id = session->session_id,
+                                          .udev_events = keyboard_ptr.get_udev_events(),
+                                          .udev_hw_db_entries = keyboard_ptr.get_udev_hw_db_entries()}));
+              session->keyboard->emplace(std::move(keyboard_ptr));
             }
           }
 
@@ -296,11 +305,6 @@ auto setup_sessions_handlers(const immer::box<state::AppState> &app_state,
           } else if (gpu_vendor == INTEL) {
             full_env.set("INTEL_DEBUG", "norbc"); // see: https://github.com/games-on-whales/wolf/issues/50
           }
-
-          /* Initialise plugged device queue */
-          auto devices_q = std::make_shared<events::devices_atom_queue>();
-          plugged_devices_queue->update(
-              [=](const session_devices map) { return map.set(session->session_id, devices_q); });
 
           /* Finally run the app, this will stop here until over */
           session->app->runner->run(session->session_id,
