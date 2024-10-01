@@ -54,7 +54,8 @@ struct Runner {
                    const immer::map<std::string, std::string> &env_variables,
                    std::string_view render_node) = 0;
 
-  virtual rfl::TaggedUnion<"type", wolf::config::AppCMD, wolf::config::AppDocker, wolf::config::AppChildSession> serialize() = 0;
+  virtual rfl::TaggedUnion<"type", wolf::config::AppCMD, wolf::config::AppDocker, wolf::config::AppChildSession>
+  serialize() = 0;
 };
 
 struct App {

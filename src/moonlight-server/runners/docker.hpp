@@ -92,7 +92,8 @@ public:
            const immer::map<std::string, std::string> &env_variables,
            std::string_view render_node) override;
 
-  rfl::TaggedUnion<"type", wolf::config::AppCMD, wolf::config::AppDocker, wolf::config::AppChildSession> serialize() override {
+  rfl::TaggedUnion<"type", wolf::config::AppCMD, wolf::config::AppDocker, wolf::config::AppChildSession>
+  serialize() override {
     return wolf::config::AppDocker{
         .name = container.name,
         .image = container.image,

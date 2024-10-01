@@ -15,7 +15,7 @@ using namespace std::chrono_literals;
 class RunChildSession : public events::Runner {
 public:
   RunChildSession(std::size_t parent_session_id, std::shared_ptr<events::EventBusType> ev_bus)
-      : ev_bus(std::move(ev_bus)), parent_session_id(parent_session_id) {};
+      : ev_bus(std::move(ev_bus)), parent_session_id(parent_session_id){};
 
   void run(std::size_t session_id,
            std::string_view app_state_folder,
