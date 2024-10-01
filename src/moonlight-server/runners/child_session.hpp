@@ -30,8 +30,9 @@ public:
     std::shared_ptr<std::atomic_bool> is_over = std::make_shared<std::atomic<bool>>(false);
 
     auto stop_handler = ev_bus->register_handler<immer::box<events::StopStreamEvent>>(
-        [session_id, is_over](const immer::box<events::StopStreamEvent> &terminate_ev) {
-          if (terminate_ev->session_id == session_id) {
+        [session_id, parent_session_id = parent_session_id, is_over](
+            const immer::box<events::StopStreamEvent> &terminate_ev) {
+          if (terminate_ev->session_id == session_id || terminate_ev->session_id == parent_session_id) {
             *is_over = true;
           }
         });
@@ -68,7 +69,7 @@ public:
 
   rfl::TaggedUnion<"type", wolf::config::AppCMD, wolf::config::AppDocker, wolf::config::AppChildSession>
   serialize() override {
-    return wolf::config::AppChildSession{.parent_session_id = parent_session_id};
+    return wolf::config::AppChildSession{.parent_session_id = std::to_string(parent_session_id)};
   }
 
 private:

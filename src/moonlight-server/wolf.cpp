@@ -3,6 +3,7 @@
 #include <chrono>
 #include <control/control.hpp>
 #include <core/docker.hpp>
+#include <core/gstreamer.hpp>
 #include <csignal>
 #include <exceptions/exceptions.h>
 #include <filesystem>
@@ -143,9 +144,6 @@ auto setup_sessions_handlers(const immer::box<state::AppState> &app_state,
                              const std::optional<AudioServer> &audio_server) {
   immer::vector_transient<immer::box<events::EventBusHandlers>> handlers;
 
-  auto wayland_sessions = std::make_shared<
-      immer::atom<immer::map<std::size_t /* session_id */, boost::shared_future<virtual_display::wl_state_ptr>>>>();
-
   /*
    * A queue of devices that are waiting to be plugged, mapped by session_id
    * This way we can accumulate devices here until the docker container is up and running
@@ -153,16 +151,13 @@ auto setup_sessions_handlers(const immer::box<state::AppState> &app_state,
   auto plugged_devices_queue = std::make_shared<immer::atom<session_devices>>();
 
   handlers.push_back(app_state->event_bus->register_handler<immer::box<events::StopStreamEvent>>(
-      [&app_state, wayland_sessions, plugged_devices_queue](const immer::box<events::StopStreamEvent> &ev) {
+      [&app_state, plugged_devices_queue](const immer::box<events::StopStreamEvent> &ev) {
         // Remove session from app state so that HTTP/S applist gets updated
+        // This should effectively destroy the virtual Wayland session since it holds the last reference
         app_state->running_sessions->update([&ev](const immer::vector<events::StreamSession> &ses_v) {
           return state::remove_session(ses_v, {.session_id = ev->session_id});
         });
 
-        // On termination cleanup the WaylandSession; since this is the only reference to it
-        // this will effectively destroy the virtual Wayland session
-        logs::log(logs::debug, "Deleting WaylandSession {}", ev->session_id);
-        wayland_sessions->update([=](const auto map) { return map.erase(ev->session_id); });
         plugged_devices_queue->update([=](const auto map) { return map.erase(ev->session_id); });
       }));
 
@@ -180,13 +175,34 @@ auto setup_sessions_handlers(const immer::box<state::AppState> &app_state,
   // Run process and our custom wayland as soon as a new StreamSession is created
   handlers.push_back(app_state->event_bus->register_handler<immer::box<events::StreamSession>>(
       [=](const immer::box<events::StreamSession> &session) {
-        auto wl_promise = std::make_shared<boost::promise<virtual_display::wl_state_ptr>>();
+        auto render_node = session->app->render_node;
+
         if (session->app->start_virtual_compositor) {
-          wayland_sessions->update([=](const auto map) {
-            return map.set(session->session_id,
-                           boost::shared_future<virtual_display::wl_state_ptr>(wl_promise->get_future()));
-          });
+          logs::log(logs::debug, "[STREAM_SESSION] Create wayland compositor");
+
+          auto wl_state = virtual_display::create_wayland_display({}, render_node);
+          virtual_display::set_resolution(
+              *wl_state,
+              {session->display_mode.width, session->display_mode.height, session->display_mode.refreshRate});
+
+          // Set the wayland display
+          session->wayland_display->store(wl_state);
+
+          // Set virtual devices
+          session->mouse->emplace(virtual_display::WaylandMouse(wl_state));
+          session->keyboard->emplace(virtual_display::WaylandKeyboard(wl_state));
+
+          // Start Gstreamer producer pipeline
+          std::thread([session, wl_state]() {
+            streaming::start_video_producer(session->session_id,
+                                            wl_state,
+                                            {.width = session->display_mode.width,
+                                             .height = session->display_mode.height,
+                                             .refreshRate = session->display_mode.refreshRate},
+                                            session->event_bus);
+          }).detach();
         }
+
         // Start selected app on a separate thread
         std::thread([=]() {
           /* Create audio virtual sink */
@@ -221,18 +237,8 @@ auto setup_sessions_handlers(const immer::box<state::AppState> &app_state,
           full_env.set("PULSE_SERVER", audio_server_name);
           mounted_paths.push_back({audio_server_name, audio_server_name});
 
-          auto render_node = session->app->render_node;
-
-          /* Create video virtual wayland compositor */
           if (session->app->start_virtual_compositor) {
-            logs::log(logs::debug, "[STREAM_SESSION] Create wayland compositor");
-
-            // TODO: allow for old inputtino mouse and keyboard
-
-            auto wl_state = virtual_display::create_wayland_display({}, render_node);
-            virtual_display::set_resolution(
-                *wl_state,
-                {session->display_mode.width, session->display_mode.height, session->display_mode.refreshRate});
+            auto wl_state = *session->wayland_display->load();
             full_env.set("GAMESCOPE_WIDTH", std::to_string(session->display_mode.width));
             full_env.set("GAMESCOPE_HEIGHT", std::to_string(session->display_mode.height));
             full_env.set("GAMESCOPE_REFRESH", std::to_string(session->display_mode.refreshRate));
@@ -253,15 +259,6 @@ auto setup_sessions_handlers(const immer::box<state::AppState> &app_state,
 
               full_env.set(utils::to_string(split[0]), utils::to_string(split[1]));
             }
-
-            // Set the wayland display
-            session->wayland_display->store(wl_state);
-
-            // Set virtual devices
-            session->mouse->emplace(virtual_display::WaylandMouse(wl_state));
-            session->keyboard->emplace(virtual_display::WaylandKeyboard(wl_state));
-
-            wl_promise->set_value(std::move(wl_state));
           } else {
             // Create virtual devices
             auto mouse = input::Mouse::create();
@@ -370,11 +367,7 @@ auto setup_sessions_handlers(const immer::box<state::AppState> &app_state,
             return;
           }
 
-          virtual_display::wl_state_ptr wl_state;
-          if (auto wayland_promise = wayland_sessions->load()->find(sess->session_id)) {
-            wl_state = wayland_promise->get(); // Stops here until the wayland socket is ready
-          }
-          streaming::start_streaming_video(sess, app_state->event_bus, std::move(wl_state), client_port);
+          streaming::start_streaming_video(sess, app_state->event_bus, client_port);
         }).detach();
       }));
 

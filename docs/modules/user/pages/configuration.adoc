@@ -269,9 +269,30 @@ In order to automatically pick up the right encoder at runtime based on the user
 
 You can read more about gstreamer and custom pipelines in the xref:gstreamer.adoc[] page.
 
+== CO-OP sessions
+
+There's experimental support for CO-OP sessions, this will allow multiple clients to connect to the same virtual session and play together. +
+
+In order to enable this you'll have to add the following app entry in the `config.toml` file:
+
+[source,toml]
+....
+[[apps]]
+title = "CO-OP session"
+# Get the parent session ID from the Wolf logs
+runner = { type = "child_session", parent_session_id = "4135727842959053255" }
+video = { source = "interpipesrc listen-to=4135727842959053255 is-live=true stream-sync=restart-ts" }
+audio = { source = "pulsesrc device=\"virtual_sink_4135727842959053255.monitor\" server=\"{server_name}\"" }
+start_virtual_compositor = false
+
+....
+
+In this example, the `parent_session_id` is the session ID of the parent session that you want to connect to. +
+The process will be simplified once we complete implementing a custom UI for Wolf, see: https://github.com/games-on-whales/wolf/issues/80[games-on-whales/wolf#80].
+
 === Set Window compositor
 
-Wolf support both https://swaywm.org/[Sway] and https://github.com/ValveSoftware/gamescope[Gamescope] compositor. 
+Wolf support both https://swaywm.org/[Sway] and https://github.com/ValveSoftware/gamescope[Gamescope] compositor.
 
 Sway is used by default, but some game may work better with one or the other.
 
@@ -283,7 +304,7 @@ Usage is controlled by environment variables on `[apps.runner]` configs:
 [WARNING]
 ====
 Gamescope have some known issues:
-- It may be unstable with some Nvidia driver versions. See https://github.com/games-on-whales/wolf/issues/60[#60]. 
+- It may be unstable with some Nvidia driver versions. See https://github.com/games-on-whales/wolf/issues/60[#60].
 - It doesn't support multiple windows which may cause issues with multi-window applications like Steam desktop UI.
 
 Switch to Gamescope only if you encounter issues with Sway.
@@ -427,7 +448,7 @@ env = [
 
 === Using configuration file
 
-Using configuration file allow more layouts to be configured. 
+Using configuration file allow more layouts to be configured.
 
 .Note: configuration file is only supported for Sway compositor and won't have any effect wih Gamescope.
 

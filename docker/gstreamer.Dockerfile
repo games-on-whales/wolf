@@ -86,6 +86,13 @@ RUN <<_GSTREAMER_INSTALL
     equivs-build $SOURCE_PATH/gstreamer.control
     dpkg -i gstreamer-wolf_${GSTREAMER_VERSION}_all.deb
 
+    # Add GstInterpipe
+    git clone https://github.com/RidgeRun/gst-interpipe.git $SOURCE_PATH/gst-interpipe
+    cd $SOURCE_PATH/gst-interpipe
+    mkdir build
+    meson build -Denable-gtk-doc=false
+    meson install -C build
+
     # Final cleanup stage
     apt-mark auto $DEV_PACKAGES
     apt-get autoremove -y --purge

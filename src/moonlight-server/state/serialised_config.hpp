@@ -61,8 +61,8 @@ struct AppDocker {
 };
 
 struct AppChildSession {
-  using Tag = rfl::Literal<"coop", "COOP">;
-  std::size_t parent_session_id;
+  using Tag = rfl::Literal<"child_session">;
+  std::string parent_session_id;
 };
 
 struct BaseAppVideoOverride {
