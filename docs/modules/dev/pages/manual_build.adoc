@@ -1,5 +1,43 @@
 = Dev environment setup
 
+== Devcontainers
+
+We provide a https://containers.dev/[devcontainer] configuration that will allow you to automatically setup a development environment for Wolf.
+The advantage of this solution is that you'll be running the code in the exact same environment as users of the official docker image, plus you don't have to worry about setting up the dependencies manually.
+
+The following are a few quickstep to get you started on VSCode:
+
+* From an empty window open up the Command Palette using kbd:[CTRL+SHIFT+P] and search for `Dev containers: Clone Repository in Container Volume`
+* Follow the instructions, you'll be asked to provide the repository URL, branch and so on; when you've finished VSCode will start building the container
+
+.Give it time, this will go on for a while; luckily, only the first time you'll have to wait this long.
+image::ROOT:devcontainers_build.png[]
+
+Once the process is over you should be able to see the files on the left panel, and you can start editing the code.
+Soon enough you'll get this prompt:
+
+image::ROOT:devcontainer_pick_tools.png[]
+
+Pick the last option: `Clang ....` and you'll be ready to go.
+
+=== Build and run Wolf
+
+In the bottom left corner of the window you should see these 3 handy little buttons, respectively: build, debug and run
+
+image::ROOT:devcontainer_buttons.png[]
+
+Pressing the play button should compile and start Wolf and you should be able to see the logs in the terminal.
+To stop it, just press kbd:[CTRL+C] in the terminal.
+
+=== Run unit tests
+
+To run tests you have to change the cmake target from the default `wolf` to `wolftests`.
+You can do that by clicking the cmake button on the bottom left corner of the window and selecting `wolftests` from the project outline.
+
+image::ROOT:devcontainer_tests.png[]
+
+== Manual installation
+
 This has been tested on Debian 12, you should adjust the setup based on your distro of choice.
 This guide will explain how to build and run Wolf outside of docker, but docker will need to be installed and configured on the host for Wolf to do anything useful.
 Consult your distribution's documentation for instructions on setting up Docker.
@@ -30,6 +68,8 @@ apt install -y build-essential ninja-build gcc meson cmake ccache bison equivs \
 	libopenjp2-7-dev liblcms2-dev libcairo2-dev libcairo-gobject2 libwebp7 librsvg2-dev libaom-dev \
 	libharfbuzz-dev libpango1.0-dev
 ....
+
+Please refer to `docker/gstreamer.Dockerfile` for an up-to-date list of parameters and versions.
 
 .Build gstreamer
 [source,bash]
@@ -156,7 +196,8 @@ cmake -Bbuild -DCMAKE_C_FLAGS="$CFLAGS" -DCMAKE_BUILD_TYPE=Release -DCMAKE_CXX_S
 ninja -C build
 ....
 
-If compilation completes correctly, you can finally start Wolf. The built binary can be found at `build/src/moonlight-server/wolf`
+If compilation completes correctly, you can finally start Wolf.
+The built binary can be found at `build/src/moonlight-server/wolf`
 Since Wolf is configured via a swoth of environment variables, it may be a good idea to lanch it via shell script.
 
 .runwolf.sh
