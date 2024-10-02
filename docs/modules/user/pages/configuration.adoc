@@ -245,7 +245,8 @@ env = [
 ]
 devices = []
 ports = []
-base_create_json = """ #<2>
+#<2>
+base_create_json = """
 {
   "HostConfig": {
     "IpcMode": "host",
