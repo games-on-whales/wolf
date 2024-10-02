@@ -42,6 +42,7 @@
     "XDG_RUNTIME_DIR": "/tmp/sockets",
     "WOLF_LOG_LEVEL": "DEBUG",
     "HOST_APPS_STATE_FOLDER": "/etc/wolf",
+    "WOLF_CFG_FOLDER": "/etc/wolf/cfg/",
     "WOLF_CFG_FILE": "/etc/wolf/cfg/config.toml",
     "WOLF_PRIVATE_KEY_FILE": "/etc/wolf/cfg/key.pem",
     "WOLF_PRIVATE_CERT_FILE": "/etc/wolf/cfg/cert.pem",
