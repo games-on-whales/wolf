@@ -124,6 +124,10 @@ For example, if you want to change the `HOST_APPS_STATE_FOLDER` to `/mnt/drive/w
 * `-e HOST_APPS_STATE_FOLDER=/mnt/drive/wolf`
 * `-v /mnt/drive/wolf:/mnt/drive/wolf:rw`
 
+Keeping `HOST_APPS_STATE_FOLDER` unchanged and only modifying `-v /mnt/drive/wolf:/etc/wolf:rw` is not sufficient. Because app container mount home directory according to `HOST_APPS_STATE_FOLDER` (i.e. `-v ${HOST_APPS_STATE_FOLDER}/${app_state_folder}/${app_title}:/home/retro`)
+
+Since Wolf keeps the configuration in `/etc/wolf/cfg`, you need to add an additional mount to ensure that Wolf's configuration is persistently stored (i.e., -v `/mnt/drive/wolf/cfg:/etc/wolf/cfg:rw`).
+
 == TOML file
 
 The TOML configuration file is read only once at startup (or created if not present) and it'll be modified by Wolf only when a new user is successfully paired.
@@ -231,7 +235,7 @@ Example:
 type = "docker"
 name = "WolfSteam"
 image = "ghcr.io/games-on-whales/steam:edge"
-mounts = [
+mounts = [ #<1>
   "/run/udev:/run/udev:ro"
 ]
 env = [
@@ -241,7 +245,7 @@ env = [
 ]
 devices = []
 ports = []
-base_create_json = """ #<1>
+base_create_json = """ #<2>
 {
   "HostConfig": {
     "IpcMode": "host",
@@ -253,7 +257,8 @@ base_create_json = """ #<1>
 """
 ....
 
-<1> *base_create_json*: here you can re-define any property that's defined in the docker API JSON format, see: https://docs.docker.com/engine/api/v1.40/#tag/Container/operation/ContainerCreate[docs.docker.com/engine/api/v1.40]
+<1> *mounts*: Here you can define any additional mount that you want to add to the container. For example, you can add `mounts = ["/media/data/games:/games:rw"]` if you want to share games files between host and app container.
+<2> *base_create_json*: here you can re-define any property that's defined in the docker API JSON format, see: https://docs.docker.com/engine/api/v1.40/#tag/Container/operation/ContainerCreate[docs.docker.com/engine/api/v1.40]
 
 [#_gstreamer]
 === Gstreamer
