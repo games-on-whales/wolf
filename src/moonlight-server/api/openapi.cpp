@@ -9,6 +9,7 @@ struct OpenAPIComponents {
 struct OpenAPISchema {
   std::string openapi = "3.1.0";
   rfl::Object<rfl::Generic> info = {};
+  rfl::Object<rfl::Generic> server = {};
   rfl::Object<rfl::Object<rfl::Generic>> paths = {};
   OpenAPIComponents components = {};
 };
@@ -25,6 +26,9 @@ template <typename T> std::string HTTPServer<T>::openapi_schema() const {
   schema.info["title"] = "Wolf API";
   schema.info["description"] = "API for the Wolf server";
   schema.info["version"] = "0.1";
+
+  schema.server["url"] = "http://localhost/";
+  schema.server["description"] = "Unix socket server";
 
   /**
    * Takes a json schema in string form and returns a valid OpenAPI json object for that schema.

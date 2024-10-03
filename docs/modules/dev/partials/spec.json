@@ -1,0 +1,700 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Wolf API",
+    "description": "API for the Wolf server",
+    "version": "0.1"
+  },
+  "servers": [
+    {
+      "url": "http://localhost/",
+      "description": "Local development server"
+    }
+  ],
+  "paths": {
+    "/api/v1/apps": {
+      "get": {
+        "summary": "Get all apps",
+        "description": "This endpoint returns a list of all apps.",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/wolf__api__AppListResponse"
+                }
+              }
+            },
+            "description": ""
+          }
+        }
+      }
+    },
+    "/api/v1/clients": {
+      "get": {
+        "summary": "Get paired clients",
+        "description": "This endpoint returns a list of all paired clients.",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/wolf__api__PairedClientsResponse"
+                }
+              }
+            },
+            "description": ""
+          }
+        }
+      }
+    },
+    "/api/v1/events": {
+      "get": {
+        "summary": "Subscribe to events",
+        "description": "This endpoint allows clients to subscribe to events using SSE",
+        "responses": {}
+      }
+    },
+    "/api/v1/openapi-schema": {
+      "get": {
+        "summary": "Return this OpenAPI schema as JSON",
+        "description": "",
+        "responses": {}
+      }
+    },
+    "/api/v1/pair/pending": {
+      "get": {
+        "summary": "Get pending pair requests",
+        "description": "This endpoint returns a list of Moonlight clients that are currently waiting to be paired.",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/wolf__api__PendingPairRequestsResponse"
+                }
+              }
+            },
+            "description": ""
+          }
+        }
+      }
+    },
+    "/api/v1/sessions": {
+      "get": {
+        "summary": "Get all stream sessions",
+        "description": "This endpoint returns a list of all active stream sessions.",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/wolf__api__StreamSessionListResponse"
+                }
+              }
+            },
+            "description": ""
+          }
+        }
+      }
+    },
+    "/api/v1/apps/add": {
+      "post": {
+        "summary": "Add an app",
+        "description": "",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/rfl__Reflector_wolf__core__events__App___ReflType"
+              }
+            }
+          },
+          "description": "",
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/wolf__api__GenericSuccessResponse"
+                }
+              }
+            },
+            "description": ""
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/wolf__api__GenericErrorResponse"
+                }
+              }
+            },
+            "description": ""
+          }
+        }
+      }
+    },
+    "/api/v1/apps/delete": {
+      "post": {
+        "summary": "Remove an app",
+        "description": "",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/wolf__api__AppDeleteRequest"
+              }
+            }
+          },
+          "description": "",
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/wolf__api__GenericSuccessResponse"
+                }
+              }
+            },
+            "description": ""
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/wolf__api__GenericErrorResponse"
+                }
+              }
+            },
+            "description": ""
+          }
+        }
+      }
+    },
+    "/api/v1/pair/client": {
+      "post": {
+        "summary": "Pair a client",
+        "description": "",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/wolf__api__PairRequest"
+              }
+            }
+          },
+          "description": "",
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/wolf__api__GenericSuccessResponse"
+                }
+              }
+            },
+            "description": ""
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/wolf__api__GenericErrorResponse"
+                }
+              }
+            },
+            "description": ""
+          }
+        }
+      }
+    },
+    "/api/v1/sessions/add": {
+      "post": {
+        "summary": "Create a new stream session",
+        "description": "",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/rfl__Reflector_wolf__core__events__StreamSession___ReflType"
+              }
+            }
+          },
+          "description": "",
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/wolf__api__GenericSuccessResponse"
+                }
+              }
+            },
+            "description": ""
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/wolf__api__GenericErrorResponse"
+                }
+              }
+            },
+            "description": ""
+          }
+        }
+      }
+    },
+    "/api/v1/sessions/pause": {
+      "post": {
+        "summary": "Pause a stream session",
+        "description": "",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/wolf__api__StreamSessionPauseRequest"
+              }
+            }
+          },
+          "description": "",
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/wolf__api__GenericSuccessResponse"
+                }
+              }
+            },
+            "description": ""
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/wolf__api__GenericErrorResponse"
+                }
+              }
+            },
+            "description": ""
+          }
+        }
+      }
+    },
+    "/api/v1/sessions/stop": {
+      "post": {
+        "summary": "Stop a stream session",
+        "description": "",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/wolf__api__StreamSessionStopRequest"
+              }
+            }
+          },
+          "description": "",
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/wolf__api__GenericSuccessResponse"
+                }
+              }
+            },
+            "description": ""
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/wolf__api__GenericErrorResponse"
+                }
+              }
+            },
+            "description": ""
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "rfl__Reflector_wolf__core__events__App___ReflType": {
+        "type": "object",
+        "properties": {
+          "av1_gst_pipeline": {
+            "type": "string"
+          },
+          "h264_gst_pipeline": {
+            "type": "string"
+          },
+          "hevc_gst_pipeline": {
+            "type": "string"
+          },
+          "id": {
+            "type": "string"
+          },
+          "joypad_type": {
+            "type": "string",
+            "enum": [
+              "XBOX",
+              "PS",
+              "NINTENDO",
+              "AUTO"
+            ]
+          },
+          "opus_gst_pipeline": {
+            "type": "string"
+          },
+          "render_node": {
+            "type": "string"
+          },
+          "runner": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/wolf__config__AppCMD__tagged"
+              },
+              {
+                "$ref": "#/components/schemas/wolf__config__AppDocker__tagged"
+              },
+              {
+                "$ref": "#/components/schemas/wolf__config__AppChildSession__tagged"
+              }
+            ]
+          },
+          "start_virtual_compositor": {
+            "type": "boolean"
+          },
+          "support_hdr": {
+            "type": "boolean"
+          },
+          "title": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "av1_gst_pipeline",
+          "h264_gst_pipeline",
+          "hevc_gst_pipeline",
+          "id",
+          "joypad_type",
+          "opus_gst_pipeline",
+          "render_node",
+          "runner",
+          "start_virtual_compositor",
+          "support_hdr",
+          "title"
+        ]
+      },
+      "rfl__Reflector_wolf__core__events__StreamSession___ReflType": {
+        "type": "object",
+        "properties": {
+          "app_id": {
+            "type": "string"
+          },
+          "audio_channel_count": {
+            "type": "integer"
+          },
+          "client_id": {
+            "type": "string"
+          },
+          "client_ip": {
+            "type": "string"
+          },
+          "video_height": {
+            "type": "integer"
+          },
+          "video_refresh_rate": {
+            "type": "integer"
+          },
+          "video_width": {
+            "type": "integer"
+          }
+        },
+        "required": [
+          "app_id",
+          "audio_channel_count",
+          "client_id",
+          "client_ip",
+          "video_height",
+          "video_refresh_rate",
+          "video_width"
+        ]
+      },
+      "wolf__api__AppDeleteRequest": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id"
+        ]
+      },
+      "wolf__api__AppListResponse": {
+        "type": "object",
+        "properties": {
+          "apps": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/rfl__Reflector_wolf__core__events__App___ReflType"
+            }
+          },
+          "success": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "apps",
+          "success"
+        ]
+      },
+      "wolf__api__GenericErrorResponse": {
+        "type": "object",
+        "properties": {
+          "error": {
+            "type": "string"
+          },
+          "success": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "error",
+          "success"
+        ]
+      },
+      "wolf__api__GenericSuccessResponse": {
+        "type": "object",
+        "properties": {
+          "success": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "success"
+        ]
+      },
+      "wolf__api__PairRequest": {
+        "type": "object",
+        "properties": {
+          "pair_secret": {
+            "type": "string"
+          },
+          "pin": {
+            "type": "string",
+            "description": "The PIN created by the remote Moonlight client"
+          }
+        },
+        "required": [
+          "pair_secret",
+          "pin"
+        ]
+      },
+      "wolf__api__PairedClient": {
+        "type": "object",
+        "properties": {
+          "app_state_folder": {
+            "type": "string"
+          },
+          "client_id": {
+            "type": "integer"
+          }
+        },
+        "required": [
+          "app_state_folder",
+          "client_id"
+        ]
+      },
+      "wolf__api__PairedClientsResponse": {
+        "type": "object",
+        "properties": {
+          "clients": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/wolf__api__PairedClient"
+            }
+          },
+          "success": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "clients",
+          "success"
+        ]
+      },
+      "wolf__api__PendingPairRequestsResponse": {
+        "type": "object",
+        "properties": {
+          "requests": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/wolf__api__PairRequest"
+            }
+          },
+          "success": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "requests",
+          "success"
+        ]
+      },
+      "wolf__api__StreamSessionListResponse": {
+        "type": "object",
+        "properties": {
+          "sessions": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/rfl__Reflector_wolf__core__events__StreamSession___ReflType"
+            }
+          },
+          "success": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "sessions",
+          "success"
+        ]
+      },
+      "wolf__api__StreamSessionPauseRequest": {
+        "type": "object",
+        "properties": {
+          "session_id": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "session_id"
+        ]
+      },
+      "wolf__api__StreamSessionStopRequest": {
+        "type": "object",
+        "properties": {
+          "session_id": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "session_id"
+        ]
+      },
+      "wolf__config__AppCMD__tagged": {
+        "type": "object",
+        "properties": {
+          "run_cmd": {
+            "type": "string"
+          },
+          "type": {
+            "type": "string",
+            "enum": [
+              "process"
+            ]
+          }
+        },
+        "required": [
+          "run_cmd",
+          "type"
+        ]
+      },
+      "wolf__config__AppChildSession__tagged": {
+        "type": "object",
+        "properties": {
+          "parent_session_id": {
+            "type": "string"
+          },
+          "type": {
+            "type": "string",
+            "enum": [
+              "child_session"
+            ]
+          }
+        },
+        "required": [
+          "parent_session_id",
+          "type"
+        ]
+      },
+      "wolf__config__AppDocker__tagged": {
+        "type": "object",
+        "properties": {
+          "base_create_json": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "devices": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "env": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "image": {
+            "type": "string"
+          },
+          "mounts": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "name": {
+            "type": "string"
+          },
+          "ports": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "type": {
+            "type": "string",
+            "enum": [
+              "docker"
+            ]
+          }
+        },
+        "required": [
+          "devices",
+          "env",
+          "image",
+          "mounts",
+          "name",
+          "ports",
+          "type"
+        ]
+      }
+    }
+  }
+}

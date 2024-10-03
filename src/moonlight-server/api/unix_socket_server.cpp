@@ -25,15 +25,12 @@ UnixSocketServer::UnixSocketServer(boost::asio::io_context &io_context,
                       .http = HTTPServer<std::shared_ptr<UnixSocket>>{},
                       .sse_keepalive_timer = boost::asio::steady_timer{io_context}});
 
-  state_->http.add(
-      HTTPMethod::GET,
-      "/api/v1/events",
-      {.summary = "Subscribe to events",
-       .description =
-           "This endpoint allows clients to subscribe to events using "
-           "[SSE](https://developer.mozilla.org/en-US/docs/Web/API/Server-sent_events/Using_server-sent_events).  \n",
-       // TODO: json_schema = rfl::json::to_schema<EventsVariant>()
-       .handler = [this](auto req, auto socket) { endpoint_Events(req, socket); }});
+  state_->http.add(HTTPMethod::GET,
+                   "/api/v1/events",
+                   {.summary = "Subscribe to events",
+                    .description = "This endpoint allows clients to subscribe to events using SSE",
+                    // TODO: json_schema = rfl::json::to_schema<EventsVariant>()
+                    .handler = [this](auto req, auto socket) { endpoint_Events(req, socket); }});
 
   /**
    * Pairing API

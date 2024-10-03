@@ -1,0 +1,70 @@
+:includedir: partial$
+= Wolf API
+
+Wolf exposes a REST API that allows you to interact with the platform programmatically. +
+The API can be accessed only via UNIX sockets, you can control the exact path by setting the `WOLF_SOCKET_PATH` environment variable. If you want to access the socket from outside the container, you should mount the socket to the host machine, ex: `-e WOLF_SOCKET_PATH=/var/run/wolf/wolf.sock` and `-v /var/run/wolf:/var/run/wolf` will allow you to access the socket from the host machine at `/var/run/wolf/wolf.sock`.
+
+You can test out the API using the `curl` command, for example, to get the OpenAPI specification you can run:
+
+[source,bash]
+....
+curl --unix-socket /var/run/wolf/wolf.sock http://localhost/api/v1/openapi-schema
+....
+
+When looking at the examples in the xref:api_reference[] remember to add the `--unix-socket` flag to the `curl` command.
+
+== Exposing the API via TCP
+
+[WARNING]
+====
+Exposing the API is highly dangerous, via the API you can pair clients to the server, execute arbitrary commands, and more. +
+*Make sure to secure the API properly if you decide to expose it.*
+====
+
+If you want to expose the API via TCP you can use a reverse proxy like `nginx`, for example, to expose the API on port 8080 you can use the following config
+
+....
+server {
+    listen 8080;
+
+    location / {
+        proxy_pass http://unix:/var/run/wolf/wolf.sock;
+        proxy_http_version 1.0;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+    }
+}
+....
+
+Save it as `wolf.conf` and start an Nginx container with the following command:
+
+[source,bash]
+....
+docker run --name wolf-proxy \
+           --network=host \
+           -v /var/run/wolf/wolf.sock:/var/run/wolf/wolf.sock:rw \
+           -v ./wolf.conf:/etc/nginx/conf.d/wolf.conf:ro \
+           nginx
+....
+
+You can now access the API via `http://localhost:8080`, ex:
+
+[source,bash]
+....
+curl localhost:8080/api/v1/openapi-schema
+....
+
+[#api_reference]
+== API Reference
+
+[subs=macros]
+++++
+<script
+  id="api-reference"
+  type="application/json">
+include::{includedir}/spec.json[]
+</script>
+<script src="https://cdn.jsdelivr.net/npm/@scalar/api-reference"></script>
+++++
