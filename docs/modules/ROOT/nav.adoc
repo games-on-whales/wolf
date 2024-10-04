@@ -11,6 +11,7 @@
 * Developer guide
 ** xref:dev:how-it-works.adoc[]
 ** xref:dev:manual_build.adoc[]
+** xref:dev:api.adoc[]
 ** xref:dev:code-structure.adoc[]
 ** xref:dev:gstreamer.adoc[]
 ** xref:dev:wayland.adoc[]
