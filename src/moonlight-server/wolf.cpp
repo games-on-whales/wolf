@@ -9,6 +9,8 @@
 #include <immer/array_transient.hpp>
 #include <immer/map_transient.hpp>
 #include <immer/vector_transient.hpp>
+#include <mdns_cpp/logger.hpp>
+#include <mdns_cpp/mdns.hpp>
 #include <memory>
 #include <platforms/hw.hpp>
 #include <rest/rest.hpp>
@@ -462,6 +464,17 @@ void run() {
   std::thread([sessions = local_state->running_sessions, ev_bus = local_state->event_bus]() {
     control::run_control(state::CONTROL_PORT, sessions, ev_bus);
   }).detach();
+
+  // mDNS
+  mdns_cpp::Logger::setLoggerSink([](const std::string &msg) {
+    // msg here will include a /n at the end, so we remove it
+    logs::log(logs::trace, "mDNS: {}", msg.substr(0, msg.size() - 1));
+  });
+  mdns_cpp::mDNS mdns;
+  mdns.setServiceName("_nvstream._tcp.local.");
+  mdns.setServiceHostname(local_state->config->hostname);
+  mdns.setServicePort(state::HTTP_PORT);
+  mdns.startService();
 
   auto audio_server = setup_audio_server(runtime_dir);
   auto sess_handlers = setup_sessions_handlers(local_state, runtime_dir, audio_server);

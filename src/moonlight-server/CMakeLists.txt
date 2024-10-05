@@ -40,6 +40,13 @@ set(TOML11_PRESERVE_COMMENTS_BY_DEFAULT, ON)
 FetchContent_MakeAvailable(toml)
 target_link_libraries_system(wolf_runner PUBLIC toml11::toml11)
 
+# mDNS
+FetchContent_Declare(
+        mdns_cpp
+        GIT_REPOSITORY https://github.com/gocarlos/mdns_cpp.git)
+FetchContent_MakeAvailable(mdns_cpp)
+target_link_libraries_system(wolf_runner PUBLIC mdns_cpp::mdns_cpp)
+
 # Enet
 set(CMAKE_PROJECT_INCLUDE_BEFORE "${PROJECT_SOURCE_DIR}/cmake/EnableCMP0048.cmake")
 FetchContent_Declare(
