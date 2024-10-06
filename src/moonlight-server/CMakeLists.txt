@@ -49,9 +49,7 @@ set(REFLECTCPP_XML OFF)
 set(REFLECTCPP_YAML OFF)
 
 FetchContent_MakeAvailable(reflect-cpp)
-pkg_check_modules(MSGPACK REQUIRED IMPORTED_TARGET msgpack-c)
-
-target_link_libraries(wolf_runner PUBLIC PkgConfig::MSGPACK reflectcpp)
+target_link_libraries(wolf_runner PUBLIC reflectcpp)
 
 
 # HTTP server library
