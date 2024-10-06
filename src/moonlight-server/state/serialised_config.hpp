@@ -90,6 +90,7 @@ enum class ControllerType {
 
 struct BaseApp {
   std::string title;
+  std::optional<std::string> icon_png_path;
   std::optional<std::string> render_node;
   std::optional<BaseAppVideoOverride> video;
   std::optional<BaseAppAudioOverride> audio;

@@ -32,6 +32,7 @@ TEST_CASE("LocalState load TOML", "[LocalState]") {
     auto first_app = apps[0];
     REQUIRE_THAT(first_app->base.title, Equals("Firefox"));
     REQUIRE_THAT(first_app->base.id, Equals("1"));
+    REQUIRE_THAT(first_app->base.icon_png_path.value(), Equals("firefox.png"));
     REQUIRE_THAT(first_app->h264_gst_pipeline, Equals("video_source !\ndefault !\nh264_pipeline !\nvideo_sink"));
     REQUIRE_THAT(first_app->hevc_gst_pipeline, Equals("video_source !\ndefault !\nhevc_pipeline !\nvideo_sink"));
     REQUIRE_THAT(first_app->av1_gst_pipeline, Equals("video_source !\nparams !\nav1_pipeline !\nvideo_sink"));
@@ -44,6 +45,7 @@ TEST_CASE("LocalState load TOML", "[LocalState]") {
     auto second_app = apps[1];
     REQUIRE_THAT(second_app->base.title, Equals("Test ball"));
     REQUIRE_THAT(second_app->base.id, Equals("2"));
+    REQUIRE(second_app->base.icon_png_path.has_value() == false);
     REQUIRE_THAT(second_app->h264_gst_pipeline,
                  Equals("override DEFAULT SOURCE !\ndefault !\nh264_pipeline !\nvideo_sink"));
     REQUIRE_THAT(second_app->hevc_gst_pipeline,

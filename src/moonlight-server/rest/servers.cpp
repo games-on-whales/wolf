@@ -159,8 +159,13 @@ void startServer(HttpsServer *server, const immer::box<state::AppState> state, i
     }
   };
 
-  // TODO: add missing
-  // https_server.resource["^/appasset$"]["GET"]
+  server->resource["^/appasset$"]["GET"] = [&state](auto resp, auto req) {
+      if (get_client_if_paired(state, req)) {
+        endpoints::https::appasset(resp, req, state);
+      } else {
+        reply_unauthorized(req, resp);
+      }
+  };
 
   server->start([](unsigned short port) { logs::log(logs::info, "HTTPS server listening on port: {} ", port); });
 }

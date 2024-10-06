@@ -231,6 +231,44 @@ void applist(const std::shared_ptr<typename SimpleWeb::Server<SimpleWeb::HTTPS>:
   send_xml<SimpleWeb::HTTPS>(response, SimpleWeb::StatusCode::success_ok, xml);
 }
 
+void appasset(const std::shared_ptr<typename SimpleWeb::Server<SimpleWeb::HTTPS>::Response> &response,
+              const std::shared_ptr<typename SimpleWeb::Server<SimpleWeb::HTTPS>::Request> &request,
+              const immer::box<state::AppState> &state) {
+  log_req<SimpleWeb::HTTPS>(request);
+
+  SimpleWeb::CaseInsensitiveMultimap headers = request->parse_query_string();
+  auto app_id = get_header(headers, "appid");
+  if (!app_id) {
+    logs::log(logs::warning, "[HTTP] Wrong request, missing app_id");
+    server_error<SimpleWeb::HTTPS>(response);
+    return;
+  }
+  auto app = state::get_app_by_id(state->config, app_id.value());
+  if (!app || !app.value()->base.icon_png_path) {
+    logs::log(logs::warning, "[HTTP] Can't find icon_png_path for app with id: {}", app_id.value());
+    server_error<SimpleWeb::HTTPS>(response);
+    return;
+  }
+  auto icon_path = app.value()->base.icon_png_path.value();
+
+  std::string host_state_folder = utils::get_env("HOST_APPS_STATE_FOLDER", "/etc/wolf");
+  auto asset_path = std::filesystem::path(host_state_folder) / icon_path;
+
+  std::ifstream asset_file(asset_path, std::ios::binary);
+  if (!asset_file) {
+    logs::log(logs::warning, "Could not open configured asset: {}", asset_path.string());
+    response->write(SimpleWeb::StatusCode::client_error_not_found, "asset not found");
+    response->close_connection_after_response = true;
+    return;
+  }
+
+  SimpleWeb::CaseInsensitiveMultimap asset_headers;
+  asset_headers.emplace("Content-Type", "image/png");
+  logs::log(logs::trace, "Sending asset {}", asset_path.string());
+  response->write(SimpleWeb::StatusCode::success_ok, asset_file, asset_headers);
+  response->close_connection_after_response = true;
+}
+
 auto create_run_session(const SimpleWeb::CaseInsensitiveMultimap &headers,
                         const std::string &client_ip,
                         const state::PairedClient &current_client,

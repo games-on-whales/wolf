@@ -20,6 +20,7 @@ app_state_folder = "some/folder"
 [[apps]]
 title = "Firefox"
 start_virtual_compositor = true
+icon_png_path = "firefox.png"
 
 [apps.runner]
 type = "docker"
@@ -126,4 +127,3 @@ default_source = "audio_source"
 default_audio_params = "audio_params"
 default_opus_encoder = "audio_encoder"
 default_sink = "audio_sink"
-

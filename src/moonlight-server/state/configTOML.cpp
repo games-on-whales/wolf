@@ -222,7 +222,10 @@ Config load_or_default(const std::string &source, const std::shared_ptr<events::
             app.audio.value_or(BaseAppAudioOverride{}).sink.value_or(default_gst_audio_settings.default_sink));
 
         return immer::box<events::App>{
-            events::App{.base = {.title = app.title, .id = std::to_string(idx + 1), .support_hdr = false},
+            events::App{.base = {.title = app.title,
+                                 .id = std::to_string(idx + 1),
+                                 .support_hdr = false,
+                                 .icon_png_path = app.icon_png_path},
                         .h264_gst_pipeline = h264_gst_pipeline,
                         .hevc_gst_pipeline = hevc_gst_pipeline,
                         .av1_gst_pipeline = av1_gst_pipeline,
