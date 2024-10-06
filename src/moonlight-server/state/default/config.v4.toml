@@ -170,7 +170,7 @@ source = "audiotestsrc wave=ticks is-live=true"
 
 [gstreamer.video]
 
-default_source = "interpipesrc listen-to={session_id} is-live=true stream-sync=restart-ts block=true"
+default_source = "interpipesrc listen-to={session_id} is-live=true stream-sync=restart-ts max-bytes=0 max-buffers=1 block=false"
 default_sink = """
 rtpmoonlightpay_video name=moonlight_pay \
 payload_size={payload_size} fec_percentage={fec_percentage} min_required_fec_packets={min_required_fec_packets} !

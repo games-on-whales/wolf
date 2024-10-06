@@ -81,9 +81,9 @@ void start_video_producer(std::size_t session_id,
                           const wolf::core::virtual_display::DisplayMode &display_mode,
                           const std::shared_ptr<events::EventBusType> &event_bus) {
   auto appsrc_state = streaming::custom_src::setup_app_src(display_mode, std::move(wl_state));
-  auto pipeline = fmt::format(
-      "appsrc is-live=true name=wolf_wayland_source ! queue ! interpipesink name={} sync=true async=false",
-      session_id);
+  auto pipeline = fmt::format("appsrc is-live=true name=wolf_wayland_source ! "                        //
+                              "interpipesink name={} sync=true async=false max-bytes=0 max-buffers=3", //
+                              session_id);
   logs::log(logs::debug, "Starting pipeline: {}", pipeline);
   run_pipeline(pipeline, [=](auto pipeline, auto loop) {
     if (auto app_src_el = gst_bin_get_by_name(GST_BIN(pipeline.get()), "wolf_wayland_source")) {
@@ -95,12 +95,6 @@ void start_video_producer(std::size_t session_id,
 
       auto caps = set_resolution(*appsrc_state->wayland_state, display_mode, app_src_ptr);
       g_object_set(app_src_ptr.get(), "caps", caps.get(), NULL);
-      // No seeking is supported, this is a live stream
-      g_object_set(app_src_el, "stream-type", GST_APP_STREAM_TYPE_STREAM, NULL);
-      // appsrc will drop any buffers that are pushed into it once its internal queue is full
-      g_object_set(app_src_el, "leaky-type", GST_APP_LEAKY_TYPE_DOWNSTREAM, NULL);
-      // sometimes the encoder or the network sink might lag behind, we'll keep up to 3 buffers in the queue
-      g_object_set(app_src_el, "max-buffers", 3, NULL);
 
       /* Adapted from the tutorial at:
        * https://gstreamer.freedesktop.org/documentation/tutorials/basic/short-cutting-the-pipeline.html?gi-language=c*/
