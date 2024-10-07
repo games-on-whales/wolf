@@ -218,7 +218,7 @@ void UnixSocketServer::endpoint_RunnerStart(const wolf::api::HTTPRequest &req, s
     state_->app_state->event_bus->fire_event(immer::box<events::StartRunner>(
         events::StartRunner{.stop_stream_when_over = event.value().stop_stream_when_over,
                             .runner = runner,
-                            .stream_session = immer::box<events::StreamSession>(*session)}));
+                            .stream_session = std::make_shared<events::StreamSession>(*session)}));
   } else {
     logs::log(logs::warning, "[API] Invalid event: {} - {}", req.body, event.error()->what());
     auto res = GenericErrorResponse{.error = event.error()->what()};

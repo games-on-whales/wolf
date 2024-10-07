@@ -164,7 +164,7 @@ struct StreamSession;
 struct StartRunner {
   bool stop_stream_when_over = false;
   std::shared_ptr<Runner> runner;
-  immer::box<StreamSession> stream_session;
+  std::shared_ptr<StreamSession> stream_session;
 };
 
 using EventBusHandlers = dp::handler_registration<immer::box<PlugDeviceEvent>,
