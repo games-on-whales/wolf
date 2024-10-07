@@ -77,6 +77,20 @@ template <> struct Reflector<events::App> {
   }
 };
 
+template <> struct Reflector<events::StartRunner> {
+  struct ReflType {
+    bool stop_stream_when_over;
+    rfl::TaggedUnion<"type", AppCMD, AppDocker, AppChildSession> runner;
+    std::string session_id;
+  };
+
+  static ReflType from(const events::StartRunner &v) {
+    return {.stop_stream_when_over = v.stop_stream_when_over,
+            .runner = v.runner->serialize(),
+            .session_id = std::to_string(v.stream_session->session_id)};
+  }
+};
+
 template <> struct Reflector<events::StreamSession> {
   struct ReflType {
     std::string app_id;

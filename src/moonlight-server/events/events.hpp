@@ -48,7 +48,7 @@ struct Runner {
 
   virtual void run(std::size_t session_id,
                    std::string_view app_state_folder,
-                   std::shared_ptr<devices_atom_queue> plugged_devices_queue,
+                   const std::shared_ptr<events::devices_atom_queue> &plugged_devices_queue,
                    const immer::array<std::string> &virtual_inputs,
                    const immer::array<std::pair<std::string, std::string>> &paths,
                    const immer::map<std::string, std::string> &env_variables,
@@ -161,6 +161,12 @@ struct RTPAudioPingEvent {
 
 struct StreamSession;
 
+struct StartRunner {
+  bool stop_stream_when_over = false;
+  std::shared_ptr<Runner> runner;
+  immer::box<StreamSession> stream_session;
+};
+
 using EventBusHandlers = dp::handler_registration<immer::box<PlugDeviceEvent>,
                                                   immer::box<PairSignal>,
                                                   immer::box<UnplugDeviceEvent>,
@@ -172,7 +178,8 @@ using EventBusHandlers = dp::handler_registration<immer::box<PlugDeviceEvent>,
                                                   immer::box<ResumeStreamEvent>,
                                                   immer::box<StopStreamEvent>,
                                                   immer::box<RTPVideoPingEvent>,
-                                                  immer::box<RTPAudioPingEvent>>;
+                                                  immer::box<RTPAudioPingEvent>,
+                                                  immer::box<StartRunner>>;
 using EventBusType = dp::event_bus<immer::box<PlugDeviceEvent>,
                                    immer::box<PairSignal>,
                                    immer::box<UnplugDeviceEvent>,
@@ -184,7 +191,8 @@ using EventBusType = dp::event_bus<immer::box<PlugDeviceEvent>,
                                    immer::box<ResumeStreamEvent>,
                                    immer::box<StopStreamEvent>,
                                    immer::box<RTPVideoPingEvent>,
-                                   immer::box<RTPAudioPingEvent>>;
+                                   immer::box<RTPAudioPingEvent>,
+                                   immer::box<StartRunner>>;
 using EventsVariant = std::variant<immer::box<PlugDeviceEvent>,
                                    immer::box<PairSignal>,
                                    immer::box<UnplugDeviceEvent>,
@@ -196,7 +204,8 @@ using EventsVariant = std::variant<immer::box<PlugDeviceEvent>,
                                    immer::box<ResumeStreamEvent>,
                                    immer::box<StopStreamEvent>,
                                    immer::box<RTPVideoPingEvent>,
-                                   immer::box<RTPAudioPingEvent>>;
+                                   immer::box<RTPAudioPingEvent>,
+                                   immer::box<StartRunner>>;
 
 /**
  * A StreamSession is created when a Moonlight user call `launch`
@@ -229,6 +238,9 @@ struct StreamSession {
    */
   std::shared_ptr<immer::atom<virtual_display::wl_state_ptr>> wayland_display =
       std::make_shared<immer::atom<virtual_display::wl_state_ptr>>();
+
+  std::shared_ptr<immer::atom<std::shared_ptr<audio::VSink>>> audio_sink =
+      std::make_shared<immer::atom<std::shared_ptr<audio::VSink>>>();
 
   // virtual devices
   std::shared_ptr<std::optional<MouseTypes>> mouse = std::make_shared<std::optional<MouseTypes>>();

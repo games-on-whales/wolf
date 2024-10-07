@@ -215,6 +215,45 @@
         }
       }
     },
+    "/api/v1/runners/start": {
+      "post": {
+        "summary": "Start a runner in a given session",
+        "description": "",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/wolf__api__RunnerStartRequest"
+              }
+            }
+          },
+          "description": "",
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/wolf__api__GenericSuccessResponse"
+                }
+              }
+            },
+            "description": ""
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/wolf__api__GenericErrorResponse"
+                }
+              }
+            },
+            "description": ""
+          }
+        }
+      }
+    },
     "/api/v1/sessions/add": {
       "post": {
         "summary": "Create a new stream session",
@@ -346,6 +385,16 @@
           },
           "hevc_gst_pipeline": {
             "type": "string"
+          },
+          "icon_png_path": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "id": {
             "type": "string"
@@ -557,6 +606,35 @@
         "required": [
           "requests",
           "success"
+        ]
+      },
+      "wolf__api__RunnerStartRequest": {
+        "type": "object",
+        "properties": {
+          "runner": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/wolf__config__AppCMD__tagged"
+              },
+              {
+                "$ref": "#/components/schemas/wolf__config__AppDocker__tagged"
+              },
+              {
+                "$ref": "#/components/schemas/wolf__config__AppChildSession__tagged"
+              }
+            ]
+          },
+          "session_id": {
+            "type": "string"
+          },
+          "stop_stream_when_over": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "runner",
+          "session_id",
+          "stop_stream_when_over"
         ]
       },
       "wolf__api__StreamSessionListResponse": {

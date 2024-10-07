@@ -15,7 +15,7 @@ void create_udev_hw_files(std::filesystem::path base_hw_db_path,
 
 void RunDocker::run(std::size_t session_id,
                     std::string_view app_state_folder,
-                    std::shared_ptr<events::devices_atom_queue> plugged_devices_queue,
+                    const std::shared_ptr<events::devices_atom_queue> &plugged_devices_queue,
                     const immer::array<std::string> &virtual_inputs,
                     const immer::array<std::pair<std::string, std::string>> &paths,
                     const immer::map<std::string, std::string> &env_variables,

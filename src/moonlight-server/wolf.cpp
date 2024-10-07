@@ -175,11 +175,15 @@ auto setup_sessions_handlers(const immer::box<state::AppState> &app_state,
   // Run process and our custom wayland as soon as a new StreamSession is created
   handlers.push_back(app_state->event_bus->register_handler<immer::box<events::StreamSession>>(
       [=](const immer::box<events::StreamSession> &session) {
-        auto render_node = session->app->render_node;
+        /* Initialise plugged device queue */
+        auto devices_q = std::make_shared<events::devices_atom_queue>();
+        plugged_devices_queue->update(
+            [=](const session_devices map) { return map.set(session->session_id, devices_q); });
 
         if (session->app->start_virtual_compositor) {
           logs::log(logs::debug, "[STREAM_SESSION] Create wayland compositor");
 
+          auto render_node = session->app->render_node;
           auto wl_state = virtual_display::create_wayland_display({}, render_node);
           virtual_display::set_resolution(
               *wl_state,
@@ -201,25 +205,57 @@ auto setup_sessions_handlers(const immer::box<state::AppState> &app_state,
                                              .refreshRate = session->display_mode.refreshRate},
                                             session->event_bus);
           }).detach();
-        }
-
-        // Start selected app on a separate thread
-        std::thread([=]() {
-          /* Create audio virtual sink */
-          logs::log(logs::debug, "[STREAM_SESSION] Create virtual audio sink");
-          auto pulse_sink_name = fmt::format("virtual_sink_{}", session->session_id);
-          std::shared_ptr<audio::VSink> v_device;
-          if (audio_server && audio_server->server) {
-            v_device = audio::create_virtual_sink(
-                audio_server->server,
-                audio::AudioDevice{.sink_name = pulse_sink_name,
-                                   .mode = state::get_audio_mode(session->audio_channel_count, true)});
+        } else {
+          // Create virtual devices
+          auto mouse = input::Mouse::create();
+          if (!mouse) {
+            logs::log(logs::error, "Failed to create mouse: {}", mouse.getErrorMessage());
+          } else {
+            auto mouse_ptr = input::Mouse(std::move(*mouse));
+            devices_q->push(immer::box<events::PlugDeviceEvent>(
+                events::PlugDeviceEvent{.session_id = session->session_id,
+                                        .udev_events = mouse_ptr.get_udev_events(),
+                                        .udev_hw_db_entries = mouse_ptr.get_udev_hw_db_entries()}));
+            session->mouse->emplace(std::move(mouse_ptr));
           }
 
-          /* Initialise plugged device queue */
-          auto devices_q = std::make_shared<events::devices_atom_queue>();
-          plugged_devices_queue->update(
-              [=](const session_devices map) { return map.set(session->session_id, devices_q); });
+          auto keyboard = input::Keyboard::create();
+          if (!keyboard) {
+            logs::log(logs::error, "Failed to create keyboard: {}", keyboard.getErrorMessage());
+          } else {
+            auto keyboard_ptr = input::Keyboard(std::move(*keyboard));
+            devices_q->push(immer::box<events::PlugDeviceEvent>(
+                events::PlugDeviceEvent{.session_id = session->session_id,
+                                        .udev_events = keyboard_ptr.get_udev_events(),
+                                        .udev_hw_db_entries = keyboard_ptr.get_udev_hw_db_entries()}));
+            session->keyboard->emplace(std::move(keyboard_ptr));
+          }
+        }
+
+        /* Create audio virtual sink */
+        logs::log(logs::debug, "[STREAM_SESSION] Create virtual audio sink");
+        auto pulse_sink_name = fmt::format("virtual_sink_{}", session->session_id);
+        std::shared_ptr<audio::VSink> v_device;
+        if (audio_server && audio_server->server) {
+          v_device = audio::create_virtual_sink(
+              audio_server->server,
+              audio::AudioDevice{.sink_name = pulse_sink_name,
+                                 .mode = state::get_audio_mode(session->audio_channel_count, true)});
+          session->audio_sink->store(v_device);
+        }
+
+        session->event_bus->fire_event(immer::box<events::StartRunner>(
+            events::StartRunner{.stop_stream_when_over = true, .runner = session->app->runner, .stream_session = session
+
+            }));
+      }));
+
+  /* Start runner */
+  handlers.push_back(app_state->event_bus->register_handler<immer::box<events::StartRunner>>(
+      [=](const immer::box<events::StartRunner> &run_session) {
+        // Start selected app on a separate thread
+        std::thread([=]() {
+          auto session = run_session->stream_session;
 
           /* Setup devices paths */
           auto all_devices = immer::array_transient<std::string>();
@@ -231,6 +267,7 @@ auto setup_sessions_handlers(const immer::box<state::AppState> &app_state,
           immer::map_transient<std::string, std::string> full_env;
           full_env.set("XDG_RUNTIME_DIR", runtime_dir);
 
+          auto pulse_sink_name = fmt::format("virtual_sink_{}", session->session_id);
           auto audio_server_name = audio_server ? audio::get_server_name(audio_server->server) : "";
           full_env.set("PULSE_SINK", pulse_sink_name);
           full_env.set("PULSE_SOURCE", pulse_sink_name + ".monitor");
@@ -259,37 +296,13 @@ auto setup_sessions_handlers(const immer::box<state::AppState> &app_state,
 
               full_env.set(utils::to_string(split[0]), utils::to_string(split[1]));
             }
-          } else {
-            // Create virtual devices
-            auto mouse = input::Mouse::create();
-            if (!mouse) {
-              logs::log(logs::error, "Failed to create mouse: {}", mouse.getErrorMessage());
-            } else {
-              auto mouse_ptr = input::Mouse(std::move(*mouse));
-              devices_q->push(immer::box<events::PlugDeviceEvent>(
-                  events::PlugDeviceEvent{.session_id = session->session_id,
-                                          .udev_events = mouse_ptr.get_udev_events(),
-                                          .udev_hw_db_entries = mouse_ptr.get_udev_hw_db_entries()}));
-              session->mouse->emplace(std::move(mouse_ptr));
-            }
-
-            auto keyboard = input::Keyboard::create();
-            if (!keyboard) {
-              logs::log(logs::error, "Failed to create keyboard: {}", keyboard.getErrorMessage());
-            } else {
-              auto keyboard_ptr = input::Keyboard(std::move(*keyboard));
-              devices_q->push(immer::box<events::PlugDeviceEvent>(
-                  events::PlugDeviceEvent{.session_id = session->session_id,
-                                          .udev_events = keyboard_ptr.get_udev_events(),
-                                          .udev_hw_db_entries = keyboard_ptr.get_udev_hw_db_entries()}));
-              session->keyboard->emplace(std::move(keyboard_ptr));
-            }
           }
 
           /* Adding custom state folder */
           mounted_paths.push_back({session->app_state_folder, "/home/retro"});
 
           /* GPU specific adjustments */
+          auto render_node = session->app->render_node;
           auto additional_devices = linked_devices(render_node);
           std::copy(additional_devices.begin(), additional_devices.end(), std::back_inserter(all_devices));
 
@@ -303,26 +316,29 @@ auto setup_sessions_handlers(const immer::box<state::AppState> &app_state,
             full_env.set("INTEL_DEBUG", "norbc"); // see: https://github.com/games-on-whales/wolf/issues/50
           }
 
+          auto devices_q = plugged_devices_queue->load()->find(session->session_id);
+
           /* Finally run the app, this will stop here until over */
-          session->app->runner->run(session->session_id,
-                                    session->app_state_folder,
-                                    devices_q,
-                                    all_devices.persistent(),
-                                    mounted_paths.persistent(),
-                                    full_env.persistent(),
-                                    render_node);
+          run_session->runner->run(session->session_id,
+                                   session->app_state_folder,
+                                   *devices_q,
+                                   all_devices.persistent(),
+                                   mounted_paths.persistent(),
+                                   full_env.persistent(),
+                                   render_node);
 
-          /* App exited, cleanup */
-          logs::log(logs::debug, "[STREAM_SESSION] Remove virtual audio sink");
-          if (audio_server && audio_server->server) {
-            audio::delete_virtual_sink(audio_server->server, v_device);
+          if (run_session->stop_stream_when_over) {
+            /* App exited, cleanup */
+            logs::log(logs::debug, "[STREAM_SESSION] Remove virtual audio sink");
+            if (session->audio_sink) {
+              audio::delete_virtual_sink(audio_server->server, session->audio_sink->load());
+            }
+
+            session->wayland_display->store(nullptr);
+
+            app_state->event_bus->fire_event(
+                immer::box<events::StopStreamEvent>(events::StopStreamEvent{.session_id = session->session_id}));
           }
-
-          session->wayland_display->store(nullptr);
-
-          /* When the app closes there's no point in keeping the stream running */
-          app_state->event_bus->fire_event(
-              immer::box<events::StopStreamEvent>(events::StopStreamEvent{.session_id = session->session_id}));
         }).detach();
       }));
 

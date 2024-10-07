@@ -147,6 +147,16 @@ UnixSocketServer::UnixSocketServer(boost::asio::io_context &io_context,
           .handler = [this](auto req, auto socket) { endpoint_StreamSessionStop(req, socket); },
       });
 
+  state_->http.add(HTTPMethod::POST,
+                   "/api/v1/runners/start",
+                   {
+                       .summary = "Start a runner in a given session",
+                       .request_description = APIDescription{.json_schema = rfl::json::to_schema<RunnerStartRequest>()},
+                       .response_description = {{200, {.json_schema = rfl::json::to_schema<GenericSuccessResponse>()}},
+                                                {500, {.json_schema = rfl::json::to_schema<GenericErrorResponse>()}}},
+                       .handler = [this](auto req, auto socket) { endpoint_RunnerStart(req, socket); },
+                   });
+
   /**
    * OpenAPI schema
    */
