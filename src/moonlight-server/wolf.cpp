@@ -244,10 +244,11 @@ auto setup_sessions_handlers(const immer::box<state::AppState> &app_state,
           session->audio_sink->store(v_device);
         }
 
-        session->event_bus->fire_event(immer::box<events::StartRunner>(
-            events::StartRunner{.stop_stream_when_over = true, .runner = session->app->runner, .stream_session = session
-
-            }));
+        session->event_bus->fire_event(immer::box<events::StartRunner>(events::StartRunner{
+            .stop_stream_when_over = true,
+            .runner = session->app->runner,
+            .stream_session = std::make_shared<events::StreamSession>(*session)
+        }));
       }));
 
   /* Start runner */
