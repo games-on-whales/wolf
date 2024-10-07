@@ -82,6 +82,7 @@ void start_video_producer(std::size_t session_id,
                           const std::shared_ptr<events::EventBusType> &event_bus) {
   auto appsrc_state = streaming::custom_src::setup_app_src(display_mode, std::move(wl_state));
   auto pipeline = fmt::format("appsrc is-live=true name=wolf_wayland_source ! "                        //
+                              "queue ! "                                                               //
                               "interpipesink name={} sync=true async=false max-bytes=0 max-buffers=3", //
                               session_id);
   logs::log(logs::debug, "Starting pipeline: {}", pipeline);
