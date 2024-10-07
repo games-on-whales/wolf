@@ -65,7 +65,8 @@ void UnixSocketServer::endpoint_AddApp(const HTTPRequest &req, std::shared_ptr<U
     state_->app_state->config->apps->update([app = app.value(), this](auto &apps) {
       auto runner = state::get_runner(app.runner, this->state_->app_state->event_bus);
       return apps.push_back(events::App{
-          .base = {.title = app.title, .id = app.id, .support_hdr = app.support_hdr},
+          .base =
+              {.title = app.title, .id = app.id, .support_hdr = app.support_hdr, .icon_png_path = app.icon_png_path},
           .h264_gst_pipeline = app.h264_gst_pipeline,
           .hevc_gst_pipeline = app.hevc_gst_pipeline,
           .av1_gst_pipeline = app.av1_gst_pipeline,

@@ -31,6 +31,7 @@ template <> struct Reflector<events::App> {
     const std::string title;
     const std::string id;
     const bool support_hdr;
+    std::optional<std::string> icon_png_path;
 
     std::string h264_gst_pipeline;
     std::string hevc_gst_pipeline;
@@ -64,6 +65,7 @@ template <> struct Reflector<events::App> {
     return {.title = v.base.title,
             .id = v.base.id,
             .support_hdr = v.base.support_hdr,
+            .icon_png_path = v.base.icon_png_path,
             .h264_gst_pipeline = v.h264_gst_pipeline,
             .hevc_gst_pipeline = v.hevc_gst_pipeline,
             .av1_gst_pipeline = v.av1_gst_pipeline,
