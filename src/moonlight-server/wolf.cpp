@@ -317,15 +317,19 @@ auto setup_sessions_handlers(const immer::box<state::AppState> &app_state,
           }
 
           auto devices_q = plugged_devices_queue->load()->find(session->session_id);
-
-          /* Finally run the app, this will stop here until over */
-          run_session->runner->run(session->session_id,
-                                   session->app_state_folder,
-                                   *devices_q,
-                                   all_devices.persistent(),
-                                   mounted_paths.persistent(),
-                                   full_env.persistent(),
-                                   render_node);
+          if (!devices_q) {
+            logs::log(logs::warning, "No devices queue found for session {}", session->session_id);
+            return;
+          } else {
+            /* Finally run the app, this will stop here until over */
+            run_session->runner->run(session->session_id,
+                                     session->app_state_folder,
+                                     *devices_q,
+                                     all_devices.persistent(),
+                                     mounted_paths.persistent(),
+                                     full_env.persistent(),
+                                     render_node);
+          }
 
           if (run_session->stop_stream_when_over) {
             /* App exited, cleanup */

@@ -12,7 +12,7 @@ using namespace wolf::core::events;
 
 void RunProcess::run(std::size_t session_id,
                      std::string_view app_state_folder,
-                     const std::shared_ptr<events::devices_atom_queue> &plugged_devices_queue,
+                     std::shared_ptr<events::devices_atom_queue> plugged_devices_queue,
                      const immer::array<std::string> &virtual_inputs,
                      const immer::array<std::pair<std::string, std::string>> &paths,
                      const immer::map<std::string, std::string> &env_variables,
