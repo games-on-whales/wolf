@@ -57,6 +57,7 @@ add_subdirectory(src/core)
 
 if (UNIX AND NOT APPLE)
     add_subdirectory(src/fake-udev)
+    add_subdirectory(src/fake-uinput)
 endif ()
 
 option(BUILD_MOONLIGHT "Build Moonlight server" ON)
