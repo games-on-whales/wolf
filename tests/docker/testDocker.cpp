@@ -60,6 +60,7 @@ TEST_CASE("Docker TOML", "DOCKER") {
   docker::DockerAPI docker_api;
 
   auto event_bus = std::make_shared<events::EventBusType>();
+  auto running_sessions = std::make_shared<immer::atom<immer::vector<events::StreamSession>>>();
   std::string toml_cfg = R"(
 
     type = "docker"
@@ -86,7 +87,7 @@ TEST_CASE("Docker TOML", "DOCKER") {
     )";
   std::istringstream is(toml_cfg, std::ios_base::binary | std::ios_base::in);
   // Round trip: load TOML -> serialize back
-  auto runner = state::get_runner(rfl::toml::read<wolf::config::AppDocker>(is).value(), event_bus);
+  auto runner = state::get_runner(rfl::toml::read<wolf::config::AppDocker>(is).value(), event_bus, running_sessions);
   auto container = rfl::get<wolf::config::AppDocker>(runner->serialize().variant());
 
   REQUIRE_THAT(container.name, Equals("WolfTestHelloWorld"));

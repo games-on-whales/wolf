@@ -63,7 +63,8 @@ void UnixSocketServer::endpoint_AddApp(const HTTPRequest &req, std::shared_ptr<U
   auto app = rfl::json::read<rfl::Reflector<wolf::core::events::App>::ReflType>(req.body);
   if (app) {
     state_->app_state->config->apps->update([app = app.value(), this](auto &apps) {
-      auto runner = state::get_runner(app.runner, this->state_->app_state->event_bus);
+      auto runner =
+          state::get_runner(app.runner, this->state_->app_state->event_bus, this->state_->app_state->running_sessions);
       return apps.push_back(events::App{
           .base =
               {.title = app.title, .id = app.id, .support_hdr = app.support_hdr, .icon_png_path = app.icon_png_path},
@@ -214,7 +215,9 @@ void UnixSocketServer::endpoint_RunnerStart(const wolf::api::HTTPRequest &req, s
       return;
     }
 
-    auto runner = state::get_runner(event.value().runner, this->state_->app_state->event_bus);
+    auto runner = state::get_runner(event.value().runner,
+                                    this->state_->app_state->event_bus,
+                                    this->state_->app_state->running_sessions);
     state_->app_state->event_bus->fire_event(immer::box<events::StartRunner>(
         events::StartRunner{.stop_stream_when_over = event.value().stop_stream_when_over,
                             .runner = runner,

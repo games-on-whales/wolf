@@ -32,9 +32,11 @@ static constexpr int DEFAULT_SESSION_TIMEOUT_MILLIS = 4000;
 /**
  * @brief Will try to load the config file and fallback to defaults
  */
-auto load_config(std::string_view config_file, const std::shared_ptr<events::EventBusType> &ev_bus) {
+auto load_config(std::string_view config_file,
+                 const std::shared_ptr<events::EventBusType> &ev_bus,
+                 state::SessionsAtoms running_sessions) {
   logs::log(logs::info, "Reading config file from: {}", config_file);
-  return state::load_or_default(config_file.data(), ev_bus);
+  return state::load_or_default(config_file.data(), ev_bus, running_sessions);
 }
 
 state::Host get_host_config(std::string_view pkey_filename, std::string_view cert_filename) {
@@ -73,7 +75,8 @@ state::Host get_host_config(std::string_view pkey_filename, std::string_view cer
  */
 auto initialize(std::string_view config_file, std::string_view pkey_filename, std::string_view cert_filename) {
   auto event_bus = std::make_shared<events::EventBusType>();
-  auto config = load_config(config_file, event_bus);
+  auto running_sessions = std::make_shared<immer::atom<immer::vector<events::StreamSession>>>();
+  auto config = load_config(config_file, event_bus, running_sessions);
 
   auto host = get_host_config(pkey_filename, cert_filename);
   auto state = state::AppState{
@@ -82,7 +85,7 @@ auto initialize(std::string_view config_file, std::string_view pkey_filename, st
       .pairing_cache = std::make_shared<immer::atom<immer::map<std::string, state::PairCache>>>(),
       .pairing_atom = std::make_shared<immer::atom<immer::map<std::string, immer::box<events::PairSignal>>>>(),
       .event_bus = event_bus,
-      .running_sessions = std::make_shared<immer::atom<immer::vector<events::StreamSession>>>()};
+      .running_sessions = running_sessions};
   return immer::box<state::AppState>(state);
 }
 

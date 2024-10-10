@@ -82,13 +82,14 @@ req(CURL *handle,
 
 TEST_CASE("Pair APIs", "[API]") {
   auto event_bus = std::make_shared<events::EventBusType>();
-  auto config = immer::box<state::Config>(state::load_or_default("config.test.toml", event_bus));
+  auto running_sessions = std::make_shared<immer::atom<immer::vector<events::StreamSession>>>();
+  auto config = immer::box<state::Config>(state::load_or_default("config.test.toml", event_bus, running_sessions));
   auto app_state = immer::box<state::AppState>(state::AppState{
       .config = config,
       .pairing_cache = std::make_shared<immer::atom<immer::map<std::string, state::PairCache>>>(),
       .pairing_atom = std::make_shared<immer::atom<immer::map<std::string, immer::box<events::PairSignal>>>>(),
       .event_bus = event_bus,
-      .running_sessions = std::make_shared<immer::atom<immer::vector<events::StreamSession>>>()});
+      .running_sessions = running_sessions});
 
   // Start the server
   std::thread server_thread([app_state]() { wolf::api::start_server(app_state); });
@@ -137,13 +138,14 @@ TEST_CASE("Pair APIs", "[API]") {
 
 TEST_CASE("APPs APIs", "[API]") {
   auto event_bus = std::make_shared<events::EventBusType>();
-  auto config = immer::box<state::Config>(state::load_or_default("config.test.toml", event_bus));
+  auto running_sessions = std::make_shared<immer::atom<immer::vector<events::StreamSession>>>();
+  auto config = immer::box<state::Config>(state::load_or_default("config.test.toml", event_bus, running_sessions));
   auto app_state = immer::box<state::AppState>(state::AppState{
       .config = config,
       .pairing_cache = std::make_shared<immer::atom<immer::map<std::string, state::PairCache>>>(),
       .pairing_atom = std::make_shared<immer::atom<immer::map<std::string, immer::box<events::PairSignal>>>>(),
       .event_bus = event_bus,
-      .running_sessions = std::make_shared<immer::atom<immer::vector<events::StreamSession>>>()});
+      .running_sessions = running_sessions});
 
   // Start the server
   std::thread server_thread([app_state]() { wolf::api::start_server(app_state); });
@@ -209,13 +211,14 @@ TEST_CASE("APPs APIs", "[API]") {
 
 TEST_CASE("Sessions APIs", "[API]") {
   auto event_bus = std::make_shared<events::EventBusType>();
-  auto config = immer::box<state::Config>(state::load_or_default("config.test.toml", event_bus));
+  auto running_sessions = std::make_shared<immer::atom<immer::vector<events::StreamSession>>>();
+  auto config = immer::box<state::Config>(state::load_or_default("config.test.toml", event_bus, running_sessions));
   auto app_state = immer::box<state::AppState>(state::AppState{
       .config = config,
       .pairing_cache = std::make_shared<immer::atom<immer::map<std::string, state::PairCache>>>(),
       .pairing_atom = std::make_shared<immer::atom<immer::map<std::string, immer::box<events::PairSignal>>>>(),
       .event_bus = event_bus,
-      .running_sessions = std::make_shared<immer::atom<immer::vector<events::StreamSession>>>()});
+      .running_sessions = running_sessions});
 
   // Start the server
   std::thread server_thread([app_state]() { wolf::api::start_server(app_state); });
@@ -297,13 +300,14 @@ void listen_sse(CURL *handle, std::shared_ptr<TSQueue<SSEEvent>> queue, std::str
 
 TEST_CASE("SSE APIs", "[API]") {
   auto event_bus = std::make_shared<events::EventBusType>();
-  auto config = immer::box<state::Config>(state::load_or_default("config.test.toml", event_bus));
+  auto running_sessions = std::make_shared<immer::atom<immer::vector<events::StreamSession>>>();
+  auto config = immer::box<state::Config>(state::load_or_default("config.test.toml", event_bus, running_sessions));
   auto app_state = immer::box<state::AppState>(state::AppState{
       .config = config,
       .pairing_cache = std::make_shared<immer::atom<immer::map<std::string, state::PairCache>>>(),
       .pairing_atom = std::make_shared<immer::atom<immer::map<std::string, immer::box<events::PairSignal>>>>(),
       .event_bus = event_bus,
-      .running_sessions = std::make_shared<immer::atom<immer::vector<events::StreamSession>>>()});
+      .running_sessions = running_sessions});
 
   // Start the server
   std::thread server_thread([app_state]() { wolf::api::start_server(app_state); });
