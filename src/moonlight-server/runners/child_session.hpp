@@ -15,7 +15,7 @@ public:
                   std::shared_ptr<events::EventBusType> ev_bus,
                   state::SessionsAtoms running_sessions)
       : ev_bus(std::move(ev_bus)), parent_session_id(parent_session_id),
-        running_sessions(std::move(running_sessions)) {};
+        running_sessions(std::move(running_sessions)){};
 
   void run(std::size_t session_id,
            std::string_view app_state_folder,

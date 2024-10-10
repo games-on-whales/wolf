@@ -21,7 +21,9 @@ using namespace wolf::config;
  *
  * If the source is not present, it'll provide some sensible defaults
  */
-Config load_or_default(const std::string &source, const std::shared_ptr<events::EventBusType> &ev_bus, state::SessionsAtoms running_sessions);
+Config load_or_default(const std::string &source,
+                       const std::shared_ptr<events::EventBusType> &ev_bus,
+                       state::SessionsAtoms running_sessions);
 
 /**
  * Side effect, will atomically update the paired clients list in cfg
