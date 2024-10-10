@@ -41,6 +41,7 @@ template <> struct Reflector<events::App> {
 
     std::string opus_gst_pipeline;
     bool start_virtual_compositor;
+    bool start_audio_server;
     rfl::TaggedUnion<"type", AppCMD, AppDocker, AppChildSession> runner;
     ControllerType joypad_type;
   };
@@ -72,6 +73,7 @@ template <> struct Reflector<events::App> {
             .render_node = v.render_node,
             .opus_gst_pipeline = v.opus_gst_pipeline,
             .start_virtual_compositor = v.start_virtual_compositor,
+            .start_audio_server = v.start_audio_server,
             .runner = v.runner->serialize(),
             .joypad_type = ctrl_type};
   }

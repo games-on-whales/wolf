@@ -283,9 +283,10 @@ In order to enable this you'll have to add the following app entry in the `confi
 title = "CO-OP session"
 # Get the parent session ID from the Wolf logs
 runner = { type = "child_session", parent_session_id = "4135727842959053255" }
-video = { source = "interpipesrc listen-to=4135727842959053255 is-live=true stream-sync=restart-ts" }
-audio = { source = "pulsesrc device=\"virtual_sink_4135727842959053255.monitor\" server=\"{server_name}\"" }
+video = { source = "interpipesrc listen-to=4135727842959053255_video is-live=true stream-sync=restart-ts max-bytes=0 max-buffers=3 block=false" }
+audio = { source = "interpipesrc listen-to=4135727842959053255_audio is-live=true stream-sync=restart-ts max-bytes=0 max-buffers=3 block=false" }
 start_virtual_compositor = false
+start_audio_server = false
 
 ....
 

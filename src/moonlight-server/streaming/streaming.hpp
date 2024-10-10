@@ -24,6 +24,12 @@ void start_video_producer(std::size_t session_id,
                           const wolf::core::virtual_display::DisplayMode &display_mode,
                           const std::shared_ptr<events::EventBusType> &event_bus);
 
+void start_audio_producer(std::size_t session_id,
+                          const std::shared_ptr<events::EventBusType> &event_bus,
+                          int channel_count,
+                          const std::string &sink_name,
+                          const std::string &server_name);
+
 void start_streaming_video(const immer::box<events::VideoSession> &video_session,
                            const std::shared_ptr<events::EventBusType> &event_bus,
                            unsigned short client_port);

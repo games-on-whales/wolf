@@ -96,6 +96,7 @@ struct BaseApp {
   std::optional<BaseAppAudioOverride> audio;
   std::optional<ControllerType> joypad_type;
   std::optional<bool> start_virtual_compositor;
+  std::optional<bool> start_audio_server;
   rfl::TaggedUnion<"type", AppCMD, AppDocker, AppChildSession> runner;
 };
 

@@ -239,12 +239,21 @@ auto setup_sessions_handlers(const immer::box<state::AppState> &app_state,
         logs::log(logs::debug, "[STREAM_SESSION] Create virtual audio sink");
         auto pulse_sink_name = fmt::format("virtual_sink_{}", session->session_id);
         std::shared_ptr<audio::VSink> v_device;
-        if (audio_server && audio_server->server) {
+        if (session->app->start_audio_server && audio_server && audio_server->server) {
           v_device = audio::create_virtual_sink(
               audio_server->server,
               audio::AudioDevice{.sink_name = pulse_sink_name,
                                  .mode = state::get_audio_mode(session->audio_channel_count, true)});
           session->audio_sink->store(v_device);
+
+          std::thread([session, audio_server = audio_server->server]() {
+            auto sink_name = fmt::format("virtual_sink_{}.monitor", session->session_id);
+            streaming::start_audio_producer(session->session_id,
+                                            session->event_bus,
+                                            session->audio_channel_count,
+                                            sink_name,
+                                            audio::get_server_name(audio_server));
+          }).detach();
         }
 
         session->event_bus->fire_event(immer::box<events::StartRunner>(
@@ -337,7 +346,7 @@ auto setup_sessions_handlers(const immer::box<state::AppState> &app_state,
           if (run_session->stop_stream_when_over) {
             /* App exited, cleanup */
             logs::log(logs::debug, "[STREAM_SESSION] Remove virtual audio sink");
-            if (session->audio_sink) {
+            if (session->app->start_audio_server) {
               audio::delete_virtual_sink(audio_server->server, session->audio_sink->load());
             }
 

@@ -130,11 +130,16 @@ Config load_or_default(const std::string &source,
   auto default_gst_video_settings = cfg.gstreamer.video;
   if (default_gst_video_settings.default_source.find("appsrc") != std::string::npos) {
     logs::log(logs::debug, "Found appsrc in default_source, migrating to interpipesrc");
-    default_gst_video_settings.default_source =
-        "interpipesrc listen-to={session_id} is-live=true stream-sync=restart-ts max-bytes=0 max-buffers=1 block=false";
+    default_gst_video_settings.default_source = "interpipesrc listen-to={session_id}_video is-live=true "
+                                                "stream-sync=restart-ts max-bytes=0 max-buffers=3 block=false";
   }
 
   auto default_gst_audio_settings = cfg.gstreamer.audio;
+  if (default_gst_audio_settings.default_source.find("appsrc") != std::string::npos) {
+    logs::log(logs::debug, "Found pulsesrc in default_source, migrating to interpipesrc");
+    default_gst_audio_settings.default_source = "interpipesrc listen-to={session_id}_audio is-live=true "
+                                                "stream-sync=restart-ts max-bytes=0 max-buffers=3 block=false";
+  }
   auto default_gst_encoder_settings = default_gst_video_settings.defaults;
 
   auto default_app_render_node = utils::get_env("WOLF_RENDER_NODE", "/dev/dri/renderD128");
@@ -235,6 +240,7 @@ Config load_or_default(const std::string &source,
 
                         .opus_gst_pipeline = opus_gst_pipeline,
                         .start_virtual_compositor = app.start_virtual_compositor.value_or(true),
+                        .start_audio_server = app.start_audio_server.value_or(true),
                         .runner = get_runner(app.runner, ev_bus, running_sessions),
                         .joypad_type = get_controller_type(app.joypad_type.value_or(ControllerType::AUTO))}};
       }) |                                                  //

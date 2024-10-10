@@ -149,6 +149,7 @@ base_create_json = """
 [[apps]]
 title = "Test ball"
 start_virtual_compositor = false
+start_audio_server = false
 
 [apps.runner]
 type = "process"
@@ -170,7 +171,7 @@ source = "audiotestsrc wave=ticks is-live=true"
 
 [gstreamer.video]
 
-default_source = "interpipesrc listen-to={session_id} is-live=true stream-sync=restart-ts max-bytes=0 max-buffers=1 block=false"
+default_source = "interpipesrc listen-to={session_id}_video is-live=true stream-sync=restart-ts max-bytes=0 max-buffers=3 block=false"
 default_sink = """
 rtpmoonlightpay_video name=moonlight_pay \
 payload_size={payload_size} fec_percentage={fec_percentage} min_required_fec_packets={min_required_fec_packets} !
@@ -374,10 +375,10 @@ video/x-av1, stream-format=obu-stream, alignment=frame, profile=main\
 ###
 [gstreamer.audio]
 default_source = """
-pulsesrc device="{sink_name}" server="{server_name}"\
+interpipesrc listen-to={session_id}_audio is-live=true stream-sync=restart-ts max-bytes=0 max-buffers=3 block=false\
 """
 
-default_audio_params = "audio/x-raw, channels={channels}, rate=48000"
+default_audio_params = "queue max-size-buffers=3 leaky=downstream ! audiorate ! audioconvert"
 
 default_opus_encoder = """
 opusenc bitrate={bitrate} bitrate-type=cbr frame-size={packet_duration} bandwidth=fullband \

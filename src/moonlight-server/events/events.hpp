@@ -69,6 +69,7 @@ struct App {
 
   std::string opus_gst_pipeline;
   bool start_virtual_compositor;
+  bool start_audio_server;
   std::shared_ptr<Runner> runner;
   moonlight::control::pkts::CONTROLLER_TYPE joypad_type;
 };

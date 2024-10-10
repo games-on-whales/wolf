@@ -81,11 +81,11 @@ void start_video_producer(std::size_t session_id,
                           const wolf::core::virtual_display::DisplayMode &display_mode,
                           const std::shared_ptr<events::EventBusType> &event_bus) {
   auto appsrc_state = streaming::custom_src::setup_app_src(display_mode, std::move(wl_state));
-  auto pipeline = fmt::format("appsrc is-live=true name=wolf_wayland_source ! "                        //
-                              "queue ! "                                                               //
-                              "interpipesink name={} sync=true async=false max-bytes=0 max-buffers=3", //
+  auto pipeline = fmt::format("appsrc is-live=true name=wolf_wayland_source ! "                              //
+                              "queue ! "                                                                     //
+                              "interpipesink name={}_video sync=true async=false max-bytes=0 max-buffers=3", //
                               session_id);
-  logs::log(logs::debug, "Starting pipeline: {}", pipeline);
+  logs::log(logs::debug, "[GSTREAMER] Starting video producer: {}", pipeline);
   run_pipeline(pipeline, [=](auto pipeline, auto loop) {
     if (auto app_src_el = gst_bin_get_by_name(GST_BIN(pipeline.get()), "wolf_wayland_source")) {
       appsrc_state->context = g_main_context_get_thread_default();
@@ -115,7 +115,36 @@ void start_video_producer(std::size_t session_id,
     auto stop_handler = event_bus->register_handler<immer::box<events::StopStreamEvent>>(
         [session_id, loop](const immer::box<events::StopStreamEvent> &ev) {
           if (ev->session_id == session_id) {
-            logs::log(logs::debug, "[GSTREAMER] Stopping pipeline: {}", session_id);
+            logs::log(logs::debug, "[GSTREAMER] Stopping video producer: {}", session_id);
+            g_main_loop_quit(loop.get());
+          }
+        });
+
+    return immer::array<immer::box<events::EventBusHandlers>>{std::move(stop_handler)};
+  });
+}
+
+void start_audio_producer(std::size_t session_id,
+                          const std::shared_ptr<events::EventBusType> &event_bus,
+                          int channel_count,
+                          const std::string &sink_name,
+                          const std::string &server_name) {
+  auto pipeline = fmt::format(
+      "pulsesrc device=\"{sink_name}\" server=\"{server_name}\" ! " //
+      "audio/x-raw, channels={channels}, rate=48000 ! "             //
+      "queue ! "                                                    //
+      "interpipesink name=\"{session_id}_audio\" sync=true async=false max-bytes=0 max-buffers=3",
+      fmt::arg("session_id", session_id),
+      fmt::arg("channels", channel_count),
+      fmt::arg("sink_name", sink_name),
+      fmt::arg("server_name", server_name));
+  logs::log(logs::debug, "[GSTREAMER] Starting audio producer: {}", pipeline);
+
+  run_pipeline(pipeline, [=](auto pipeline, auto loop) {
+    auto stop_handler = event_bus->register_handler<immer::box<events::StopStreamEvent>>(
+        [session_id, loop](const immer::box<events::StopStreamEvent> &ev) {
+          if (ev->session_id == session_id) {
+            logs::log(logs::debug, "[GSTREAMER] Stopping audio producer: {}", session_id);
             g_main_loop_quit(loop.get());
           }
         });
@@ -224,6 +253,7 @@ void start_streaming_audio(const immer::box<events::AudioSession> &audio_session
                            const std::string &server_name) {
   auto pipeline = fmt::format(
       fmt::runtime(audio_session->gst_pipeline),
+      fmt::arg("session_id", audio_session->session_id),
       fmt::arg("channels", audio_session->audio_mode.channels),
       fmt::arg("bitrate", audio_session->audio_mode.bitrate),
       // TODO: opusenc hardcodes those two
