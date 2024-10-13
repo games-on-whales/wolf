@@ -498,15 +498,19 @@ void run() {
   std::thread([local_state]() { wolf::api::start_server(local_state); }).detach();
 
   // mDNS
-  mdns_cpp::Logger::setLoggerSink([](const std::string &msg) {
-    // msg here will include a /n at the end, so we remove it
-    logs::log(logs::trace, "mDNS: {}", msg.substr(0, msg.size() - 1));
-  });
-  mdns_cpp::mDNS mdns;
-  mdns.setServiceName("_nvstream._tcp.local.");
-  mdns.setServiceHostname(local_state->config->hostname);
-  mdns.setServicePort(state::HTTP_PORT);
-  mdns.startService();
+  try {
+    mdns_cpp::Logger::setLoggerSink([](const std::string &msg) {
+      // msg here will include a /n at the end, so we remove it
+      logs::log(logs::trace, "mDNS: {}", msg.substr(0, msg.size() - 1));
+    });
+    mdns_cpp::mDNS mdns;
+    mdns.setServiceName("_nvstream._tcp.local.");
+    mdns.setServiceHostname(local_state->config->hostname);
+    mdns.setServicePort(state::HTTP_PORT);
+    mdns.startService();
+  } catch (const std::exception &e) {
+    logs::log(logs::error, "mDNS error: {}", e.what());
+  }
 
   auto audio_server = setup_audio_server(runtime_dir);
   auto sess_handlers = setup_sessions_handlers(local_state, runtime_dir, audio_server);
