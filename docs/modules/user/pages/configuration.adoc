@@ -165,28 +165,30 @@ You can re-define parts of the Gstreamer pipeline easily, ex:
 title = "Test ball" #<1>
 start_virtual_compositor = false #<2>
 app_state_folder = "some/folder" #<3>
+icon_png_path = "ball.png" #<4>
 
-[apps.runner] #<4>
+[apps.runner] #<5>
 type = "process"
 run_cmd = "sh -c \"while :; do echo 'running...'; sleep 10; done\""
 
-[apps.video] #<5>
+[apps.video] #<6>
 source = """
 videotestsrc pattern=ball flip=true is-live=true !
 video/x-raw, framerate={fps}/1
 \
 """
 
-[apps.audio] #<6>
+[apps.audio] #<7>
 source = "audiotestsrc wave=ticks is-live=true"
 ....
 
 <1> *title*: this is the name that will be displayed in Moonlight
 <2> *start_virtual_compositor*: set to True if this app needs our custom virtual compositor (TODO: document this better)
 <3> *app_state_folder*: the folder where the app will store permanent data, see: xref:data_setup[]
-<4> *runner*: the type of process to run in order to start this app, see: xref:_app_runner[]
-<5> *video*: here it's possible to override the default video pipeline variables defined in: xref:_gstreamer[]
-<6> *audio*: here it's possible to override the default audio pipeline variables defined in: xref:_gstreamer[]
+<4> *icon_png_path*: this is the box art that will be displayed in Moonlight (PNG, ideally 200x266 or 628x888 pixels)
+<5> *runner*: the type of process to run in order to start this app, see: xref:_app_runner[]
+<6> *video*: here it's possible to override the default video pipeline variables defined in: xref:_gstreamer[]
+<7> *audio*: here it's possible to override the default audio pipeline variables defined in: xref:_gstreamer[]
 
 See more examples in the xref:gstreamer.adoc[] page.
 
@@ -269,9 +271,31 @@ In order to automatically pick up the right encoder at runtime based on the user
 
 You can read more about gstreamer and custom pipelines in the xref:gstreamer.adoc[] page.
 
+== CO-OP sessions
+
+There's experimental support for CO-OP sessions, this will allow multiple clients to connect to the same virtual session and play together. +
+
+In order to enable this you'll have to add the following app entry in the `config.toml` file:
+
+[source,toml]
+....
+[[apps]]
+title = "CO-OP session"
+# Get the parent session ID from the Wolf logs
+runner = { type = "child_session", parent_session_id = "4135727842959053255" }
+video = { source = "interpipesrc listen-to=4135727842959053255_video is-live=true stream-sync=restart-ts max-bytes=0 max-buffers=3 block=false" }
+audio = { source = "interpipesrc listen-to=4135727842959053255_audio is-live=true stream-sync=restart-ts max-bytes=0 max-buffers=3 block=false" }
+start_virtual_compositor = false
+start_audio_server = false
+
+....
+
+In this example, the `parent_session_id` is the session ID of the parent session that you want to connect to. +
+The process will be simplified once we complete implementing a custom UI for Wolf, see: https://github.com/games-on-whales/wolf/issues/80[games-on-whales/wolf#80].
+
 === Set Window compositor
 
-Wolf support both https://swaywm.org/[Sway] and https://github.com/ValveSoftware/gamescope[Gamescope] compositor. 
+Wolf support both https://swaywm.org/[Sway] and https://github.com/ValveSoftware/gamescope[Gamescope] compositor.
 
 Sway is used by default, but some game may work better with one or the other.
 
@@ -283,7 +307,7 @@ Usage is controlled by environment variables on `[apps.runner]` configs:
 [WARNING]
 ====
 Gamescope have some known issues:
-- It may be unstable with some Nvidia driver versions. See https://github.com/games-on-whales/wolf/issues/60[#60]. 
+- It may be unstable with some Nvidia driver versions. See https://github.com/games-on-whales/wolf/issues/60[#60].
 - It doesn't support multiple windows which may cause issues with multi-window applications like Steam desktop UI.
 
 Switch to Gamescope only if you encounter issues with Sway.
@@ -427,7 +451,7 @@ env = [
 
 === Using configuration file
 
-Using configuration file allow more layouts to be configured. 
+Using configuration file allow more layouts to be configured.
 
 .Note: configuration file is only supported for Sway compositor and won't have any effect wih Gamescope.
 

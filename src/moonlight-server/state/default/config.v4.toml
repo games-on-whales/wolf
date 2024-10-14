@@ -149,6 +149,7 @@ base_create_json = """
 [[apps]]
 title = "Test ball"
 start_virtual_compositor = false
+start_audio_server = false
 
 [apps.runner]
 type = "process"
@@ -170,7 +171,7 @@ source = "audiotestsrc wave=ticks is-live=true"
 
 [gstreamer.video]
 
-default_source = "appsrc name=wolf_wayland_source is-live=true block=false format=3 stream-type=0"
+default_source = "interpipesrc listen-to={session_id}_video is-live=true stream-sync=restart-ts max-bytes=0 max-buffers=3 block=false"
 default_sink = """
 rtpmoonlightpay_video name=moonlight_pay \
 payload_size={payload_size} fec_percentage={fec_percentage} min_required_fec_packets={min_required_fec_packets} !
@@ -192,14 +193,14 @@ chroma-site={color_range}, format=NV12, colorimetry={color_space}, pixel-aspect-
 [gstreamer.video.defaults.qsv]
 video_params = """
 queue !
-videoconvert !
+videoconvertscale !
 video/x-raw, chroma-site={color_range}, width={width}, height={height}, format=NV12, colorimetry={color_space}\
 """
 
 [gstreamer.video.defaults.vaapi]
 video_params = """
 queue !
-videoconvert !
+videoconvertscale !
 video/x-raw, chroma-site={color_range}, width={width}, height={height}, format=NV12, colorimetry={color_space}\
 """
 
@@ -218,7 +219,7 @@ video/x-h265, profile=main, stream-format=byte-stream\
 
 [[gstreamer.video.hevc_encoders]]
 plugin_name = "qsv"
-check_elements = ["qsvh265enc", "videoconvert"]
+check_elements = ["qsvh265enc", "videoconvertscale"]
 encoder_pipeline = """
 qsvh265enc b-frames=0 gop-size=0 idr-interval=1 ref-frames=1 bitrate={bitrate} rate-control=cbr low-latency=1 target-usage=6 !
 h265parse !
@@ -227,7 +228,7 @@ video/x-h265, profile=main, stream-format=byte-stream\
 
 [[gstreamer.video.hevc_encoders]]
 plugin_name = "vaapi"
-check_elements = ["vah265lpenc", "videoconvert"] # lp: (Low Power)
+check_elements = ["vah265lpenc", "videoconvertscale"] # lp: (Low Power)
 encoder_pipeline = """
 vah265lpenc aud=false b-frames=0 ref-frames=1 num-slices={slices_per_frame} bitrate={bitrate} mbbrc=1 rate-control=cbr target-usage=6 !
 h265parse !
@@ -236,7 +237,7 @@ video/x-h265, profile=main, stream-format=byte-stream\
 
 [[gstreamer.video.hevc_encoders]]
 plugin_name = "vaapi"
-check_elements = ["vah265enc", "videoconvert"]
+check_elements = ["vah265enc", "videoconvertscale"]
 encoder_pipeline = """
 vah265enc aud=false b-frames=0 ref-frames=1 num-slices={slices_per_frame} bitrate={bitrate} mbbrc=1 rate-control=cbr target-usage=6 !
 h265parse !
@@ -247,8 +248,7 @@ video/x-h265, profile=main, stream-format=byte-stream\
 plugin_name = "x265" # SW Encoding
 check_elements = ["x265enc"]
 video_params = """
-videoscale !
-videoconvert !
+videoconvertscale !
 videorate !
 video/x-raw, width={width}, height={height}, framerate={fps}/1, format=I420,
 chroma-site={color_range}, colorimetry={color_space}\
@@ -275,7 +275,7 @@ video/x-h264, profile=main, stream-format=byte-stream\
 
 [[gstreamer.video.h264_encoders]]
 plugin_name = "qsv"
-check_elements = ["qsvh264enc", "videoconvert"]
+check_elements = ["qsvh264enc", "videoconvertscale"]
 encoder_pipeline = """
 qsvh264enc b-frames=0 gop-size=0 idr-interval=1 ref-frames=1 bitrate={bitrate} rate-control=cbr target-usage=6  !
 h264parse !
@@ -284,7 +284,7 @@ video/x-h264, profile=main, stream-format=byte-stream\
 
 [[gstreamer.video.h264_encoders]]
 plugin_name = "vaapi"
-check_elements = ["vah264lpenc", "videoconvert"] # lp: (Low Power)
+check_elements = ["vah264lpenc", "videoconvertscale"] # lp: (Low Power)
 encoder_pipeline = """
 vah264lpenc aud=false b-frames=0 ref-frames=1 num-slices={slices_per_frame} bitrate={bitrate} target-usage=6 !
 h264parse !
@@ -293,7 +293,7 @@ video/x-h264, profile=main, stream-format=byte-stream\
 
 [[gstreamer.video.h264_encoders]]
 plugin_name = "vaapi"
-check_elements = ["vah264enc", "videoconvert"]
+check_elements = ["vah264enc", "videoconvertscale"]
 encoder_pipeline = """
 vah264enc aud=false b-frames=0 ref-frames=1 num-slices={slices_per_frame} bitrate={bitrate} target-usage=6 !
 h264parse !
@@ -304,8 +304,7 @@ video/x-h264, profile=main, stream-format=byte-stream\
 plugin_name = "x264" # SW Encoding
 check_elements = ["x264enc"]
 video_params = """
-videoscale !
-videoconvert !
+videoconvertscale !
 videorate !
 video/x-raw, width={width}, height={height}, framerate={fps}/1, format=I420,
 chroma-site={color_range}, colorimetry={color_space}\
@@ -331,7 +330,7 @@ video/x-av1, stream-format=obu-stream, alignment=frame, profile=main\
 
 [[gstreamer.video.av1_encoders]]
 plugin_name = "qsv"
-check_elements = ["qsvav1enc", "videoconvert"]
+check_elements = ["qsvav1enc", "videoconvertscale"]
 encoder_pipeline = """
 qsvav1enc gop-size=0 ref-frames=1 bitrate={bitrate} rate-control=cbr low-latency=1 target-usage=6 !
 av1parse !
@@ -340,7 +339,7 @@ video/x-av1, stream-format=obu-stream, alignment=frame, profile=main\
 
 [[gstreamer.video.av1_encoders]]
 plugin_name = "vaapi"
-check_elements = ["vaav1enc", "videoconvert"]
+check_elements = ["vaav1enc", "videoconvertscale"]
 encoder_pipeline = """
 vaav1enc gop-size=0 ref-frames=1 bitrate={bitrate} rate-control=cbr !
 av1parse !
@@ -349,7 +348,7 @@ video/x-av1, stream-format=obu-stream, alignment=frame, profile=main\
 
 [[gstreamer.video.av1_encoders]]
 plugin_name = "vaapi"
-check_elements = ["vaav1lpenc", "videoconvert"] # LP = Low Power
+check_elements = ["vaav1lpenc", "videoconvertscale"] # LP = Low Power
 encoder_pipeline = """
 vaav1lpenc gop-size=0 ref-frames=1 bitrate={bitrate} rate-control=cbr !
 av1parse !
@@ -360,8 +359,7 @@ video/x-av1, stream-format=obu-stream, alignment=frame, profile=main\
 plugin_name = "aom"
 check_elements = ["av1enc"]
 video_params = """
-videoscale !
-videoconvert !
+videoconvertscale !
 videorate !
 video/x-raw, width={width}, height={height}, framerate={fps}/1, format=I420,
 chroma-site={color_range}, colorimetry={color_space}\
@@ -377,10 +375,10 @@ video/x-av1, stream-format=obu-stream, alignment=frame, profile=main\
 ###
 [gstreamer.audio]
 default_source = """
-pulsesrc device="{sink_name}" server="{server_name}"\
+interpipesrc listen-to={session_id}_audio is-live=true stream-sync=restart-ts max-bytes=0 max-buffers=3 block=false\
 """
 
-default_audio_params = "audio/x-raw, channels={channels}, rate=48000"
+default_audio_params = "queue max-size-buffers=3 leaky=downstream ! audiorate ! audioconvert"
 
 default_opus_encoder = """
 opusenc bitrate={bitrate} bitrate-type=cbr frame-size={packet_duration} bandwidth=fullband \

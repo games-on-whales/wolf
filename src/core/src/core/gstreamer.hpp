@@ -32,7 +32,7 @@ static void pipeline_eos_handler(GstBus *bus, GstMessage *message, gpointer data
 }
 
 static bool run_pipeline(const std::string &pipeline_desc,
-                         const std::function<immer::array<immer::box<dp::handler_registration>>(
+                         const std::function<immer::array<immer::box<events::EventBusHandlers>>(
                              gst_element_ptr /* pipeline */, gst_main_loop_ptr /* main_loop */)> &on_pipeline_ready) {
   GError *error = nullptr;
   gst_element_ptr pipeline(gst_parse_launch(pipeline_desc.c_str(), &error), [](const auto &pipeline) {
@@ -81,10 +81,6 @@ static bool run_pipeline(const std::string &pipeline_desc,
   gst_element_set_state(pipeline.get(), GST_STATE_PAUSED);
   gst_element_set_state(pipeline.get(), GST_STATE_READY);
   gst_element_set_state(pipeline.get(), GST_STATE_NULL);
-
-  for (const auto &handler : handlers) {
-    handler->unregister();
-  }
 
   return true;
 }

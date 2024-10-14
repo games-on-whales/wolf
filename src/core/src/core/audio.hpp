@@ -20,7 +20,7 @@ constexpr auto SAMPLE_RATE = 48000;
 
 struct AudioMode {
 
-  enum Speakers {
+  enum class Speakers {
     FRONT_LEFT,
     FRONT_RIGHT,
     FRONT_CENTER,

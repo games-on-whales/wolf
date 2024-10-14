@@ -66,7 +66,7 @@ public:
     receive_message([self = shared_from_this()](auto parsed_msg) {
       if (parsed_msg) {
         auto user_ip = self->socket().remote_endpoint().address().to_string();
-        auto session = get_session_by_ip(self->stream_sessions->load(), user_ip);
+        auto session = state::get_session_by_ip(self->stream_sessions->load(), user_ip);
         if (session) {
           auto response = commands::message_handler(parsed_msg.value(), session.value());
           self->send_message(response, [self](auto bytes) { self->close(); });

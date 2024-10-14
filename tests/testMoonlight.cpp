@@ -19,39 +19,45 @@ using namespace state;
 using namespace ranges;
 
 TEST_CASE("LocalState load TOML", "[LocalState]") {
-  auto event_bus = std::make_shared<dp::event_bus>();
-  auto state = state::load_or_default("config.test.toml", event_bus);
+  auto event_bus = std::make_shared<events::EventBusType>();
+  auto running_sessions = std::make_shared<immer::atom<immer::vector<events::StreamSession>>>();
+  auto state = state::load_or_default("config.test.toml", event_bus, running_sessions);
   REQUIRE(state.hostname == "Wolf");
   REQUIRE(state.uuid == "0000-1111-2222-3333");
   REQUIRE(state.support_hevc);
 
   SECTION("Apps") {
-    REQUIRE_THAT(state.apps, Catch::Matchers::SizeIs(2));
+    auto apps = state.apps->load().get();
+    REQUIRE_THAT(apps, Catch::Matchers::SizeIs(2));
 
-    auto first_app = state.apps[0];
-    REQUIRE_THAT(first_app.base.title, Equals("Firefox"));
-    REQUIRE_THAT(first_app.base.id, Equals("1"));
-    REQUIRE_THAT(first_app.h264_gst_pipeline, Equals("video_source !\ndefault !\nh264_pipeline !\nvideo_sink"));
-    REQUIRE_THAT(first_app.hevc_gst_pipeline, Equals("video_source !\ndefault !\nhevc_pipeline !\nvideo_sink"));
-    REQUIRE_THAT(first_app.av1_gst_pipeline, Equals("video_source !\nparams !\nav1_pipeline !\nvideo_sink"));
-    REQUIRE(first_app.joypad_type == moonlight::control::pkts::CONTROLLER_TYPE::AUTO);
-    REQUIRE(first_app.start_virtual_compositor);
-    REQUIRE(first_app.render_node == "/dev/dri/renderD128");
-    REQUIRE_THAT(toml::find(first_app.runner->serialise(), "type").as_string(), Equals("docker"));
+    auto first_app = apps[0];
+    REQUIRE_THAT(first_app->base.title, Equals("Firefox"));
+    REQUIRE_THAT(first_app->base.id, Equals("1"));
+    REQUIRE_THAT(first_app->base.icon_png_path.value(), Equals("firefox.png"));
+    REQUIRE_THAT(first_app->h264_gst_pipeline, Equals("video_source !\ndefault !\nh264_pipeline !\nvideo_sink"));
+    REQUIRE_THAT(first_app->hevc_gst_pipeline, Equals("video_source !\ndefault !\nhevc_pipeline !\nvideo_sink"));
+    REQUIRE_THAT(first_app->av1_gst_pipeline, Equals("video_source !\nparams !\nav1_pipeline !\nvideo_sink"));
+    REQUIRE(first_app->joypad_type == moonlight::control::pkts::CONTROLLER_TYPE::AUTO);
+    REQUIRE(first_app->start_virtual_compositor);
+    REQUIRE(first_app->render_node == "/dev/dri/renderD128");
+    auto first_app_runner = rfl::get<AppDocker>(first_app->runner->serialize().variant());
+    REQUIRE_THAT(first_app_runner.image, Equals("ghcr.io/games-on-whales/firefox:master"));
 
-    auto second_app = state.apps[1];
-    REQUIRE_THAT(second_app.base.title, Equals("Test ball"));
-    REQUIRE_THAT(second_app.base.id, Equals("2"));
-    REQUIRE_THAT(second_app.h264_gst_pipeline,
+    auto second_app = apps[1];
+    REQUIRE_THAT(second_app->base.title, Equals("Test ball"));
+    REQUIRE_THAT(second_app->base.id, Equals("2"));
+    REQUIRE(second_app->base.icon_png_path.has_value() == false);
+    REQUIRE_THAT(second_app->h264_gst_pipeline,
                  Equals("override DEFAULT SOURCE !\ndefault !\nh264_pipeline !\nvideo_sink"));
-    REQUIRE_THAT(second_app.hevc_gst_pipeline,
+    REQUIRE_THAT(second_app->hevc_gst_pipeline,
                  Equals("override DEFAULT SOURCE !\ndefault !\nhevc_pipeline !\nvideo_sink"));
-    REQUIRE_THAT(second_app.av1_gst_pipeline,
+    REQUIRE_THAT(second_app->av1_gst_pipeline,
                  Equals("override DEFAULT SOURCE !\nparams !\nav1_pipeline !\nvideo_sink"));
-    REQUIRE(!second_app.start_virtual_compositor);
-    REQUIRE(second_app.joypad_type == moonlight::control::pkts::CONTROLLER_TYPE::XBOX);
-    REQUIRE(second_app.render_node == "/tmp/dead_beef");
-    REQUIRE_THAT(toml::find(second_app.runner->serialise(), "type").as_string(), Equals("process"));
+    REQUIRE(!second_app->start_virtual_compositor);
+    REQUIRE(second_app->joypad_type == moonlight::control::pkts::CONTROLLER_TYPE::XBOX);
+    REQUIRE(second_app->render_node == "/tmp/dead_beef");
+    auto second_app_runner = rfl::get<AppCMD>(second_app->runner->serialize().variant());
+    REQUIRE_THAT(second_app_runner.run_cmd, Equals("destroy_computer_now"));
   }
 
   SECTION("Paired Clients") {
@@ -64,7 +70,7 @@ TEST_CASE("LocalState load TOML", "[LocalState]") {
 }
 
 TEST_CASE("LocalState pairing information", "[LocalState]") {
-  auto event_bus = std::make_shared<dp::event_bus>();
+  auto event_bus = std::make_shared<events::EventBusType>();
   auto clients_atom = std::make_shared<immer::atom<state::PairedClientList>>();
   auto cfg = state::Config{.config_source = "config.test.toml", .paired_clients = clients_atom};
   auto a_client_cert = "-----BEGIN CERTIFICATE-----\n"
@@ -125,8 +131,9 @@ TEST_CASE("LocalState pairing information", "[LocalState]") {
 }
 
 TEST_CASE("Mocked serverinfo", "[MoonlightProtocol]") {
-  auto event_bus = std::make_shared<dp::event_bus>();
-  auto cfg = state::load_or_default("config.test.toml", event_bus);
+  auto event_bus = std::make_shared<events::EventBusType>();
+  auto running_sessions = std::make_shared<immer::atom<immer::vector<events::StreamSession>>>();
+  auto cfg = state::load_or_default("config.test.toml", event_bus, running_sessions);
   immer::array<DisplayMode> displayModes = {{1920, 1080, 60}, {1024, 768, 30}};
 
   SECTION("server_info conforms with the expected HEVC response") {
@@ -329,9 +336,11 @@ TEST_CASE("Pairing moonlight", "[MoonlightProtocol]") {
 }
 
 TEST_CASE("applist", "[MoonlightProtocol]") {
-  auto event_bus = std::make_shared<dp::event_bus>();
-  auto cfg = state::load_or_default("config.test.toml", event_bus);
-  auto base_apps = cfg.apps | views::transform([](auto app) { return app.base; }) | to<immer::vector<moonlight::App>>();
+  auto event_bus = std::make_shared<events::EventBusType>();
+  auto running_sessions = std::make_shared<immer::atom<immer::vector<events::StreamSession>>>();
+  auto cfg = state::load_or_default("config.test.toml", event_bus, running_sessions);
+  auto base_apps = cfg.apps->load().get() | views::transform([](auto app) { return app->base; }) |
+                   to<immer::vector<moonlight::App>>();
   auto result = applist(base_apps);
   REQUIRE(xml_to_str(result) == "<?xml version=\"1.0\" encoding=\"utf-8\"?>\n"
                                 "<root status_code=\"200\">"
@@ -341,8 +350,9 @@ TEST_CASE("applist", "[MoonlightProtocol]") {
 }
 
 TEST_CASE("launch", "[MoonlightProtocol]") {
-  auto event_bus = std::make_shared<dp::event_bus>();
-  auto cfg = state::load_or_default("config.test.toml", event_bus);
+  auto event_bus = std::make_shared<events::EventBusType>();
+  auto running_sessions = std::make_shared<immer::atom<immer::vector<events::StreamSession>>>();
+  auto cfg = state::load_or_default("config.test.toml", event_bus, running_sessions);
   auto result = launch_success("192.168.1.1", "3021");
   REQUIRE(xml_to_str(result) == "<?xml version=\"1.0\" encoding=\"utf-8\"?>\n"
                                 "<root status_code=\"200\">"
@@ -352,46 +362,46 @@ TEST_CASE("launch", "[MoonlightProtocol]") {
 }
 
 TEST_CASE("Multiple users", "[HTTP]") {
-  auto event_bus = std::make_shared<dp::event_bus>();
+  auto event_bus = std::make_shared<events::EventBusType>();
   auto paired_clients = std::shared_ptr<immer::atom<state::PairedClientList>>();
   auto app_state = state::AppState{
       .config = state::Config{.paired_clients = paired_clients},
       .host = {},
       .pairing_cache = std::make_shared<immer::atom<immer::map<std::string, state::PairCache>>>(),
       .event_bus = event_bus,
-      .running_sessions = std::make_shared<immer::atom<immer::vector<state::StreamSession>>>()};
+      .running_sessions = std::make_shared<immer::atom<immer::vector<events::StreamSession>>>()};
 
   auto client1 = state::PairedClient{.app_state_folder = "test"};
-  auto app1 = state::App{.base = moonlight::App{.title = "test_app"}};
+  auto app1 = events::App{.base = moonlight::App{.title = "test_app"}};
   auto client1_ip = "0.0.0.0";
   auto client1_headers = SimpleWeb::CaseInsensitiveMultimap{{"rikey", "1234"}, {"rikeyid", "5678"}};
   auto session1 = endpoints::https::create_run_session(client1_headers, client1_ip, client1, app_state, app1);
 
-  REQUIRE(session1.video_stream_port == 48100);
-  REQUIRE(session1.audio_stream_port == 48200);
+  REQUIRE(session1->video_stream_port == 48100);
+  REQUIRE(session1->audio_stream_port == 48200);
 
-  app_state.running_sessions->update([session1](auto &sessions) { return sessions.push_back(session1); });
+  app_state.running_sessions->update([session1](auto &sessions) { return sessions.push_back(*session1); });
   auto session2 = endpoints::https::create_run_session(client1_headers, client1_ip, client1, app_state, app1);
 
-  REQUIRE(session2.video_stream_port == 48101);
-  REQUIRE(session2.audio_stream_port == 48201);
+  REQUIRE(session2->video_stream_port == 48101);
+  REQUIRE(session2->audio_stream_port == 48201);
 
   // Saving only the second session
   app_state.running_sessions->update(
-      [session2](auto &sessions) { return immer::vector<state::StreamSession>{session2}; });
+      [session2](auto &sessions) { return immer::vector<events::StreamSession>{*session2}; });
   // We should now assign back the now available [48100, 48200] ports
   auto session3 = endpoints::https::create_run_session(client1_headers, client1_ip, client1, app_state, app1);
 
-  REQUIRE(session3.video_stream_port == 48100);
-  REQUIRE(session3.audio_stream_port == 48200);
+  REQUIRE(session3->video_stream_port == 48100);
+  REQUIRE(session3->audio_stream_port == 48200);
 
   // Saving all 3 sessions (even if one is a duplicate)
   app_state.running_sessions->update([session1, session2, session3](auto &sessions) {
-    return immer::vector<state::StreamSession>{session1, session2, session3};
+    return immer::vector<events::StreamSession>{*session1, *session2, *session3};
   });
   // We should now assign the 2nd port (even if we have 3 sessions) because of port clash
   auto session4 = endpoints::https::create_run_session(client1_headers, client1_ip, client1, app_state, app1);
 
-  REQUIRE(session4.video_stream_port == 48102);
-  REQUIRE(session4.audio_stream_port == 48202);
+  REQUIRE(session4->video_stream_port == 48102);
+  REQUIRE(session4->audio_stream_port == 48202);
 }

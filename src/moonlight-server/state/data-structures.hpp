@@ -7,6 +7,7 @@
 #include <core/virtual-display.hpp>
 #include <deque>
 #include <eventbus/event_bus.hpp>
+#include <events/events.hpp>
 #include <helpers/tsqueue.hpp>
 #include <immer/array.hpp>
 #include <immer/atom.hpp>
@@ -17,40 +18,13 @@
 #include <moonlight/data-structures.hpp>
 #include <openssl/x509.h>
 #include <optional>
-#include <toml.hpp>
+#include <state/serialised_config.hpp>
 #include <utility>
 
 namespace state {
 using namespace std::chrono_literals;
 using namespace wolf::core;
 namespace ba = boost::asio;
-
-struct PlugDeviceEvent {
-  std::size_t session_id;
-  std::vector<std::map<std::string, std::string>> udev_events;
-  std::vector<std::pair<std::string, std::vector<std::string>>> udev_hw_db_entries;
-};
-
-struct UnplugDeviceEvent {
-  std::size_t session_id;
-  std::vector<std::map<std::string, std::string>> udev_events;
-  std::vector<std::pair<std::string, std::vector<std::string>>> udev_hw_db_entries;
-};
-
-using devices_atom_queue = TSQueue<immer::box<PlugDeviceEvent>>;
-
-struct Runner {
-
-  virtual void run(std::size_t session_id,
-                   std::string_view app_state_folder,
-                   std::shared_ptr<devices_atom_queue> plugged_devices_queue,
-                   const immer::array<std::string> &virtual_inputs,
-                   const immer::array<std::pair<std::string, std::string>> &paths,
-                   const immer::map<std::string, std::string> &env_variables,
-                   std::string_view render_node) = 0;
-
-  virtual toml::value serialise() = 0;
-};
 
 /**
  * All ports are derived from a base port, default: 47989
@@ -64,30 +38,7 @@ enum STANDARD_PORTS_MAPPING {
   RTSP_SETUP_PORT = 48010
 };
 
-struct PairedClient {
-  std::string client_cert;
-  std::string app_state_folder;
-  uint run_uid = 1000;
-  uint run_gid = 1000;
-};
-
-struct PairSignal {
-  std::string client_ip;
-  std::string host_ip;
-  std::shared_ptr<boost::promise<std::string>> user_pin;
-};
-
-struct RTPVideoPingEvent {
-  std::string client_ip;
-  unsigned short client_port;
-};
-
-struct RTPAudioPingEvent {
-  std::string client_ip;
-  unsigned short client_port;
-};
-
-using PairedClientList = immer::vector<immer::box<PairedClient>>;
+using PairedClientList = immer::vector<immer::box<wolf::config::PairedClient>>;
 
 enum Encoder {
   NVIDIA,
@@ -96,21 +47,6 @@ enum Encoder {
   SOFTWARE,
   APPLE,
   UNKNOWN
-};
-
-struct App {
-  moonlight::App base;
-
-  std::string h264_gst_pipeline;
-  std::string hevc_gst_pipeline;
-  std::string av1_gst_pipeline;
-
-  std::string render_node;
-
-  std::string opus_gst_pipeline;
-  bool start_virtual_compositor;
-  std::shared_ptr<Runner> runner;
-  moonlight::control::pkts::CONTROLLER_TYPE joypad_type;
 };
 
 /**
@@ -132,7 +68,7 @@ struct Config {
   /**
    * List of available Apps
    */
-  immer::vector<App> apps;
+  std::shared_ptr<immer::atom<immer::vector<immer::box<events::App>>>> apps;
 };
 
 /**
@@ -163,57 +99,7 @@ struct PairCache {
   std::optional<std::string> client_hash;
 };
 
-using MouseTypes = std::variant<input::Mouse, virtual_display::WaylandMouse>;
-using KeyboardTypes = std::variant<input::Keyboard, virtual_display::WaylandKeyboard>;
-using JoypadTypes = std::variant<input::XboxOneJoypad, input::SwitchJoypad, input::PS5Joypad>;
-using JoypadList = immer::map<int /* controller number */, std::shared_ptr<JoypadTypes>>;
-
-/**
- * A StreamSession is created when a Moonlight user call `launch`
- *
- * This will then be fired up in the event_bus so that the rtsp, command, audio and video threads
- * can start working their magic.
- */
-struct StreamSession {
-  moonlight::DisplayMode display_mode;
-  int audio_channel_count;
-
-  std::shared_ptr<dp::event_bus> event_bus;
-  std::shared_ptr<App> app;
-  std::string app_state_folder;
-
-  // gcm encryption keys
-  std::string aes_key;
-  std::string aes_iv;
-
-  // client info
-  std::size_t session_id;
-  std::string ip;
-  unsigned short video_stream_port;
-  unsigned short audio_stream_port;
-
-  /**
-   * Optional: the wayland display for the current session.
-   * Will be only set during an active streaming and destroyed on stream end.
-   */
-  std::shared_ptr<immer::atom<virtual_display::wl_state_ptr>> wayland_display =
-      std::make_shared<immer::atom<virtual_display::wl_state_ptr>>();
-
-  // virtual devices
-  std::shared_ptr<std::optional<MouseTypes>> mouse = std::make_shared<std::optional<MouseTypes>>();
-  std::shared_ptr<std::optional<KeyboardTypes>> keyboard = std::make_shared<std::optional<KeyboardTypes>>();
-
-  std::shared_ptr<immer::atom<JoypadList>> joypads = std::make_shared<immer::atom<state::JoypadList>>();
-
-  std::shared_ptr<std::optional<input::PenTablet>> pen_tablet =
-      std::make_shared<std::optional<input::PenTablet>>(); /* Optional, will be set on first use */
-  std::shared_ptr<std::optional<input::TouchScreen>> touch_screen =
-      std::make_shared<std::optional<input::TouchScreen>>(); /* Optional, will be set on first use */
-};
-
-// TODO: unplug device event? Or should this be tied to the session?
-
-using SessionsAtoms = std::shared_ptr<immer::atom<immer::vector<StreamSession>>>;
+using SessionsAtoms = std::shared_ptr<immer::atom<immer::vector<events::StreamSession>>>;
 
 /**
  * The whole application state as a composition of immutable datastructures
@@ -230,15 +116,20 @@ struct AppState {
   immer::box<Host> host;
 
   /**
-   * Mutable temporary results in order to achieve the multistep pairing process
+   * Mutable, temporary results in order to achieve the multistep pairing process
    * It's shared between the two HTTP/HTTPS threads
    */
   std::shared_ptr<immer::atom<immer::map<std::string, PairCache>>> pairing_cache;
 
   /**
+   * Mutable, temporary promises to be resolved when the client sends the correct pin
+   */
+  std::shared_ptr<immer::atom<immer::map<std::string, immer::box<events::PairSignal>>>> pairing_atom;
+
+  /**
    * A shared bus of events so that we can decouple modules
    */
-  std::shared_ptr<dp::event_bus> event_bus;
+  std::shared_ptr<events::EventBusType> event_bus;
 
   /**
    * A list of all currently running (and paused) streaming sessions
@@ -254,31 +145,31 @@ const static immer::array<audio::AudioMode> AUDIO_CONFIGURATIONS = {
      {.channels = 2,
       .streams = 1,
       .coupled_streams = 1,
-      .speakers = {audio::AudioMode::FRONT_LEFT, audio::AudioMode::FRONT_RIGHT},
+      .speakers = {audio::AudioMode::Speakers::FRONT_LEFT, audio::AudioMode::Speakers::FRONT_RIGHT},
       .bitrate = 96000},
      // 5.1
      {.channels = 6,
       .streams = 4,
       .coupled_streams = 2,
-      .speakers = {audio::AudioMode::FRONT_LEFT,
-                   audio::AudioMode::FRONT_RIGHT,
-                   audio::AudioMode::FRONT_CENTER,
-                   audio::AudioMode::LOW_FREQUENCY,
-                   audio::AudioMode::BACK_LEFT,
-                   audio::AudioMode::BACK_RIGHT},
+      .speakers = {audio::AudioMode::Speakers::FRONT_LEFT,
+                   audio::AudioMode::Speakers::FRONT_RIGHT,
+                   audio::AudioMode::Speakers::FRONT_CENTER,
+                   audio::AudioMode::Speakers::LOW_FREQUENCY,
+                   audio::AudioMode::Speakers::BACK_LEFT,
+                   audio::AudioMode::Speakers::BACK_RIGHT},
       .bitrate = 256000},
      // 7.1
      {.channels = 8,
       .streams = 5,
       .coupled_streams = 3,
-      .speakers = {audio::AudioMode::FRONT_LEFT,
-                   audio::AudioMode::FRONT_RIGHT,
-                   audio::AudioMode::FRONT_CENTER,
-                   audio::AudioMode::LOW_FREQUENCY,
-                   audio::AudioMode::BACK_LEFT,
-                   audio::AudioMode::BACK_RIGHT,
-                   audio::AudioMode::SIDE_LEFT,
-                   audio::AudioMode::SIDE_RIGHT},
+      .speakers = {audio::AudioMode::Speakers::FRONT_LEFT,
+                   audio::AudioMode::Speakers::FRONT_RIGHT,
+                   audio::AudioMode::Speakers::FRONT_CENTER,
+                   audio::AudioMode::Speakers::LOW_FREQUENCY,
+                   audio::AudioMode::Speakers::BACK_LEFT,
+                   audio::AudioMode::Speakers::BACK_RIGHT,
+                   audio::AudioMode::Speakers::SIDE_LEFT,
+                   audio::AudioMode::Speakers::SIDE_RIGHT},
       .bitrate = 450000}}};
 
 static const audio::AudioMode &get_audio_mode(int channels, bool high_quality) {

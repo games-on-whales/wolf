@@ -2,6 +2,7 @@
 
 #include <chrono>
 #include <enet/enet.h>
+#include <events/events.hpp>
 #include <helpers/logger.hpp>
 #include <moonlight/control.hpp>
 #include <range/v3/view.hpp>
@@ -10,34 +11,12 @@
 
 namespace control {
 
-/**
- * Events received in the ControlSession will be fired up in the event_bus
- */
-struct ControlEvent {
-  // A unique ID that identifies this session
-  std::size_t session_id;
-
-  moonlight::control::pkts::PACKET_TYPE type;
-  std::string_view raw_packet;
-};
-
-struct PauseStreamEvent {
-  std::size_t session_id;
-};
-
-struct ResumeStreamEvent {
-  std::size_t session_id;
-};
-
-struct StopStreamEvent {
-  std::size_t session_id;
-};
-
 using namespace std::chrono_literals;
+using namespace wolf::core;
 
 void run_control(int port,
                  const state::SessionsAtoms &running_sessions,
-                 const std::shared_ptr<dp::event_bus> &event_bus,
+                 const std::shared_ptr<events::EventBusType> &event_bus,
                  int peers = 20,
                  std::chrono::milliseconds timeout = 1000ms,
                  const std::string &host_ip = "0.0.0.0");

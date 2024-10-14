@@ -24,7 +24,7 @@ FetchContent_MakeAvailable(fmtlib)
 target_link_libraries_system(wolf_helpers INTERFACE fmt::fmt-header-only)
 
 # Boost for logging
-find_package(Boost REQUIRED COMPONENTS log container)
+find_package(Boost 1.77 REQUIRED COMPONENTS log container)
 include_directories(${Boost_INCLUDE_DIRS})
 target_link_libraries(wolf_helpers INTERFACE ${Boost_LIBRARIES})
 

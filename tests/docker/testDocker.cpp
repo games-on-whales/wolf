@@ -1,14 +1,16 @@
 #include <catch2/catch_test_macros.hpp>
-#include <catch2/matchers/catch_matchers_string.hpp>
-#include <catch2/matchers/catch_matchers_vector.hpp>
 #include <catch2/matchers/catch_matchers_container_properties.hpp>
 #include <catch2/matchers/catch_matchers_contains.hpp>
+#include <catch2/matchers/catch_matchers_string.hpp>
+#include <catch2/matchers/catch_matchers_vector.hpp>
+#include <core/docker.hpp>
+#include <rfl/toml.hpp>
+#include <runners/docker.hpp>
+#include <state/config.hpp>
+#include <state/serialised_config.hpp>
 
 using Catch::Matchers::Contains;
 using Catch::Matchers::Equals;
-
-#include <core/docker.hpp>
-#include <runners/docker.hpp>
 
 TEST_CASE("Docker API", "DOCKER") {
   docker::init();
@@ -57,7 +59,8 @@ TEST_CASE("Docker TOML", "DOCKER") {
   docker::init();
   docker::DockerAPI docker_api;
 
-  auto event_bus = std::make_shared<dp::event_bus>();
+  auto event_bus = std::make_shared<events::EventBusType>();
+  auto running_sessions = std::make_shared<immer::atom<immer::vector<events::StreamSession>>>();
   std::string toml_cfg = R"(
 
     type = "docker"
@@ -83,21 +86,20 @@ TEST_CASE("Docker TOML", "DOCKER") {
 
     )";
   std::istringstream is(toml_cfg, std::ios_base::binary | std::ios_base::in);
-  auto container = docker::RunDocker::from_toml(event_bus, toml::parse(is, "std::string")).serialise();
+  // Round trip: load TOML -> serialize back
+  auto runner = state::get_runner(rfl::toml::read<wolf::config::AppDocker>(is).value(), event_bus, running_sessions);
+  auto container = rfl::get<wolf::config::AppDocker>(runner->serialize().variant());
 
-  REQUIRE_THAT(container.at("type").as_string(), Equals("docker"));
-  REQUIRE_THAT(container.at("name").as_string(), Equals("WolfTestHelloWorld"));
-  REQUIRE_THAT(container.at("image").as_string(), Equals("hello-world"));
+  REQUIRE_THAT(container.name, Equals("WolfTestHelloWorld"));
+  REQUIRE_THAT(container.image, Equals("hello-world"));
 
-  REQUIRE_THAT(toml::get<std::vector<std::string>>(container.at("ports")),
-               Equals(std::vector<std::string>{"1234:1235/tcp", "1234:1235/udp"}));
-  REQUIRE_THAT(toml::get<std::vector<std::string>>(container.at("devices")),
+  REQUIRE_THAT(container.ports, Equals(std::vector<std::string>{"1234:1235/tcp", "1234:1235/udp"}));
+  REQUIRE_THAT(container.devices,
                Equals(std::vector<std::string>{
                    "/dev/input/mice:/dev/input/mice:ro",
                    "/a/b/c:/d/e/f:mrw",
                    "/tmp:/tmp:rw",
                }));
-  REQUIRE_THAT(toml::get<std::vector<std::string>>(container.at("env")),
-               Equals(std::vector<std::string>{"LOG_LEVEL=info"}));
-  REQUIRE_THAT(container.at("base_create_json").as_string(), Equals("{'HostConfig': {}}"));
+  REQUIRE_THAT(container.env, Equals(std::vector<std::string>{"LOG_LEVEL=info"}));
+  REQUIRE_THAT(container.base_create_json.value(), Equals("{'HostConfig': {}}"));
 }

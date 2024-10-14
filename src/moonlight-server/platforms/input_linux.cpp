@@ -38,7 +38,7 @@ static const std::map<short, short> key_mappings = {
     {KEY_DOT, 0xBE},       {KEY_SLASH, 0xBF},      {KEY_GRAVE, 0xC0},      {KEY_LEFTBRACE, 0xDB},
     {KEY_BACKSLASH, 0xDC}, {KEY_RIGHTBRACE, 0xDD}, {KEY_APOSTROPHE, 0xDE}, {KEY_102ND, 0xE2}};
 
-void paste_utf(state::KeyboardTypes &keyboard, const std::basic_string<char32_t> &utf32) {
+void paste_utf(events::KeyboardTypes &keyboard, const std::basic_string<char32_t> &utf32) {
   /* To HEX string */
   auto hex_unicode = to_hex(utf32);
   logs::log(logs::debug, "[INPUT] Typing U+{}", hex_unicode);

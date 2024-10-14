@@ -1,6 +1,8 @@
 add_library(wolf_runner)
 add_library(wolf::runner ALIAS wolf_runner)
 
+find_package(PkgConfig)
+
 ##############################
 # External deps via GIT
 ####
@@ -13,14 +15,42 @@ FetchContent_Declare(
 FetchContent_MakeAvailable(fmtlib) # Download and build
 target_link_libraries_system(wolf_runner PUBLIC fmt::fmt-header-only)
 
+# Event bus
 FetchContent_Declare(
         eventbus
-        GIT_REPOSITORY https://github.com/DeveloperPaul123/eventbus
-        GIT_TAG 0.10.1
+        GIT_REPOSITORY https://github.com/games-on-whales/eventbus
+        GIT_TAG abb3a48
 )
 set(EVENTBUS_BUILD_TESTS OFF)
 FetchContent_MakeAvailable(eventbus)
 target_link_libraries_system(wolf_runner PUBLIC dp::eventbus)
+
+# TOML
+FetchContent_Declare(
+        tomlplusplus
+        GIT_REPOSITORY https://github.com/marzer/tomlplusplus.git
+        GIT_TAG        v3.4.0
+)
+FetchContent_MakeAvailable(tomlplusplus)
+target_link_libraries(wolf_runner PUBLIC tomlplusplus::tomlplusplus)
+
+# Serialization
+FetchContent_Declare(
+        reflect-cpp
+        GIT_REPOSITORY https://github.com/getml/reflect-cpp
+        GIT_TAG v0.14.1
+)
+set(REFLECTCPP_BSON OFF)
+set(REFLECTCPP_CBOR OFF)
+set(REFLECTCPP_FLEXBUFFERS OFF)
+set(REFLECTCPP_MSGPACK OFF) # Only works with vcpkg, doing it manually
+set(REFLECTCPP_TOML OFF)
+set(REFLECTCPP_XML OFF)
+set(REFLECTCPP_YAML OFF)
+
+FetchContent_MakeAvailable(reflect-cpp)
+target_link_libraries(wolf_runner PUBLIC reflectcpp)
+
 
 # HTTP server library
 FetchContent_Declare(
@@ -30,22 +60,13 @@ FetchContent_Declare(
 FetchContent_MakeAvailable(simplewebserver)
 target_link_libraries_system(wolf_runner PUBLIC simple-web-server)
 
-# TOML parser (config file)
-FetchContent_Declare(
-        toml
-        GIT_REPOSITORY https://github.com/ToruNiina/toml11.git
-        GIT_TAG v4.2.0)
-set(TOML11_COLORIZE_ERROR_MESSAGE, ON)
-set(TOML11_PRESERVE_COMMENTS_BY_DEFAULT, ON)
-FetchContent_MakeAvailable(toml)
-target_link_libraries_system(wolf_runner PUBLIC toml11::toml11)
-
 # mDNS
 FetchContent_Declare(
         mdns_cpp
         GIT_REPOSITORY https://github.com/gocarlos/mdns_cpp.git)
 FetchContent_MakeAvailable(mdns_cpp)
 target_link_libraries_system(wolf_runner PUBLIC mdns_cpp::mdns_cpp)
+
 
 # Enet
 set(CMAKE_PROJECT_INCLUDE_BEFORE "${PROJECT_SOURCE_DIR}/cmake/EnableCMP0048.cmake")
@@ -63,7 +84,7 @@ FetchContent_Declare(
         GIT_REPOSITORY https://github.com/jeremy-rifkin/cpptrace.git
         GIT_TAG 448c325
 )
-find_package(PkgConfig)
+
 pkg_check_modules(LIBUNWIND QUIET libunwind)
 if (LIBUNWIND_FOUND)
     set(CPPTRACE_UNWIND_WITH_LIBUNWIND ON)
@@ -77,7 +98,7 @@ FetchContent_MakeAvailable(cpptrace)
 find_package(Threads REQUIRED)
 find_package(OpenSSL REQUIRED)
 
-find_package(Boost REQUIRED COMPONENTS log locale)
+find_package(Boost 1.77 REQUIRED COMPONENTS log locale)
 include_directories(${Boost_INCLUDE_DIRS})
 
 target_link_libraries(
@@ -94,6 +115,7 @@ target_include_directories(wolf_runner PUBLIC .)
 
 file(GLOB HEADER_LIST CONFIGURE_DEPENDS */*.hpp)
 file(GLOB SRC_LIST SRCS
+        api/*.cpp
         gst-plugin/*.cpp
         control/*.cpp
         rest/*.cpp

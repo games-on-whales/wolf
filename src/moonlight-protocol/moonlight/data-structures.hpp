@@ -1,5 +1,6 @@
 #pragma once
 #include <cstdint>
+#include <optional>
 #include <string>
 
 namespace moonlight {
@@ -16,6 +17,7 @@ struct App {
   const std::string title;
   const std::string id;
   const bool support_hdr;
+  std::optional<std::string> icon_png_path;
 };
 
 #define FLAG_EXTENSION 0x10

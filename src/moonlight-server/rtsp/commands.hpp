@@ -1,7 +1,7 @@
 #pragma once
 
-#include "streaming/data-structures.hpp"
 #include <chrono>
+#include <events/events.hpp>
 #include <helpers/logger.hpp>
 #include <helpers/utils.hpp>
 #include <rtp/udp-ping.hpp>
@@ -15,6 +15,7 @@ using namespace ranges;
 using namespace std::string_literals;
 using namespace std::chrono_literals;
 using namespace rtsp;
+using namespace wolf::core;
 
 RTSP_PACKET error_msg(unsigned short status_code, std::string_view error_msg, int sequence_number = 0) {
   return {.type = RESPONSE,
@@ -40,7 +41,7 @@ constexpr uint32_t FS_CONTROLLER_TOUCH_EVENTS = 0x02;
 using namespace wolf::core::audio;
 
 RTSP_PACKET
-describe(const RTSP_PACKET &req, const state::StreamSession &session) {
+describe(const RTSP_PACKET &req, const events::StreamSession &session) {
   std::vector<std::pair<std::string, std::string>> payloads;
   if (session.display_mode.hevc_supported) {
     payloads.push_back({"", "sprop-parameter-sets=AAAAAU"});
@@ -57,24 +58,24 @@ describe(const RTSP_PACKET &req, const state::StreamSession &session) {
     if (audio_mode.channels == 6) { // 5.1
       mapping_p = {
           // The mapping for 5.1 is: [0 1 4 5 2 3]
-          AudioMode::FRONT_LEFT,
-          AudioMode::FRONT_RIGHT,
-          AudioMode::BACK_LEFT,
-          AudioMode::BACK_RIGHT,
-          AudioMode::FRONT_CENTER,
-          AudioMode::LOW_FREQUENCY,
+          AudioMode::Speakers::FRONT_LEFT,
+          AudioMode::Speakers::FRONT_RIGHT,
+          AudioMode::Speakers::BACK_LEFT,
+          AudioMode::Speakers::BACK_RIGHT,
+          AudioMode::Speakers::FRONT_CENTER,
+          AudioMode::Speakers::LOW_FREQUENCY,
       };
     } else if (audio_mode.channels == 8) { // 7.1
       mapping_p = {
           // The mapping for 7.1 is: [0 1 4 5 2 3 6 7]
-          AudioMode::FRONT_LEFT,
-          AudioMode::FRONT_RIGHT,
-          AudioMode::BACK_LEFT,
-          AudioMode::BACK_RIGHT,
-          AudioMode::FRONT_CENTER,
-          AudioMode::LOW_FREQUENCY,
-          AudioMode::SIDE_LEFT,
-          AudioMode::SIDE_RIGHT,
+          AudioMode::Speakers::FRONT_LEFT,
+          AudioMode::Speakers::FRONT_RIGHT,
+          AudioMode::Speakers::BACK_LEFT,
+          AudioMode::Speakers::BACK_RIGHT,
+          AudioMode::Speakers::FRONT_CENTER,
+          AudioMode::Speakers::LOW_FREQUENCY,
+          AudioMode::Speakers::SIDE_LEFT,
+          AudioMode::Speakers::SIDE_RIGHT,
       };
     }
 
@@ -86,9 +87,10 @@ describe(const RTSP_PACKET &req, const state::StreamSession &session) {
     if (audio_mode.channels > 2) { // 5.1 and 7.1
       std::rotate(mapping_p.begin() + 3, mapping_p.begin() + 4, mapping_p.end());
     }
-    std::string audio_speakers = mapping_p                                                              //
-                                 | views::transform([](auto speaker) { return (char)(speaker + '0'); }) //
-                                 | to<std::string>;
+    std::string audio_speakers =
+        mapping_p                                                                                //
+        | views::transform([](auto speaker) { return (char)(static_cast<int>(speaker) + '0'); }) //
+        | to<std::string>;
     auto surround_params = fmt::format("fmtp:97 surround-params={}{}{}{}",
                                        audio_mode.channels,
                                        audio_mode.streams,
@@ -105,7 +107,7 @@ describe(const RTSP_PACKET &req, const state::StreamSession &session) {
   return ok_msg(req.seq_number, {}, payloads);
 }
 
-RTSP_PACKET setup(const RTSP_PACKET &req, const state::StreamSession &session) {
+RTSP_PACKET setup(const RTSP_PACKET &req, const events::StreamSession &session) {
 
   int service_port;
   auto type = req.request.stream.type;
@@ -151,7 +153,7 @@ std::pair<std::string, std::optional<int>> parse_arg_line(const std::pair<std::s
 }
 
 RTSP_PACKET
-announce(const RTSP_PACKET &req, const state::StreamSession &session) {
+announce(const RTSP_PACKET &req, const events::StreamSession &session) {
 
   auto args = req.payloads //
               | views::filter([](const std::pair<std::string, std::string> &line) {
@@ -209,14 +211,14 @@ announce(const RTSP_PACKET &req, const state::StreamSession &session) {
   }
 
   // Video session
-  state::VideoSession video = {
+  events::VideoSession video = {
       .display_mode = {.width = display.width, .height = display.height, .refreshRate = display.refreshRate},
       .gst_pipeline = gst_pipeline,
 
       .session_id = session.session_id,
 
       .port = session.video_stream_port,
-      .timeout = std::chrono::milliseconds(args["x-nv-video[0].timeoutLengthMs"].value_or(7000)),
+      .timeout_ms = args["x-nv-video[0].timeoutLengthMs"].value_or(7000),
       .packet_size = args["x-nv-video[0].packetSize"].value_or(1024),
       .frames_with_invalid_ref_threshold = args["x-nv-video[0].framesWithInvalidRefThreshold"].value_or(0),
       .fec_percentage = fec_percentage,
@@ -224,16 +226,16 @@ announce(const RTSP_PACKET &req, const state::StreamSession &session) {
       .bitrate_kbps = bitrate,
       .slices_per_frame = args["x-nv-video[0].videoEncoderSlicesPerFrame"].value_or(1),
 
-      .color_range = (csc & 0x1) ? state::JPEG : state::MPEG,
-      .color_space = state::ColorSpace(csc >> 1),
+      .color_range = (csc & 0x1) ? events::ColorRange::JPEG : events::ColorRange::MPEG,
+      .color_space = events::ColorSpace(csc >> 1),
 
       .client_ip = session.ip};
-  session.event_bus->fire_event(immer::box<state::VideoSession>(video));
+  session.event_bus->fire_event(immer::box<events::VideoSession>(video));
 
   // Audio session
   auto high_quality_audio = args["x-nv-audio.surround.AudioQuality"].value_or(0) == 1;
   auto audio_mode = state::get_audio_mode(audio_channels, high_quality_audio);
-  state::AudioSession audio = {
+  events::AudioSession audio = {
       .gst_pipeline = session.app->opus_gst_pipeline,
 
       .session_id = session.session_id,
@@ -247,13 +249,13 @@ announce(const RTSP_PACKET &req, const state::StreamSession &session) {
 
       .packet_duration = args["x-nv-aqos.packetDuration"].value_or(5),
       .audio_mode = audio_mode};
-  session.event_bus->fire_event(immer::box<state::AudioSession>(audio));
+  session.event_bus->fire_event(immer::box<events::AudioSession>(audio));
 
   return ok_msg(req.seq_number);
 }
 
 RTSP_PACKET
-message_handler(const RTSP_PACKET &req, const state::StreamSession &session) {
+message_handler(const RTSP_PACKET &req, const events::StreamSession &session) {
   auto cmd = req.request.cmd;
   logs::log(logs::debug, "[RTSP] received command {}", cmd);
 

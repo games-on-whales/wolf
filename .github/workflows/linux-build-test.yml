@@ -64,7 +64,6 @@ jobs:
                 -H$GITHUB_WORKSPACE \
                 -DCMAKE_BUILD_TYPE=Debug \
                 -DCMAKE_CXX_EXTENSIONS=OFF \
-                -DCMAKE_CXX_STANDARD=17 \
                 -DTEST_VIRTUAL_INPUT=OFF \
                 -DTEST_DOCKER=ON \
                 -DTEST_RUST_WAYLAND=ON \
@@ -96,7 +95,7 @@ jobs:
 
   # First build the common dependencies: Rust-based libgstwaylanddisplay
   build-gst-wayland:
-    runs-on: ubuntu-22.04
+    runs-on: ubuntu-24.04
     steps:
       - name: Prepare environment
         # ubuntu-latest breaks without libunwind-dev,
@@ -130,28 +129,22 @@ jobs:
           if-no-files-found: error
 
   test:
-    runs-on: ubuntu-22.04
+    runs-on: ubuntu-24.04
     needs: build-gst-wayland
     strategy:
       fail-fast: false
       matrix:
         cxx:
-          - g++-10
           - g++-12
-          - clang++-11
-          - clang++-14
+          - clang++-16
         build_type: [ Release ]
         shared: [ true, false ]
-        std: [ 17 ]
+        std: [ 20 ]
         include:
-          - cxx: g++-10
-            other_pkgs: [ g++-10 ]
           - cxx: g++-12
             other_pkgs: [ g++-12 ]
-          - cxx: clang++-11
-            other_pkgs: [ clang-11 ]
-          - cxx: clang++-14
-            other_pkgs: [ clang-14 ]
+          - cxx: clang++-16
+            other_pkgs: [ clang-16 ]
 
 
     steps:

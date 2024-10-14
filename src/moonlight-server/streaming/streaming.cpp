@@ -1,34 +1,20 @@
 #include <control/control.hpp>
-#include <core/gstreamer.hpp>
 #include <functional>
-#include <gst-plugin/video.hpp>
-#include <gstreamer-1.0/gst/app/gstappsink.h>
-#include <gstreamer-1.0/gst/app/gstappsrc.h>
 #include <immer/array.hpp>
 #include <immer/array_transient.hpp>
 #include <immer/box.hpp>
 #include <memory>
-#include <streaming/data-structures.hpp>
 #include <streaming/streaming.hpp>
 
 namespace streaming {
 
-struct GstAppDataState {
-  wolf::core::gstreamer::gst_element_ptr app_src;
-  wolf::core::virtual_display::wl_state_ptr wayland_state;
-  GMainContext *context;
-  GSource *source;
-  int framerate;
-  GstClockTime timestamp = 0;
-};
-
 namespace custom_src {
 
-std::shared_ptr<GstAppDataState> setup_app_src(const immer::box<state::VideoSession> &video_session,
+std::shared_ptr<GstAppDataState> setup_app_src(const wolf::core::virtual_display::DisplayMode &video_session,
                                                wolf::core::virtual_display::wl_state_ptr wl_ptr) {
   return std::shared_ptr<GstAppDataState>(new GstAppDataState{.wayland_state = std::move(wl_ptr),
                                                               .source = nullptr,
-                                                              .framerate = video_session->display_mode.refreshRate},
+                                                              .framerate = video_session.refreshRate},
                                           [](const auto &app_data_state) {
                                             logs::log(logs::trace, "~GstAppDataState");
                                             if (app_data_state->source) {
@@ -39,7 +25,7 @@ std::shared_ptr<GstAppDataState> setup_app_src(const immer::box<state::VideoSess
                                           });
 }
 
-static bool push_data(GstAppDataState *data) {
+bool push_data(GstAppDataState *data) {
   GstFlowReturn ret;
 
   if (data->wayland_state) {
@@ -69,7 +55,7 @@ static bool push_data(GstAppDataState *data) {
   return false;
 }
 
-static void app_src_need_data(GstElement *pipeline, guint size, GstAppDataState *data) {
+void app_src_need_data(GstElement *pipeline, guint size, GstAppDataState *data) {
   if (!data->source) {
     logs::log(logs::debug, "[WAYLAND] Start feeding app-src");
     data->source = g_idle_source_new();
@@ -78,7 +64,7 @@ static void app_src_need_data(GstElement *pipeline, guint size, GstAppDataState 
   }
 }
 
-static void app_src_enough_data(GstElement *pipeline, guint size, GstAppDataState *data) {
+void app_src_enough_data(GstElement *pipeline, guint size, GstAppDataState *data) {
   if (data->source) {
     logs::log(logs::trace, "app_src_enough_data");
     g_source_destroy(data->source);
@@ -88,30 +74,107 @@ static void app_src_enough_data(GstElement *pipeline, guint size, GstAppDataStat
 } // namespace custom_src
 
 using namespace wolf::core::gstreamer;
+using namespace wolf::core;
+
+void start_video_producer(std::size_t session_id,
+                          wolf::core::virtual_display::wl_state_ptr wl_state,
+                          const wolf::core::virtual_display::DisplayMode &display_mode,
+                          const std::shared_ptr<events::EventBusType> &event_bus) {
+  auto appsrc_state = streaming::custom_src::setup_app_src(display_mode, std::move(wl_state));
+  auto pipeline = fmt::format("appsrc is-live=true name=wolf_wayland_source ! "                              //
+                              "queue ! "                                                                     //
+                              "interpipesink name={}_video sync=true async=false max-bytes=0 max-buffers=3", //
+                              session_id);
+  logs::log(logs::debug, "[GSTREAMER] Starting video producer: {}", pipeline);
+  run_pipeline(pipeline, [=](auto pipeline, auto loop) {
+    if (auto app_src_el = gst_bin_get_by_name(GST_BIN(pipeline.get()), "wolf_wayland_source")) {
+      appsrc_state->context = g_main_context_get_thread_default();
+      logs::log(logs::debug, "Setting up wolf_wayland_source");
+      g_assert(GST_IS_APP_SRC(app_src_el));
+
+      auto app_src_ptr = wolf::core::gstreamer::gst_element_ptr(app_src_el, ::gst_object_unref);
+
+      auto caps = set_resolution(*appsrc_state->wayland_state, display_mode, app_src_ptr);
+      g_object_set(app_src_ptr.get(), "caps", caps.get(), NULL);
+
+      /* Adapted from the tutorial at:
+       * https://gstreamer.freedesktop.org/documentation/tutorials/basic/short-cutting-the-pipeline.html?gi-language=c*/
+      g_signal_connect(app_src_el,
+                       "need-data",
+                       G_CALLBACK(streaming::custom_src::app_src_need_data),
+                       appsrc_state.get());
+      g_signal_connect(app_src_el,
+                       "enough-data",
+                       G_CALLBACK(streaming::custom_src::app_src_enough_data),
+                       appsrc_state.get());
+      appsrc_state->app_src = std::move(app_src_ptr);
+    }
+
+    // TODO: pause and resume? Should we do it?
+
+    auto stop_handler = event_bus->register_handler<immer::box<events::StopStreamEvent>>(
+        [session_id, loop](const immer::box<events::StopStreamEvent> &ev) {
+          if (ev->session_id == session_id) {
+            logs::log(logs::debug, "[GSTREAMER] Stopping video producer: {}", session_id);
+            g_main_loop_quit(loop.get());
+          }
+        });
+
+    return immer::array<immer::box<events::EventBusHandlers>>{std::move(stop_handler)};
+  });
+}
+
+void start_audio_producer(std::size_t session_id,
+                          const std::shared_ptr<events::EventBusType> &event_bus,
+                          int channel_count,
+                          const std::string &sink_name,
+                          const std::string &server_name) {
+  auto pipeline = fmt::format(
+      "pulsesrc device=\"{sink_name}\" server=\"{server_name}\" ! " //
+      "audio/x-raw, channels={channels}, rate=48000 ! "             //
+      "queue ! "                                                    //
+      "interpipesink name=\"{session_id}_audio\" sync=true async=false max-bytes=0 max-buffers=3",
+      fmt::arg("session_id", session_id),
+      fmt::arg("channels", channel_count),
+      fmt::arg("sink_name", sink_name),
+      fmt::arg("server_name", server_name));
+  logs::log(logs::debug, "[GSTREAMER] Starting audio producer: {}", pipeline);
+
+  run_pipeline(pipeline, [=](auto pipeline, auto loop) {
+    auto stop_handler = event_bus->register_handler<immer::box<events::StopStreamEvent>>(
+        [session_id, loop](const immer::box<events::StopStreamEvent> &ev) {
+          if (ev->session_id == session_id) {
+            logs::log(logs::debug, "[GSTREAMER] Stopping audio producer: {}", session_id);
+            g_main_loop_quit(loop.get());
+          }
+        });
+
+    return immer::array<immer::box<events::EventBusHandlers>>{std::move(stop_handler)};
+  });
+}
 
 /**
  * Start VIDEO pipeline
  */
-void start_streaming_video(const immer::box<state::VideoSession> &video_session,
-                           const std::shared_ptr<dp::event_bus> &event_bus,
-                           wolf::core::virtual_display::wl_state_ptr wl_ptr,
+void start_streaming_video(const immer::box<events::VideoSession> &video_session,
+                           const std::shared_ptr<events::EventBusType> &event_bus,
                            unsigned short client_port) {
-  std::string color_range = (static_cast<int>(video_session->color_range) == static_cast<int>(state::JPEG)) ? "jpeg"
-                                                                                                            : "mpeg2";
+  std::string color_range = (video_session->color_range == events::ColorRange::JPEG) ? "jpeg" : "mpeg2";
   std::string color_space;
-  switch (static_cast<int>(video_session->color_space)) {
-  case state::BT601:
+  switch (video_session->color_space) {
+  case events::ColorSpace::BT601:
     color_space = "bt601";
     break;
-  case state::BT709:
+  case events::ColorSpace::BT709:
     color_space = "bt709";
     break;
-  case state::BT2020:
+  case events::ColorSpace::BT2020:
     color_space = "bt2020";
     break;
   }
 
-  auto pipeline = fmt::format(video_session->gst_pipeline,
+  auto pipeline = fmt::format(fmt::runtime(video_session->gst_pipeline),
+                              fmt::arg("session_id", video_session->session_id),
                               fmt::arg("width", video_session->display_mode.width),
                               fmt::arg("height", video_session->display_mode.height),
                               fmt::arg("fps", video_session->display_mode.refreshRate),
@@ -127,53 +190,26 @@ void start_streaming_video(const immer::box<state::VideoSession> &video_session,
                               fmt::arg("host_port", video_session->port));
   logs::log(logs::debug, "Starting video pipeline: \n{}", pipeline);
 
-  auto appsrc_state = custom_src::setup_app_src(video_session, std::move(wl_ptr));
-
-  run_pipeline(pipeline, [video_session, event_bus, appsrc_state](auto pipeline, auto loop) {
-    if (auto app_src_el = gst_bin_get_by_name(GST_BIN(pipeline.get()), "wolf_wayland_source")) {
-      appsrc_state->context = g_main_context_get_thread_default();
-      logs::log(logs::debug, "Setting up wolf_wayland_source");
-      g_assert(GST_IS_APP_SRC(app_src_el));
-
-      auto app_src_ptr = wolf::core::gstreamer::gst_element_ptr(app_src_el, ::gst_object_unref);
-
-      auto caps = set_resolution(*appsrc_state->wayland_state, video_session->display_mode, app_src_ptr);
-      g_object_set(app_src_ptr.get(), "caps", caps.get(), NULL);
-      // No seeking is supported, this is a live stream
-      g_object_set(app_src_el, "stream-type", GST_APP_STREAM_TYPE_STREAM, NULL);
-      // appsrc will drop any buffers that are pushed into it once its internal queue is full
-      g_object_set(app_src_el, "leaky-type", GST_APP_LEAKY_TYPE_DOWNSTREAM, NULL);
-      // sometimes the encoder or the network sink might lag behind, we'll keep up to 3 buffers in the queue
-      g_object_set(app_src_el, "max-buffers", 3, NULL);
-
-      /* Adapted from the tutorial at:
-       * https://gstreamer.freedesktop.org/documentation/tutorials/basic/short-cutting-the-pipeline.html?gi-language=c*/
-      g_signal_connect(app_src_el, "need-data", G_CALLBACK(custom_src::app_src_need_data), appsrc_state.get());
-      g_signal_connect(app_src_el, "enough-data", G_CALLBACK(custom_src::app_src_enough_data), appsrc_state.get());
-      appsrc_state->app_src = std::move(app_src_ptr);
-    }
-
+  run_pipeline(pipeline, [video_session, event_bus](auto pipeline, auto loop) {
     /*
      * The force IDR event will be triggered by the control stream.
      * We have to pass this back into the gstreamer pipeline
      * in order to force the encoder to produce a new IDR packet
      */
-    auto idr_handler = event_bus->register_handler<immer::box<control::ControlEvent>>(
-        [sess_id = video_session->session_id, pipeline](const immer::box<control::ControlEvent> &ctrl_ev) {
+    auto idr_handler = event_bus->register_handler<immer::box<events::IDRRequestEvent>>(
+        [sess_id = video_session->session_id, pipeline](const immer::box<events::IDRRequestEvent> &ctrl_ev) {
           if (ctrl_ev->session_id == sess_id) {
-            if (ctrl_ev->type == moonlight::control::pkts::IDR_FRAME) {
-              logs::log(logs::debug, "[GSTREAMER] Forcing IDR");
-              // Force IDR event, see: https://github.com/centricular/gstwebrtc-demos/issues/186
-              // https://gstreamer.freedesktop.org/documentation/additional/design/keyframe-force.html?gi-language=c
-              wolf::core::gstreamer::send_message(
-                  pipeline.get(),
-                  gst_structure_new("GstForceKeyUnit", "all-headers", G_TYPE_BOOLEAN, TRUE, NULL));
-            }
+            logs::log(logs::debug, "[GSTREAMER] Forcing IDR");
+            // Force IDR event, see: https://github.com/centricular/gstwebrtc-demos/issues/186
+            // https://gstreamer.freedesktop.org/documentation/additional/design/keyframe-force.html?gi-language=c
+            wolf::core::gstreamer::send_message(
+                pipeline.get(),
+                gst_structure_new("GstForceKeyUnit", "all-headers", G_TYPE_BOOLEAN, TRUE, NULL));
           }
         });
 
-    auto pause_handler = event_bus->register_handler<immer::box<control::PauseStreamEvent>>(
-        [sess_id = video_session->session_id, loop](const immer::box<control::PauseStreamEvent> &ev) {
+    auto pause_handler = event_bus->register_handler<immer::box<events::PauseStreamEvent>>(
+        [sess_id = video_session->session_id, loop](const immer::box<events::PauseStreamEvent> &ev) {
           if (ev->session_id == sess_id) {
             logs::log(logs::debug, "[GSTREAMER] Pausing pipeline: {}", sess_id);
 
@@ -193,15 +229,15 @@ void start_streaming_video(const immer::box<state::VideoSession> &video_session,
           }
         });
 
-    auto stop_handler = event_bus->register_handler<immer::box<control::StopStreamEvent>>(
-        [sess_id = video_session->session_id, loop](const immer::box<control::StopStreamEvent> &ev) {
+    auto stop_handler = event_bus->register_handler<immer::box<events::StopStreamEvent>>(
+        [sess_id = video_session->session_id, loop](const immer::box<events::StopStreamEvent> &ev) {
           if (ev->session_id == sess_id) {
             logs::log(logs::debug, "[GSTREAMER] Stopping pipeline: {}", sess_id);
             g_main_loop_quit(loop.get());
           }
         });
 
-    return immer::array<immer::box<dp::handler_registration>>{std::move(idr_handler),
+    return immer::array<immer::box<events::EventBusHandlers>>{std::move(idr_handler),
                                                               std::move(pause_handler),
                                                               std::move(stop_handler)};
   });
@@ -210,13 +246,14 @@ void start_streaming_video(const immer::box<state::VideoSession> &video_session,
 /**
  * Start AUDIO pipeline
  */
-void start_streaming_audio(const immer::box<state::AudioSession> &audio_session,
-                           const std::shared_ptr<dp::event_bus> &event_bus,
+void start_streaming_audio(const immer::box<events::AudioSession> &audio_session,
+                           const std::shared_ptr<events::EventBusType> &event_bus,
                            unsigned short client_port,
                            const std::string &sink_name,
                            const std::string &server_name) {
   auto pipeline = fmt::format(
-      audio_session->gst_pipeline,
+      fmt::runtime(audio_session->gst_pipeline),
+      fmt::arg("session_id", audio_session->session_id),
       fmt::arg("channels", audio_session->audio_mode.channels),
       fmt::arg("bitrate", audio_session->audio_mode.bitrate),
       // TODO: opusenc hardcodes those two
@@ -235,8 +272,8 @@ void start_streaming_audio(const immer::box<state::AudioSession> &audio_session,
   logs::log(logs::debug, "Starting audio pipeline: \n{}", pipeline);
 
   run_pipeline(pipeline, [session_id = audio_session->session_id, event_bus](auto pipeline, auto loop) {
-    auto pause_handler = event_bus->register_handler<immer::box<control::PauseStreamEvent>>(
-        [session_id, loop](const immer::box<control::PauseStreamEvent> &ev) {
+    auto pause_handler = event_bus->register_handler<immer::box<events::PauseStreamEvent>>(
+        [session_id, loop](const immer::box<events::PauseStreamEvent> &ev) {
           if (ev->session_id == session_id) {
             logs::log(logs::debug, "[GSTREAMER] Pausing pipeline: {}", session_id);
 
@@ -256,15 +293,15 @@ void start_streaming_audio(const immer::box<state::AudioSession> &audio_session,
           }
         });
 
-    auto stop_handler = event_bus->register_handler<immer::box<control::StopStreamEvent>>(
-        [session_id, loop](const immer::box<control::StopStreamEvent> &ev) {
+    auto stop_handler = event_bus->register_handler<immer::box<events::StopStreamEvent>>(
+        [session_id, loop](const immer::box<events::StopStreamEvent> &ev) {
           if (ev->session_id == session_id) {
             logs::log(logs::debug, "[GSTREAMER] Stopping pipeline: {}", session_id);
             g_main_loop_quit(loop.get());
           }
         });
 
-    return immer::array<immer::box<dp::handler_registration>>{std::move(pause_handler), std::move(stop_handler)};
+    return immer::array<immer::box<events::EventBusHandlers>>{std::move(pause_handler), std::move(stop_handler)};
   });
 }
 

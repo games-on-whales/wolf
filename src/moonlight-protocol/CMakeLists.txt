@@ -94,7 +94,7 @@ set_target_properties(moonlight PROPERTIES OUTPUT_NAME "moonlight")
 # moonlight-common-c dependencies
 target_include_directories(moonlight PUBLIC ./rtsp)
 
-find_package(Boost REQUIRED)
+find_package(Boost 1.77 REQUIRED)
 
 
 target_link_libraries(

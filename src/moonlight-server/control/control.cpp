@@ -1,6 +1,7 @@
 #include "core/input.hpp"
 #include <control/control.hpp>
 #include <control/input_handler.hpp>
+#include <events/events.hpp>
 #include <immer/box.hpp>
 #include <state/sessions.hpp>
 #include <sys/socket.h>
@@ -9,6 +10,7 @@ namespace control {
 
 using namespace ranges;
 using namespace moonlight::control;
+using namespace wolf::core::events;
 
 void free_host(ENetHost *host) {
   std::for_each(host->peers, host->peers + host->peerCount, [](ENetPeer &peer_ref) {
@@ -97,7 +99,7 @@ bool encrypt_and_send(std::string_view payload,
 
 void run_control(int port,
                  const state::SessionsAtoms &running_sessions,
-                 const std::shared_ptr<dp::event_bus> &event_bus,
+                 const std::shared_ptr<events::EventBusType> &event_bus,
                  int peers,
                  std::chrono::milliseconds timeout,
                  const std::string &host_ip) {
@@ -111,7 +113,7 @@ void run_control(int port,
 
   auto stop_ev = event_bus->register_handler<immer::box<StopStreamEvent>>(
       [&connected_clients, &running_sessions](const immer::box<StopStreamEvent> &ev) {
-        auto client_session = get_session_by_id(running_sessions->load(), ev->session_id);
+        auto client_session = state::get_session_by_id(running_sessions->load(), ev->session_id);
         auto terminate_pkt = ControlTerminatePacket{};
         std::string plaintext = {(char *)&terminate_pkt, sizeof(terminate_pkt)};
         encrypt_and_send(plaintext, client_session->aes_key, connected_clients, ev->session_id);
@@ -120,7 +122,7 @@ void run_control(int port,
   while (true) {
     if (enet_host_service(host.get(), &event, timeout.count()) > 0) {
       auto [client_ip, client_port] = get_ip((sockaddr *)&event.peer->address.address);
-      auto client_session = get_session_by_ip(running_sessions->load(), client_ip);
+      auto client_session = state::get_session_by_ip(running_sessions->load(), client_ip);
       if (client_session) {
         switch (event.type) {
         case ENET_EVENT_TYPE_NONE:
@@ -171,9 +173,9 @@ void run_control(int port,
                     immer::box<PauseStreamEvent>(PauseStreamEvent{.session_id = client_session->session_id}));
               } else if (sub_type == INPUT_DATA) {
                 handle_input(client_session.value(), connected_clients, (INPUT_PKT *)decrypted.data());
-              } else {
-                auto ev = ControlEvent{client_session->session_id, sub_type, decrypted};
-                event_bus->fire_event(immer::box<ControlEvent>{ev});
+              } else if (sub_type == IDR_FRAME) {
+                auto ev = IDRRequestEvent{.session_id = client_session->session_id};
+                event_bus->fire_event(immer::box<IDRRequestEvent>{ev});
               }
             } catch (std::runtime_error &e) {
               logs::log(logs::warning, "[ENET] Unable to decrypt incoming packet: {}", e.what());
