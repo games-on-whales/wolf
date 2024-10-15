@@ -21,3 +21,4 @@ Cargo.lock
 build/
 .clj-kondo
 .lsp
+result
