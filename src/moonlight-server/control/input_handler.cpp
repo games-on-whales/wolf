@@ -18,7 +18,7 @@ using namespace moonlight::control;
 std::shared_ptr<events::JoypadTypes> create_new_joypad(const events::StreamSession &session,
                                                        const immer::atom<enet_clients_map> &connected_clients,
                                                        int controller_number,
-                                                       CONTROLLER_TYPE type,
+                                                       CONTROLLER_TYPE requested_type,
                                                        uint8_t capabilities) {
 
   auto on_rumble_fn = ([clients = &connected_clients,
@@ -49,11 +49,28 @@ std::shared_ptr<events::JoypadTypes> create_new_joypad(const events::StreamSessi
   });
 
   std::shared_ptr<events::JoypadTypes> new_pad;
-  CONTROLLER_TYPE final_type = session.app->joypad_type == AUTO ? type : session.app->joypad_type;
+  auto controllers_override = session.client_settings->controllers_override;
+  auto final_type = controllers_override.size() > controller_number ? controllers_override[controller_number]
+                                                                    : wolf::config::ControllerType::AUTO;
+  if (final_type == wolf::config::ControllerType::AUTO) {
+    switch (requested_type) {
+    case XBOX:
+      final_type = wolf::config::ControllerType::XBOX;
+      break;
+    case PS:
+      final_type = wolf::config::ControllerType::PS;
+      break;
+    case NINTENDO:
+      final_type = wolf::config::ControllerType::NINTENDO;
+      break;
+    default:
+      final_type = wolf::config::ControllerType::AUTO;
+      break;
+    }
+  }
   switch (final_type) {
-  case UNKNOWN:
-  case AUTO:
-  case XBOX: {
+  case wolf::config::ControllerType::AUTO:
+  case wolf::config::ControllerType::XBOX: {
     logs::log(logs::info, "Creating Xbox joypad for controller {}", controller_number);
     auto result =
         XboxOneJoypad::create({.name = "Wolf X-Box One (virtual) pad",
@@ -70,7 +87,7 @@ std::shared_ptr<events::JoypadTypes> create_new_joypad(const events::StreamSessi
     }
     break;
   }
-  case PS: {
+  case wolf::config::ControllerType::PS: {
     logs::log(logs::info, "Creating PS joypad for controller {}", controller_number);
     auto result = PS5Joypad::create(
         {.name = "Wolf DualSense (virtual) pad", .vendor_id = 0x054C, .product_id = 0x0CE6, .version = 0x8111});
@@ -99,7 +116,7 @@ std::shared_ptr<events::JoypadTypes> create_new_joypad(const events::StreamSessi
     }
     break;
   }
-  case NINTENDO:
+  case wolf::config::ControllerType::NINTENDO:
     logs::log(logs::info, "Creating Nintendo joypad for controller {}", controller_number);
     auto result = SwitchJoypad::create({.name = "Wolf Nintendo (virtual) pad",
                                         // https://github.com/torvalds/linux/blob/master/drivers/hid/hid-ids.h#L981
@@ -116,7 +133,7 @@ std::shared_ptr<events::JoypadTypes> create_new_joypad(const events::StreamSessi
     break;
   }
 
-  if (capabilities & ACCELEROMETER && final_type == PS) {
+  if (capabilities & ACCELEROMETER && final_type == wolf::config::ControllerType::PS) {
     // Request acceleromenter events from the client at 100 Hz
     logs::log(logs::info, "Requesting accelerometer events for controller {}", controller_number);
     auto accelerometer_pkt = ControlMotionEventPacket{
@@ -128,7 +145,7 @@ std::shared_ptr<events::JoypadTypes> create_new_joypad(const events::StreamSessi
     encrypt_and_send(plaintext, session.aes_key, connected_clients, session.session_id);
   }
 
-  if (capabilities & GYRO && final_type == PS) {
+  if (capabilities & GYRO && final_type == wolf::config::ControllerType::PS) {
     // Request gyroscope events from the client at 100 Hz
     logs::log(logs::info, "Requesting gyroscope events for controller {}", controller_number);
     auto gyro_pkt = ControlMotionEventPacket{
@@ -141,7 +158,10 @@ std::shared_ptr<events::JoypadTypes> create_new_joypad(const events::StreamSessi
   }
 
   session.joypads->update([&](events::JoypadList joypads) {
-    logs::log(logs::debug, "[INPUT] Sending PlugDeviceEvent for joypad {} of type: {}", controller_number, (int)type);
+    logs::log(logs::debug,
+              "[INPUT] Sending PlugDeviceEvent for joypad {} of type: {}",
+              controller_number,
+              (int)final_type);
 
     events::PlugDeviceEvent unplug_ev{.session_id = session.session_id};
     std::visit(
@@ -216,8 +236,9 @@ static inline float deg2rad(float degree) {
 
 void mouse_move_rel(const MOUSE_MOVE_REL_PACKET &pkt, events::StreamSession &session) {
   if (session.mouse->has_value()) {
-    short delta_x = boost::endian::big_to_native(pkt.delta_x);
-    short delta_y = boost::endian::big_to_native(pkt.delta_y);
+    auto pointer_acceleration = session.client_settings->mouse_acceleration;
+    short delta_x = boost::endian::big_to_native(pkt.delta_x) * pointer_acceleration;
+    short delta_y = boost::endian::big_to_native(pkt.delta_y) * pointer_acceleration;
     std::visit([delta_x, delta_y](auto &mouse) { mouse.move(delta_x, delta_y); }, session.mouse->value());
   } else {
     logs::log(logs::warning, "Received MOUSE_MOVE_REL_PACKET but no mouse device is present");
@@ -226,8 +247,9 @@ void mouse_move_rel(const MOUSE_MOVE_REL_PACKET &pkt, events::StreamSession &ses
 
 void mouse_move_abs(const MOUSE_MOVE_ABS_PACKET &pkt, events::StreamSession &session) {
   if (session.mouse->has_value()) {
-    float x = boost::endian::big_to_native(pkt.x);
-    float y = boost::endian::big_to_native(pkt.y);
+    auto pointer_acceleration = session.client_settings->mouse_acceleration;
+    float x = boost::endian::big_to_native(pkt.x) * pointer_acceleration;
+    float y = boost::endian::big_to_native(pkt.y) * pointer_acceleration;
     float width = boost::endian::big_to_native(pkt.width);
     float height = boost::endian::big_to_native(pkt.height);
     std::visit([x, y, width, height](auto &mouse) { mouse.move_abs(x, y, width, height); }, session.mouse->value());
@@ -277,9 +299,12 @@ void mouse_button(const MOUSE_BUTTON_PACKET &pkt, events::StreamSession &session
 
 void mouse_scroll(const MOUSE_SCROLL_PACKET &pkt, events::StreamSession &session) {
   if (session.mouse->has_value()) {
-    std::visit([scroll_amount = boost::endian::big_to_native(pkt.scroll_amt1)](
-                   auto &mouse) { mouse.vertical_scroll(scroll_amount); },
-               session.mouse->value());
+    std::visit(
+        [session, scroll_amount = boost::endian::big_to_native(pkt.scroll_amt1)](auto &mouse) {
+          auto scroll_acceleration = session.client_settings->v_scroll_acceleration;
+          mouse.vertical_scroll(scroll_amount * scroll_acceleration);
+        },
+        session.mouse->value());
   } else {
     logs::log(logs::warning, "Received MOUSE_SCROLL_PACKET but no mouse device is present");
   }
@@ -287,9 +312,12 @@ void mouse_scroll(const MOUSE_SCROLL_PACKET &pkt, events::StreamSession &session
 
 void mouse_h_scroll(const MOUSE_HSCROLL_PACKET &pkt, events::StreamSession &session) {
   if (session.mouse->has_value()) {
-    std::visit([scroll_amount = boost::endian::big_to_native(pkt.scroll_amount)](
-                   auto &mouse) { mouse.horizontal_scroll(scroll_amount); },
-               session.mouse->value());
+    std::visit(
+        [session, scroll_amount = boost::endian::big_to_native(pkt.scroll_amount)](auto &mouse) {
+          auto scroll_acceleration = session.client_settings->h_scroll_acceleration;
+          mouse.horizontal_scroll(scroll_amount * scroll_acceleration);
+        },
+        session.mouse->value());
   } else {
     logs::log(logs::warning, "Received MOUSE_HSCROLL_PACKET but no mouse device is present");
   }

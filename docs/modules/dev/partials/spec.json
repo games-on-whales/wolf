@@ -399,15 +399,6 @@
           "id": {
             "type": "string"
           },
-          "joypad_type": {
-            "type": "string",
-            "enum": [
-              "XBOX",
-              "PS",
-              "NINTENDO",
-              "AUTO"
-            ]
-          },
           "opus_gst_pipeline": {
             "type": "string"
           },
@@ -427,6 +418,9 @@
               }
             ]
           },
+          "start_audio_server": {
+            "type": "boolean"
+          },
           "start_virtual_compositor": {
             "type": "boolean"
           },
@@ -442,10 +436,10 @@
           "h264_gst_pipeline",
           "hevc_gst_pipeline",
           "id",
-          "joypad_type",
           "opus_gst_pipeline",
           "render_node",
           "runner",
+          "start_audio_server",
           "start_virtual_compositor",
           "support_hdr",
           "title"
@@ -466,6 +460,9 @@
           "client_ip": {
             "type": "string"
           },
+          "client_settings": {
+            "$ref": "#/components/schemas/wolf__config__ClientSettings"
+          },
           "video_height": {
             "type": "integer"
           },
@@ -481,6 +478,7 @@
           "audio_channel_count",
           "client_id",
           "client_ip",
+          "client_settings",
           "video_height",
           "video_refresh_rate",
           "video_width"
@@ -771,6 +769,46 @@
           "name",
           "ports",
           "type"
+        ]
+      },
+      "wolf__config__ClientSettings": {
+        "type": "object",
+        "properties": {
+          "controllers_override": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "enum": [
+                "XBOX",
+                "PS",
+                "NINTENDO",
+                "AUTO"
+              ]
+            }
+          },
+          "h_scroll_acceleration": {
+            "type": "number"
+          },
+          "mouse_acceleration": {
+            "type": "number"
+          },
+          "run_gid": {
+            "type": "integer"
+          },
+          "run_uid": {
+            "type": "integer"
+          },
+          "v_scroll_acceleration": {
+            "type": "number"
+          }
+        },
+        "required": [
+          "controllers_override",
+          "h_scroll_acceleration",
+          "mouse_acceleration",
+          "run_gid",
+          "run_uid",
+          "v_scroll_acceleration"
         ]
       }
     }

@@ -195,13 +195,17 @@ See more examples in the xref:gstreamer.adoc[] page.
 === Override the default joypad mapping
 
 By default, Wolf will try to match the joypad type that Moonlight sends with the correct mapping.
-It is possible to override this behaviour by setting the `joypad_mapping` property in the `apps` entry; example:
+It is possible to override this behaviour for each Moonlight paired client, ex:
 
 [source,toml]
 ....
-[[apps]]
-title = "Test ball"
-joypad_type = "xbox" # Force the joypad to always be xbox
+[[paired_clients]]
+# client_cert = ...
+[paired_clients.settings]
+controllers_override = [
+  "PS", # First controller will be forced to be PS
+  "XBOX" # Second controller will be forced to be XBOX
+]
 ....
 
 The available joypad types are:
@@ -210,6 +214,21 @@ The available joypad types are:
 * `xbox`
 * `nintendo`
 * `ps`
+
+=== Input mouse overrides
+
+You can increase and decrease the mouse acceleration and scroll speed for each paired client, ex:
+
+[source,toml]
+....
+[[paired_clients]]
+# client_cert = ...
+[paired_clients.settings]
+# Values above 1.0 will make it faster, between 0.0 and 1.0 will make it slower
+mouse_acceleration = 1.0
+v_scroll_acceleration = 1.0
+h_scroll_acceleration = 1.0
+....
 
 
 [#_app_runner]

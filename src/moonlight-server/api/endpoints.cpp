@@ -75,7 +75,6 @@ void UnixSocketServer::endpoint_AddApp(const HTTPRequest &req, std::shared_ptr<U
           .opus_gst_pipeline = app.opus_gst_pipeline,
           .start_virtual_compositor = app.start_virtual_compositor,
           .runner = runner,
-          .joypad_type = state::get_controller_type(app.joypad_type),
       });
     });
     auto res = GenericSuccessResponse{.success = true};

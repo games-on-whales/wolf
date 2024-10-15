@@ -328,6 +328,9 @@ auto setup_sessions_handlers(const immer::box<state::AppState> &app_state,
             full_env.set("INTEL_DEBUG", "norbc"); // see: https://github.com/games-on-whales/wolf/issues/50
           }
 
+          full_env.set("PUID", std::to_string(session->client_settings->run_uid));
+          full_env.set("PGID", std::to_string(session->client_settings->run_gid));
+
           auto devices_q = plugged_devices_queue->load()->find(session->session_id);
           if (!devices_q) {
             logs::log(logs::warning, "No devices queue found for session {}", session->session_id);

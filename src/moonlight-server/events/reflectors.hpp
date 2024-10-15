@@ -43,26 +43,9 @@ template <> struct Reflector<events::App> {
     bool start_virtual_compositor;
     bool start_audio_server;
     rfl::TaggedUnion<"type", AppCMD, AppDocker, AppChildSession> runner;
-    ControllerType joypad_type;
   };
 
   static ReflType from(const events::App &v) {
-    ControllerType ctrl_type;
-    switch (v.joypad_type) {
-    case moonlight::control::pkts::CONTROLLER_TYPE::XBOX:
-      ctrl_type = ControllerType::XBOX;
-      break;
-    case moonlight::control::pkts::CONTROLLER_TYPE::PS:
-      ctrl_type = ControllerType::PS;
-      break;
-    case moonlight::control::pkts::CONTROLLER_TYPE::NINTENDO:
-      ctrl_type = ControllerType::NINTENDO;
-      break;
-    case moonlight::control::pkts::CONTROLLER_TYPE::AUTO:
-    case moonlight::control::pkts::UNKNOWN:
-      ctrl_type = ControllerType::AUTO;
-      break;
-    }
     return {.title = v.base.title,
             .id = v.base.id,
             .support_hdr = v.base.support_hdr,
@@ -74,8 +57,7 @@ template <> struct Reflector<events::App> {
             .opus_gst_pipeline = v.opus_gst_pipeline,
             .start_virtual_compositor = v.start_virtual_compositor,
             .start_audio_server = v.start_audio_server,
-            .runner = v.runner->serialize(),
-            .joypad_type = ctrl_type};
+            .runner = v.runner->serialize()};
   }
 };
 
@@ -104,6 +86,8 @@ template <> struct Reflector<events::StreamSession> {
     int video_refresh_rate;
 
     int audio_channel_count;
+
+    wolf::config::ClientSettings client_settings;
   };
 
   static ReflType from(const events::StreamSession &v) {
@@ -113,7 +97,8 @@ template <> struct Reflector<events::StreamSession> {
             .video_width = v.display_mode.width,
             .video_height = v.display_mode.height,
             .video_refresh_rate = v.display_mode.refreshRate,
-            .audio_channel_count = v.audio_channel_count};
+            .audio_channel_count = v.audio_channel_count,
+            .client_settings = v.client_settings};
   }
 };
 

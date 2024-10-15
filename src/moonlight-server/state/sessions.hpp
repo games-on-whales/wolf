@@ -80,6 +80,7 @@ inline std::shared_ptr<events::StreamSession> create_stream_session(immer::box<s
   auto session = events::StreamSession{.display_mode = display_mode,
                                        .audio_channel_count = audio_channel_count,
                                        .event_bus = state->event_bus,
+                                       .client_settings = current_client.settings,
                                        .app = std::make_shared<events::App>(run_app),
                                        .app_state_folder = full_path.string(),
 

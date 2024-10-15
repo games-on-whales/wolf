@@ -37,7 +37,6 @@ TEST_CASE("LocalState load TOML", "[LocalState]") {
     REQUIRE_THAT(first_app->h264_gst_pipeline, Equals("video_source !\ndefault !\nh264_pipeline !\nvideo_sink"));
     REQUIRE_THAT(first_app->hevc_gst_pipeline, Equals("video_source !\ndefault !\nhevc_pipeline !\nvideo_sink"));
     REQUIRE_THAT(first_app->av1_gst_pipeline, Equals("video_source !\nparams !\nav1_pipeline !\nvideo_sink"));
-    REQUIRE(first_app->joypad_type == moonlight::control::pkts::CONTROLLER_TYPE::AUTO);
     REQUIRE(first_app->start_virtual_compositor);
     REQUIRE(first_app->render_node == "/dev/dri/renderD128");
     auto first_app_runner = rfl::get<AppDocker>(first_app->runner->serialize().variant());
@@ -54,7 +53,6 @@ TEST_CASE("LocalState load TOML", "[LocalState]") {
     REQUIRE_THAT(second_app->av1_gst_pipeline,
                  Equals("override DEFAULT SOURCE !\nparams !\nav1_pipeline !\nvideo_sink"));
     REQUIRE(!second_app->start_virtual_compositor);
-    REQUIRE(second_app->joypad_type == moonlight::control::pkts::CONTROLLER_TYPE::XBOX);
     REQUIRE(second_app->render_node == "/tmp/dead_beef");
     auto second_app_runner = rfl::get<AppCMD>(second_app->runner->serialize().variant());
     REQUIRE_THAT(second_app_runner.run_cmd, Equals("destroy_computer_now"));
@@ -63,8 +61,13 @@ TEST_CASE("LocalState load TOML", "[LocalState]") {
   SECTION("Paired Clients") {
     REQUIRE_THAT(state.paired_clients->load().get(), Catch::Matchers::SizeIs(1));
     REQUIRE_THAT(state.paired_clients->load().get()[0]->client_cert, Equals("A VERY VALID CERTIFICATE"));
-    REQUIRE(state.paired_clients->load().get()[0]->run_uid == 1234);
-    REQUIRE(state.paired_clients->load().get()[0]->run_gid == 5678);
+    REQUIRE(state.paired_clients->load().get()[0]->settings.run_uid == 1234);
+    REQUIRE(state.paired_clients->load().get()[0]->settings.run_gid == 5678);
+    REQUIRE(state.paired_clients->load().get()[0]->settings.controllers_override[0] ==
+            wolf::config::ControllerType::PS);
+    REQUIRE(state.paired_clients->load().get()[0]->settings.mouse_acceleration == 2.5f);
+    REQUIRE(state.paired_clients->load().get()[0]->settings.v_scroll_acceleration == 1.5f);
+    REQUIRE(state.paired_clients->load().get()[0]->settings.h_scroll_acceleration == 10.2f);
     REQUIRE_THAT(state.paired_clients->load().get()[0]->app_state_folder, Equals("some/folder"));
   }
 }

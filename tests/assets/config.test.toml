@@ -12,10 +12,14 @@ config_version = 4
 # A list of paired clients that will be allowed to stream
 [[paired_clients]]
 client_cert = "A VERY VALID CERTIFICATE"
+app_state_folder = "some/folder"
+[paired_clients.settings]
 run_uid = 1234
 run_gid = 5678
-app_state_folder = "some/folder"
-
+controllers_override = ["PS"]
+mouse_acceleration = 2.5
+v_scroll_acceleration = 1.5
+h_scroll_acceleration = 10.2
 
 [[apps]]
 title = "Firefox"

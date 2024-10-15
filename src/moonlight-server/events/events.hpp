@@ -71,7 +71,6 @@ struct App {
   bool start_virtual_compositor;
   bool start_audio_server;
   std::shared_ptr<Runner> runner;
-  moonlight::control::pkts::CONTROLLER_TYPE joypad_type;
 };
 
 using MouseTypes = std::variant<input::Mouse, virtual_display::WaylandMouse>;
@@ -219,6 +218,7 @@ struct StreamSession {
   int audio_channel_count;
 
   std::shared_ptr<EventBusType> event_bus;
+  immer::box<wolf::config::ClientSettings> client_settings;
   std::shared_ptr<App> app;
   std::string app_state_folder;
 

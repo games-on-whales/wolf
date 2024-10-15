@@ -37,7 +37,7 @@ RUN <<_GST_WAYLAND_DISPLAY
 
     git clone https://github.com/games-on-whales/gst-wayland-display
     cd gst-wayland-display
-    git checkout 48382dc
+    git checkout a31f5a0
     cargo install cargo-c
     cargo cinstall -p c-bindings --prefix=/usr/local --libdir=/usr/local/lib/
 _GST_WAYLAND_DISPLAY
