@@ -290,7 +290,7 @@ TEST_CASE("uinput - mouse", "[UINPUT]") {
 
 TEST_CASE("uinput - joypad", "[UINPUT]") {
   SECTION("OLD Moonlight: create joypad on first packet arrival") {
-    events::App app = {.joypad_type = moonlight::control::pkts::CONTROLLER_TYPE::AUTO};
+    events::App app = {};
     auto session =
         events::StreamSession{.event_bus = std::make_shared<events::EventBusType>(), .app = std::make_shared<events::App>(app)};
     short controller_number = 1;
@@ -306,7 +306,7 @@ TEST_CASE("uinput - joypad", "[UINPUT]") {
   }
 
   SECTION("NEW Moonlight: create joypad with CONTROLLER_ARRIVAL") {
-    events::App app = {.joypad_type = moonlight::control::pkts::CONTROLLER_TYPE::AUTO};
+    events::App app = {};
     auto session =
         events::StreamSession{.event_bus = std::make_shared<events::EventBusType>(), .app = std::make_shared<events::App>(app)};
     uint8_t controller_number = 1;

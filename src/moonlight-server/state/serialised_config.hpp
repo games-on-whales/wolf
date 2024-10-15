@@ -4,11 +4,24 @@
 
 namespace wolf::config {
 
+enum class ControllerType {
+  XBOX,
+  PS,
+  NINTENDO,
+  AUTO
+};
+
+struct ClientSettings {
+  uint run_uid = 1000;
+  uint run_gid = 1000;
+  /* A list of forced controller overrides, the position in the array denotes the controller number */
+  std::vector<ControllerType> controllers_override = {};
+};
+
 struct PairedClient {
   std::string client_cert;
   std::string app_state_folder;
-  uint run_uid = 1000;
-  uint run_gid = 1000;
+  std::optional<ClientSettings> settings = {};
 };
 
 struct GstEncoderDefault {
@@ -81,20 +94,12 @@ struct BaseAppAudioOverride {
   std::optional<std::string> sink;
 };
 
-enum class ControllerType {
-  XBOX,
-  PS,
-  NINTENDO,
-  AUTO
-};
-
 struct BaseApp {
   std::string title;
   std::optional<std::string> icon_png_path;
   std::optional<std::string> render_node;
   std::optional<BaseAppVideoOverride> video;
   std::optional<BaseAppAudioOverride> audio;
-  std::optional<ControllerType> joypad_type;
   std::optional<bool> start_virtual_compositor;
   std::optional<bool> start_audio_server;
   rfl::TaggedUnion<"type", AppCMD, AppDocker, AppChildSession> runner;
