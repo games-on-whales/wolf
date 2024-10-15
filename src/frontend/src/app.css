@@ -1,0 +1,10 @@
+main {
+  margin: auto;
+  max-width: 66em;
+}
+
+body {
+  background: url(./background.png) no-repeat center center;
+  background-size: cover;
+  min-height: 100vh;
+}

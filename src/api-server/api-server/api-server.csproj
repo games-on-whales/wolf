@@ -1,0 +1,22 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+
+    <PropertyGroup>
+        <TargetFramework>net8.0</TargetFramework>
+        <Nullable>enable</Nullable>
+        <ImplicitUsings>enable</ImplicitUsings>
+        <RootNamespace>WolfApiServer</RootNamespace>
+        <AssemblyName>WolfApiServer</AssemblyName>
+        <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+    </PropertyGroup>
+
+    <ItemGroup>
+        <PackageReference Include="Microsoft.VisualStudio.Web.CodeGeneration.Design" Version="8.0.4" />
+        <PackageReference Include="Swashbuckle.AspNetCore" Version="6.7.3" />
+        <PackageReference Include="Swashbuckle.AspNetCore.Swagger" Version="6.7.3" />
+    </ItemGroup>
+
+    <Target Name="GenerateOpenApiSpec" AfterTargets="Build">
+        <Exec Command="dotnet swagger tofile --output ./bin/swagger.json $(OutputPath)$(AssemblyName)$(TargetExt) v1" />
+    </Target>
+
+</Project>
