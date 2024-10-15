@@ -103,7 +103,7 @@ Config load_or_default(const std::string &source,
   }
 
   // First check the version of the config file
-  auto base_cfg = rfl::toml::load<BaseConfig>(source).value();
+  auto base_cfg = rfl::toml::load<BaseConfig, rfl::DefaultIfMissing>(source).value();
   auto version = base_cfg.config_version.value_or(0);
   if (version <= 3) {
     logs::log(logs::warning, "Found old config file, migrating to newer version");
@@ -125,7 +125,7 @@ Config load_or_default(const std::string &source,
   }
 
   // Will throw if the config is invalid
-  auto cfg = rfl::toml::load<WolfConfig>(source).value();
+  auto cfg = rfl::toml::load<WolfConfig, rfl::DefaultIfMissing>(source).value();
 
   auto default_gst_video_settings = cfg.gstreamer.video;
   if (default_gst_video_settings.default_source.find("appsrc") != std::string::npos) {
@@ -262,7 +262,7 @@ void pair(const Config &cfg, const PairedClient &client) {
       [&client](const state::PairedClientList &paired_clients) { return paired_clients.push_back(client); });
 
   // Update TOML
-  auto tml = rfl::toml::load<WolfConfig>(cfg.config_source).value();
+  auto tml = rfl::toml::load<WolfConfig, rfl::DefaultIfMissing>(cfg.config_source).value();
   tml.paired_clients.push_back(client);
   rfl::toml::save(cfg.config_source, tml);
 }
@@ -278,7 +278,7 @@ void unpair(const Config &cfg, const PairedClient &client) {
   });
 
   // Update TOML
-  auto tml = rfl::toml::load<WolfConfig>(cfg.config_source).value();
+  auto tml = rfl::toml::load<WolfConfig, rfl::DefaultIfMissing>(cfg.config_source).value();
   tml.paired_clients.erase(std::remove_if(tml.paired_clients.begin(),
                                           tml.paired_clients.end(),
                                           [&client](const auto &v) { return v.client_cert == client.client_cert; }),

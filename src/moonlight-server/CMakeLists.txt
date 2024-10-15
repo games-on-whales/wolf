@@ -38,7 +38,7 @@ target_link_libraries(wolf_runner PUBLIC tomlplusplus::tomlplusplus)
 FetchContent_Declare(
         reflect-cpp
         GIT_REPOSITORY https://github.com/getml/reflect-cpp
-        GIT_TAG v0.14.1
+        GIT_TAG 54c2a84
 )
 set(REFLECTCPP_BSON OFF)
 set(REFLECTCPP_CBOR OFF)

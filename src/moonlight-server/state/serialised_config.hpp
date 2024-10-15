@@ -16,12 +16,18 @@ struct ClientSettings {
   uint run_gid = 1000;
   /* A list of forced controller overrides, the position in the array denotes the controller number */
   std::vector<ControllerType> controllers_override = {};
+  /* Values above 1.0 will make it faster, between 0.0 and 1.0 will make it slower */
+  float mouse_acceleration = 1.0;
+  /* (vertical scroll) Values above 1.0 will make it faster, between 0.0 and 1.0 will make it slower */
+  float v_scroll_acceleration = 1.0;
+  /* (horizontal scroll) Values above 1.0 will make it faster, between 0.0 and 1.0 will make it slower */
+  float h_scroll_acceleration = 1.0;
 };
 
 struct PairedClient {
   std::string client_cert;
   std::string app_state_folder;
-  std::optional<ClientSettings> settings = {};
+  ClientSettings settings = {};
 };
 
 struct GstEncoderDefault {
@@ -102,7 +108,8 @@ struct BaseApp {
   std::optional<BaseAppAudioOverride> audio;
   std::optional<bool> start_virtual_compositor;
   std::optional<bool> start_audio_server;
-  rfl::TaggedUnion<"type", AppCMD, AppDocker, AppChildSession> runner;
+  rfl::TaggedUnion<"type", AppCMD, AppDocker, AppChildSession> runner =
+      AppCMD{}; // We have to provide a default or rfl::DefaultIfMissing will fail
 };
 
 struct WolfConfig {

@@ -77,18 +77,17 @@ inline std::shared_ptr<events::StreamSession> create_stream_session(immer::box<s
   auto video_stream_port = get_next_available_port(state->running_sessions->load(), true);
   auto audio_stream_port = get_next_available_port(state->running_sessions->load(), false);
 
-  auto session = events::StreamSession{
-      .display_mode = display_mode,
-      .audio_channel_count = audio_channel_count,
-      .event_bus = state->event_bus,
-      .client_settings = current_client.settings.value_or(wolf::config::ClientSettings{}),
-      .app = std::make_shared<events::App>(run_app),
-      .app_state_folder = full_path.string(),
+  auto session = events::StreamSession{.display_mode = display_mode,
+                                       .audio_channel_count = audio_channel_count,
+                                       .event_bus = state->event_bus,
+                                       .client_settings = current_client.settings,
+                                       .app = std::make_shared<events::App>(run_app),
+                                       .app_state_folder = full_path.string(),
 
-      // client info
-      .session_id = state::get_client_id(current_client),
-      .video_stream_port = video_stream_port,
-      .audio_stream_port = audio_stream_port};
+                                       // client info
+                                       .session_id = state::get_client_id(current_client),
+                                       .video_stream_port = video_stream_port,
+                                       .audio_stream_port = audio_stream_port};
 
   return std::make_shared<events::StreamSession>(session);
 }

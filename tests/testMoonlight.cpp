@@ -61,9 +61,13 @@ TEST_CASE("LocalState load TOML", "[LocalState]") {
   SECTION("Paired Clients") {
     REQUIRE_THAT(state.paired_clients->load().get(), Catch::Matchers::SizeIs(1));
     REQUIRE_THAT(state.paired_clients->load().get()[0]->client_cert, Equals("A VERY VALID CERTIFICATE"));
-    REQUIRE(state.paired_clients->load().get()[0]->settings.value().run_uid == 1234);
-    REQUIRE(state.paired_clients->load().get()[0]->settings.value().run_gid == 5678);
-    REQUIRE(state.paired_clients->load().get()[0]->settings.value().controllers_override[0] == wolf::config::ControllerType::PS);
+    REQUIRE(state.paired_clients->load().get()[0]->settings.run_uid == 1234);
+    REQUIRE(state.paired_clients->load().get()[0]->settings.run_gid == 5678);
+    REQUIRE(state.paired_clients->load().get()[0]->settings.controllers_override[0] ==
+            wolf::config::ControllerType::PS);
+    REQUIRE(state.paired_clients->load().get()[0]->settings.mouse_acceleration == 2.5f);
+    REQUIRE(state.paired_clients->load().get()[0]->settings.v_scroll_acceleration == 1.5f);
+    REQUIRE(state.paired_clients->load().get()[0]->settings.h_scroll_acceleration == 10.2f);
     REQUIRE_THAT(state.paired_clients->load().get()[0]->app_state_folder, Equals("some/folder"));
   }
 }

@@ -17,7 +17,9 @@ app_state_folder = "some/folder"
 run_uid = 1234
 run_gid = 5678
 controllers_override = ["PS"]
-
+mouse_acceleration = 2.5
+v_scroll_acceleration = 1.5
+h_scroll_acceleration = 10.2
 
 [[apps]]
 title = "Firefox"

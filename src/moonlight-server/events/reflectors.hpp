@@ -86,6 +86,8 @@ template <> struct Reflector<events::StreamSession> {
     int video_refresh_rate;
 
     int audio_channel_count;
+
+    wolf::config::ClientSettings client_settings;
   };
 
   static ReflType from(const events::StreamSession &v) {
@@ -95,7 +97,8 @@ template <> struct Reflector<events::StreamSession> {
             .video_width = v.display_mode.width,
             .video_height = v.display_mode.height,
             .video_refresh_rate = v.display_mode.refreshRate,
-            .audio_channel_count = v.audio_channel_count};
+            .audio_channel_count = v.audio_channel_count,
+            .client_settings = v.client_settings};
   }
 };
 

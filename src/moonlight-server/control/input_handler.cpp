@@ -236,7 +236,7 @@ static inline float deg2rad(float degree) {
 
 void mouse_move_rel(const MOUSE_MOVE_REL_PACKET &pkt, events::StreamSession &session) {
   if (session.mouse->has_value()) {
-    auto pointer_acceleration = std::stof(utils::get_env("WOLF_POINTER_ACCELERATION", "1.0"));
+    auto pointer_acceleration = session.client_settings->mouse_acceleration;
     short delta_x = boost::endian::big_to_native(pkt.delta_x) * pointer_acceleration;
     short delta_y = boost::endian::big_to_native(pkt.delta_y) * pointer_acceleration;
     std::visit([delta_x, delta_y](auto &mouse) { mouse.move(delta_x, delta_y); }, session.mouse->value());
@@ -247,7 +247,7 @@ void mouse_move_rel(const MOUSE_MOVE_REL_PACKET &pkt, events::StreamSession &ses
 
 void mouse_move_abs(const MOUSE_MOVE_ABS_PACKET &pkt, events::StreamSession &session) {
   if (session.mouse->has_value()) {
-    auto pointer_acceleration = std::stof(utils::get_env("WOLF_POINTER_ACCELERATION", "1.0"));
+    auto pointer_acceleration = session.client_settings->mouse_acceleration;
     float x = boost::endian::big_to_native(pkt.x) * pointer_acceleration;
     float y = boost::endian::big_to_native(pkt.y) * pointer_acceleration;
     float width = boost::endian::big_to_native(pkt.width);
@@ -299,9 +299,12 @@ void mouse_button(const MOUSE_BUTTON_PACKET &pkt, events::StreamSession &session
 
 void mouse_scroll(const MOUSE_SCROLL_PACKET &pkt, events::StreamSession &session) {
   if (session.mouse->has_value()) {
-    std::visit([scroll_amount = boost::endian::big_to_native(pkt.scroll_amt1)](
-                   auto &mouse) { mouse.vertical_scroll(scroll_amount); },
-               session.mouse->value());
+    std::visit(
+        [session, scroll_amount = boost::endian::big_to_native(pkt.scroll_amt1)](auto &mouse) {
+          auto scroll_acceleration = session.client_settings->v_scroll_acceleration;
+          mouse.vertical_scroll(scroll_amount * scroll_acceleration);
+        },
+        session.mouse->value());
   } else {
     logs::log(logs::warning, "Received MOUSE_SCROLL_PACKET but no mouse device is present");
   }
@@ -309,9 +312,12 @@ void mouse_scroll(const MOUSE_SCROLL_PACKET &pkt, events::StreamSession &session
 
 void mouse_h_scroll(const MOUSE_HSCROLL_PACKET &pkt, events::StreamSession &session) {
   if (session.mouse->has_value()) {
-    std::visit([scroll_amount = boost::endian::big_to_native(pkt.scroll_amount)](
-                   auto &mouse) { mouse.horizontal_scroll(scroll_amount); },
-               session.mouse->value());
+    std::visit(
+        [session, scroll_amount = boost::endian::big_to_native(pkt.scroll_amount)](auto &mouse) {
+          auto scroll_acceleration = session.client_settings->h_scroll_acceleration;
+          mouse.horizontal_scroll(scroll_amount * scroll_acceleration);
+        },
+        session.mouse->value());
   } else {
     logs::log(logs::warning, "Received MOUSE_HSCROLL_PACKET but no mouse device is present");
   }
