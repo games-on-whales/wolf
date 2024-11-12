@@ -22,3 +22,5 @@ build/
 .clj-kondo
 .lsp
 result
+.devenv
+.direnv

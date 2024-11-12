@@ -6,8 +6,8 @@ pkgs.rustPlatform.buildRustPackage rec {
   src = pkgs.fetchFromGitHub {
     owner = "games-on-whales";
     repo = "gst-wayland-display";
-    rev = "aa5626f7b74cc5aeeb2ded188fe62ca27b056998";
-    hash = "sha256-QOTZDlcmjzQqDMheCx13NryfO1mP+AI8Lq2xS1IoG0Y=";
+    rev = "a31f5a02a1c54ee14fca54f1eaea1a1c583ab139";
+    hash = "sha256-xofDFqIjSEdzXj3/Qa2G24GZcLArOrwIoBSKqteqBLE=";
   };
   nativeBuildInputs = with pkgs; [ pkg-config cargo-c ];
   buildInputs = with pkgs; [
@@ -37,7 +37,7 @@ pkgs.rustPlatform.buildRustPackage rec {
     lockFile = cargoLockFile;
     outputHashes = {
       # "smithay-0.3.0" = pkgs.lib.fakeSha256;
-      "smithay-0.3.0" = "sha256-jrBY/r4IuVKiE7ykuxeZcJgikqJo6VoKQlBWrDbpy9Y=";
+      "smithay-0.3.0" = "sha256-d13BZvEWSwKzFVe7X9ysCNQZj6BFPChM4oCfvX7URs8=";
     };
   };
 

@@ -48,7 +48,7 @@ in pkgs.stdenv.mkDerivation {
     libunwind
     orc
     libdrm
-    boost175
+    boost
     gst_all_1.gstreamer
     # Common plugins like "filesrc" to combine within e.g. gst-launch
     gst_all_1.gst-plugins-base
@@ -76,10 +76,13 @@ in pkgs.stdenv.mkDerivation {
     "-DFETCHCONTENT_SOURCE_DIR_NANORS=${deps.nanors_src}"
     "-DFETCHCONTENT_SOURCE_DIR_PEGLIB=${deps.peglib_src}"
     "-DFETCHCONTENT_SOURCE_DIR_SIMPLEWEBSERVER=${deps.simplewebserver_src}"
-    "-DFETCHCONTENT_SOURCE_DIR_TOML=${deps.toml_src}"
+    # "-DFETCHCONTENT_SOURCE_DIR_TOML=${deps.toml_src}"
     "-DFETCHCONTENT_SOURCE_DIR_ENET=${deps.enet_src}"
     "-DFETCHCONTENT_SOURCE_DIR_CPPTRACE=${deps.cpptrace_src}"
     "-DFETCHCONTENT_SOURCE_DIR_LIBDWARF=${deps.libdwarf_src}"
+    "-DFETCHCONTENT_SOURCE_DIR_TOMLPLUSPLUS=${deps.tomlplusplus_src}"
+    "-DFETCHCONTENT_SOURCE_DIR_REFLECT-CPP=${deps.reflect-cpp_src}"
+    "-DFETCHCONTENT_SOURCE_DIR_MDNS_CPP=${deps.mdns-cpp_src}"
     "-DCMAKE_BUILD_TYPE=Release"
     "-DCMAKE_CXX_STANDARD=17"
     "-DCMAKE_CXX_EXTENSIONS=OFF"
@@ -105,8 +108,8 @@ in pkgs.stdenv.mkDerivation {
       --prefix RUST_BACKTRACE : "full"
       --prefix RUST_LOG : "WARN"
       --prefix GST_DEBUG : 2
-      --prefix PUID : 0 
-      --prefix PGID : 0 
+      --prefix PUID : 0
+      --prefix PGID : 0
       --prefix UNAME : "root"
     )
   '';
