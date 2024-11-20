@@ -94,23 +94,23 @@ in pkgs.stdenv.mkDerivation {
 
   preFixup = ''
        gappsWrapperArgs+=(
-      --prefix XDG_RUNTIME_DIR : "/tmp/sockets"
-      --prefix WOLF_CFG_FOLDER  : "${wolf_cfg_folder}"
-      --prefix WOLF_CFG_FILE : "${wolf_cfg_folder}/config.toml"
-      --prefix WOLF_PRIVATE_KEY_FILE : "${wolf_cfg_folder}/key.pem"
-      --prefix WOLF_PRIVATE_CERT_FILE : "${wolf_cfg_folder}/cert.pem"
-      --prefix HOST_APPS_STATE_FOLDER : "${wolf_state_folder}"
-      --prefix WOLF_PULSE_IMAGE : "ghcr.io/games-on-whales/pulseaudio:master"
-      --prefix WOLF_DOCKER_SOCKET : "/var/run/docker.sock"
-      --prefix WOLF_RENDER_NODE : "/dev/dri/renderD128"
-      --prefix WOLF_STOP_CONTAINER_ON_EXIT : "TRUE"
-      --prefix WOLF_LOG_LEVEL : "INFO"
-      --prefix RUST_BACKTRACE : "full"
-      --prefix RUST_LOG : "WARN"
-      --prefix GST_DEBUG : 2
-      --prefix PUID : 0
-      --prefix PGID : 0
-      --prefix UNAME : "root"
+      --set-default XDG_RUNTIME_DIR "/tmp/sockets"
+      --set-default WOLF_CFG_FOLDER  "${wolf_cfg_folder}"
+      --set-default WOLF_CFG_FILE "${wolf_cfg_folder}/config.toml"
+      --set-default WOLF_PRIVATE_KEY_FILE "${wolf_cfg_folder}/key.pem"
+      --set-default WOLF_PRIVATE_CERT_FILE "${wolf_cfg_folder}/cert.pem"
+      --set-default HOST_APPS_STATE_FOLDER "${wolf_state_folder}"
+      --set-default WOLF_PULSE_IMAGE "ghcr.io/games-on-whales/pulseaudio:master"
+      --set-default WOLF_DOCKER_SOCKET "/var/run/docker.sock"
+      --set-default WOLF_RENDER_NODE "/dev/dri/renderD128"
+      --set-default WOLF_STOP_CONTAINER_ON_EXIT "TRUE"
+      --set-default WOLF_LOG_LEVEL "INFO"
+      --set-default RUST_BACKTRACE "full"
+      --set-default RUST_LOG "WARN"
+      --set-default GST_DEBUG 2
+      --set-default PUID 0
+      --set-default PGID 0
+      --set-default UNAME "root"
     )
   '';
 
