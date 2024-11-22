@@ -102,6 +102,7 @@ in pkgs.stdenv.mkDerivation {
       --set-default HOST_APPS_STATE_FOLDER "${wolf_state_folder}"
       --set-default WOLF_PULSE_IMAGE "ghcr.io/games-on-whales/pulseaudio:master"
       --set-default WOLF_DOCKER_SOCKET "/var/run/docker.sock"
+      --set-default WOLF_DOCKER_FAKE_UDEV_PATH "${fake-udev}/bin/fake-udev"
       --set-default WOLF_RENDER_NODE "/dev/dri/renderD128"
       --set-default WOLF_STOP_CONTAINER_ON_EXIT "TRUE"
       --set-default WOLF_LOG_LEVEL "INFO"
@@ -119,6 +120,6 @@ in pkgs.stdenv.mkDerivation {
     mkdir -p $out/bin
     cp ./src/moonlight-server/wolf $out/bin/wolf
   '';
-  postPatch = ''
-    substituteInPlace src/moonlight-server/runners/docker.hpp --replace '"WOLF_DOCKER_FAKE_UDEV_PATH", ""' '"WOLF_DOCKER_FAKE_UDEV_PATH", "${fake-udev}/bin/fake-udev"' '';
+  # postPatch = ''
+  # substituteInPlace src/moonlight-server/runners/docker.hpp --replace '"WOLF_DOCKER_FAKE_UDEV_PATH", ""' '"WOLF_DOCKER_FAKE_UDEV_PATH", "${fake-udev}/bin/fake-udev"' '';
 }
