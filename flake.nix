@@ -107,6 +107,12 @@
           rev = "bdb1057";
           hash = "sha256-C9i/CyQG9QsDqIx75FbgiKp2b/POigUw71vh+rXAdyg=";
         };
+        gst-interpipe_src = pkgs.fetchgit {
+          # must use fetchgit.since repo in github & submodule in gitlab
+          fetchSubmodules = true;
+          url = "https://github.com/RidgeRun/gst-interpipe.git";
+          hash = "sha256-Z+RgAsXawqAjNJeaqzoOcHF2xy45fVSo4jm2qIcbJ3o=";
+        };
         gst-wayland-display =
           import ./nix/gst-wayland-display.nix { inherit pkgs; };
       };

@@ -26,6 +26,25 @@ let
       cp ./fake-udev $out/bin/fake-udev
     '';
   };
+  gst-interpipe = pkgs.stdenv.mkDerivation {
+    pname = "gst-interpipe";
+    version = "1.0";
+    src = deps.gst-interpipe_src;
+
+    nativeBuildInputs = with pkgs; [
+      meson
+      ninja
+      cmake
+      pkg-config
+      autoreconfHook
+      gtk-doc
+      docbook-xsl-nons
+    ];
+
+    buildInputs = with pkgs; [ gst_all_1.gstreamer gst_all_1.gst-plugins-base ];
+
+    cmakeFlags = [ "-Denable-gtk-doc=false" ];
+  };
 in pkgs.stdenv.mkDerivation {
   pname = "wolf";
   version = "1.0";
@@ -35,6 +54,7 @@ in pkgs.stdenv.mkDerivation {
 
   buildInputs = with pkgs; [
     fake-udev
+    gst-interpipe
     deps.gst-wayland-display
     wayland
     icu
