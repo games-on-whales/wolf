@@ -104,6 +104,7 @@ in pkgs.stdenv.mkDerivation {
       --set-default WOLF_DOCKER_SOCKET "/var/run/docker.sock"
       --set-default WOLF_DOCKER_FAKE_UDEV_PATH "${fake-udev}/bin/fake-udev"
       --set-default WOLF_RENDER_NODE "/dev/dri/renderD128"
+      --set-default WOLF_ENCODER_NODE "/dev/dri/renderD128"
       --set-default WOLF_STOP_CONTAINER_ON_EXIT "TRUE"
       --set-default WOLF_LOG_LEVEL "INFO"
       --set-default RUST_BACKTRACE "full"
