@@ -68,7 +68,7 @@ in pkgs.stdenv.mkDerivation {
     libunwind
     orc
     libdrm
-    boost
+    boost186 # pin to this version due to use of boost/asio/io_service.hpp
     gst_all_1.gstreamer
     # Common plugins like "filesrc" to combine within e.g. gst-launch
     gst_all_1.gst-plugins-base

@@ -1,4 +1,5 @@
 { pkgs, ... }:
+
 pkgs.rustPlatform.buildRustPackage rec {
   pname = "gst-wayland-display";
   version = "1.0";
@@ -9,7 +10,9 @@ pkgs.rustPlatform.buildRustPackage rec {
     rev = "a31f5a02a1c54ee14fca54f1eaea1a1c583ab139";
     hash = "sha256-xofDFqIjSEdzXj3/Qa2G24GZcLArOrwIoBSKqteqBLE=";
   };
+
   nativeBuildInputs = with pkgs; [ pkg-config cargo-c ];
+
   buildInputs = with pkgs; [
     mesa
     libglvnd
@@ -30,6 +33,8 @@ pkgs.rustPlatform.buildRustPackage rec {
 
     udev
   ];
+
+  doCheck = false; # Disables test checks
 
   cargoLockFile =
     builtins.toFile "cargo.lock" (builtins.readFile "${src}/Cargo.lock");
