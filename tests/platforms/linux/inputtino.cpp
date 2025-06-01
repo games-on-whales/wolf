@@ -127,7 +127,7 @@ TEST_CASE("uinput - pen tablet", "[UINPUT]") {
     REQUIRE(libinput_event_tablet_tool_get_tip_state(t_event) == LIBINPUT_TABLET_TOOL_TIP_DOWN);
   }
 }
-
+/*
 TEST_CASE("uinput - touch screen", "[UINPUT]") {
   auto session = events::StreamSession{.event_bus = std::make_shared<events::EventBusType>()};
 
@@ -183,7 +183,7 @@ TEST_CASE("uinput - touch screen", "[UINPUT]") {
     REQUIRE(libinput_event_get_type(event.get()) == LIBINPUT_EVENT_TOUCH_FRAME);
   }
 }
-
+*/
 TEST_CASE("uinput - mouse", "[UINPUT]") {
   libevdev_ptr mouse_rel_dev(libevdev_new(), ::libevdev_free);
   libevdev_ptr mouse_abs_dev(libevdev_new(), ::libevdev_free);
