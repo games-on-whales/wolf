@@ -64,4 +64,22 @@ private:
   wl_state_ptr w_state;
 };
 
+class WaylandTouchScreen {
+public:
+  WaylandTouchScreen(wl_state_ptr w_state) : w_state(w_state) {};
+
+  void down(unsigned int touch_id, double x, double y);
+
+  void up(unsigned int touch_id);
+
+  void motion(unsigned int touch_id, double x, double y);
+
+  void cancel();
+  
+  void frame();
+
+private:
+  wl_state_ptr w_state;
+};
+
 } // namespace wolf::core::virtual_display
