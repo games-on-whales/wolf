@@ -406,35 +406,63 @@ void touch(const TOUCH_PACKET &pkt, events::StreamSession &session) {
     auto x = netfloat_to_0_1(pkt.x);
     auto y = netfloat_to_0_1(pkt.y);
     auto pressure_or_distance = netfloat_to_0_1(pkt.pressure_or_distance);
-    switch (pkt.event_type) {
-    case pkts::TOUCH_EVENT_HOVER:
-    case pkts::TOUCH_EVENT_DOWN:
-    case pkts::TOUCH_EVENT_MOVE: {
-      // Convert our 0..360 range to -90..90 relative to Y axis
-      int adjusted_angle = pkt.rotation;
+    std::visit([&pkt, &session, &x, &y, &finger_id, &pressure_or_distance](auto& screen) {
+        using T = std::decay_t<decltype(screen)>;
+        if constexpr (std::is_same_v<T, input::TouchScreen>) {
+            // Inputtino TouchScreen only defines place_finger and release_finger methods
+            switch (pkt.event_type) {
+            case pkts::TOUCH_EVENT_HOVER:
+            case pkts::TOUCH_EVENT_DOWN:
+            case pkts::TOUCH_EVENT_MOVE: {
+              // Convert our 0..360 range to -90..90 relative to Y axis
+              int adjusted_angle = pkt.rotation;
 
-      if (adjusted_angle > 90 && adjusted_angle < 270) {
-        // Lower hemisphere
-        adjusted_angle = 180 - adjusted_angle;
-      }
+              if (adjusted_angle > 90 && adjusted_angle < 270) {
+                // Lower hemisphere
+                adjusted_angle = 180 - adjusted_angle;
+              }
 
-      // Wrap the value if it's out of range
-      if (adjusted_angle > 90) {
-        adjusted_angle -= 360;
-      } else if (adjusted_angle < -90) {
-        adjusted_angle += 360;
-      }
-      session.touch_screen->value().place_finger(finger_id, x, y, pressure_or_distance, adjusted_angle);
-      break;
-    }
-    case pkts::TOUCH_EVENT_UP:
-    case pkts::TOUCH_EVENT_HOVER_LEAVE:
-    case pkts::TOUCH_EVENT_CANCEL:
-      session.touch_screen->value().release_finger(finger_id);
-      break;
-    default:
-      logs::log(logs::warning, "[INPUT] Unknown touch event type {}", (int)pkt.event_type);
-    }
+              // Wrap the value if it's out of range
+              if (adjusted_angle > 90) {
+                adjusted_angle -= 360;
+              } else if (adjusted_angle < -90) {
+                adjusted_angle += 360;
+              }
+              screen.place_finger(finger_id, x, y, pressure_or_distance, adjusted_angle);
+              break;
+            }
+            case pkts::TOUCH_EVENT_UP:
+            case pkts::TOUCH_EVENT_HOVER_LEAVE:
+            case pkts::TOUCH_EVENT_CANCEL:
+              screen.release_finger(finger_id);
+              break;
+            default:
+              logs::log(logs::warning, "[INPUT] Unknown touch event type {}", (int)pkt.event_type);
+            }
+        } else if constexpr (std::is_same_v<T, virtual_display::WaylandTouchScreen>) {
+            // For WaylandTouchScreen, we handle the events differently
+            switch (pkt.event_type) {
+            case pkts::TOUCH_EVENT_HOVER:
+            case pkts::TOUCH_EVENT_DOWN:
+              screen.down(finger_id, x, y);
+              break;
+            case pkts::TOUCH_EVENT_MOVE:
+              screen.motion(finger_id, x, y);
+              break;
+            case pkts::TOUCH_EVENT_UP:
+              screen.up(finger_id);
+              break;
+            case pkts::TOUCH_EVENT_HOVER_LEAVE:
+            case pkts::TOUCH_EVENT_CANCEL:
+              screen.cancel();
+              break;
+            default:
+              logs::log(logs::warning, "[INPUT] Unknown touch event type {}", (int)pkt.event_type);
+            }
+            // Moonlight TOUCH_EVENT does not include TouchFrame events, so we trigger it manually every time
+            screen.frame();
+        }
+    }, **session.touch_screen);
   }
 }
 
