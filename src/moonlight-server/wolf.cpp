@@ -226,6 +226,7 @@ auto setup_sessions_handlers(const immer::box<state::AppState> &app_state,
           // Set virtual devices
           session->mouse->emplace(virtual_display::WaylandMouse(wl_state));
           session->keyboard->emplace(virtual_display::WaylandKeyboard(wl_state));
+          session->touch_screen->emplace(virtual_display::WaylandTouchScreen(wl_state));
 
           // Start Gstreamer producer pipeline
           std::thread([session, wl_state]() {

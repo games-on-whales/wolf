@@ -75,6 +75,7 @@ struct App {
 
 using MouseTypes = std::variant<input::Mouse, virtual_display::WaylandMouse>;
 using KeyboardTypes = std::variant<input::Keyboard, virtual_display::WaylandKeyboard>;
+using TouchScreenTypes = std::variant<input::TouchScreen, virtual_display::WaylandTouchScreen>;
 using JoypadTypes = std::variant<input::XboxOneJoypad, input::SwitchJoypad, input::PS5Joypad>;
 using JoypadList = immer::map<int /* controller number */, std::shared_ptr<JoypadTypes>>;
 
@@ -266,13 +267,14 @@ struct StreamSession {
   // virtual devices
   std::shared_ptr<std::optional<MouseTypes>> mouse = std::make_shared<std::optional<MouseTypes>>();
   std::shared_ptr<std::optional<KeyboardTypes>> keyboard = std::make_shared<std::optional<KeyboardTypes>>();
+  std::shared_ptr<std::optional<TouchScreenTypes>> touch_screen =
+      std::make_shared<std::optional<TouchScreenTypes>>(); /* Now added at the start */
 
   std::shared_ptr<immer::atom<JoypadList>> joypads = std::make_shared<immer::atom<JoypadList>>();
 
   std::shared_ptr<std::optional<input::PenTablet>> pen_tablet =
       std::make_shared<std::optional<input::PenTablet>>(); /* Optional, will be set on first use */
-  std::shared_ptr<std::optional<input::TouchScreen>> touch_screen =
-      std::make_shared<std::optional<input::TouchScreen>>(); /* Optional, will be set on first use */
+
 };
 
 } // namespace wolf::core::events
