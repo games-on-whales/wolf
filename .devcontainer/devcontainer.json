@@ -31,7 +31,9 @@
     "/run/udev:/run/udev:ro",
     "-v",
     "/var/run/docker.sock:/var/run/docker.sock:ro",
-    "--rm"
+    "-v",
+    "/dev/:/dev/:rw",
+    "--rm",
   ],
   "hostRequirements": {
     "gpu": true
@@ -53,7 +55,7 @@
     "WOLF_RENDER_NODE": "/dev/dri/renderD128",
     "WOLF_STOP_CONTAINER_ON_EXIT": "TRUE",
     "WOLF_DOCKER_SOCKET": "/var/run/docker.sock",
-    "WOLF_DOCKER_FAKE_UDEV_PATH": "/wolf/fake-udev",
+    "WOLF_DOCKER_FAKE_UDEV_PATH": "/etc/wolf/fake-udev",
     "RUST_BACKTRACE": "full",
     "RUST_LOG": "INFO",
     "GST_DEBUG": "2",
