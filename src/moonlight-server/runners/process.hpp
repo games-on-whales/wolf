@@ -1,5 +1,17 @@
 #pragma once
+#include <boost/version.hpp>
+#if BOOST_VERSION < 108800
 #include <boost/process.hpp>
+namespace bp = boost::process;
+#else
+#include <boost/process/v1/child.hpp>
+#include <boost/process/v1/env.hpp>
+#include <boost/process/v1/io.hpp>
+#include <boost/process/v1/async.hpp>
+#include <boost/process/v1/group.hpp>
+#include <boost/process/v1/start_dir.hpp>
+namespace bp = boost::process::v1;
+#endif
 #include <core/input.hpp>
 #include <eventbus/event_bus.hpp>
 #include <immer/box.hpp>
@@ -34,6 +46,5 @@ protected:
   std::string run_cmd;
   std::shared_ptr<events::EventBusType> ev_bus;
 };
-namespace bp = boost::process;
 
 } // namespace process
