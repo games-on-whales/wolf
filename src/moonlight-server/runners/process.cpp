@@ -20,6 +20,7 @@ void RunProcess::run(std::size_t session_id,
   logs::log(logs::debug, "[PROCESS] Starting process: {}", this->run_cmd);
 
   std::future<std::string> std_out, err_out;
+  boost::asio::io_context ios;
   bp::child child_proc;
   bp::group group_proc;
 
@@ -35,6 +36,7 @@ void RunProcess::run(std::size_t session_id,
 #if BOOST_VERSION < 108800
                            bp::std_out > std_out,
                            bp::std_err > err_out,
+                           ios,
 #endif
                            group_proc);
 
@@ -51,6 +53,9 @@ void RunProcess::run(std::size_t session_id,
       });
 
   // This will stop here until the process is over
+#if BOOST_VERSION < 108800
+  ios.run();
+#endif
   child_proc.wait(); // to avoid a zombie process & get the exit code
 
   auto ex_code = child_proc.exit_code();
