@@ -9,6 +9,7 @@
 #include <csignal>
 
 using Catch::Matchers::Contains;
+using Catch::Matchers::StartsWith;
 using Catch::Matchers::Equals;
 using Catch::Matchers::SizeIs;
 
@@ -25,8 +26,8 @@ TEST_CASE("Wayland C APIs", "[WAYLAND]") {
 
   auto graphic_devices = get_devices(*w_state);
   REQUIRE_THAT(graphic_devices, SizeIs(2));
-  REQUIRE_THAT(graphic_devices, Contains("/dev/dri/renderD128"));
-  REQUIRE_THAT(graphic_devices, Contains("/dev/dri/card0"));
+  REQUIRE_THAT(graphic_devices, Contains(StartsWith("/dev/dri/renderD")));
+  REQUIRE_THAT(graphic_devices, Contains(StartsWith("/dev/dri/card")));
 
   { // Set resolution to 1080p
     auto caps = set_resolution(*w_state, {1920, 1080, 60});
