@@ -406,9 +406,10 @@ void touch(const TOUCH_PACKET &pkt, events::StreamSession &session) {
     auto x = netfloat_to_0_1(pkt.x);
     auto y = netfloat_to_0_1(pkt.y);
     auto pressure_or_distance = netfloat_to_0_1(pkt.pressure_or_distance);
-    std::visit([&pkt, &session, &x, &y, &finger_id, &pressure_or_distance](auto& screen) {
-        using T = std::decay_t<decltype(screen)>;
-        if constexpr (std::is_same_v<T, input::TouchScreen>) {
+    std::visit(
+        [&pkt, &session, &x, &y, &finger_id, &pressure_or_distance](auto &screen) {
+          using T = std::decay_t<decltype(screen)>;
+          if constexpr (std::is_same_v<T, input::TouchScreen>) {
             // Inputtino TouchScreen only defines place_finger and release_finger methods
             switch (pkt.event_type) {
             case pkts::TOUCH_EVENT_HOVER:
@@ -439,7 +440,7 @@ void touch(const TOUCH_PACKET &pkt, events::StreamSession &session) {
             default:
               logs::log(logs::warning, "[INPUT] Unknown touch event type {}", (int)pkt.event_type);
             }
-        } else if constexpr (std::is_same_v<T, virtual_display::WaylandTouchScreen>) {
+          } else if constexpr (std::is_same_v<T, virtual_display::WaylandTouchScreen>) {
             // For WaylandTouchScreen, we handle the events differently
             switch (pkt.event_type) {
             case pkts::TOUCH_EVENT_HOVER:
@@ -461,8 +462,9 @@ void touch(const TOUCH_PACKET &pkt, events::StreamSession &session) {
             }
             // Moonlight TOUCH_EVENT does not include TouchFrame events, so we trigger it manually every time
             screen.frame();
-        }
-    }, **session.touch_screen);
+          }
+        },
+        **session.touch_screen);
   }
 }
 

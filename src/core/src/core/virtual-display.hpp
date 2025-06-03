@@ -75,7 +75,7 @@ public:
   void motion(unsigned int touch_id, double x, double y);
 
   void cancel();
-  
+
   void frame();
 
 private:

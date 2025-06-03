@@ -4,11 +4,11 @@
 #include <boost/process.hpp>
 namespace bp = boost::process;
 #else
+#include <boost/process/v1/async.hpp>
 #include <boost/process/v1/child.hpp>
 #include <boost/process/v1/env.hpp>
-#include <boost/process/v1/io.hpp>
-#include <boost/process/v1/async.hpp>
 #include <boost/process/v1/group.hpp>
+#include <boost/process/v1/io.hpp>
 #include <boost/process/v1/start_dir.hpp>
 namespace bp = boost::process::v1;
 #endif

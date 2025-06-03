@@ -209,7 +209,7 @@ void WaylandKeyboard::release(unsigned int key_code) {
   display_keyboard_input(w_state->display, key_mappings.at(key_code), false);
 }
 
-void WaylandTouchScreen::down( unsigned int touch_id, double x, double y) {
+void WaylandTouchScreen::down(unsigned int touch_id, double x, double y) {
   display_touch_down(w_state->display, touch_id, x, y);
 }
 
@@ -227,6 +227,6 @@ void WaylandTouchScreen::cancel() {
 
 void WaylandTouchScreen::frame() {
   display_touch_frame(w_state->display);
-}  
+}
 
 } // namespace wolf::core::virtual_display
