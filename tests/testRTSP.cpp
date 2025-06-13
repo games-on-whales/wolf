@@ -271,7 +271,7 @@ TEST_CASE("Commands (Payload matching)", "[RTSP]") {
   constexpr int port = 8080;
   boost::asio::io_context ioc;
   auto state = test_init_state();
-  auto wolf_server = tcp_server(ioc, port, state);
+  auto wolf_server = tcp_server(ioc, tcp::endpoint(tcp::v4(), port), state);
   auto wolf_client = tcp_tester::create_client(ioc, port, state);
 
   SECTION("MissingNo") {
@@ -457,7 +457,7 @@ TEST_CASE("Commands (IP Matching)", "[RTSP]") {
   constexpr int port = 8080;
   boost::asio::io_context ioc;
   auto state = test_init_state();
-  auto wolf_server = tcp_server(ioc, port, state);
+  auto wolf_server = tcp_server(ioc, tcp::endpoint(tcp::v4(), port), state);
   auto wolf_client = tcp_tester::create_client(ioc, port, state);
 
   SECTION("MissingNo") {
