@@ -44,7 +44,13 @@ void not_found(const std::shared_ptr<typename SimpleWeb::Server<T>::Response> &r
 template <class T>
 std::string get_host_ip(const std::shared_ptr<typename SimpleWeb::Server<T>::Request> &request,
                         const immer::box<state::AppState> &state) {
-  return state->host->internal_ip.value_or(request->local_endpoint().address().to_string());
+  if (state->host->internal_ip) {
+    return *state->host->internal_ip;
+  }
+
+  auto addr = request->local_endpoint().address();
+  // Convert IPv4-mapped IPv6 addresses to IPv4
+  return (addr.is_v6() && addr.to_v6().is_v4_mapped()) ? addr.to_v6().to_v4().to_string() : addr.to_string();
 }
 
 template <class T>

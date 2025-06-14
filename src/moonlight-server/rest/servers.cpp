@@ -21,7 +21,7 @@ using namespace wolf::core;
  * @brief Start the generic server on the specified port
  * @return std::thread: the thread where this server will run
  */
-void startServer(HttpServer *server, const immer::box<state::AppState> state, int port, const char* address) {
+void startServer(HttpServer *server, const immer::box<state::AppState> state, int port, const char *address) {
   server->config.port = port;
   server->config.address = address;
   server->default_resource["GET"] = endpoints::not_found<SimpleWeb::HTTP>;
@@ -74,7 +74,12 @@ void startServer(HttpServer *server, const immer::box<state::AppState> state, in
       [pairing_atom](const immer::box<events::PairSignal> pair_sig) {
         pairing_atom->update([&pair_sig](const immer::map<std::string, immer::box<events::PairSignal>> &m) {
           auto secret = crypto::str_to_hex(crypto::random(8));
-          logs::log(logs::info, "Insert pin at http://{}:47989/pin/#{}", pair_sig->host_ip, secret);
+          if (pair_sig->host_ip.find(':') != std::string::npos) {
+            // ipv6 format
+            logs::log(logs::info, "Insert pin at http://[{}]:47989/pin/#{}", pair_sig->host_ip, secret);
+          } else {
+            logs::log(logs::info, "Insert pin at http://{}:47989/pin/#{}", pair_sig->host_ip, secret);
+          }
           // filter out any other (dangling) pair request from the same client
           auto t_map = m.transient();
           for (auto [key, value] : m) {
@@ -114,7 +119,7 @@ void reply_unauthorized(const std::shared_ptr<typename SimpleWeb::ServerBase<Sim
   send_xml<SimpleWeb::HTTPS>(response, SimpleWeb::StatusCode::client_error_unauthorized, xml);
 }
 
-void startServer(HttpsServer *server, const immer::box<state::AppState> state, int port, const char* address) {
+void startServer(HttpsServer *server, const immer::box<state::AppState> state, int port, const char *address) {
   server->config.port = port;
   server->config.address = address;
   server->default_resource["GET"] = endpoints::not_found<SimpleWeb::HTTPS>;
