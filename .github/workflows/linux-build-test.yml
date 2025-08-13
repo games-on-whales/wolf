@@ -41,13 +41,13 @@ jobs:
       - name: Setup Rust
         uses: dtolnay/rust-toolchain@stable
         with:
-          toolchain: 1.85.1
+          toolchain: stable
 
       - name: Setup gst-wayland-display
         run: |
           git clone https://github.com/games-on-whales/gst-wayland-display
           cd gst-wayland-display
-          git checkout 03d1beb
+          git checkout efdd9fb
           cargo install --locked cargo-c
           cargo cinstall -p c-bindings --prefix=/usr/local
 
@@ -114,13 +114,13 @@ jobs:
       - name: Setup Rust
         uses: dtolnay/rust-toolchain@stable
         with:
-          toolchain: 1.85.1
+          toolchain: stable
 
       - name: Setup gst-wayland-display
         run: |
           git clone https://github.com/games-on-whales/gst-wayland-display
           cd gst-wayland-display
-          git checkout 03d1beb
+          git checkout efdd9fb
           cargo install --locked cargo-c
           cargo cinstall -p c-bindings --prefix=/usr/local --destdir=${{runner.workspace}}
 
