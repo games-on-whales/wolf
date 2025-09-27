@@ -96,14 +96,18 @@ void UnixSocketServer::endpoint_AddApp(const HTTPRequest &req, std::shared_ptr<U
       auto runner =
           state::get_runner(app.runner, this->state_->app_state->event_bus, this->state_->app_state->running_sessions);
       return apps.push_back(events::App{
-          .base =
-              {.title = app.title, .id = app.id, .support_hdr = app.support_hdr, .icon_png_path = app.icon_png_path},
-          .h264_gst_pipeline = app.h264_gst_pipeline,
-          .hevc_gst_pipeline = app.hevc_gst_pipeline,
-          .av1_gst_pipeline = app.av1_gst_pipeline,
-          .render_node = app.render_node,
-          .opus_gst_pipeline = app.opus_gst_pipeline,
-          .start_virtual_compositor = app.start_virtual_compositor,
+          .base = {.title = app.title,
+                   .id = app.id,
+                   .support_hdr = app.support_hdr.value_or(false), // Default to false
+                   .icon_png_path = app.icon_png_path},
+          .video_producer_buffer_caps = app.video_producer_buffer_caps.value_or("video/x-raw(memory:DMABuf)"), // Default for NVIDIA GPU zero-copy
+          .h264_gst_pipeline = app.h264_gst_pipeline.value_or("interpipesrc listen-to={session_id}_video is-live=true stream-sync=restart-ts max-bytes=0 max-buffers=1 leaky-type=downstream ! video/x-raw, width={width}, height={height}, framerate={fps}/1 ! nvh264enc preset=low-latency-hq zerolatency=true gop-size=0 rc-mode=cbr-ld-hq bitrate={bitrate} aud=false ! h264parse ! video/x-h264, profile=main, stream-format=byte-stream ! rtpmoonlightpay_video name=moonlight_pay payload_size={payload_size} fec_percentage={fec_percentage} min_required_fec_packets={min_required_fec_packets} ! appsink sync=false name=wolf_udp_sink"),
+          .hevc_gst_pipeline = app.hevc_gst_pipeline.value_or(""),  // Empty when HEVC not available (matches TOML)
+          .av1_gst_pipeline = app.av1_gst_pipeline.value_or(""),    // Empty when AV1 not available (matches TOML)
+          .render_node = app.render_node.value_or("/dev/dri/renderD128"),  // Use system default
+          .opus_gst_pipeline = app.opus_gst_pipeline.value_or("interpipesrc listen-to={session_id}_audio is-live=true stream-sync=restart-ts max-bytes=0 max-buffers=3 block=false ! queue max-size-buffers=3 leaky=downstream ! audiorate ! audioconvert ! opusenc bitrate={bitrate} bitrate-type=cbr frame-size={packet_duration} bandwidth=fullband audio-type=restricted-lowdelay max-payload-size=1400 ! rtpmoonlightpay_audio name=moonlight_pay packet_duration={packet_duration} encrypt={encrypt} aes_key=\"{aes_key}\" aes_iv=\"{aes_iv}\" ! appsink name=wolf_udp_sink"),
+          .start_virtual_compositor = app.start_virtual_compositor.value_or(true), // Default to true
+          .start_audio_server = app.start_audio_server.value_or(true), // Default to true
           .runner = runner,
       });
     });
