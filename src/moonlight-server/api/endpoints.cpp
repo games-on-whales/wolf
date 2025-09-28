@@ -111,6 +111,90 @@ void UnixSocketServer::endpoint_AddApp(const HTTPRequest &req, std::shared_ptr<U
           .runner = runner,
       });
     });
+
+    logs::log(logs::info, "[API] App addition completed, checking auto-start configuration");
+    // Auto-start container if enabled
+    logs::log(logs::debug, "[API] Auto-start containers setting: {}", state_->app_state->config->auto_start_containers);
+    if (state_->app_state->config->auto_start_containers) {
+      logs::log(logs::info, "[API] Auto-start is enabled, looking for app: {}", app.value().id);
+      auto new_app = state::get_app_by_id(this->state_->app_state->config, app.value().id);
+      if (new_app) {
+        logs::log(logs::info, "[API] Auto-starting container for app: {}", app.value().id);
+        try {
+          // Create a virtual background client for auto-started containers
+          auto background_client = wolf::config::PairedClient{
+              .client_cert = "-----BEGIN CERTIFICATE-----\nVIRTUAL_BACKGROUND_CLIENT_FOR_AUTO_START\n-----END CERTIFICATE-----",
+              .app_state_folder = fmt::format("auto_start_{}", app.value().id),
+              .settings = wolf::config::ClientSettings{
+                  .run_uid = 1000,
+                  .run_gid = 1000,
+                  .controllers_override = {},
+                  .mouse_acceleration = 1.0,
+                  .v_scroll_acceleration = 1.0,
+                  .h_scroll_acceleration = 1.0,
+              }};
+
+          // Create a minimal stream session for the auto-started container
+          // Use iPad resolution (2360x1640@120fps) as specified by user
+          auto display_mode = moonlight::DisplayMode{
+              .width = 2360,
+              .height = 1640,
+              .refreshRate = 120,
+              .hevc_supported = state_->app_state->config->support_hevc,
+              .av1_supported = state_->app_state->config->support_av1};
+
+          auto background_session = state::create_stream_session(
+              state_->app_state,
+              *new_app.value(),
+              background_client,
+              display_mode,
+              2, // Stereo audio
+              "9d804e47a6aa6624b7d4b502b32cc522", // 32-char hex for AES-128
+              "0123456789abcdef" // 16-char hex for IV
+          );
+
+          // Add the session to running sessions so it can be found for reuse
+          state_->app_state->running_sessions->update(
+              [background_session](const immer::vector<events::StreamSession> &ses_v) {
+                return ses_v.push_back(*background_session);
+              });
+
+          auto runner = new_app.value()->runner;
+          state_->app_state->event_bus->fire_event(immer::box<events::StartRunner>(
+              events::StartRunner{.stop_stream_when_over = false,
+                                  .runner = runner,
+                                  .stream_session = background_session}));
+
+          // Also start video and audio sessions to set up Wayland display infrastructure
+          auto video_session = events::VideoSession{
+              .session_id = background_session->session_id,
+              .width = background_session->display_mode.width,
+              .height = background_session->display_mode.height,
+              .fps = background_session->display_mode.refreshRate,
+              .slices_per_frame = 8,
+              .bitrate = 20000000, // 20 Mbps for background sessions
+              .colour_range = "full",
+              .colour_space = "bt709",
+              .encoder_type = "HEVC"
+          };
+          state_->app_state->event_bus->fire_event(immer::box<events::VideoSession>(video_session));
+
+          auto audio_session = events::AudioSession{
+              .session_id = background_session->session_id,
+              .bitrate = 96000, // 96 kbps for stereo audio
+              .channel_count = 2,
+              .packet_duration = 20000, // 20ms packets
+              .encrypt_data = false // No encryption for background sessions
+          };
+          state_->app_state->event_bus->fire_event(immer::box<events::AudioSession>(audio_session));
+
+          logs::log(logs::info, "[API] Auto-started container with background session and video/audio: {}", background_session->session_id);
+        } catch (const std::exception &e) {
+          logs::log(logs::warning, "[API] Failed to auto-start container for app {}: {}", app.value().id, e.what());
+        }
+      }
+    }
+
     auto res = GenericSuccessResponse{.success = true};
     send_http(socket, 200, rfl::json::write(res));
   } else {
@@ -164,6 +248,37 @@ void UnixSocketServer::endpoint_StreamSessionAdd(const HTTPRequest &req, std::sh
       auto res = GenericErrorResponse{.error = "Invalid client_id"};
       send_http(socket, 500, rfl::json::write(res));
       return;
+    }
+
+    // Check for existing session if reuse_existing_sessions is enabled
+    if (state_->app_state->config->reuse_existing_sessions) {
+      auto sessions = state_->app_state->running_sessions->load();
+      if (auto existing_session = state::get_session_by_app_id(sessions.get(), ss.app_id)) {
+        logs::log(logs::info, "[API] Reusing existing session for app_id: {}, session_id: {}",
+                 ss.app_id, existing_session->session_id);
+
+        // Update session resolution to match the newest client's request
+        auto updated_session = *existing_session;
+        updated_session.display_mode.width = ss.video_width;
+        updated_session.display_mode.height = ss.video_height;
+        updated_session.display_mode.refreshRate = ss.video_refresh_rate;
+        updated_session.ip = ss.client_ip;
+        updated_session.rtsp_fake_ip = ss.rtsp_fake_ip;
+
+        // Update the session in the state
+        state_->app_state->running_sessions->update(
+            [&updated_session](const immer::vector<events::StreamSession> &ses_v) {
+              return state::remove_session(ses_v, *existing_session).push_back(updated_session);
+            });
+
+        logs::log(logs::info, "[API] Updated session resolution to {}x{}@{}fps for session_id: {}",
+                 ss.video_width, ss.video_height, ss.video_refresh_rate, existing_session->session_id);
+
+        // Return existing session ID
+        auto res = StreamSessionCreated{.success = true, .session_id = std::to_string(existing_session->session_id)};
+        send_http(socket, 200, rfl::json::write(res));
+        return;
+      }
     }
 
     auto new_session = state::create_stream_session( //
@@ -249,12 +364,29 @@ void UnixSocketServer::endpoint_StreamSessionStop(const HTTPRequest &req, std::s
   if (session) {
     auto sessions = state_->app_state->running_sessions->load();
     auto session_id = std::stoul(session.value().session_id);
-    if (state::get_session_by_id(sessions.get(), session_id)) {
-      this->state_->app_state->event_bus->fire_event(
-          immer::box<events::StopStreamEvent>(events::StopStreamEvent{.session_id = session_id}));
-      auto res = GenericSuccessResponse{.success = true};
-      send_http(socket, 200, rfl::json::write(res));
-      return;
+    if (auto found_session = state::get_session_by_id(sessions.get(), session_id)) {
+
+      // Check if this is an auto-started persistent session by examining the virtual client
+      auto client = state::get_client_by_id(this->state_->app_state->config, session_id);
+      bool is_auto_started_session = false;
+      if (client && client->client_cert.find("VIRTUAL_BACKGROUND_CLIENT_FOR_AUTO_START") != std::string::npos) {
+        is_auto_started_session = true;
+      }
+
+      if (is_auto_started_session) {
+        // For auto-started persistent sessions, stop is a no-op to preserve running AI agents
+        logs::log(logs::info, "[API] Stop request ignored for auto-started persistent session: {}", session_id);
+        auto res = GenericSuccessResponse{.success = true};
+        send_http(socket, 200, rfl::json::write(res));
+        return;
+      } else {
+        // Normal stop behavior for user-initiated sessions
+        this->state_->app_state->event_bus->fire_event(
+            immer::box<events::StopStreamEvent>(events::StopStreamEvent{.session_id = session_id}));
+        auto res = GenericSuccessResponse{.success = true};
+        send_http(socket, 200, rfl::json::write(res));
+        return;
+      }
     } else {
       logs::log(logs::warning, "[API] Invalid session_id: {}", session.value().session_id);
       auto res = GenericErrorResponse{.error = "Invalid session_id"};

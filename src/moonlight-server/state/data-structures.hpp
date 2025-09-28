@@ -52,6 +52,8 @@ inline int get_port(STANDARD_PORTS_MAPPING port) {
     return utils::get_env("WOLF_AUDIO_PING_PORT") ? std::stoi(utils::get_env("WOLF_AUDIO_PING_PORT")) : AUDIO_PING_PORT;
   case RTSP_SETUP_PORT:
     return utils::get_env("WOLF_RTSP_SETUP_PORT") ? std::stoi(utils::get_env("WOLF_RTSP_SETUP_PORT")) : RTSP_SETUP_PORT;
+  default:
+    return 0; // Should never reach here
   }
 }
 
@@ -75,6 +77,11 @@ struct Config {
   std::string config_source;
   bool support_hevc;
   bool support_av1;
+
+  // Session management configuration
+  bool reuse_existing_sessions = false;  // Check for existing sessions before creating new
+  bool clients_share_sessions = false;   // Allow multiple clients per session
+  bool auto_start_containers = false;    // Auto-start containers when apps are added
 
   /**
    * Mutable, paired_clients will be loaded up on startup

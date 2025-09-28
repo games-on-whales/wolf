@@ -36,6 +36,25 @@ inline std::optional<events::StreamSession> get_session_by_client(const immer::v
   return get_session_by_id(sessions, client_id);
 }
 
+inline std::optional<events::StreamSession> get_session_by_app_id(const immer::vector<events::StreamSession> &sessions,
+                                                                   const std::string &app_id) {
+  auto results =
+      sessions |                                                                                              //
+      ranges::views::filter([&app_id](const events::StreamSession &session) {
+        return session.app && session.app->base.id == app_id;
+      }) |                                                                                                    //
+      ranges::views::take(1)                                                                                 //
+      | ranges::to_vector;                                                                                   //
+  if (results.size() == 1) {
+    return results[0];
+  } else if (results.empty()) {
+    return {};
+  } else {
+    logs::log(logs::warning, "Found multiple sessions for app ID: {}", app_id);
+    return results[0]; // Return first session if multiple found
+  }
+}
+
 inline std::shared_ptr<events::StreamSession> create_stream_session(immer::box<state::AppState> state,
                                                                     const events::App &run_app,
                                                                     const wolf::config::PairedClient &current_client,

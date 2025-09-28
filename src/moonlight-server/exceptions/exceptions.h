@@ -25,11 +25,11 @@ static void safe_dump_stacktrace_to(const std::string &file_name) {
     if (fd <= 0) {
       return;
     }
-    write(fd, reinterpret_cast<char *>(&count), sizeof(count));
+    [[maybe_unused]] auto result1 = write(fd, reinterpret_cast<char *>(&count), sizeof(count));
     for (std::size_t i = 0; i < count; i++) {
       cpptrace::safe_object_frame frame{};
       cpptrace::get_safe_object_frame(buffer[i], &frame);
-      write(fd, &frame, sizeof(frame));
+      [[maybe_unused]] auto result2 = write(fd, &frame, sizeof(frame));
     }
     close(fd);
   }
@@ -43,10 +43,17 @@ static std::unique_ptr<cpptrace::object_trace> load_stacktrace_from(const std::s
     logs::log(logs::warning, "Unable to open stacktrace file {}", file_name);
     return {};
   }
-  read(fd, reinterpret_cast<char *>(&count), sizeof(count));
+  if (read(fd, reinterpret_cast<char *>(&count), sizeof(count)) != sizeof(count)) {
+    logs::log(logs::warning, "Failed to read count from stacktrace file {}", file_name);
+    close(fd);
+    return {};
+  }
   for (std::size_t i = 0; i < count; i++) {
     cpptrace::safe_object_frame frame{};
-    read(fd, &frame, sizeof(frame));
+    if (read(fd, &frame, sizeof(frame)) != sizeof(frame)) {
+      logs::log(logs::warning, "Failed to read frame {} from stacktrace file {}", i, file_name);
+      break;
+    }
     try {
       trace.frames.push_back(frame.resolve());
     } catch (std::exception &ex) {
