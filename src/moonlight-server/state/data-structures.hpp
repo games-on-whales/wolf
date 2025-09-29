@@ -79,9 +79,14 @@ struct Config {
   bool support_av1;
 
   // Session management configuration
-  bool reuse_existing_sessions = false;  // Check for existing sessions before creating new
-  bool clients_share_sessions = false;   // Allow multiple clients per session
-  bool auto_start_containers = false;    // Auto-start containers when apps are added
+  bool auto_persistent_sessions = false;  // When enabled:
+                                          // - Auto-creates background sessions when apps are added
+                                          // - Sessions use deterministic IDs (app hash) for reuse
+                                          // - Newest client can connect to existing session/container (replaces previous client)
+                                          // - Sessions are protected from stop requests (persistent)
+                                          // - Containers stay running between client connections
+                                          // NOTE: True multi-client sharing not implemented - only single client replacement
+                                          // When disabled: traditional Moonlight behavior (new session per client)
 
   /**
    * Mutable, paired_clients will be loaded up on startup

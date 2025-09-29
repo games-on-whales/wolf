@@ -117,9 +117,7 @@ struct BaseApp {
 };
 
 struct SessionManagementConfig {
-  std::optional<bool> reuse_existing_sessions;
-  std::optional<bool> clients_share_sessions;
-  std::optional<bool> auto_start_containers;  // Auto-start containers when apps are added
+  std::optional<bool> auto_persistent_sessions;  // Auto-start background sessions that persist and can be shared by multiple clients
 };
 
 struct WolfConfig {

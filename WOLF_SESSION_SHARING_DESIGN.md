@@ -1,22 +1,44 @@
-# Wolf Session Sharing Design
+# Wolf Session Management Architecture
 
-## Goal
-Enable multiple Moonlight clients to connect to the same Wolf app session, with persistent background sessions for AI agents that run continuously.
+## CRITICAL FINDINGS: True Session Sharing Not Implemented
 
-## Problem
-Currently Wolf creates separate sessions per client+app combination, leading to:
-- Multiple containers for same Personal Dev environment
-- AI agents can't run unsupervised (sessions die when clients disconnect)
-- Confusing user experience with duplicate environments
-- Users see "cold start" behavior instead of resuming running sessions
+### **What Actually Works:**
+- ✅ **Auto-persistent sessions**: Background containers auto-start and stay running
+- ✅ **Single client replacement**: Newest client can connect to existing background session
+- ✅ **Container persistence**: Apps like Zed/Hyprland survive between client connections
+- ✅ **Stop protection**: Background sessions ignore stop requests
 
-## Solution
-Add two configuration flags to enable session sharing:
+### **What Does NOT Work (Session Sharing Illusion):**
+- ❌ **Multiple simultaneous clients**: Each new client kicks out the previous one
+- ❌ **Dynamic resolution changes**: Video pipeline has resolution hardcoded at startup
+- ❌ **True multi-client routing**: No per-client RTSP/encryption management
+- ❌ **Client preference isolation**: New client overwrites session metadata
+
+## Architectural Reality
+
+### **Wolf Video Pipeline Constraints:**
+1. **Resolution hardcoded at startup**: GStreamer pipelines baked with specific width/height
+2. **Cannot restart video pipeline**: Would kill compositor and lose app state
+3. **Compositor tied to resolution**: Wayland display mode set at container creation
+4. **App state non-transferable**: Zed projects, Hyprland workspaces lost if compositor restarts
+
+### **Current "Session Sharing" = Session Hijacking:**
+```cpp
+// When new client connects to existing session:
+updated_session.display_mode.width = ss.video_width;    // Breaks previous client
+updated_session.ip = ss.client_ip;                      // Steals RTSP routing
+updated_session.rtsp_fake_ip = ss.rtsp_fake_ip;         // Overwrites networking
+```
+
+**Result**: Previous client disconnected, new client gets old resolution (not what they requested)
+
+## Simplified Configuration
+
+Replaced 3 confusing toggles with 1 clear toggle:
 
 ```toml
 [session_management]
-reuse_existing_sessions = false  # Default: false (existing behavior)
-clients_share_sessions = false   # Default: false (existing behavior)
+auto_persistent_sessions = true  # Enable persistent background sessions with single-client replacement
 ```
 
 ## Behavior Changes

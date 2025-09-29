@@ -100,7 +100,9 @@ inline std::shared_ptr<events::StreamSession> create_stream_session(immer::box<s
       .rtsp_fake_ip = rtsp_fake_ip,
 
       // client info
-      .session_id = get_client_id(current_client),
+      .session_id = state->config->auto_persistent_sessions ?
+                   std::hash<std::string>{}(run_app.base.id) :  // Persistent session: use app ID hash
+                   get_client_id(current_client), // Individual sessions: use client ID
       .video_stream_port = static_cast<unsigned short>(get_port(VIDEO_PING_PORT)),
       .audio_stream_port = static_cast<unsigned short>(get_port(AUDIO_PING_PORT)),
       .control_stream_port = static_cast<unsigned short>(get_port(CONTROL_PORT))};

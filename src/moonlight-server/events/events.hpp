@@ -72,6 +72,13 @@ struct App {
   std::string opus_gst_pipeline;
   bool start_virtual_compositor;
   bool start_audio_server;
+
+  // Default display configuration for Personal Dev Environments
+  // These are used when auto_persistent_sessions=true OR when no client preferences available
+  std::optional<int> default_display_width;
+  std::optional<int> default_display_height;
+  std::optional<int> default_display_fps;
+
   std::shared_ptr<Runner> runner;
 };
 

@@ -331,9 +331,7 @@ Config load_or_default(const std::string &source,
                 .config_source = source,
                 .support_hevc = hevc_encoder.has_value(),
                 .support_av1 = av1_encoder.has_value() && encoder_type(*av1_encoder) != SOFTWARE,
-                .reuse_existing_sessions = cfg.session_management.value_or(SessionManagementConfig{}).reuse_existing_sessions.value_or(false),
-                .clients_share_sessions = cfg.session_management.value_or(SessionManagementConfig{}).clients_share_sessions.value_or(false),
-                .auto_start_containers = cfg.session_management.value_or(SessionManagementConfig{}).auto_start_containers.value_or(false),
+                .auto_persistent_sessions = cfg.session_management.value_or(SessionManagementConfig{}).auto_persistent_sessions.value_or(false),
                 .paired_clients = clients_atom,
                 .apps = apps_atom};
 }

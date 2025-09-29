@@ -178,8 +178,8 @@ void WaylandKeyboard::press(unsigned int key_code) {
                              NULL);
     /* clang-format on */
     gstreamer::send_message(w_state->wayland_plugin.get(), msg);
-  } else {
-    logs::log(logs::warning, "Key code not found: {}", key_code);
+  } else if (key_code != 255) {  // Filter out key code 255 (special "no key" value)
+    logs::log(logs::trace, "Key code not found: {}", key_code);  // Reduced to trace level
   }
 }
 
@@ -192,8 +192,8 @@ void WaylandKeyboard::release(unsigned int key_code) {
                              NULL);
     /* clang-format on */
     gstreamer::send_message(w_state->wayland_plugin.get(), msg);
-  } else {
-    logs::log(logs::warning, "Key code not found: {}", key_code);
+  } else if (key_code != 255) {  // Filter out key code 255 (special "no key" value)
+    logs::log(logs::trace, "Key code not found: {}", key_code);  // Reduced to trace level
   }
 }
 
