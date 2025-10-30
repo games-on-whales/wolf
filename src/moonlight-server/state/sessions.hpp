@@ -36,6 +36,25 @@ inline std::optional<events::StreamSession> get_session_by_client(const immer::v
   return get_session_by_id(sessions, client_id);
 }
 
+inline std::optional<events::StreamSession> get_session_by_app_id(const immer::vector<events::StreamSession> &sessions,
+                                                                   const std::string &app_id) {
+  auto results =
+      sessions |                                                                                              //
+      ranges::views::filter([&app_id](const events::StreamSession &session) {
+        return session.app && session.app->base.id == app_id;
+      }) |                                                                                                    //
+      ranges::views::take(1)                                                                                 //
+      | ranges::to_vector;                                                                                   //
+  if (results.size() == 1) {
+    return results[0];
+  } else if (results.empty()) {
+    return {};
+  } else {
+    logs::log(logs::warning, "Found multiple sessions for app ID: {}", app_id);
+    return results[0]; // Return first session if multiple found
+  }
+}
+
 inline std::shared_ptr<events::StreamSession> create_stream_session(immer::box<state::AppState> state,
                                                                     const events::App &run_app,
                                                                     const wolf::config::PairedClient &current_client,
@@ -81,7 +100,9 @@ inline std::shared_ptr<events::StreamSession> create_stream_session(immer::box<s
       .rtsp_fake_ip = rtsp_fake_ip,
 
       // client info
-      .session_id = get_client_id(current_client),
+      .session_id = state->config->auto_persistent_sessions ?
+                   std::hash<std::string>{}(run_app.base.id) :  // Persistent session: use app ID hash
+                   get_client_id(current_client), // Individual sessions: use client ID
       .video_stream_port = static_cast<unsigned short>(get_port(VIDEO_PING_PORT)),
       .audio_stream_port = static_cast<unsigned short>(get_port(AUDIO_PING_PORT)),
       .control_stream_port = static_cast<unsigned short>(get_port(CONTROL_PORT))};

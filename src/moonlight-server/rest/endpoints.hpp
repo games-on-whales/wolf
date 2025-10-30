@@ -61,7 +61,20 @@ void serverinfo(const std::shared_ptr<typename SimpleWeb::Server<T>::Response> &
   bool is_https = std::is_same_v<SimpleWeb::HTTPS, T>;
 
   bool is_busy = stream_session.has_value();
-  int app_id = stream_session.has_value() ? std::stoi(stream_session->app->base.id) : 0;
+  int app_id = 0;
+  if (stream_session.has_value()) {
+    try {
+      app_id = std::stoi(stream_session->app->base.id);
+      logs::log(logs::debug, "[SERVERINFO] Successfully converted app ID '{}' to integer: {}",
+               stream_session->app->base.id, app_id);
+    } catch (const std::exception& e) {
+      logs::log(logs::warning, "[SERVERINFO] Failed to convert app ID '{}' to integer: {}",
+               stream_session->app->base.id, e.what());
+      // For non-numeric app IDs, use a hash to generate a numeric ID
+      app_id = static_cast<int>(std::hash<std::string>{}(stream_session->app->base.id));
+      logs::log(logs::debug, "[SERVERINFO] Using hash-based app ID: {}", app_id);
+    }
+  }
 
   auto local_ip = get_host_ip<T>(request, state);
 
@@ -484,10 +497,44 @@ void resume(const std::shared_ptr<typename SimpleWeb::Server<SimpleWeb::HTTPS>::
   log_req<SimpleWeb::HTTPS>(request);
 
   auto client_ip = get_client_ip<SimpleWeb::HTTPS>(request);
-  auto old_session = state::get_session_by_client(state->running_sessions->load(), current_client);
+  SimpleWeb::CaseInsensitiveMultimap headers = request->parse_query_string();
+
+  std::optional<events::StreamSession> old_session;
+
+  if (state->config->auto_persistent_sessions) {
+    // With auto_persistent_sessions enabled, prioritize app-based lookup for background sessions
+    auto app_id = get_header(headers, "appid");
+    if (app_id) {
+      logs::log(logs::debug, "[HTTPS] Resume: auto_persistent_sessions enabled, searching for background session with app_id: {}", app_id.value());
+      old_session = state::get_session_by_app_id(state->running_sessions->load(), app_id.value());
+      if (old_session) {
+        logs::log(logs::info, "[HTTPS] Resume: Found background session for app {}, allowing any paired client to resume", app_id.value());
+      } else {
+        logs::log(logs::warning, "[HTTPS] Resume: No background session found for app_id: {}", app_id.value());
+        // Debug: show all available sessions
+        auto sessions = state->running_sessions->load();
+        logs::log(logs::debug, "[HTTPS] Resume: Available sessions count: {}", sessions.get().size());
+        for (const auto &session : sessions.get()) {
+          logs::log(logs::debug, "[HTTPS] Resume: Session app_id: {}, session_id: {}",
+                   session.app ? session.app->base.id : "null", session.session_id);
+        }
+      }
+    }
+  } else {
+    // Without auto_persistent_sessions, use traditional client-specific lookup
+    logs::log(logs::debug, "[HTTPS] Resume: auto_persistent_sessions disabled, using client-specific lookup");
+    old_session = state::get_session_by_client(state->running_sessions->load(), current_client);
+  }
+
   if (old_session) {
     auto new_session =
         create_run_session(request->parse_query_string(), client_ip, current_client, state, *old_session->app);
+
+    // For background sessions, preserve the original display mode to avoid pipeline format mismatches
+    new_session->display_mode = old_session->display_mode;
+    logs::log(logs::info, "[HTTPS] Resume: Preserving background session display mode {}x{}@{}fps",
+             old_session->display_mode.width, old_session->display_mode.height, old_session->display_mode.refreshRate);
+
     // Carry over the old session display handle
     new_session->wayland_display = std::move(old_session->wayland_display);
     // Carry over the old session devices, they'll be already plugged into the container
@@ -504,8 +551,10 @@ void resume(const std::shared_ptr<typename SimpleWeb::Server<SimpleWeb::HTTPS>::
     auto rtsp_ip = get_rtsp_ip_string(get_host_ip<SimpleWeb::HTTPS>(request, state), *new_session);
     auto xml = moonlight::launch_resume(rtsp_ip, std::to_string(get_port(state::RTSP_SETUP_PORT)));
     send_xml<SimpleWeb::HTTPS>(response, SimpleWeb::StatusCode::success_ok, xml);
+    return; // Return after successful resume
   } else {
-    logs::log(logs::warning, "[HTTPS] Received resume event from an unregistered session, ip: {}", client_ip);
+    auto app_id = get_header(headers, "appid");
+    logs::log(logs::warning, "[HTTPS] Received resume event from an unregistered session, ip: {}, app_id: {}", client_ip, app_id.value_or("unknown"));
   }
 
   server_error<SimpleWeb::HTTPS>(response);

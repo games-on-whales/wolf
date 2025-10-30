@@ -28,7 +28,42 @@ void startServer(HttpServer *server, const immer::box<state::AppState> state, in
   server->default_resource["POST"] = endpoints::not_found<SimpleWeb::HTTP>;
 
   server->resource["^/serverinfo$"]["GET"] = [&state](auto resp, auto req) {
-    endpoints::serverinfo<SimpleWeb::HTTP>(resp, req, {}, state);
+    auto sessions = state->running_sessions->load();
+    // For background sessions: check if ANY session exists, not just current client's session
+    std::optional<events::StreamSession> active_session = {};
+    if (!sessions.get().empty()) {
+      // Select the most appropriate session for serverinfo
+      // For multiple background sessions, prefer the most recently created one
+      const auto &session_list = sessions.get();
+      if (session_list.size() == 1) {
+        active_session = session_list[0];
+        logs::log(logs::debug, "[SERVERINFO] Single session found, using session_id: {}", active_session->session_id);
+      } else {
+        // Multiple sessions: find the one with the highest session_id (most recent)
+        auto most_recent_session = session_list[0];
+        for (const auto &session : session_list) {
+          if (session.session_id > most_recent_session.session_id) {
+            most_recent_session = session;
+          }
+        }
+        active_session = most_recent_session;
+        logs::log(logs::info, "[SERVERINFO] Multiple sessions found ({}), selected most recent session_id: {}, app: '{}'",
+                 session_list.size(), active_session->session_id,
+                 active_session->app ? active_session->app->base.title : "unknown");
+      }
+
+      // Ensure app is populated by looking it up if needed
+      if (active_session.has_value() && (!active_session->app || !active_session->app->base.id.empty())) {
+        // Get the app by using the app_id from the stored session
+        // For background sessions, we need to look up the app details
+        logs::log(logs::debug, "[SERVERINFO] Background session found, app pointer: {}",
+                 active_session->app ? "valid" : "null");
+        if (active_session->app) {
+          logs::log(logs::debug, "[SERVERINFO] Background session app ID: {}", active_session->app->base.id);
+        }
+      }
+    }
+    endpoints::serverinfo<SimpleWeb::HTTP>(resp, req, active_session, state);
   };
 
   server->resource["^/pair$"]["GET"] = [&state](auto resp, auto req) { endpoints::pair(resp, req, state); };
@@ -122,8 +157,31 @@ void startServer(HttpsServer *server, const immer::box<state::AppState> state, i
 
   server->resource["^/serverinfo$"]["GET"] = [&state](auto resp, auto req) {
     if (auto client = get_client_if_paired(state, req)) {
-      auto client_session = state::get_session_by_client(state->running_sessions->load(), client.value());
-      endpoints::serverinfo<SimpleWeb::HTTPS>(resp, req, client_session, state);
+      auto sessions = state->running_sessions->load();
+      // For background sessions: check if ANY session exists, not just current client's session
+      std::optional<events::StreamSession> active_session = {};
+      if (!sessions.get().empty()) {
+        // Select the most appropriate session for serverinfo
+        // For multiple background sessions, prefer the most recently created one
+        const auto &session_list = sessions.get();
+        if (session_list.size() == 1) {
+          active_session = session_list[0];
+          logs::log(logs::debug, "[SERVERINFO HTTPS] Single session found, using session_id: {}", active_session->session_id);
+        } else {
+          // Multiple sessions: find the one with the highest session_id (most recent)
+          auto most_recent_session = session_list[0];
+          for (const auto &session : session_list) {
+            if (session.session_id > most_recent_session.session_id) {
+              most_recent_session = session;
+            }
+          }
+          active_session = most_recent_session;
+          logs::log(logs::info, "[SERVERINFO HTTPS] Multiple sessions found ({}), selected most recent session_id: {}, app: '{}'",
+                   session_list.size(), active_session->session_id,
+                   active_session->app ? active_session->app->base.title : "unknown");
+        }
+      }
+      endpoints::serverinfo<SimpleWeb::HTTPS>(resp, req, active_session, state);
     } else {
       reply_unauthorized(req, resp);
     }

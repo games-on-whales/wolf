@@ -30,18 +30,30 @@ template <> struct Reflector<events::App> {
   struct ReflType {
     const std::string title;
     const std::string id;
-    const bool support_hdr;
+    // Make support_hdr optional to match TOML config behavior
+    std::optional<bool> support_hdr;
     std::optional<std::string> icon_png_path;
 
-    std::string h264_gst_pipeline;
-    std::string hevc_gst_pipeline;
-    std::string av1_gst_pipeline;
+    // Make GStreamer pipeline fields optional to match TOML config behavior
+    // This fixes the "Field not found" errors when these are omitted (like XFCE config)
+    std::optional<std::string> h264_gst_pipeline;
+    std::optional<std::string> hevc_gst_pipeline;
+    std::optional<std::string> av1_gst_pipeline;
 
-    std::string render_node;
+    std::optional<std::string> render_node;
+    std::optional<std::string> video_producer_buffer_caps;
 
-    std::string opus_gst_pipeline;
-    bool start_virtual_compositor;
-    bool start_audio_server;
+    std::optional<std::string> opus_gst_pipeline;
+    // Make compositor/audio optional to match TOML config behavior
+    std::optional<bool> start_virtual_compositor;
+    std::optional<bool> start_audio_server;
+
+    // Default display configuration for Personal Dev Environments
+    // Used when auto_persistent_sessions=true OR when no client preferences available
+    std::optional<int> default_display_width;
+    std::optional<int> default_display_height;
+    std::optional<int> default_display_fps;
+
     rfl::TaggedUnion<"type", AppCMD, AppDocker, AppChildSession> runner;
   };
 
@@ -54,9 +66,13 @@ template <> struct Reflector<events::App> {
             .hevc_gst_pipeline = v.hevc_gst_pipeline,
             .av1_gst_pipeline = v.av1_gst_pipeline,
             .render_node = v.render_node,
+            .video_producer_buffer_caps = v.video_producer_buffer_caps,
             .opus_gst_pipeline = v.opus_gst_pipeline,
             .start_virtual_compositor = v.start_virtual_compositor,
             .start_audio_server = v.start_audio_server,
+            .default_display_width = v.default_display_width,
+            .default_display_height = v.default_display_height,
+            .default_display_fps = v.default_display_fps,
             .runner = v.runner->serialize()};
   }
 };

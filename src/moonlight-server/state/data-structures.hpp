@@ -52,6 +52,8 @@ inline int get_port(STANDARD_PORTS_MAPPING port) {
     return utils::get_env("WOLF_AUDIO_PING_PORT") ? std::stoi(utils::get_env("WOLF_AUDIO_PING_PORT")) : AUDIO_PING_PORT;
   case RTSP_SETUP_PORT:
     return utils::get_env("WOLF_RTSP_SETUP_PORT") ? std::stoi(utils::get_env("WOLF_RTSP_SETUP_PORT")) : RTSP_SETUP_PORT;
+  default:
+    return 0; // Should never reach here
   }
 }
 
@@ -75,6 +77,16 @@ struct Config {
   std::string config_source;
   bool support_hevc;
   bool support_av1;
+
+  // Session management configuration
+  bool auto_persistent_sessions = false;  // When enabled:
+                                          // - Auto-creates background sessions when apps are added
+                                          // - Sessions use deterministic IDs (app hash) for reuse
+                                          // - Newest client can connect to existing session/container (replaces previous client)
+                                          // - Sessions are protected from stop requests (persistent)
+                                          // - Containers stay running between client connections
+                                          // NOTE: True multi-client sharing not implemented - only single client replacement
+                                          // When disabled: traditional Moonlight behavior (new session per client)
 
   /**
    * Mutable, paired_clients will be loaded up on startup

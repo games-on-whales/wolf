@@ -331,6 +331,7 @@ Config load_or_default(const std::string &source,
                 .config_source = source,
                 .support_hevc = hevc_encoder.has_value(),
                 .support_av1 = av1_encoder.has_value() && encoder_type(*av1_encoder) != SOFTWARE,
+                .auto_persistent_sessions = cfg.session_management.value_or(SessionManagementConfig{}).auto_persistent_sessions.value_or(false),
                 .paired_clients = clients_atom,
                 .apps = apps_atom};
 }

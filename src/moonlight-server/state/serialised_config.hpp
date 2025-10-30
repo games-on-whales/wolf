@@ -116,6 +116,10 @@ struct BaseApp {
       AppCMD{}; // We have to provide a default or rfl::DefaultIfMissing will fail
 };
 
+struct SessionManagementConfig {
+  std::optional<bool> auto_persistent_sessions;  // Auto-start background sessions that persist and can be shared by multiple clients
+};
+
 struct WolfConfig {
   std::string hostname;
   std::string uuid;
@@ -123,6 +127,7 @@ struct WolfConfig {
   std::vector<PairedClient> paired_clients;
   std::vector<BaseApp> apps;
   GstreamerSettings gstreamer;
+  std::optional<SessionManagementConfig> session_management;
 };
 
 struct BaseConfig {

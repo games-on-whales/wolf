@@ -3,6 +3,8 @@
 #include <rtp/udp-ping.hpp>
 #include <state/config.hpp>
 #include <state/sessions.hpp>
+#include <random>
+#include <fmt/format.h>
 
 namespace wolf::api {
 
@@ -92,21 +94,126 @@ void UnixSocketServer::endpoint_Apps(const HTTPRequest &req, std::shared_ptr<Uni
 void UnixSocketServer::endpoint_AddApp(const HTTPRequest &req, std::shared_ptr<UnixSocket> socket) {
   auto app = rfl::json::read<rfl::Reflector<events::App>::ReflType>(req.body);
   if (app) {
-    state_->app_state->config->apps->update([app = app.value(), this](auto &apps) {
-      auto runner =
-          state::get_runner(app.runner, this->state_->app_state->event_bus, this->state_->app_state->running_sessions);
-      return apps.push_back(events::App{
-          .base =
-              {.title = app.title, .id = app.id, .support_hdr = app.support_hdr, .icon_png_path = app.icon_png_path},
-          .h264_gst_pipeline = app.h264_gst_pipeline,
-          .hevc_gst_pipeline = app.hevc_gst_pipeline,
-          .av1_gst_pipeline = app.av1_gst_pipeline,
-          .render_node = app.render_node,
-          .opus_gst_pipeline = app.opus_gst_pipeline,
-          .start_virtual_compositor = app.start_virtual_compositor,
+    // Check if app with same ID already exists (make AddApp idempotent)
+    bool app_already_exists = false;
+    auto existing_apps = state_->app_state->config->apps->load();
+    for (const auto &existing_app : existing_apps.get()) {
+      if (existing_app->base.id == app.value().id) {
+        app_already_exists = true;
+        logs::log(logs::debug, "[API] App with ID '{}' already exists, skipping addition", app.value().id);
+        break;
+      }
+    }
+
+    if (!app_already_exists) {
+      state_->app_state->config->apps->update([app = app.value(), this](auto &apps) {
+        auto runner =
+            state::get_runner(app.runner, this->state_->app_state->event_bus, this->state_->app_state->running_sessions);
+        return apps.push_back(events::App{
+          .base = {.title = app.title,
+                   .id = app.id,
+                   .support_hdr = app.support_hdr.value_or(false), // Default to false
+                   .icon_png_path = app.icon_png_path},
+          .video_producer_buffer_caps = app.video_producer_buffer_caps.value_or("video/x-raw(memory:DMABuf)"), // Default for NVIDIA GPU zero-copy
+          .h264_gst_pipeline = app.h264_gst_pipeline.value_or("interpipesrc listen-to={session_id}_video is-live=true stream-sync=restart-ts max-bytes=0 max-buffers=1 leaky-type=downstream ! video/x-raw, width={width}, height={height}, framerate={fps}/1 ! nvh264enc preset=low-latency-hq zerolatency=true gop-size=0 rc-mode=cbr-ld-hq bitrate={bitrate} aud=false ! h264parse ! video/x-h264, profile=main, stream-format=byte-stream ! rtpmoonlightpay_video name=moonlight_pay payload_size={payload_size} fec_percentage={fec_percentage} min_required_fec_packets={min_required_fec_packets} ! appsink sync=false name=wolf_udp_sink"),
+          .hevc_gst_pipeline = app.hevc_gst_pipeline.value_or(""),  // Empty when HEVC not available (matches TOML)
+          .av1_gst_pipeline = app.av1_gst_pipeline.value_or(""),    // Empty when AV1 not available (matches TOML)
+          .render_node = app.render_node.value_or("/dev/dri/renderD128"),  // Use system default
+          .opus_gst_pipeline = app.opus_gst_pipeline.value_or("interpipesrc listen-to={session_id}_audio is-live=true stream-sync=restart-ts max-bytes=0 max-buffers=3 block=false ! queue max-size-buffers=3 leaky=downstream ! audiorate ! audioconvert ! opusenc bitrate={bitrate} bitrate-type=cbr frame-size={packet_duration} bandwidth=fullband audio-type=restricted-lowdelay max-payload-size=1400 ! rtpmoonlightpay_audio name=moonlight_pay packet_duration={packet_duration} encrypt={encrypt} aes_key=\"{aes_key}\" aes_iv=\"{aes_iv}\" ! appsink name=wolf_udp_sink"),
+          .start_virtual_compositor = app.start_virtual_compositor.value_or(true), // Default to true
+          .start_audio_server = app.start_audio_server.value_or(true), // Default to true
+          .default_display_width = app.default_display_width,
+          .default_display_height = app.default_display_height,
+          .default_display_fps = app.default_display_fps,
           .runner = runner,
       });
     });
+
+      logs::log(logs::info, "[API] App addition completed, checking auto-start configuration");
+      // Auto-start container if enabled
+      logs::log(logs::debug, "[API] Auto-persistent sessions setting: {}", state_->app_state->config->auto_persistent_sessions);
+      if (state_->app_state->config->auto_persistent_sessions) {
+      logs::log(logs::info, "[API] Auto-start is enabled, looking for app: {}", app.value().id);
+      auto new_app = state::get_app_by_id(this->state_->app_state->config, app.value().id);
+      if (new_app) {
+        logs::log(logs::info, "[API] Auto-starting container for app: {}", app.value().id);
+        try {
+          // Use default client settings for background sessions (no virtual client needed)
+          auto background_client_settings = wolf::config::ClientSettings{
+              .run_uid = 1000,
+              .run_gid = 1000,
+              .controllers_override = {},
+              .mouse_acceleration = 1.0,
+              .v_scroll_acceleration = 1.0,
+              .h_scroll_acceleration = 1.0,
+          };
+
+          // Use app's default display configuration if available, otherwise fallback to iPad resolution
+          auto display_mode = moonlight::DisplayMode{
+              .width = new_app.value()->default_display_width.value_or(2360),  // Use app default or fallback to iPad width
+              .height = new_app.value()->default_display_height.value_or(1640), // Use app default or fallback to iPad height
+              .refreshRate = new_app.value()->default_display_fps.value_or(120), // Use app default or fallback to 120fps
+              .hevc_supported = state_->app_state->config->support_hevc,
+              .av1_supported = state_->app_state->config->support_av1};
+
+          // Generate session parameters like the normal create_stream_session function
+          std::random_device rd;
+          std::mt19937 generator(rd());
+          std::uniform_int_distribution<> chars(33, 126);
+          std::array<char, 16> rtp_secret_payload;
+          for (auto &c : rtp_secret_payload) {
+            c = static_cast<char>(chars(generator));
+          }
+          std::uniform_int_distribution<u_int32_t> uints(0, UINT32_MAX);
+          std::uniform_int_distribution<> ints(0, 255);
+          auto rtsp_fake_ip = fmt::format("{}.{}.{}.{}", ints(generator), ints(generator), ints(generator), ints(generator));
+
+          // Create directories for background session
+          auto app_local_folder = std::filesystem::path(state_->app_state->host->local_base_state_folder) / "helix_background_sessions" / new_app.value()->base.title;
+          auto app_host_folder = std::filesystem::path(state_->app_state->host->host_base_state_folder) / "helix_background_sessions" / new_app.value()->base.title;
+          std::filesystem::create_directories(app_local_folder);
+          std::filesystem::create_directories(app_host_folder);
+
+          // Create background session directly without virtual client
+          auto background_session = std::make_shared<events::StreamSession>(events::StreamSession{
+              .display_mode = display_mode,
+              .audio_channel_count = 2, // Stereo
+              .event_bus = state_->app_state->event_bus,
+              .client_settings = immer::box<wolf::config::ClientSettings>(background_client_settings),
+              .app = std::make_shared<events::App>(*new_app.value()),
+              .app_local_state_folder = app_local_folder.string(),
+              .app_host_state_folder = app_host_folder.string(),
+              .aes_key = "9d804e47a6aa6624b7d4b502b32cc522", // 32-char hex for AES-128
+              .aes_iv = "0123456789abcdef", // 16-char hex for IV
+              .rtp_secret_payload = rtp_secret_payload,
+              .enet_secret_payload = uints(generator),
+              .rtsp_fake_ip = rtsp_fake_ip,
+              .session_id = state_->app_state->config->auto_persistent_sessions ?
+                          std::hash<std::string>{}(new_app.value()->base.id) :  // Persistent session: use app ID hash
+                          uints(generator), // Individual sessions: use random ID
+              .ip = "127.0.0.1", // Local background session
+              .video_stream_port = static_cast<unsigned short>(state::get_port(state::VIDEO_PING_PORT)),
+              .audio_stream_port = static_cast<unsigned short>(state::get_port(state::AUDIO_PING_PORT)),
+              .control_stream_port = static_cast<unsigned short>(state::get_port(state::CONTROL_PORT)),
+          });
+
+          // Follow the exact same pattern as normal Moonlight sessions:
+          // 1. Fire StreamSession event (triggers automatic setup of video/audio/Wayland)
+          // 2. Add to running sessions list
+          state_->app_state->event_bus->fire_event(immer::box<events::StreamSession>(*background_session));
+          state_->app_state->running_sessions->update(
+              [background_session](const immer::vector<events::StreamSession> &ses_v) {
+                return ses_v.push_back(*background_session);
+              });
+
+          logs::log(logs::info, "[API] Auto-started container with background session and video/audio: {}", background_session->session_id);
+        } catch (const std::exception &e) {
+          logs::log(logs::warning, "[API] Failed to auto-start container for app {}: {}", app.value().id, e.what());
+        }
+      }
+      }
+    } // End of if (!app_already_exists)
+
     auto res = GenericSuccessResponse{.success = true};
     send_http(socket, 200, rfl::json::write(res));
   } else {
@@ -160,6 +267,52 @@ void UnixSocketServer::endpoint_StreamSessionAdd(const HTTPRequest &req, std::sh
       auto res = GenericErrorResponse{.error = "Invalid client_id"};
       send_http(socket, 500, rfl::json::write(res));
       return;
+    }
+
+    // TODO: SESSION SHARING ARCHITECTURE ISSUES
+    // CRITICAL: True session sharing is NOT implemented - only session replacement works:
+    // 1. OVERWRITES session metadata (resolution, IP, RTSP routing) - breaks previous clients
+    // 2. NO video pipeline restart - new client gets old resolution, not what they requested
+    // 3. NO multi-client support - each "reuse" kicks out the previous client
+    // 4. Wolf video pipelines have resolution HARDCODED at startup - cannot change dynamically
+    // 5. Restarting video pipeline = killing compositor = losing app state (Zed, Hyprland, etc.)
+    //
+    // CURRENT BEHAVIOR: "Session sharing" = session hijacking by newest client
+    // NEW CLIENT EXPERIENCE: Connects but gets wrong resolution (background session's resolution)
+    // PREVIOUS CLIENT EXPERIENCE: Gets disconnected/broken when new client connects
+    //
+    // REALITY: This enables "single client connecting to persistent background container"
+    // NOT TRUE SHARING: Multiple simultaneous clients is not architecturally possible
+
+    // Check for existing session if auto_persistent_sessions is enabled
+    if (state_->app_state->config->auto_persistent_sessions) {
+      auto sessions = state_->app_state->running_sessions->load();
+      if (auto existing_session = state::get_session_by_app_id(sessions.get(), ss.app_id)) {
+        logs::log(logs::info, "[API] Reusing existing session for app_id: {}, session_id: {}",
+                 ss.app_id, existing_session->session_id);
+
+        // Update session resolution to match the newest client's request
+        auto updated_session = *existing_session;
+        updated_session.display_mode.width = ss.video_width;
+        updated_session.display_mode.height = ss.video_height;
+        updated_session.display_mode.refreshRate = ss.video_refresh_rate;
+        updated_session.ip = ss.client_ip;
+        updated_session.rtsp_fake_ip = ss.rtsp_fake_ip;
+
+        // Update the session in the state
+        state_->app_state->running_sessions->update(
+            [&updated_session, existing_session](const immer::vector<events::StreamSession> &ses_v) {
+              return state::remove_session(ses_v, *existing_session).push_back(updated_session);
+            });
+
+        logs::log(logs::info, "[API] Updated session resolution to {}x{}@{}fps for session_id: {}",
+                 ss.video_width, ss.video_height, ss.video_refresh_rate, existing_session->session_id);
+
+        // Return existing session ID
+        auto res = StreamSessionCreated{.success = true, .session_id = std::to_string(existing_session->session_id)};
+        send_http(socket, 200, rfl::json::write(res));
+        return;
+      }
     }
 
     auto new_session = state::create_stream_session( //
@@ -245,12 +398,26 @@ void UnixSocketServer::endpoint_StreamSessionStop(const HTTPRequest &req, std::s
   if (session) {
     auto sessions = state_->app_state->running_sessions->load();
     auto session_id = std::stoul(session.value().session_id);
-    if (state::get_session_by_id(sessions.get(), session_id)) {
-      this->state_->app_state->event_bus->fire_event(
-          immer::box<events::StopStreamEvent>(events::StopStreamEvent{.session_id = session_id}));
-      auto res = GenericSuccessResponse{.success = true};
-      send_http(socket, 200, rfl::json::write(res));
-      return;
+    if (auto found_session = state::get_session_by_id(sessions.get(), session_id)) {
+
+      // Check if this is a persistent background session
+      // If auto_persistent_sessions is enabled, all sessions should be persistent
+      bool is_background_session = state_->app_state->config->auto_persistent_sessions;
+
+      if (is_background_session) {
+        // For persistent background sessions, stop is a no-op to preserve running containers
+        logs::log(logs::info, "[API] Stop request ignored for persistent background session: {}", session_id);
+        auto res = GenericSuccessResponse{.success = true};
+        send_http(socket, 200, rfl::json::write(res));
+        return;
+      } else {
+        // Normal stop behavior for user-initiated sessions
+        this->state_->app_state->event_bus->fire_event(
+            immer::box<events::StopStreamEvent>(events::StopStreamEvent{.session_id = session_id}));
+        auto res = GenericSuccessResponse{.success = true};
+        send_http(socket, 200, rfl::json::write(res));
+        return;
+      }
     } else {
       logs::log(logs::warning, "[API] Invalid session_id: {}", session.value().session_id);
       auto res = GenericErrorResponse{.error = "Invalid session_id"};
