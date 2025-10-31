@@ -74,7 +74,8 @@ void startServer(HttpServer *server, const immer::box<state::AppState> state, in
       [pairing_atom](const immer::box<events::PairSignal> pair_sig) {
         pairing_atom->update([&pair_sig](const immer::map<std::string, immer::box<events::PairSignal>> &m) {
           auto secret = crypto::str_to_hex(crypto::random(8));
-          logs::log(logs::info, "Insert pin at http://{}:47989/pin/#{}", pair_sig->host_ip, secret);
+          auto http_port = std::to_string(state::get_port(state::HTTP_PORT));
+          logs::log(logs::info, "Insert pin at http://{}:{}/pin/#{}", pair_sig->host_ip, http_port, secret);
           // filter out any other (dangling) pair request from the same client
           auto t_map = m.transient();
           for (auto [key, value] : m) {
