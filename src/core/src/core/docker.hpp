@@ -6,7 +6,7 @@
 #include <vector>
 
 namespace wolf::core::docker {
-constexpr auto DOCKER_API_VERSION = "v1.40";
+constexpr auto DOCKER_API_VERSION = "v1.50";
 
 enum ContainerStatus {
   CREATED,
@@ -140,7 +140,7 @@ public:
 
   /**
    * Get the container logs
-   * https://docs.docker.com/engine/api/v1.40/#tag/Container/operation/ContainerLogs
+   * https://docs.docker.com/engine/api/v1.50/#tag/Container/operation/ContainerLogs
    */
   std::string get_logs(std::string_view id,
                        bool get_stdout = true,

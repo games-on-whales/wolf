@@ -277,7 +277,7 @@ base_create_json = """
 
 <1> *mounts*: Here you can define any additional mount that you want to add to the container.
 For example, you can add `mounts = ["/media/data/games:/games:rw"]` if you want to share games files between host and app container.
-<2> *base_create_json*: here you can re-define any property that's defined in the docker API JSON format, see: https://docs.docker.com/engine/api/v1.40/#tag/Container/operation/ContainerCreate[docs.docker.com/engine/api/v1.40]
+<2> *base_create_json*: here you can re-define any property that's defined in the docker API JSON format, see: https://docs.docker.com/engine/api/v1.50/#tag/Container/operation/ContainerCreate[docs.docker.com/engine/api/v1.50]
 
 [#_gstreamer]
 === Gstreamer
