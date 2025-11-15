@@ -31,7 +31,7 @@ RUN apt-get update -y && \
 RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
 ENV PATH="$HOME/.cargo/bin:${PATH}"
 
-ARG RUST_VERSION=1.88.0
+ARG RUST_VERSION=1.89.0
 ENV RUST_VERSION=$RUST_VERSION
 RUN rustup install $RUST_VERSION && rustup default $RUST_VERSION
 
