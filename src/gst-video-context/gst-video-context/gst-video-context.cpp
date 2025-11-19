@@ -147,6 +147,9 @@ bool set_context(gst_context_ptr context, GstMessage *msg) {
     gst_message_parse_context_type(msg, &context_type);
 
     if (g_strcmp0(context_type, GST_CUDA_CONTEXT_TYPE) == 0) {
+      // TODO: avoid this, it's not needed and we aren't un-reffing!
+      gst_object_ref(context->cuda_context.get());
+      gst_object_ref(context->context);
       gst_element_set_context(GST_ELEMENT(GST_MESSAGE_SRC(msg)), context->context);
       return true;
     }

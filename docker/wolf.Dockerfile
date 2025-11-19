@@ -43,7 +43,7 @@ RUN <<_GST_WAYLAND_DISPLAY
 
     git clone https://github.com/games-on-whales/gst-wayland-display
     cd gst-wayland-display
-    git checkout f31e506
+    git checkout 785f3b2
     cargo install cargo-c
     cargo cinstall --features="cuda" --prefix=/usr/local/lib/x86_64-linux-gnu/ --libdir=/usr/local/lib/x86_64-linux-gnu/gstreamer-1.0
 _GST_WAYLAND_DISPLAY
