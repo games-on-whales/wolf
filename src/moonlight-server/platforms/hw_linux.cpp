@@ -1,5 +1,6 @@
 #include "hw.hpp"
 #include <arpa/inet.h>
+#include <boost/asio/ip/address.hpp>
 #include <fcntl.h>
 #include <filesystem>
 #include <fmt/core.h>
@@ -220,6 +221,19 @@ std::string get_ip_address(ifaddrs *ifa) {
 }
 
 std::string get_mac_address(std::string_view local_ip) {
+
+  boost::asio::ip::address addr;
+  try {
+    addr = boost::asio::ip::make_address(local_ip);
+    // handle IPv6 addresses like ::ffff:127.0.0.1
+    if (addr.is_v6() && addr.to_v6().is_v4_mapped()) {
+      addr = addr.to_v6().to_v4();
+    }
+  } catch (const boost::system::system_error &e) {
+    logs::log(logs::warning, "Invalid IP address '{}': {}", local_ip, e.what());
+    return "00:00:00:00:00:00";
+  }
+
   ifaddrs *ifaddrptr = nullptr;
   if (getifaddrs(&ifaddrptr) == -1) {
     logs::log(logs::warning,
@@ -233,8 +247,23 @@ std::string get_mac_address(std::string_view local_ip) {
   // First: search for the interface name that has the same IP address
   std::string interface = "";
   for (auto ifa = ifAddrStruct.get(); ifa != NULL; ifa = ifa->ifa_next) {
-    if (ifa->ifa_addr && local_ip == get_ip_address(ifa)) {
-      interface = ifa->ifa_name;
+    if (!ifa->ifa_addr)
+      continue;
+
+    if (addr.is_v4() && ifa->ifa_addr->sa_family == AF_INET) {
+      auto &v4_addr = ((struct sockaddr_in *)ifa->ifa_addr)->sin_addr;
+      auto addr_bytes = addr.to_v4().to_bytes();
+      if (memcmp(&v4_addr, addr_bytes.data(), sizeof(v4_addr)) == 0) {
+        interface = ifa->ifa_name;
+        break;
+      }
+    } else if (addr.is_v6() && ifa->ifa_addr->sa_family == AF_INET6) {
+      auto &v6_addr = ((struct sockaddr_in6 *)ifa->ifa_addr)->sin6_addr;
+      auto addr_bytes = addr.to_v6().to_bytes();
+      if (memcmp(&v6_addr, addr_bytes.data(), sizeof(v6_addr)) == 0) {
+        interface = ifa->ifa_name;
+        break;
+      }
     }
   }
 

@@ -83,6 +83,7 @@ jobs:
                 -DTEST_NVIDIA=OFF \
                 -DTEST_EXCEPTIONS=OFF \
                 -DTEST_UHID=OFF \
+                -DTEST_LINUX_NETWORK=ON \
                 -G Ninja
 
       - name: Build tests + lib

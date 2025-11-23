@@ -208,9 +208,8 @@ protected:
  */
 class tcp_server {
 public:
-  tcp_server(boost::asio::io_context &io_context, int port, state::SessionsAtoms state)
-      : io_context_(io_context), acceptor_(io_context, tcp::endpoint(tcp::v4(), port)),
-        stream_sessions(std::move(state)) {
+  tcp_server(boost::asio::io_context &io_context, const tcp::endpoint &endpoint, const state::SessionsAtoms &state)
+      : io_context_(io_context), acceptor_(io_context, endpoint), stream_sessions(state) {
     acceptor_.set_option(boost::asio::socket_base::reuse_address{true});
     acceptor_.listen(4096);
     start_accept();
@@ -252,9 +251,9 @@ private:
 void run_server(int port, const state::SessionsAtoms &running_sessions) {
   try {
     boost::asio::io_context io_context;
-    tcp_server server(io_context, port, running_sessions);
+    tcp_server server(io_context, tcp::endpoint(tcp::v6(), port), running_sessions);
 
-    logs::log(logs::info, "RTSP server started on port: {}", port);
+    logs::log(logs::info, "[RTSP] Using IPv6 dual-stack mode on port {}", port);
 
     // This will block here until the context is stopped
     io_context.run();

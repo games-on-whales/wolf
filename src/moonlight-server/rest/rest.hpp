@@ -44,7 +44,7 @@ using XML = moonlight::XML;
 
 namespace HTTPServers {
 
-void startServer(HttpServer *server, const immer::box<state::AppState> state, int port);
+void startServer(HttpServer *server, const immer::box<state::AppState> state, int port, const char *address = "::");
 
-void startServer(HttpsServer *server, const immer::box<state::AppState> state, int port);
+void startServer(HttpsServer *server, const immer::box<state::AppState> state, int port, const char *address = "::");
 } // namespace HTTPServers

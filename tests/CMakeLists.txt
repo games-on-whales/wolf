@@ -75,6 +75,11 @@ if (UNIX AND NOT APPLE)
                 "platforms/linux/libinput.h"
                 "platforms/linux/inputtino.cpp")
     endif ()
+
+    option(TEST_LINUX_NETWORK "Enable Linux network test" OFF)
+    if (TEST_LINUX_NETWORK)
+        list(APPEND SRC_LIST "platforms/linux/network.cpp")
+    endif ()
 endif ()
 
 find_package(CURL)

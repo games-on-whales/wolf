@@ -43,9 +43,12 @@ void start_rtp_ping(unsigned short video_port,
   auto io_context = std::make_shared<boost::asio::io_context>();
 
   try {
-    logs::log(logs::info, "[RTP] Starting RTP ping server on ports {} and {}", video_port, audio_port);
-    auto video_socket = std::make_shared<udp::socket>(*io_context, udp::endpoint(udp::v4(), video_port));
-    auto audio_socket = std::make_shared<udp::socket>(*io_context, udp::endpoint(udp::v4(), audio_port));
+    logs::log(logs::info,
+              "[RTP] Starting RTP ping IPv6 dual-stack mode server on ports {} and {}",
+              video_port,
+              audio_port);
+    auto video_socket = std::make_shared<udp::socket>(*io_context, udp::endpoint(udp::v6(), video_port));
+    auto audio_socket = std::make_shared<udp::socket>(*io_context, udp::endpoint(udp::v6(), audio_port));
 
     std::thread([io_context, video_socket, audio_socket, event_bus]() {
       UDP_Server video_server(video_socket, [event_bus, video_socket](const RTPPingEvent &ping) {

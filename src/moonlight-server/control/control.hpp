@@ -19,7 +19,7 @@ void run_control(int port,
                  const std::shared_ptr<events::EventBusType> &event_bus,
                  int peers = 20,
                  std::chrono::milliseconds timeout = 1000ms,
-                 const std::string &host_ip = "0.0.0.0");
+                 const std::string &host_ip = "::");
 
 using enet_clients_map = immer::map<ENetPeer *, immer::box<events::StreamSession>>;
 
