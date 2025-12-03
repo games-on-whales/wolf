@@ -216,6 +216,8 @@ private:
   void endpoint_LobbyCreate(const HTTPRequest &req, std::shared_ptr<UnixSocket> socket);
   void endpoint_LobbyJoin(const HTTPRequest &req, std::shared_ptr<UnixSocket> socket);
   void endpoint_LobbyLeave(const HTTPRequest &req, std::shared_ptr<UnixSocket> socket);
+  void endpoint_LobbyPause(const HTTPRequest &req, std::shared_ptr<UnixSocket> socket);
+  void endpoint_LobbyResume(const HTTPRequest &req, std::shared_ptr<UnixSocket> socket);
   void endpoint_LobbyStop(const HTTPRequest &req, std::shared_ptr<UnixSocket> socket);
 
   void endpoint_RunnerStart(const HTTPRequest &req, std::shared_ptr<UnixSocket> socket);

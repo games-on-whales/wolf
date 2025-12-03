@@ -505,6 +505,38 @@ void UnixSocketServer::endpoint_LobbyLeave(const wolf::api::HTTPRequest &req, st
   }
 }
 
+void UnixSocketServer::endpoint_LobbyPause(const wolf::api::HTTPRequest &req, std::shared_ptr<UnixSocket> socket) {
+  auto event = rfl::json::read<events::PauseLobbyEvent>(req.body);
+  if (event) {
+    auto lobbies = this->state_->app_state->lobbies->load();
+    if (auto err = check_lobby_pin(lobbies.get(), event->lobby_id, event->pin)) {
+      send_http(socket, 500, rfl::json::write(GenericErrorResponse{.error = err.value()}));
+      return;
+    }
+    state_->app_state->event_bus->fire_event(immer::box<events::PauseLobbyEvent>(event.value()));
+    send_http(socket, 200, rfl::json::write(GenericSuccessResponse{}));
+  } else {
+    logs::log(logs::warning, "[API] Invalid event: {} - {}", req.body, event.error().what());
+    send_http(socket, 500, rfl::json::write(GenericErrorResponse{.error = event.error().what()}));
+  }
+}
+
+void UnixSocketServer::endpoint_LobbyResume(const wolf::api::HTTPRequest &req, std::shared_ptr<UnixSocket> socket) {
+  auto event = rfl::json::read<events::ResumeLobbyEvent>(req.body);
+  if (event) {
+    auto lobbies = this->state_->app_state->lobbies->load();
+    if (auto err = check_lobby_pin(lobbies.get(), event->lobby_id, event->pin)) {
+      send_http(socket, 500, rfl::json::write(GenericErrorResponse{.error = err.value()}));
+      return;
+    }
+    state_->app_state->event_bus->fire_event(immer::box<events::ResumeLobbyEvent>(event.value()));
+    send_http(socket, 200, rfl::json::write(GenericSuccessResponse{}));
+  } else {
+    logs::log(logs::warning, "[API] Invalid event: {} - {}", req.body, event.error().what());
+    send_http(socket, 500, rfl::json::write(GenericErrorResponse{.error = event.error().what()}));
+  }
+}
+
 void UnixSocketServer::endpoint_LobbyStop(const wolf::api::HTTPRequest &req, std::shared_ptr<UnixSocket> socket) {
   auto event = rfl::json::read<events::StopLobbyEvent>(req.body);
   if (event) {

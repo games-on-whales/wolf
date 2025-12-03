@@ -111,6 +111,20 @@ public:
   bool start_by_id(std::string_view id) const;
 
   /**
+   * Pauses the container
+   *
+   * https://docs.docker.com/reference/api/engine/version/v1.51/#tag/Container/operation/ContainerPause
+   */
+  bool pause_by_id(std::string_view id) const;
+
+  /**
+   * Upauses the container
+   *
+   * https://docs.docker.com/reference/api/engine/version/v1.51/#tag/Container/operation/ContainerUnpause
+   */
+  bool unpause_by_id(std::string_view id) const;
+
+  /**
    * Stops the container
    *
    * https://docs.docker.com/engine/api/v1.30/#tag/Container/operation/ContainerStop

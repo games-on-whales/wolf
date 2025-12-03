@@ -461,6 +461,84 @@
         }
       }
     },
+    "/api/v1/lobbies/pause": {
+      "post": {
+        "summary": "Pause a lobby",
+        "description": "",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/wolf__core__events__PauseLobbyEvent"
+              }
+            }
+          },
+          "description": "",
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/wolf__api__GenericSuccessResponse"
+                }
+              }
+            },
+            "description": ""
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/wolf__api__GenericErrorResponse"
+                }
+              }
+            },
+            "description": ""
+          }
+        }
+      }
+    },
+    "/api/v1/lobbies/resume": {
+      "post": {
+        "summary": "Resume a lobby",
+        "description": "",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/wolf__core__events__ResumeLobbyEvent"
+              }
+            }
+          },
+          "description": "",
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/wolf__api__GenericSuccessResponse"
+                }
+              }
+            },
+            "description": ""
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/wolf__api__GenericErrorResponse"
+                }
+              }
+            },
+            "description": ""
+          }
+        }
+      }
+    },
     "/api/v1/lobbies/stop": {
       "post": {
         "summary": "Stop a lobby",
@@ -1948,6 +2026,54 @@
         "required": [
           "lobby_id",
           "moonlight_session_id"
+        ]
+      },
+      "wolf__core__events__PauseLobbyEvent": {
+        "type": "object",
+        "properties": {
+          "lobby_id": {
+            "type": "string"
+          },
+          "pin": {
+            "anyOf": [
+              {
+                "type": "array",
+                "items": {
+                  "type": "integer"
+                }
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "lobby_id"
+        ]
+      },
+      "wolf__core__events__ResumeLobbyEvent": {
+        "type": "object",
+        "properties": {
+          "lobby_id": {
+            "type": "string"
+          },
+          "pin": {
+            "anyOf": [
+              {
+                "type": "array",
+                "items": {
+                  "type": "integer"
+                }
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "lobby_id"
         ]
       },
       "wolf__core__events__StopLobbyEvent": {

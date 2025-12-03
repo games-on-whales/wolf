@@ -219,6 +219,38 @@ bool DockerAPI::start_by_id(std::string_view id) const {
   return false;
 }
 
+bool DockerAPI::pause_by_id(std::string_view id) const {
+  if (auto conn = docker_connect(socket_path)) {
+    auto raw_msg = req(
+        conn.value().get(),
+        POST,
+        fmt::format("http://localhost/{}/containers/{}/pause", docker_api_version, id));
+    if (raw_msg && (raw_msg->first == 204 || raw_msg->first == 304)) {
+      return true;
+    } else if (raw_msg) {
+      logs::log(logs::warning, "[DOCKER] error {} - {}", raw_msg->first, raw_msg->second);
+    }
+  }
+
+  return false;
+}
+
+bool DockerAPI::unpause_by_id(std::string_view id) const {
+  if (auto conn = docker_connect(socket_path)) {
+    auto raw_msg = req(
+        conn.value().get(),
+        POST,
+        fmt::format("http://localhost/{}/containers/{}/unpause", docker_api_version, id));
+    if (raw_msg && (raw_msg->first == 204 || raw_msg->first == 304)) {
+      return true;
+    } else if (raw_msg) {
+      logs::log(logs::warning, "[DOCKER] error {} - {}", raw_msg->first, raw_msg->second);
+    }
+  }
+
+  return false;
+}
+
 bool DockerAPI::stop_by_id(std::string_view id, int timeout_seconds) const {
   if (auto conn = docker_connect(socket_path)) {
     auto raw_msg = req(

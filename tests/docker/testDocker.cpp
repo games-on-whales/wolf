@@ -33,6 +33,8 @@ TEST_CASE("Docker API", "[DOCKER]") {
   auto first_container = docker_api.create(container);
   REQUIRE(first_container.has_value());
   REQUIRE(docker_api.start_by_id(first_container.value().id));
+  REQUIRE(docker_api.pause_by_id(first_container.value().id));
+  REQUIRE(docker_api.unpause_by_id(first_container.value().id));
   REQUIRE(docker_api.stop_by_id(first_container.value().id));
 
   // This should remove the first container and create a new one with the same name

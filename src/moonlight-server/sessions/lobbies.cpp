@@ -253,6 +253,39 @@ setup_lobbies_handlers(const immer::box<state::AppState> &app_state,
         }
       }));
 
+  // Pausing a lobby will trigger leave for all the connected sessions
+  handlers.push_back(app_state->event_bus->register_handler<immer::box<events::PauseLobbyEvent>>(
+      [=](const immer::box<events::PauseLobbyEvent> &stop_lobby_event) {
+        auto lobbies = app_state->lobbies->load();
+        auto lobby = state::get_lobby_by_id(lobbies.get(), stop_lobby_event->lobby_id);
+
+        if (!lobby) {
+          logs::log(logs::warning, "[LOBBY] lobby {} not found", stop_lobby_event->lobby_id);
+          return;
+        }
+        logs::log(logs::info, "[LOBBY] pausing lobby {}", stop_lobby_event->lobby_id);
+
+        immer::vector<immer::box<std::string>> sessions = lobby->connected_sessions->load();
+        for (auto &session_id : sessions) {
+          app_state->event_bus->fire_event(immer::box<events::LeaveLobbyEvent>{
+              events::LeaveLobbyEvent{.lobby_id = lobby->id, .moonlight_session_id = std::stoul(*session_id)}});
+        }
+      }));
+
+  // When a Moonlight client resume a lobby
+  handlers.push_back(app_state->event_bus->register_handler<immer::box<events::ResumeLobbyEvent>>(
+      [=](const immer::box<events::ResumeLobbyEvent> &resume_lobby_event) {
+        auto lobbies = app_state->lobbies->load();
+        auto lobby = state::get_lobby_by_id(lobbies.get(), resume_lobby_event->lobby_id);
+
+        if (!lobby) {
+          logs::log(logs::error,
+                    "[LOBBY] Failed to resume lobby: lobby {} not found",
+                    resume_lobby_event->lobby_id);
+          return;
+        }
+      }));
+
   // Stopping a lobby will trigger leave for all the connected sessions
   handlers.push_back(app_state->event_bus->register_handler<immer::box<events::StopLobbyEvent>>(
       [=](const immer::box<events::StopLobbyEvent> &stop_lobby_event) {

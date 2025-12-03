@@ -282,6 +282,28 @@ UnixSocketServer::UnixSocketServer(boost::asio::io_context &io_context,
 
   state_->http.add(
       HTTPMethod::POST,
+      "/api/v1/lobbies/pause",
+      {
+          .summary = "Pause a lobby",
+          .request_description = APIDescription{.json_schema = rfl::json::to_schema<events::PauseLobbyEvent>()},
+          .response_description = {{200, {.json_schema = rfl::json::to_schema<GenericSuccessResponse>()}},
+                                   {500, {.json_schema = rfl::json::to_schema<GenericErrorResponse>()}}},
+          .handler = [this](auto req, auto socket) { endpoint_LobbyPause(req, socket); },
+      });
+
+  state_->http.add(
+      HTTPMethod::POST,
+      "/api/v1/lobbies/resume",
+      {
+          .summary = "Resume a lobby",
+          .request_description = APIDescription{.json_schema = rfl::json::to_schema<events::ResumeLobbyEvent>()},
+          .response_description = {{200, {.json_schema = rfl::json::to_schema<GenericSuccessResponse>()}},
+                                   {500, {.json_schema = rfl::json::to_schema<GenericErrorResponse>()}}},
+          .handler = [this](auto req, auto socket) { endpoint_LobbyResume(req, socket); },
+      });
+
+  state_->http.add(
+      HTTPMethod::POST,
       "/api/v1/lobbies/stop",
       {
           .summary = "Stop a lobby",
