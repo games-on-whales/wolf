@@ -749,7 +749,7 @@ Keep an eye on the logs from Wolf to get more details.
 [#_virtual_devices_support]
 == Virtual devices support
 
-We use uinput to create virtual devices (Mouse, Keyboard and Joypad), make sure that `/dev/uinput` is present in the host:
+We use uinput to create virtual Joypad devices, make sure that `/dev/uinput` is present in the host:
 
 [source,bash]
 ....
@@ -757,55 +757,22 @@ ls -la /dev/uinput
 crw------- 1 root root 10, 223 Jan 17 09:08 /dev/uinput
 ....
 
-.Add your user to group `input`
-[source,bash]
-....
-sudo usermod -a -G input $USER
-....
-
 .Create `udev` rules under `/etc/udev/rules.d/85-wolf-virtual-inputs.rules`
 [source,bash]
 ....
-# Allows Wolf to acces /dev/uinput
-KERNEL=="uinput", SUBSYSTEM=="misc", MODE="0660", GROUP="input", OPTIONS+="static_node=uinput"
+# Allows Wolf to acces /dev/uinput (only needed for joypad support)
+KERNEL=="uinput", SUBSYSTEM=="misc", MODE="0660", GROUP="input", OPTIONS+="static_node=uinput", TAG+="uaccess"
 
-# Allows Wolf to access /dev/uhid
-KERNEL=="uhid", TAG+="uaccess"
-
-# Move virtual keyboard and mouse into a different seat
-SUBSYSTEMS=="input", ATTRS{id/vendor}=="ab00", MODE="0660", GROUP="input", ENV{ID_SEAT}="seat9"
+# Allows Wolf to access /dev/uhid (only needed for DualSense emulation)
+KERNEL=="uhid", GROUP="input", MODE="0660", TAG+="uaccess"
 
 # Joypads
-SUBSYSTEMS=="input", ATTRS{name}=="Wolf X-Box One (virtual) pad", MODE="0660", GROUP="input"
-SUBSYSTEMS=="input", ATTRS{name}=="Wolf PS5 (virtual) pad", MODE="0660", GROUP="input"
-SUBSYSTEMS=="input", ATTRS{name}=="Wolf gamepad (virtual) motion sensors", MODE="0660", GROUP="input"
-SUBSYSTEMS=="input", ATTRS{name}=="Wolf Nintendo (virtual) pad", MODE="0660", GROUP="input"
+KERNEL=="hidraw*", ATTRS{name}=="Wolf PS5 (virtual) pad", GROUP="input", MODE="0660", ENV{ID_SEAT}="seat9"
+SUBSYSTEMS=="input", ATTRS{name}=="Wolf X-Box One (virtual) pad", MODE="0660", ENV{ID_SEAT}="seat9"
+SUBSYSTEMS=="input", ATTRS{name}=="Wolf PS5 (virtual) pad", MODE="0660", ENV{ID_SEAT}="seat9"
+SUBSYSTEMS=="input", ATTRS{name}=="Wolf gamepad (virtual) motion sensors", MODE="0660", ENV{ID_SEAT}="seat9"
+SUBSYSTEMS=="input", ATTRS{name}=="Wolf Nintendo (virtual) pad", MODE="0660", ENV{ID_SEAT}="seat9"
 ....
-
-.What does that mean?
-[%collapsible]
-====
-
-    KERNEL=="uinput", SUBSYSTEM=="misc", MODE="0660", GROUP="input", OPTIONS+="static_node=uinput"
-
-Allows Wolf to access `/dev/uinput` on your system.
-It needs that node to create the virtual devices.
-This is usually not the default on servers, but if that is already working for you on your desktop system, you can skip this line.
-
-    SUBSYSTEMS=="input", ATTRS{id/vendor}=="ab00", MODE="0660", GROUP="input", ENV{ID_SEAT}="seat9"
-
-This line checks for the custom vendor-id that Wolf gives to newly created virtual devices and assigns them to `seat9`, which will cause any session with a lower seat (usually you only have `seat1` for your main session) to ignore the devices.
-
-    SUBSYSTEMS=="input", ATTRS{name}=="Wolf X-Box One (virtual) pad", MODE="0660", GROUP="input"
-    SUBSYSTEMS=="input", ATTRS{name}=="Wolf PS5 (virtual) pad", MODE="0660", GROUP="input"
-    SUBSYSTEMS=="input", ATTRS{name}=="Wolf gamepad (virtual) motion sensors", MODE="0660", GROUP="input"
-    SUBSYSTEMS=="input", ATTRS{name}=="Wolf Nintendo (virtual) pad", MODE="0660", GROUP="input"
-
-Now the virtual controllers are different, because we need to emulate an existing brand for them to be picked up correctly, so our virtual controllers have a vendor/product id resembling a real controller.
-The assigned name instead is specific to Wolf.
-
-You can't assign controllers a seat however (well - you can - but it won't have the same effect), so we just give it permissions where only user+group can pick it up.
-====
 
 Reload the udev rules either by rebooting or run:
 
