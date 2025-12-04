@@ -51,10 +51,6 @@ Wolf is configured via a TOML config file and some additional optional ENV varia
 |/dev/dri/renderD128
 |The default render node used for virtual desktops; see: <<_multiple_gpu>>
 
-|WOLF_ENCODER_NODE
-|$WOLF_RENDER_NODE
-|The default render node used for the Gstreamer pipelines; see: <<_multiple_gpu>>
-
 |WOLF_DOCKER_FAKE_UDEV_PATH
 |$HOST_APPS_STATE_FOLDER/fake-udev
 |The path on the host for the fake-udev CLI tool
@@ -80,43 +76,21 @@ Additional env variables useful when debugging:
 Wolf is designed to support multiple streaming sessions simultaneously, each potentially running a different app.
 To ensure that each app’s data remains persistent and isolated, Wolf automatically creates a dedicated folder structure for every app instance.
 
-When using the configuration provided in the quickstart guide, this structure is located at `/etc/wolf/${app_state_folder}/${app_title}` on the host system.
-This folder is then mounted as the home directory (`/home/retro`) inside the app’s Docker container, using a bind mount like `-v /etc/wolf/${app_state_folder}/${app_title}:/home/retro`.
+When using the configuration provided in the quickstart guide, this structure is located at `/etc/wolf/profile_data/${profile_id}/${app_title}` on the host system.
+This folder is then mounted as the home directory (`/home/retro`) inside the app’s Docker container, using a bind mount like `-v /etc/wolf/profile_data/${profile_id}/${app_title}:/home/retro`.
 
 The magic of Wolf lies in its ability to dynamically resolve the host path, regardless of where `/etc/wolf` is actually located. +
 For example, if you run Wolf mounting `/etc/wolf` to a custom location on your host such as `-v /mnt/drive/wolf:/etc/wolf:rw` Wolf will automatically adjust the mount path for each app.
-In this case, the app’s data will be stored in `/mnt/drive/wolf/${app_state_folder}/${app_title}` on the host, but still appear as `/home/retro` inside the app container.
+In this case, the app’s data will be stored in `/mnt/drive/wolf/profile_data/${profile_id}/${app_title}` on the host, but still appear as `/home/retro` inside the app container.
 
 These two variables are defined as follows:
 
-* `app_state_folder`: defaults to a unique identifier for each client so that every Moonlight session will have its own folder.
-Can be changed in the `config.toml` file
-* `app_title`: the title of the app as defined in the `config.toml` file
-
-=== Share home folder with multiple clients
-
-[WARNING]
-====
-This will break isolation, if you want to connect with multiple clients at the same time you should not share the home folder.
-You can follow development of that feature https://github.com/games-on-whales/wolf/issues/83[here]
-====
-
-By default, Wolf will create a new home folder for each client, but if you want to share the same home folder with multiple clients, you can set the `app_state_folder` to the same value for each paired client; example: +
-
-[source,toml]
-....
-[[paired_clients]]
-app_state_folder = "common"               # <-- !!!
-
-[[paired_clients]]
-app_state_folder = "common"               # <-- !!!
-....
-
-This way, when running any app from those two clients, they will share the same home folder by mounting `${HOST_APPS_STATE_FOLDER}/common/${app_title}` as `/home/retro` in the docker container.
+* `profile_id`: a unique identifier for each user profile, see: xref:_profiles[]
+* `app_title`: the title of the app as defined in the `config.toml` file, see: xref:_defining_apps[]
 
 == TOML file
 
-The TOML configuration file is read only once at startup (or created if not present) and it'll be modified by Wolf only when a new user is successfully paired.
+The TOML configuration file is read only once at startup (or created if not present), and it'll be modified by Wolf only when a new user is successfully paired.
 
 .Default TOML configuration file
 [source,toml]
@@ -127,7 +101,7 @@ config_version = 2 #<3>
 uuid = "0f75f4d1-e28e-410a-b318-c0579f18f8d1" #<4>
 
 paired_clients = [] #<5>
-apps = [] #<6>
+profiles = [] #<6>
 gstreamer = {} #<7>
 ....
 
@@ -136,35 +110,157 @@ gstreamer = {} #<7>
 <3> *config_version*: The version of this config file
 <4> *uuid*: a randomly generated UUID, it's used by Moonlight to know if the current host has already been paired
 <5> *paired_clients*: a list of all the Moonlight clients that have succesfully completed the pairing process; it'll be populated by Wolf and saved to this file.
-<6> *apps*: a list of apps, see: xref:_defining_apps[]
+<6> *profiles*: a list of xref:_profiles[profiles], each contains a list of xref:_defining_apps[apps]
 <7> *gstreamer* audio/video pipeline definitions, see xref:_gstreamer[]
+
+[#_profiles]
+=== Profiles
+
+Wolf supports multiple profiles, each with its own set of apps. +
+This allows you to define different configurations for different users or use cases.
+
+By default, we have a special profile called `moonlight-profile-id` which defines what will be shown as available apps by Moonlight clients when connecting to Wolf.
+Here's the default TOML configuration file which defines two apps:
+
+* Wolf UI: a docker container running the Wolf UI
+* Test ball: a dummy Gstreamer pipeline used to test out if everything is working correctly
+
+[source,toml]
+....
+[[profiles]]
+id = 'moonlight-profile-id'
+
+    [[profiles.apps]]
+    title = 'Wolf UI'
+    start_virtual_compositor = true
+    icon_png_path = "https://raw.githubusercontent.com/games-on-whales/wolf-ui/refs/heads/main/src/Icons/wolf_ui_icon.png"
+
+        [profiles.apps.runner]
+        type = 'docker'
+        name = 'Wolf-UI'
+        image = 'ghcr.io/games-on-whales/wolf-ui:main'
+        devices = []
+        env = [
+            'GOW_REQUIRED_DEVICES=/dev/input/event* /dev/dri/* /dev/nvidia*',
+            'WOLF_SOCKET_PATH=/var/run/wolf/wolf.sock',
+            'WOLF_UI_AUTOUPDATE=False',
+            'LOGLEVEL=INFO'
+        ]
+        mounts = [
+            '/var/run/wolf/wolf.sock:/var/run/wolf/wolf.sock'
+        ]
+        ports = []
+        base_create_json = '''{
+          "HostConfig": {
+            "IpcMode": "host",
+            "CapAdd": ["NET_RAW", "MKNOD", "NET_ADMIN", "SYS_ADMIN", "SYS_NICE"],
+            "Privileged": false,
+            "DeviceCgroupRules": ["c 13:* rmw", "c 244:* rmw"]
+          }
+        }'''
+
+
+
+    [[profiles.apps]]
+    title = 'Test ball'
+    icon_png_path = "https://raw.githubusercontent.com/games-on-whales/wolf/refs/heads/stable/docs/images/test_ball_icon.png"
+    start_audio_server = false
+    start_virtual_compositor = false
+
+        [profiles.apps.runner]
+        type = 'process'
+        run_cmd = "sh -c \"while :; do echo 'running...'; sleep 10; done\""
+
+        [profiles.apps.audio]
+        source = 'audiotestsrc wave=ticks is-live=true'
+
+        [profiles.apps.video]
+        source = '''videotestsrc pattern=ball flip=true is-live=true !
+                           video/x-raw, framerate={fps}/1'''
+....
+
+Wolf UI is a special app that will be able to show you available profiles and lobbies directly from your Moonlight client.
+By default we create a single profile in our TOML file called `user`:
+
+[source,toml]
+....
+# An example profile that will be shown in our Wolf UI
+[[profiles]]
+id = "user"
+name = "User"
+
+    [[profiles.apps]]
+    title = "Firefox"
+    icon_png_path = "https://games-on-whales.github.io/wildlife/apps/firefox/assets/icon.png"
+    start_virtual_compositor = true
+
+        [profiles.apps.runner]
+        type = "docker"
+        name = "WolfFirefox"
+        image = "ghcr.io/games-on-whales/firefox:edge"
+        mounts = []
+        env = [
+            "RUN_SWAY=1",
+            "MOZ_ENABLE_WAYLAND=1",
+            "GOW_REQUIRED_DEVICES=/dev/input/* /dev/dri/* /dev/nvidia*",
+        ]
+        devices = []
+        ports = []
+        base_create_json = """
+        {
+          "HostConfig": {
+            "IpcMode": "host",
+            "Privileged": false,
+            "CapAdd": ["NET_RAW", "MKNOD", "NET_ADMIN"],
+            "DeviceCgroupRules": ["c 13:* rmw", "c 244:* rmw"]
+          }
+        }
+        \
+        """
+# Additional apps for the current profile will be defined here
+....
+
+Additional profiles can be defined in the same way, here are the full options that you have available:
+
+[source,toml]
+....
+[[profiles]]
+id = 'user' #<1>
+name = 'Random User' #<2>
+icon_png_path = 'http://192.168.1.155:8888/misc/guest.png' #<3>
+pin = [ 3, 2, 1, 4 ] #<4>
+....
+
+<1> *id*: a unique string that identifies this profile, used internally by Wolf
+<2> *name*: the name that will be displayed in Wolf UI
+<3> *icon_png_path*: this is the box art that will be displayed in Wolf UI, see: xref:custom_images[]
+<4> *pin*: optional, if present Wolf UI will ask for a PIN in order to show this profile app list
 
 [#_defining_apps]
 === Defining apps
 
-Apps defined here will be shown in Moonlight after successfully pairing with Wolf. +
-You can re-define parts of the Gstreamer pipeline easily, ex:
+Here's an example annotated TOML configuration for a single app:
 
 [source,toml]
 ....
-[[apps]]
+[[profiles.apps]]
 title = "Test ball" #<1>
 start_virtual_compositor = false #<2>
 app_state_folder = "some/folder" #<3>
 icon_png_path = "ball.png" #<4>
 
-[apps.runner] #<5>
+[profiles.apps.runner] #<5>
 type = "process"
 run_cmd = "sh -c \"while :; do echo 'running...'; sleep 10; done\""
 
-[apps.video] #<6>
+[profiles.apps.video] #<6>
 source = """
 videotestsrc pattern=ball flip=true is-live=true !
 video/x-raw, framerate={fps}/1
 \
 """
 
-[apps.audio] #<7>
+[profiles.apps.audio] #<7>
 source = "audiotestsrc wave=ticks is-live=true"
 ....
 
@@ -287,33 +383,11 @@ In order to automatically pick up the right encoder at runtime based on the user
 
 You can read more about gstreamer and custom pipelines in the xref:gstreamer.adoc[] page.
 
-== CO-OP sessions
-
-There's experimental support for CO-OP sessions, this will allow multiple clients to connect to the same virtual session and play together. +
-
-In order to enable this you'll have to add the following app entry in the `config.toml` file:
-
-[source,toml]
-....
-[[apps]]
-title = "CO-OP session"
-# Get the parent session ID from the Wolf logs
-runner = { type = "child_session", parent_session_id = "4135727842959053255" }
-video = { source = "interpipesrc listen-to=4135727842959053255_video is-live=true stream-sync=restart-ts max-bytes=0 max-buffers=3 block=false" }
-audio = { source = "interpipesrc listen-to=4135727842959053255_audio is-live=true stream-sync=restart-ts max-bytes=0 max-buffers=3 block=false" }
-start_virtual_compositor = false
-start_audio_server = false
-
-....
-
-In this example, the `parent_session_id` is the session ID of the parent session that you want to connect to. +
-The process will be simplified once we complete implementing a custom UI for Wolf, see: https://github.com/games-on-whales/wolf/issues/80[games-on-whales/wolf#80].
-
 === Set Window compositor
 
-Wolf support both https://swaywm.org/[Sway] and https://github.com/ValveSoftware/gamescope[Gamescope] compositor.
+Our Docker images support both https://swaywm.org/[Sway] and https://github.com/ValveSoftware/gamescope[Gamescope] compositor.
 
-Sway is used by default, but some game may work better with one or the other.
+Sway is used by default, but some games may work better with one or the other.
 
 Usage is controlled by environment variables on `[apps.runner]` configs:
 
@@ -357,26 +431,8 @@ If both are defined, Gamescoped is used. (see https://github.com/games-on-whales
 [#_multiple_gpu]
 == Multiple GPUs
 
-When you have multiple GPUs installed in your host, you might want to have better control over which one is used by Wolf and how. +
-There are two main separated parts that make use of HW acceleration in Wolf:
-
-* *App render node*: this will use HW acceleration in order to create virtual Wayland desktops and run the chosen app (ex: Firefox, Steam, ...).
-Use the `WOLF_RENDER_NODE` (defaults to `/dev/dri/renderD128`) env variable to control this.
-* *Gstreamer video encoding*: this will use HW acceleration in order to efficiently encode the video stream with H.264 or HEVC.
-Use the `WOLF_ENCODER_NODE` (defaults to `WOLF_RENDER_NODE`) env variable to control this.
-
-They can be configured separately, and in theory you could even *use two GPUs at the same time* for different jobs; ex: use the integrated GPU just for the streaming part and use a powerful GPU to play apps/games.
-
-[WARNING]
-====
-This isn't recommended, it might introduce additional latency and it's not optimal.
-HW encoding on modern GPUs is very lightweight and it's better to use the same GPU for both jobs.
-====
-
-=== App render node
-
-Each application that Wolf will start will have access only to a specific render node even if the host has multiple GPUs connected. +
-By default, Wolf will use the env variable `WOLF_RENDER_NODE` which defaults to `/dev/dri/renderD128`
+When you have multiple GPUs installed in your host, you might want to specify which one to use for Wolf.
+Use the `WOLF_RENDER_NODE` environment variable (defaults to `/dev/dri/renderD128`) to control this.
 
 [TIP]
 ====
@@ -395,53 +451,15 @@ ls -l /sys/class/drm/renderD*/device/driver
 
 ====
 
-Wolf supports also overriding the render node in each single app defined in the `config.toml` config file by setting the `render_node` property; example:
+There are two main separated parts that make use of HW acceleration in Wolf:
 
-[source,toml]
-....
-[apps.runner]
-type = "docker"
-name = "WolfSteam"
-image = "ghcr.io/games-on-whales/steam:edge"
+* *App render node*: this will use HW acceleration in order to create virtual Wayland desktops and run the chosen app (ex: Firefox, Steam, ...).
+* *Gstreamer video encoding*: this will use HW acceleration in order to efficiently encode the video stream with H.264 or HEVC.
 
-# More options here, removed for brevity...
-render_node = "/dev/dri/renderD129"
-....
+Since Wolf supports HW accelerated zero-copy pipelines it's best to keep both the Wayland rendering and the Gstreamer encoding on the same GPU.
+Support for multi-GPU load balancing is planned for future releases.
 
-=== Gstreamer video encoding
-
-The easy way to control this is to just edit the env variable `WOLF_ENCODER_NODE` (defaults to match `WOLF_RENDER_NODE` in order to use the same GPU for both), this will set the default render node used for the Gstreamer pipelines.
-
-The streaming video encoding pipeline is fully controlled by the `config.toml` file; here the order in which entries are listed is important because Wolf will just try each listed plugin; the first one that works is the one that will be used.
-
-[NOTE,caption=EXAMPLE]
-====
-If you have an Intel iGPU and a Nvidia card in the same host, and you would like to use QuickSync in order to do the encoding, you can either:
-
-* Delete the `nvcodec` entries under `gstreamer.video.hevc_encoders`
-* Cut the `qsv` entry and paste it above the `nvcodec` entry
-====
-
-On top of that, each single `apps` entry support overriding the default streaming pipeline; for example:
-
-[source,toml]
-....
-[[apps]]
-title = "Test ball"
-
-# More options here, removed for brevity...
-
-[apps.video]
-source = """
-videotestsrc pattern=ball flip=true is-live=true !
-video/x-raw, framerate={fps}/1
-\
-"""
-....
-
-In case you have two GPUs that will use the same encoder pipeline (example: an AMD iGPU and an AMD GPU card) you can override the `video_params` with the corresponding encoder plugin; see:
-https://gitlab.freedesktop.org/gstreamer/gstreamer/-/issues/1167[gstreamer/issues/1167].
-
+[#_keyboard_layout]
 == Changing and Switching Keyboard Layouts in wolf Apps Containers
 
 This guide demonstrates how to change the default keyboard layout and switch between multiple layouts in Docker containers.
