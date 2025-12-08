@@ -1,8 +1,9 @@
 * User guide
 ** xref:user:quickstart.adoc[]
 ** xref:user:configuration.adoc[]
-** xref:user:gstreamer.adoc[]
+** xref:user:wolf-ui.adoc[]
 ** xref:user:troubleshooting.adoc[]
+** xref:user:gstreamer.adoc[]
 
 ** xref:apps:index.adoc[]
 *** xref:apps:steam.adoc[]
@@ -11,6 +12,7 @@
 
 * Developer guide
 ** xref:dev:how-it-works.adoc[]
+** xref:dev:lobbies.adoc[]
 ** xref:dev:manual_build.adoc[]
 ** xref:dev:api.adoc[]
 ** xref:dev:code-structure.adoc[]
