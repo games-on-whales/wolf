@@ -222,6 +222,7 @@ name = "User"
 
 Additional profiles can be defined in the same way, here are the full options that you have available:
 
+[#_profile_example]
 [source,toml]
 ....
 [[profiles]]

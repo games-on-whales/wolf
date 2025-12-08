@@ -738,7 +738,7 @@ You should now be able to point Moonlight to the IP address of the server and st
 
 * In Moonlight, you'll get a prompt for a PIN image:ROOT:moonlight-pairing-code.png[A screenshot of Moonlight asking for a PIN]
 * Wolf will log a line with a link to a page where you can input that PIN (ex: http://localhost:47989/pin/#337327E8A6FC0C66 make sure to replace `localhost` with your server IP) image:ROOT:wolf-pairing-code.png[A screenshot of the Wolf page where you can insert the PIN]
-* In Moonlight, you should now be able to see a list of the applications that are supported by Wolf image:ROOT:moonlight-pairing-done.png[A screenshot of Moonlight showing the apps]
+* In Moonlight, you should now be able to see a list of the applications that are supported by Wolf, the default entrypoint is xref:wolf-ui.adoc[] image:ROOT:moonlight-pairing-done.png[A screenshot of Moonlight showing the apps]
 
 [TIP]
 ====
