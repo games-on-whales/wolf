@@ -53,8 +53,18 @@ image:ROOT:steam_mangohud_config.png[Steam launch options]
 In a game, you can press `Right Shift` + `F12` to make the overlay appear and disappear.
 You can also press `Right Shift` + `F11` to change the position of the overlay on screen.
 
-=== Using alternative Proton ===
+== Using alternative Proton ==
 
-From where your /etc/wolf is stored, add the desired proton files to /etc/wolf/profile_data/${profile_id}/WolfSteam/.steam/debian-installation/compatibilitytools.d/
+From where your `/etc/wolf` is mounted in your host, add the desired proton files to `/etc/wolf/profile_data/${profile_id}/WolfSteam/.steam/debian-installation/compatibilitytools.d/`
 
-Note that, in order to add this, you must have already started the user once for said profile_id. Additionally, you may have to create the compatibilitytools.d if no compatibility tools folder exists.
+[NOTE]
+====
+In order to add this, you must have already started the user once for said profile_id. Additionally, you may have to create the `compatibilitytools.d` if no compatibility tools folder exists.
+====
+
+=== Example for ProtonGE ===
+
+* Download the latest ProtonGE release from https://github.com/GloriousEggroll/proton-ge-custom/releases
+* Extract the release tarball into `/etc/wolf/profile_data/${profile_id}/WolfSteam/.steam/debian-installation/compatibilitytools.d/`
+* Restart Steam
+* Select the desired ProtonGE version in the Steam game's properties under "Compatibility"'
