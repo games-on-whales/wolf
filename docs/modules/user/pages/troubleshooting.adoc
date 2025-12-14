@@ -142,3 +142,9 @@ docker volume ls | grep nvidia-driver
 ....
 
 (thanks to G.Reaper)
+
+== Problems with AV1 Streaming
+
+Cards such as the 7900XTX that have problems with encoding, as well as CPUs such as the N150 have reported problems with AV1 streaming. If this occurs, edit the config toml file and comment out the [[gstreamer.video.av1_encoders]] via # before the lines within them.
+
+One good step to isolate the issue is to run moonlight statistics, and to validate that the network is behaving as expected. The 7900XTX will, when it runs into this issue, only be able to stream at 30FPS over moonlight regardless of settings or configuration. Users with the UHD 730 have also reported similar issues with AV1 encoding.
