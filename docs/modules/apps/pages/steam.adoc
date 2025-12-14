@@ -68,3 +68,44 @@ In order to add this, you must have already started the user once for said profi
 * Extract the release tarball into `/etc/wolf/profile_data/${profile_id}/WolfSteam/.steam/debian-installation/compatibilitytools.d/`
 * Restart Steam
 * Select the desired ProtonGE version in the Steam game's properties under "Compatibility"'
+
+== Setting up a shared library ==
+
+=== Setting the mount point ===
+The host's library will need to mounted to the container.
+This is easily accomplished by using the `mounts` option in the `config.toml` file.
+Set `mounts = [ '/path/to/steamapps:/home/retro/.steam/debian-installation/steamapps:rw' ]` in the Steam block and restart Wolf.
+
+=== Permissions ===
+The library needs to be owned by user:group 1000:1000 for the container to access it.
+The library needs all permissions given to it for proper function.
+
+When a new user is added, permissions prevent proper initialization of the first run of the container. 
+It will fail to load due to `/home/retro/.steam/ubuntu12_32/` and `/home/retro/.steam/ubuntu12_32/steam-runtime` not having the proper permissions.
+Once the first run has been attempted, these can be `chown` 'd to `1000:1000` and `chmod` 'd to `777`.
+
+This script performs a quick and easy fix for this. Usage is simple: run the Steam app once as the new user, letting it crash, and then run this script with `bash mk_steam_dir.sh userid` to correct the issue. Second start of the app with the new user should start with the Updating Steam dialogue. If you changed the default location where Wolf stores its persistent data, you'll need to update the BASE variable in the script.
+
+`mk_steam_dir.sh`
+[source,bash]
+....
+#!/bin/bash
+# Assign the base path for your Wolf persistent data:
+BASE=/etc/wolf
+# Check if the first argument is empty
+if [ -z "$1" ]; then
+    echo "Error: You must provide the user's data directory. This is their 'id' entry in the config file."
+    echo "Usage: $0 <user-directory>"
+    exit 1
+fi
+# Check if the user's WolfSteam directory exists
+if [[ ! -d "$BASE/profile-data/$1/WolfSteam" ]]; then
+    echo "Please run Steam once (it will crash) from the user '$1' and then run this script."
+    exit 1
+fi
+# Create required subdirectories
+mkdir -vp "$BASE/profile-data/$1/WolfSteam/.steam/ubuntu12_32/steam-runtime"
+# Set ownership and permissions
+chown -Rv 1000:1000 "$BASE/profile-data/$1/WolfSteam"
+chmod -Rv 777 "$BASE/profile-data/$1/WolfSteam"
+....
