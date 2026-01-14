@@ -461,84 +461,6 @@
         }
       }
     },
-    "/api/v1/lobbies/pause": {
-      "post": {
-        "summary": "Pause a lobby",
-        "description": "",
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/wolf__core__events__PauseLobbyEvent"
-              }
-            }
-          },
-          "description": "",
-          "required": true
-        },
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/wolf__api__GenericSuccessResponse"
-                }
-              }
-            },
-            "description": ""
-          },
-          "500": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/wolf__api__GenericErrorResponse"
-                }
-              }
-            },
-            "description": ""
-          }
-        }
-      }
-    },
-    "/api/v1/lobbies/resume": {
-      "post": {
-        "summary": "Resume a lobby",
-        "description": "",
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/wolf__core__events__ResumeLobbyEvent"
-              }
-            }
-          },
-          "description": "",
-          "required": true
-        },
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/wolf__api__GenericSuccessResponse"
-                }
-              }
-            },
-            "description": ""
-          },
-          "500": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/wolf__api__GenericErrorResponse"
-                }
-              }
-            },
-            "description": ""
-          }
-        }
-      }
-    },
     "/api/v1/lobbies/stop": {
       "post": {
         "summary": "Stop a lobby",
@@ -704,6 +626,84 @@
             "application/json": {
               "schema": {
                 "$ref": "#/components/schemas/wolf__api__RunnerStartRequest"
+              }
+            }
+          },
+          "description": "",
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/wolf__api__GenericSuccessResponse"
+                }
+              }
+            },
+            "description": ""
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/wolf__api__GenericErrorResponse"
+                }
+              }
+            },
+            "description": ""
+          }
+        }
+      }
+    },
+    "/api/v1/runners/pause": {
+      "post": {
+        "summary": "Pause a runner",
+        "description": "",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/wolf__api__RunnerPauseRequest"
+              }
+            }
+          },
+          "description": "",
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/wolf__api__GenericSuccessResponse"
+                }
+              }
+            },
+            "description": ""
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/wolf__api__GenericErrorResponse"
+                }
+              }
+            },
+            "description": ""
+          }
+        }
+      }
+    },
+    "/api/v1/runners/resume": {
+      "post": {
+        "summary": "Resume a runner",
+        "description": "",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/wolf__api__RunnerPauseRequest"
               }
             }
           },
@@ -1617,6 +1617,28 @@
           "session_id"
         ]
       },
+      "wolf__api__RunnerPauseRequest": {
+        "type": "object",
+        "properties": {
+          "runner": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/wolf__config__AppCMD__tagged"
+              },
+              {
+                "$ref": "#/components/schemas/wolf__config__AppDocker__tagged"
+              }
+            ]
+          },
+          "session_id": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "runner",
+          "session_id"
+        ]
+      },
       "wolf__api__StreamSessionCreated": {
         "type": "object",
         "properties": {
@@ -2026,54 +2048,6 @@
         "required": [
           "lobby_id",
           "moonlight_session_id"
-        ]
-      },
-      "wolf__core__events__PauseLobbyEvent": {
-        "type": "object",
-        "properties": {
-          "lobby_id": {
-            "type": "string"
-          },
-          "pin": {
-            "anyOf": [
-              {
-                "type": "array",
-                "items": {
-                  "type": "integer"
-                }
-              },
-              {
-                "type": "null"
-              }
-            ]
-          }
-        },
-        "required": [
-          "lobby_id"
-        ]
-      },
-      "wolf__core__events__ResumeLobbyEvent": {
-        "type": "object",
-        "properties": {
-          "lobby_id": {
-            "type": "string"
-          },
-          "pin": {
-            "anyOf": [
-              {
-                "type": "array",
-                "items": {
-                  "type": "integer"
-                }
-              },
-              {
-                "type": "null"
-              }
-            ]
-          }
-        },
-        "required": [
-          "lobby_id"
         ]
       },
       "wolf__core__events__StopLobbyEvent": {

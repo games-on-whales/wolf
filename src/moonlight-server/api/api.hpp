@@ -157,6 +157,11 @@ struct RunnerStartRequest {
   std::string session_id;
 };
 
+struct RunnerPauseRequest {
+  events::RunnerTypes runner;
+  std::string session_id;
+};
+
 struct GetIconRequest {
   std::string icon_png_path;
 };
@@ -216,11 +221,11 @@ private:
   void endpoint_LobbyCreate(const HTTPRequest &req, std::shared_ptr<UnixSocket> socket);
   void endpoint_LobbyJoin(const HTTPRequest &req, std::shared_ptr<UnixSocket> socket);
   void endpoint_LobbyLeave(const HTTPRequest &req, std::shared_ptr<UnixSocket> socket);
-  void endpoint_LobbyPause(const HTTPRequest &req, std::shared_ptr<UnixSocket> socket);
-  void endpoint_LobbyResume(const HTTPRequest &req, std::shared_ptr<UnixSocket> socket);
   void endpoint_LobbyStop(const HTTPRequest &req, std::shared_ptr<UnixSocket> socket);
 
   void endpoint_RunnerStart(const HTTPRequest &req, std::shared_ptr<UnixSocket> socket);
+  void endpoint_RunnerPause(const HTTPRequest &req, std::shared_ptr<UnixSocket> socket);
+  void endpoint_RunnerResume(const HTTPRequest &req, std::shared_ptr<UnixSocket> socket);
 
   void endpoint_UpdateClientSettings(const HTTPRequest &req, std::shared_ptr<UnixSocket> socket);
   void endpoint_GetIcon(const HTTPRequest &req, std::shared_ptr<UnixSocket> socket);

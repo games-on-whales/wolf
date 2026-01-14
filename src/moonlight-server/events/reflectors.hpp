@@ -122,14 +122,14 @@ template <> struct Reflector<events::Profile> {
   }
 };
 
-template <> struct Reflector<events::StartRunner> {
+template <> struct Reflector<events::StartRunnerEvent> {
   struct ReflType {
     bool stop_stream_when_over;
     events::RunnerTypes runner;
     std::string session_id;
   };
 
-  static ReflType from(const events::StartRunner &v) {
+  static ReflType from(const events::StartRunnerEvent &v) {
     return {.stop_stream_when_over = v.stop_stream_when_over,
             .runner = v.runner->serialize(),
             .session_id = std::to_string(v.stream_session->session_id)};

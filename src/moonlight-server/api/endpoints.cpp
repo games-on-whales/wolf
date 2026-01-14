@@ -505,38 +505,6 @@ void UnixSocketServer::endpoint_LobbyLeave(const wolf::api::HTTPRequest &req, st
   }
 }
 
-void UnixSocketServer::endpoint_LobbyPause(const wolf::api::HTTPRequest &req, std::shared_ptr<UnixSocket> socket) {
-  auto event = rfl::json::read<events::PauseLobbyEvent>(req.body);
-  if (event) {
-    auto lobbies = this->state_->app_state->lobbies->load();
-    if (auto err = check_lobby_pin(lobbies.get(), event->lobby_id, event->pin)) {
-      send_http(socket, 500, rfl::json::write(GenericErrorResponse{.error = err.value()}));
-      return;
-    }
-    state_->app_state->event_bus->fire_event(immer::box<events::PauseLobbyEvent>(event.value()));
-    send_http(socket, 200, rfl::json::write(GenericSuccessResponse{}));
-  } else {
-    logs::log(logs::warning, "[API] Invalid event: {} - {}", req.body, event.error().what());
-    send_http(socket, 500, rfl::json::write(GenericErrorResponse{.error = event.error().what()}));
-  }
-}
-
-void UnixSocketServer::endpoint_LobbyResume(const wolf::api::HTTPRequest &req, std::shared_ptr<UnixSocket> socket) {
-  auto event = rfl::json::read<events::ResumeLobbyEvent>(req.body);
-  if (event) {
-    auto lobbies = this->state_->app_state->lobbies->load();
-    if (auto err = check_lobby_pin(lobbies.get(), event->lobby_id, event->pin)) {
-      send_http(socket, 500, rfl::json::write(GenericErrorResponse{.error = err.value()}));
-      return;
-    }
-    state_->app_state->event_bus->fire_event(immer::box<events::ResumeLobbyEvent>(event.value()));
-    send_http(socket, 200, rfl::json::write(GenericSuccessResponse{}));
-  } else {
-    logs::log(logs::warning, "[API] Invalid event: {} - {}", req.body, event.error().what());
-    send_http(socket, 500, rfl::json::write(GenericErrorResponse{.error = event.error().what()}));
-  }
-}
-
 void UnixSocketServer::endpoint_LobbyStop(const wolf::api::HTTPRequest &req, std::shared_ptr<UnixSocket> socket) {
   auto event = rfl::json::read<events::StopLobbyEvent>(req.body);
   if (event) {
@@ -566,9 +534,55 @@ void UnixSocketServer::endpoint_RunnerStart(const wolf::api::HTTPRequest &req, s
     }
 
     auto runner = state::get_runner(event.value().runner, this->state_->app_state->event_bus);
-    state_->app_state->event_bus->fire_event(immer::box<events::StartRunner>(
-        events::StartRunner{.stop_stream_when_over = event.value().stop_stream_when_over,
+    state_->app_state->event_bus->fire_event(immer::box<events::StartRunnerEvent>(
+        events::StartRunnerEvent{.stop_stream_when_over = event.value().stop_stream_when_over,
                             .runner = runner,
+                            .stream_session = std::make_shared<events::StreamSession>(*session)}));
+  } else {
+    logs::log(logs::warning, "[API] Invalid event: {} - {}", req.body, event.error().what());
+    auto res = GenericErrorResponse{.error = event.error().what()};
+    send_http(socket, 500, rfl::json::write(res));
+  }
+}
+
+void UnixSocketServer::endpoint_RunnerPause(const wolf::api::HTTPRequest &req, std::shared_ptr<UnixSocket> socket) {
+  auto event = rfl::json::read<RunnerPauseRequest>(req.body);
+  if (event) {
+    auto session = state::get_session_by_id(this->state_->app_state->running_sessions->load(),
+                                            std::stoul(event.value().session_id));
+    if (!session) {
+      logs::log(logs::warning, "[API] Invalid session_id: {}", event.value().session_id);
+      auto res = GenericErrorResponse{.error = "Invalid session_id"};
+      send_http(socket, 500, rfl::json::write(res));
+      return;
+    }
+
+    auto runner = state::get_runner(event.value().runner, this->state_->app_state->event_bus);
+    state_->app_state->event_bus->fire_event(immer::box<events::PauseRunnerEvent>(
+        events::PauseRunnerEvent{.runner = runner,
+                            .stream_session = std::make_shared<events::StreamSession>(*session)}));
+  } else {
+    logs::log(logs::warning, "[API] Invalid event: {} - {}", req.body, event.error().what());
+    auto res = GenericErrorResponse{.error = event.error().what()};
+    send_http(socket, 500, rfl::json::write(res));
+  }
+}
+
+void UnixSocketServer::endpoint_RunnerResume(const wolf::api::HTTPRequest &req, std::shared_ptr<UnixSocket> socket) {
+  auto event = rfl::json::read<RunnerPauseRequest>(req.body);
+  if (event) {
+    auto session = state::get_session_by_id(this->state_->app_state->running_sessions->load(),
+                                            std::stoul(event.value().session_id));
+    if (!session) {
+      logs::log(logs::warning, "[API] Invalid session_id: {}", event.value().session_id);
+      auto res = GenericErrorResponse{.error = "Invalid session_id"};
+      send_http(socket, 500, rfl::json::write(res));
+      return;
+    }
+
+    auto runner = state::get_runner(event.value().runner, this->state_->app_state->event_bus);
+    state_->app_state->event_bus->fire_event(immer::box<events::ResumeRunnerEvent>(
+        events::ResumeRunnerEvent{.runner = runner,
                             .stream_session = std::make_shared<events::StreamSession>(*session)}));
   } else {
     logs::log(logs::warning, "[API] Invalid event: {} - {}", req.body, event.error().what());

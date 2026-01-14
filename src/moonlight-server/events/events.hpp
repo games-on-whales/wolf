@@ -192,16 +192,6 @@ struct LeaveLobbyEvent {
   const std::size_t moonlight_session_id;
 };
 
-struct PauseLobbyEvent {
-  const std::string lobby_id;
-  std::optional<std::vector<short>> pin = std::nullopt;
-};
-
-struct ResumeLobbyEvent {
-  const std::string lobby_id;
-  std::optional<std::vector<short>> pin = std::nullopt;
-};
-
 struct StopLobbyEvent {
   const std::string lobby_id;
   std::optional<std::vector<short>> pin = std::nullopt;
@@ -326,8 +316,18 @@ struct RTPAudioPingEvent {
 
 struct StreamSession;
 
-struct StartRunner {
+struct StartRunnerEvent {
   bool stop_stream_when_over = false;
+  std::shared_ptr<Runner> runner;
+  std::shared_ptr<StreamSession> stream_session;
+};
+
+struct PauseRunnerEvent {
+  std::shared_ptr<Runner> runner;
+  std::shared_ptr<StreamSession> stream_session;
+};
+
+struct ResumeRunnerEvent {
   std::shared_ptr<Runner> runner;
   std::shared_ptr<StreamSession> stream_session;
 };
@@ -345,12 +345,12 @@ using EventBusHandlers = dp::handler_registration<immer::box<PlugDeviceEvent>,
                                                   immer::box<ClientWolfUIComboEvent>,
                                                   immer::box<RTPVideoPingEvent>,
                                                   immer::box<RTPAudioPingEvent>,
-                                                  immer::box<StartRunner>,
+                                                  immer::box<StartRunnerEvent>,
+                                                  immer::box<PauseRunnerEvent>,
+                                                  immer::box<ResumeRunnerEvent>,
                                                   immer::box<JoinLobbyEvent>,
                                                   immer::box<LeaveLobbyEvent>,
                                                   immer::box<CreateLobbyEvent>,
-                                                  immer::box<PauseLobbyEvent>,
-                                                  immer::box<ResumeLobbyEvent>,
                                                   immer::box<StopLobbyEvent>,
                                                   immer::box<SwitchStreamProducerEvents>>;
 using EventBusType = dp::event_bus<immer::box<PlugDeviceEvent>,
@@ -366,12 +366,12 @@ using EventBusType = dp::event_bus<immer::box<PlugDeviceEvent>,
                                    immer::box<ClientWolfUIComboEvent>,
                                    immer::box<RTPVideoPingEvent>,
                                    immer::box<RTPAudioPingEvent>,
-                                   immer::box<StartRunner>,
+                                   immer::box<StartRunnerEvent>,
+                                   immer::box<PauseRunnerEvent>,
+                                   immer::box<ResumeRunnerEvent>,
                                    immer::box<JoinLobbyEvent>,
                                    immer::box<LeaveLobbyEvent>,
                                    immer::box<CreateLobbyEvent>,
-                                   immer::box<PauseLobbyEvent>,
-                                   immer::box<ResumeLobbyEvent>,
                                    immer::box<StopLobbyEvent>,
                                    immer::box<SwitchStreamProducerEvents>>;
 using EventsVariant = std::variant<immer::box<PlugDeviceEvent>,
@@ -387,12 +387,12 @@ using EventsVariant = std::variant<immer::box<PlugDeviceEvent>,
                                    immer::box<ClientWolfUIComboEvent>,
                                    immer::box<RTPVideoPingEvent>,
                                    immer::box<RTPAudioPingEvent>,
-                                   immer::box<StartRunner>,
+                                   immer::box<StartRunnerEvent>,
+                                   immer::box<PauseRunnerEvent>,
+                                   immer::box<ResumeRunnerEvent>,
                                    immer::box<JoinLobbyEvent>,
                                    immer::box<LeaveLobbyEvent>,
                                    immer::box<CreateLobbyEvent>,
-                                   immer::box<PauseLobbyEvent>,
-                                   immer::box<ResumeLobbyEvent>,
                                    immer::box<StopLobbyEvent>,
                                    immer::box<SwitchStreamProducerEvents>>;
 
