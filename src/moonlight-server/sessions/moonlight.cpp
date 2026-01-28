@@ -168,16 +168,16 @@ setup_moonlight_handlers(const immer::box<state::AppState> &app_state,
           session->touch_screen->emplace(virtual_display::WaylandTouchScreen(wl_state));
 
           logs::log(logs::debug, "[STREAM_SESSION] Start runner");
-          session->event_bus->fire_event(immer::box<events::StartRunner>(
-              events::StartRunner{.stop_stream_when_over = true,
+          session->event_bus->fire_event(immer::box<events::StartRunnerEvent>(
+              events::StartRunnerEvent{.stop_stream_when_over = true,
                                   .runner = session->app->runner,
                                   .stream_session = std::make_shared<events::StreamSession>(*session)}));
         });
       }));
 
   /* Start runner */
-  handlers.push_back(app_state->event_bus->register_handler<immer::box<events::StartRunner>>(
-      [=](const immer::box<events::StartRunner> &run_session) {
+  handlers.push_back(app_state->event_bus->register_handler<immer::box<events::StartRunnerEvent>>(
+      [=](const immer::box<events::StartRunnerEvent> &run_session) {
         auto session_id = std::to_string(run_session->stream_session->session_id);
         auto devices_q = plugged_devices_queue->load()->find(session_id);
         if (!devices_q) {

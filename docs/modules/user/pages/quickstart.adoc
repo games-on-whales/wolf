@@ -292,7 +292,7 @@ sudo nvidia-container-cli --load-kmods info
 
 [source,bash]
 ....
-#!/bin/bash
+#!/usr/bin/env bash
 ## Script to initialize nvidia device nodes.
 ## https://docs.nvidia.com/cuda/cuda-installation-guide-linux/index.html#runfile-verifications
 

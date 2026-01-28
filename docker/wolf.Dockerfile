@@ -38,7 +38,7 @@ RUN rustup install $RUST_VERSION && rustup default $RUST_VERSION
 
 WORKDIR /tmp/
 RUN <<_GST_WAYLAND_DISPLAY
-    #!/bin/bash
+    #!/usr/bin/env bash
     set -e
 
     git clone https://github.com/games-on-whales/gst-wayland-display

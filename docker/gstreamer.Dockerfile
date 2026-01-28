@@ -27,7 +27,7 @@ Description: Manually built from git
 EOT
 
 RUN <<_GSTREAMER_INSTALL
-    #!/bin/bash
+    #!/usr/bin/env bash
     set -e
 
     DEV_PACKAGES=" \

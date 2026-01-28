@@ -101,36 +101,38 @@ UnixSocketServer::UnixSocketServer(boost::asio::io_context &io_context,
       });
 
   state_->http.add(HTTPMethod::POST,
-                   "/api/v1/apps/add",
-                   {
-                       .summary = "Add a Moonlight app",
-                       .request_description =
-                           APIDescription{.json_schema = rfl::json::to_schema<rfl::Reflector<events::App>::ReflType>()},
-                       .response_description = {{200, {.json_schema = rfl::json::to_schema<GenericSuccessResponse>()}},
-                                                {500, {.json_schema = rfl::json::to_schema<GenericErrorResponse>()}}},
-                       .handler = [this](auto req, auto socket) { endpoint_AddApp(req, socket); },
-                   });
+      "/api/v1/apps/add",
+      {
+          .summary = "Add a Moonlight app",
+          .request_description =
+              APIDescription{.json_schema = rfl::json::to_schema<rfl::Reflector<events::App>::ReflType>()},
+          .response_description = {{200, {.json_schema = rfl::json::to_schema<GenericSuccessResponse>()}},
+                                  {500, {.json_schema = rfl::json::to_schema<GenericErrorResponse>()}}},
+          .handler = [this](auto req, auto socket) { endpoint_AddApp(req, socket); },
+      });
 
   state_->http.add(HTTPMethod::POST,
-                   "/api/v1/apps/delete",
-                   {.summary = "Remove a Moonlight app",
-                    .request_description = APIDescription{.json_schema = rfl::json::to_schema<AppDeleteRequest>()},
-                    .response_description = {{200, {.json_schema = rfl::json::to_schema<GenericSuccessResponse>()}},
-                                             {500, {.json_schema = rfl::json::to_schema<GenericErrorResponse>()}}},
-                    .handler = [this](auto req, auto socket) { endpoint_RemoveApp(req, socket); }});
+      "/api/v1/apps/delete",
+      {
+          .summary = "Remove a Moonlight app",
+          .request_description = APIDescription{.json_schema = rfl::json::to_schema<AppDeleteRequest>()},
+          .response_description = {{200, {.json_schema = rfl::json::to_schema<GenericSuccessResponse>()}},
+                                    {500, {.json_schema = rfl::json::to_schema<GenericErrorResponse>()}}},
+          .handler = [this](auto req, auto socket) { endpoint_RemoveApp(req, socket); },
+      });
 
   /**
    * Profiles API
    */
 
   state_->http.add(HTTPMethod::GET,
-                   "/api/v1/profiles",
-                   {
-                       .summary = "Get all profiles",
-                       .description = "This endpoint returns a list of all profiles.",
-                       .response_description = {{200, {.json_schema = rfl::json::to_schema<ProfileListResponse>()}}},
-                       .handler = [this](auto req, auto socket) { endpoint_Profiles(req, socket); },
-                   });
+      "/api/v1/profiles",
+      {
+          .summary = "Get all profiles",
+          .description = "This endpoint returns a list of all profiles.",
+          .response_description = {{200, {.json_schema = rfl::json::to_schema<ProfileListResponse>()}}},
+          .handler = [this](auto req, auto socket) { endpoint_Profiles(req, socket); },
+      });
 
   state_->http.add(
       HTTPMethod::POST,
@@ -225,38 +227,61 @@ UnixSocketServer::UnixSocketServer(boost::asio::io_context &io_context,
           .handler = [this](auto req, auto socket) { endpoint_StreamSessionHandleInput(req, socket); },
       });
 
-  state_->http.add(HTTPMethod::POST,
-                   "/api/v1/runners/start",
-                   {
-                       .summary = "Start a runner in a given session",
-                       .request_description = APIDescription{.json_schema = rfl::json::to_schema<RunnerStartRequest>()},
-                       .response_description = {{200, {.json_schema = rfl::json::to_schema<GenericSuccessResponse>()}},
-                                                {500, {.json_schema = rfl::json::to_schema<GenericErrorResponse>()}}},
-                       .handler = [this](auto req, auto socket) { endpoint_RunnerStart(req, socket); },
-                   });
+  state_->http.add(
+      HTTPMethod::POST,
+      "/api/v1/runners/start",
+      {
+          .summary = "Start a runner in a given session",
+          .request_description = APIDescription{.json_schema = rfl::json::to_schema<RunnerStartRequest>()},
+          .response_description = {{200, {.json_schema = rfl::json::to_schema<GenericSuccessResponse>()}},
+                                  {500, {.json_schema = rfl::json::to_schema<GenericErrorResponse>()}}},
+          .handler = [this](auto req, auto socket) { endpoint_RunnerStart(req, socket); },
+      });
+
+  state_->http.add(
+      HTTPMethod::POST,
+      "/api/v1/runners/pause",
+      {
+          .summary = "Pause a runner",
+          .request_description = APIDescription{.json_schema = rfl::json::to_schema<RunnerPauseRequest>()},
+          .response_description = {{200, {.json_schema = rfl::json::to_schema<GenericSuccessResponse>()}},
+                                   {500, {.json_schema = rfl::json::to_schema<GenericErrorResponse>()}}},
+          .handler = [this](auto req, auto socket) { endpoint_RunnerPause(req, socket); },
+      });
+
+  state_->http.add(
+      HTTPMethod::POST,
+      "/api/v1/runners/resume",
+      {
+          .summary = "Resume a runner",
+          .request_description = APIDescription{.json_schema = rfl::json::to_schema<RunnerPauseRequest>()},
+          .response_description = {{200, {.json_schema = rfl::json::to_schema<GenericSuccessResponse>()}},
+                                   {500, {.json_schema = rfl::json::to_schema<GenericErrorResponse>()}}},
+          .handler = [this](auto req, auto socket) { endpoint_RunnerResume(req, socket); },
+      });
 
   /**
    * Lobbies API
    */
 
   state_->http.add(HTTPMethod::GET,
-                   "/api/v1/lobbies",
-                   {
-                       .summary = "List all lobbies",
-                       .response_description = {{200, {.json_schema = rfl::json::to_schema<LobbiesResponse>()}},
-                                                {500, {.json_schema = rfl::json::to_schema<GenericErrorResponse>()}}},
-                       .handler = [this](auto req, auto socket) { endpoint_Lobbies(req, socket); },
-                   });
+      "/api/v1/lobbies",
+      {
+          .summary = "List all lobbies",
+          .response_description = {{200, {.json_schema = rfl::json::to_schema<LobbiesResponse>()}},
+                                  {500, {.json_schema = rfl::json::to_schema<GenericErrorResponse>()}}},
+          .handler = [this](auto req, auto socket) { endpoint_Lobbies(req, socket); },
+      });
 
   state_->http.add(HTTPMethod::POST,
-                   "/api/v1/lobbies/create",
-                   {
-                       .summary = "Create a new lobby",
-                       .request_description = APIDescription{.json_schema = rfl::json::to_schema<CreateLobbyRequest>()},
-                       .response_description = {{200, {.json_schema = rfl::json::to_schema<LobbyCreateResponse>()}},
-                                                {500, {.json_schema = rfl::json::to_schema<GenericErrorResponse>()}}},
-                       .handler = [this](auto req, auto socket) { endpoint_LobbyCreate(req, socket); },
-                   });
+      "/api/v1/lobbies/create",
+      {
+          .summary = "Create a new lobby",
+          .request_description = APIDescription{.json_schema = rfl::json::to_schema<CreateLobbyRequest>()},
+          .response_description = {{200, {.json_schema = rfl::json::to_schema<LobbyCreateResponse>()}},
+                                  {500, {.json_schema = rfl::json::to_schema<GenericErrorResponse>()}}},
+          .handler = [this](auto req, auto socket) { endpoint_LobbyCreate(req, socket); },
+      });
 
   state_->http.add(
       HTTPMethod::POST,

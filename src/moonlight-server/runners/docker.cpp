@@ -196,6 +196,20 @@ void RunDocker::run(std::string_view session_id,
     logs::log(logs::info, "[DOCKER] Starting container: {}", docker_container->name);
     logs::log(logs::debug, "[DOCKER] Starting container: {}", *docker_container);
 
+    auto pause_runner_handler = this->ev_bus->register_handler<immer::box<events::PauseRunnerEvent>>(
+        [session_id, container_id, this](const immer::box<events::PauseRunnerEvent> &pause_ev) {
+          if (std::to_string(pause_ev->stream_session->session_id) == session_id) {
+            docker_api.pause_by_id(container_id);
+          }
+        });
+
+    auto unpause_runner_handler = this->ev_bus->register_handler<immer::box<events::ResumeRunnerEvent>>(
+        [session_id, container_id, this](const immer::box<events::ResumeRunnerEvent> &resume_ev) {
+          if (std::to_string(resume_ev->stream_session->session_id) == session_id) {
+            docker_api.unpause_by_id(container_id);
+          }
+        });
+
     auto terminate_handler = this->ev_bus->register_handler<immer::box<events::StopStreamEvent>>(
         [session_id, container_id, this](const immer::box<events::StopStreamEvent> &terminate_ev) {
           if (std::to_string(terminate_ev->session_id) == session_id) {

@@ -1,3 +1,15 @@
+# System
+.DS_Store
+
+# Editors
+.vscode
+.idea
+
+# direnv
+.direnv
+.envrc.local
+
+# CMake
 CMakeLists.txt.user
 CMakeCache.txt
 CMakeFiles
@@ -7,17 +19,20 @@ Makefile
 cmake_install.cmake
 install_manifest.txt
 compile_commands.json
-CTestTestfile.cmake
-_deps
 build
-.vscode
-.idea
 cmake-build-*
-DartConfiguration.tcl
-.DS_Store
 .run/
+build/
+_deps
+
+# Rust
 target
 Cargo.lock
-build/
+
+# CTest
+CTestTestfile.cmake
+DartConfiguration.tcl
+
+# Static Analysis
 .clj-kondo
 .lsp

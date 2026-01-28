@@ -18,7 +18,7 @@ RUN apt-get update -y && \
 
 # libmfx is not available in Ubuntu 25.04 so we are building from sources (see: https://github.com/games-on-whales/wolf/issues/221)
 RUN <<_BUILD_LIBMFX
-    #!/bin/bash
+    #!/usr/bin/env bash
     set -e
 
     apt-get update -y
@@ -53,7 +53,7 @@ _BUILD_LIBMFX
 # Adding missing libnvrtc.so and libnvrtc-bulletins.so for Nvidia
 # https://developer.download.nvidia.com/compute/cuda/redist/cuda_nvrtc/LICENSE.txt
 RUN <<_ADD_NVRTC
-    #!/bin/bash
+    #!/usr/bin/env bash
     set -e
 
     #Extra deps

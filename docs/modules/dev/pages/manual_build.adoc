@@ -203,7 +203,7 @@ Since Wolf is configured via a swoth of environment variables, it may be a good 
 .runwolf.sh
 [source,bash]
 ....
-#!/bin/bash
+#!/usr/bin/env bash
 
 : ${WOLF_CFG_FOLDER:-"config"}
 

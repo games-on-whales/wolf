@@ -656,6 +656,84 @@
         }
       }
     },
+    "/api/v1/runners/pause": {
+      "post": {
+        "summary": "Pause a runner",
+        "description": "",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/wolf__api__RunnerPauseRequest"
+              }
+            }
+          },
+          "description": "",
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/wolf__api__GenericSuccessResponse"
+                }
+              }
+            },
+            "description": ""
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/wolf__api__GenericErrorResponse"
+                }
+              }
+            },
+            "description": ""
+          }
+        }
+      }
+    },
+    "/api/v1/runners/resume": {
+      "post": {
+        "summary": "Resume a runner",
+        "description": "",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/wolf__api__RunnerPauseRequest"
+              }
+            }
+          },
+          "description": "",
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/wolf__api__GenericSuccessResponse"
+                }
+              }
+            },
+            "description": ""
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/wolf__api__GenericErrorResponse"
+                }
+              }
+            },
+            "description": ""
+          }
+        }
+      }
+    },
     "/api/v1/sessions/add": {
       "post": {
         "summary": "Create a new stream session",
@@ -1535,6 +1613,28 @@
         },
         "required": [
           "stop_stream_when_over",
+          "runner",
+          "session_id"
+        ]
+      },
+      "wolf__api__RunnerPauseRequest": {
+        "type": "object",
+        "properties": {
+          "runner": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/wolf__config__AppCMD__tagged"
+              },
+              {
+                "$ref": "#/components/schemas/wolf__config__AppDocker__tagged"
+              }
+            ]
+          },
+          "session_id": {
+            "type": "string"
+          }
+        },
+        "required": [
           "runner",
           "session_id"
         ]
