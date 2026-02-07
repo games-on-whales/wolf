@@ -47,7 +47,7 @@ using libevdev_ptr = std::shared_ptr<libevdev>;
 std::vector<inputtino::libevdev_event_ptr> fetch_events(const libevdev_ptr &dev, int max_events = 50);
 
 static std::pair<unsigned int, unsigned int> get_major_minor(const std::string &devnode) {
-  struct stat buf{};
+  struct stat buf {};
   if (stat(devnode.c_str(), &buf) == -1) {
     logs::log(logs::warning, "Unable to get stats of {}", devnode);
     return {};

@@ -31,7 +31,7 @@ std::vector<inputtino::libevdev_event_ptr> fetch_events(const libevdev_ptr &dev,
 
 std::vector<inputtino::libevdev_event_ptr> fetch_events(int uinput_fd, int max_events) {
   std::vector<inputtino::libevdev_event_ptr> events = {};
-  struct input_event ev{};
+  struct input_event ev {};
   int ret, read_events = 0;
   while (read_events < max_events && (ret = read(uinput_fd, &ev, sizeof(ev))) == sizeof(ev)) {
     events.push_back(std::make_shared<input_event>(ev));
