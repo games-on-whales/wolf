@@ -208,8 +208,8 @@ struct DockerPullImageEndEvent {
 
 struct DockerContainerCreated {
   std::string container_id;
-  std::string hostname; 
-  std::string session_id; 
+  std::string hostname;
+  std::string session_id;
 };
 
 struct DockerContainerStopped {

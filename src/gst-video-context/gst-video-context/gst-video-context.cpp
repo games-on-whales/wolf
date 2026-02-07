@@ -26,7 +26,7 @@ bool init() {
 namespace fs = std::filesystem;
 
 std::optional<std::string> getPciBusIdFromDri(const fs::path &driPath) {
-  struct stat st {};
+  struct stat st{};
   if (stat(driPath.c_str(), &st) != 0) {
     return std::nullopt;
   }

@@ -1,6 +1,6 @@
 #include <immer/vector_transient.hpp>
-#include <sessions/handlers.hpp>
 #include <sessions/common.hpp>
+#include <sessions/handlers.hpp>
 #include <state/config.hpp>
 #include <state/data-structures.hpp>
 #include <state/sessions.hpp>
@@ -151,7 +151,7 @@ setup_lobbies_handlers(const immer::box<state::AppState> &app_state,
 
         { // Create audio virtual sink
           logs::log(logs::debug, "[LOBBY] Create audio virtual sink");
-          auto pulse_sink_name = fmt::format("{}{}", VIRTUAL_SINK_PREFIX,  lobby->id);
+          auto pulse_sink_name = fmt::format("{}{}", VIRTUAL_SINK_PREFIX, lobby->id);
           if (audio_server && audio_server->server) {
             auto channel_count = lobby_settings->audio_settings.channel_count;
             auto v_device = audio::create_virtual_sink(

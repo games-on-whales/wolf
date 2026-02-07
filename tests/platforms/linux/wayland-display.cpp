@@ -9,7 +9,6 @@
 #include <csignal>
 
 using Catch::Matchers::Contains;
-using Catch::Matchers::StartsWith;
 using Catch::Matchers::Equals;
 using Catch::Matchers::SizeIs;
 using Catch::Matchers::StartsWith;

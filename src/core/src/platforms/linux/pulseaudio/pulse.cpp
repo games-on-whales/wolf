@@ -57,7 +57,7 @@ struct Server {
   boost::future<bool> on_ready_fut;
 };
 
-pa_context* context(const std::shared_ptr<Server>& server) {
+pa_context *context(const std::shared_ptr<Server> &server) {
   return server ? server->ctx : nullptr;
 }
 

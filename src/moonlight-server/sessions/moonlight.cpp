@@ -1,8 +1,8 @@
 #include <immer/array_transient.hpp>
 #include <immer/map_transient.hpp>
 #include <immer/vector_transient.hpp>
-#include <sessions/handlers.hpp>
 #include <sessions/common.hpp>
+#include <sessions/handlers.hpp>
 #include <state/sessions.hpp>
 #include <streaming/streaming.hpp>
 
@@ -136,7 +136,7 @@ setup_moonlight_handlers(const immer::box<state::AppState> &app_state,
 
         /* Create audio virtual sink */
         logs::log(logs::debug, "[STREAM_SESSION] Create virtual audio sink");
-        auto pulse_sink_name = fmt::format("{}{}", VIRTUAL_SINK_PREFIX,  session->session_id);
+        auto pulse_sink_name = fmt::format("{}{}", VIRTUAL_SINK_PREFIX, session->session_id);
         std::shared_ptr<audio::VSink> v_device;
         if (session->app->start_audio_server && audio_server && audio_server->server) {
           v_device = audio::create_virtual_sink(

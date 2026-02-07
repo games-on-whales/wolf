@@ -1,8 +1,8 @@
 #include <immer/array_transient.hpp>
 #include <immer/map_transient.hpp>
 #include <platforms/hw.hpp>
-#include <sessions/handlers.hpp>
 #include <sessions/common.hpp>
+#include <sessions/handlers.hpp>
 
 namespace wolf::core::sessions {
 
