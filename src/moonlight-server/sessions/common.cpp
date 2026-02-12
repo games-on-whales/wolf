@@ -71,6 +71,20 @@ void start_runner(std::shared_ptr<events::Runner> runner,
       {std::filesystem::path(args->host->host_base_state_folder) / "fake-udev", "/usr/bin/fake-udev"});
   mounted_paths.push_back({std::filesystem::path(args->app_host_state_folder) / "udev", "/run/udev/"});
 
+  // Mount fake-uinput broker and LD_PRELOAD library for Steam Input support (issue #81)
+  mounted_paths.push_back(
+      {std::filesystem::path(args->host->host_base_state_folder) / "fake-uinput-broker",
+       "/usr/bin/fake-uinput-broker"});
+  auto fake_uinput_lib = std::filesystem::path(args->host->host_base_state_folder) / "libfake-uinput.so";
+  if (std::filesystem::exists(fake_uinput_lib)) {
+    mounted_paths.push_back({fake_uinput_lib, "/usr/lib/x86_64-linux-gnu/fake-uinput.so"});
+    full_env.set("LD_PRELOAD", "/usr/$LIB/fake-uinput.so");
+  }
+  auto fake_uinput_lib_32 = std::filesystem::path(args->host->host_base_state_folder) / "libfake-uinput-32.so";
+  if (std::filesystem::exists(fake_uinput_lib_32)) {
+    mounted_paths.push_back({fake_uinput_lib_32, "/usr/lib/i386-linux-gnu/fake-uinput.so"});
+  }
+
   /* Finally run the app, this will stop here until over */
   runner->run(args->session_id,
               args->app_local_state_folder,

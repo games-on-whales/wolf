@@ -196,6 +196,12 @@ void RunDocker::run(std::string_view session_id,
     logs::log(logs::info, "[DOCKER] Starting container: {}", docker_container->name);
     logs::log(logs::debug, "[DOCKER] Starting container: {}", *docker_container);
 
+    // Start fake-uinput broker inside container for Steam Input support (issue #81)
+    if (use_fake_udev) {
+      logs::log(logs::info, "[DOCKER] Starting fake-uinput broker in container: {}", docker_container->name);
+      docker_api.exec(container_id, {"/bin/bash", "-c", "nohup /usr/bin/fake-uinput-broker &"}, "root");
+    }
+
     std::string inspected_hostname;
     if (auto inspected = docker_api.get_by_id(container_id)) {
       inspected_hostname = inspected->hostname;
