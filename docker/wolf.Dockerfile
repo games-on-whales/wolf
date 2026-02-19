@@ -66,9 +66,13 @@ RUN --mount=type=cache,target=/cache/ccache \
     -G Ninja && \
     ninja -C $CMAKE_BUILD_DIR wolf && \
     ninja -C $CMAKE_BUILD_DIR fake-udev && \
+    ninja -C $CMAKE_BUILD_DIR fake-uinput-broker && \
+    ninja -C $CMAKE_BUILD_DIR fake_uinput && \
     # We have to copy out the built executables because this will only be available inside the buildkit cache
     cp $CMAKE_BUILD_DIR/src/moonlight-server/wolf /wolf/wolf && \
-    cp $CMAKE_BUILD_DIR/src/fake-udev/fake-udev /wolf/fake-udev
+    cp $CMAKE_BUILD_DIR/src/fake-udev/fake-udev /wolf/fake-udev && \
+    cp $CMAKE_BUILD_DIR/src/fake-uinput/fake-uinput-broker /wolf/fake-uinput-broker && \
+    cp $CMAKE_BUILD_DIR/src/fake-uinput/libfake-uinput.so /wolf/libfake-uinput.so
 
 ########################################################
 FROM $BASE_IMAGE AS runner
@@ -106,6 +110,8 @@ ENV WOLF_CFG_FOLDER=/etc/wolf/cfg
 
 COPY --from=wolf-builder /wolf/wolf /wolf/wolf
 COPY --from=wolf-builder /wolf/fake-udev /wolf/fake-udev
+COPY --from=wolf-builder /wolf/fake-uinput-broker /wolf/fake-uinput-broker
+COPY --from=wolf-builder /wolf/libfake-uinput.so /wolf/libfake-uinput.so
 
 ENV GST_GL_API=gles2 \
     GST_GL_PLATFORM=egl \

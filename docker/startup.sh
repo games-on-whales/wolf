@@ -21,4 +21,14 @@ export GST_GL_DRM_DEVICE=${GST_GL_DRM_DEVICE:-$WOLF_ENCODER_NODE}
 export WOLF_DOCKER_FAKE_UDEV_PATH=${WOLF_DOCKER_FAKE_UDEV_PATH:-$HOST_APPS_STATE_FOLDER/fake-udev}
 cp /wolf/fake-udev $WOLF_DOCKER_FAKE_UDEV_PATH
 
+# Copy fake-uinput broker and LD_PRELOAD library for Steam Input support
+export WOLF_DOCKER_FAKE_UINPUT_BROKER_PATH=${WOLF_DOCKER_FAKE_UINPUT_BROKER_PATH:-$HOST_APPS_STATE_FOLDER/fake-uinput-broker}
+cp /wolf/fake-uinput-broker $WOLF_DOCKER_FAKE_UINPUT_BROKER_PATH
+if [ -f /wolf/libfake-uinput.so ]; then
+    cp /wolf/libfake-uinput.so $HOST_APPS_STATE_FOLDER/libfake-uinput.so
+fi
+if [ -f /wolf/libfake-uinput-32.so ]; then
+    cp /wolf/libfake-uinput-32.so $HOST_APPS_STATE_FOLDER/libfake-uinput-32.so
+fi
+
 exec /wolf/wolf
