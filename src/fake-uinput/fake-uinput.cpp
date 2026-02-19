@@ -39,10 +39,12 @@ static std::mutex g_mutex;
 static std::unordered_map<int, std::vector<std::string>> g_tracked;
 
 static void resolve_symbols() {
-    if (!real_ioctl)
+    if (!real_ioctl) {
         real_ioctl = reinterpret_cast<ioctl_fn>(dlsym(RTLD_NEXT, "ioctl"));
-    if (!real_close)
+    }
+    if (!real_close) {
         real_close = reinterpret_cast<close_fn>(dlsym(RTLD_NEXT, "close"));
+    }
 }
 
 /** Connect to the broker with exponential backoff. Returns fd or -1. */
@@ -50,15 +52,18 @@ static int broker_connect() {
     int total_ms = 0, backoff_ms = INITIAL_BACKOFF_MS;
     while (total_ms < MAX_BACKOFF_MS) {
         int sock = socket(AF_UNIX, SOCK_STREAM, 0);
-        if (sock < 0) return -1;
+        if (sock < 0) {
+            return -1;
+        }
 
         struct sockaddr_un addr {};
         addr.sun_family = AF_UNIX;
         std::strncpy(addr.sun_path, BROKER_SOCK, sizeof(addr.sun_path) - 1);
 
         if (connect(sock, reinterpret_cast<struct sockaddr *>(&addr),
-                    sizeof(addr)) == 0)
+                    sizeof(addr)) == 0) {
             return sock;
+        }
         real_close(sock);
 
         usleep(static_cast<useconds_t>(backoff_ms) * 1000);
@@ -94,10 +99,14 @@ static bool broker_request(const std::string &command) {
     }
 
     std::string resp(buf, static_cast<size_t>(n));
-    if (!resp.empty() && resp.back() == '\n') resp.pop_back();
+    if (!resp.empty() && resp.back() == '\n') {
+        resp.pop_back();
+    }
 
     bool ok = resp.rfind("OK", 0) == 0;
-    if (!ok) std::cout << TAG << " broker error: " << resp << std::endl;
+    if (!ok) {
+        std::cout << TAG << " broker error: " << resp << std::endl;
+    }
     return ok;
 }
 
@@ -132,10 +141,13 @@ static void handle_dev_create(int fd) {
 
     std::vector<std::string> paths;
     for (const auto &entry : fs::directory_iterator(sysdir, ec)) {
-        if (!entry.is_directory(ec)) continue;
-        std::string name = entry.path().filename().string();
-        if (name.rfind("event", 0) != 0 && name.rfind("js", 0) != 0)
+        if (!entry.is_directory(ec)) {
             continue;
+        }
+        std::string name = entry.path().filename().string();
+        if (name.rfind("event", 0) != 0 && name.rfind("js", 0) != 0) {
+            continue;
+        }
 
         std::string subpath = entry.path().string();
         std::cout << TAG << " requesting: MKNOD " << subpath << std::endl;
@@ -155,7 +167,9 @@ static void handle_dev_destroy(int fd) {
     {
         std::lock_guard<std::mutex> lock(g_mutex);
         auto it = g_tracked.find(fd);
-        if (it == g_tracked.end()) return;
+        if (it == g_tracked.end()) {
+            return;
+        }
         paths = std::move(it->second);
         g_tracked.erase(it);
     }
@@ -175,10 +189,11 @@ extern "C" int ioctl(int fd, unsigned long request, ...) {
     int result = real_ioctl(fd, request, arg);
 
     if (result >= 0) {
-        if (request == UI_DEV_CREATE)
+        if (request == UI_DEV_CREATE) {
             handle_dev_create(fd);
-        else if (request == UI_DEV_DESTROY)
+        } else if (request == UI_DEV_DESTROY) {
             handle_dev_destroy(fd);
+        }
     }
     return result;
 }
