@@ -7,6 +7,7 @@
 #include <immer/array.hpp>
 #include <immer/box.hpp>
 #include <memory>
+#include <platform/batched_send.hpp>
 #include <streaming/streaming.hpp>
 
 namespace streaming {
@@ -196,24 +197,104 @@ struct UDPSink {
   std::shared_ptr<udp::endpoint> client_endpoint;
 };
 
+/**
+ * Send buffers using Apollo-style batching (sendmmsg)
+ */
 static GstFlowReturn
-send_buffer(std::shared_ptr<GstBuffer> buffer, std::shared_ptr<GstSample> sample, UDPSink *udp_sink) {
+send_buffer_batched(GstBufferList *buffer_list, std::shared_ptr<GstSample> sample, UDPSink *udp_sink) {
+  guint num_buffers = gst_buffer_list_length(buffer_list);
+  if (num_buffers == 0) {
+    return GST_FLOW_OK;
+  }
+
+  // Ensure socket is open
+  if (!udp_sink->socket->is_open()) {
+    logs::log(logs::warning, "UDP Socket is not open");
+    udp_sink->socket->open(udp::v4());
+    // Configure socket for high-bandwidth streaming
+    wolf::platform::configure_socket_for_streaming(*udp_sink->socket, true);
+    wolf::platform::enable_socket_qos(udp_sink->socket->native_handle(), true);
+  }
+
+  // Collect all buffers into a batch
+  std::vector<wolf::platform::buffer_descriptor_t> payload_buffers;
+  std::vector<std::pair<std::shared_ptr<GstBuffer>, GstMapInfo>> mapped_buffers;
+
+  mapped_buffers.reserve(num_buffers);
+
+  // Map all buffers first
+  for (guint i = 0; i < num_buffers; i++) {
+    GstBuffer *buffer = gst_buffer_list_get(buffer_list, i);
+    auto buffer_ref = std::shared_ptr<GstBuffer>(gst_buffer_ref(buffer), gst_buffer_unref);
+
+    GstMapInfo map;
+    if (!gst_buffer_map(buffer, &map, GST_MAP_READ)) {
+      logs::log(logs::error, "Failed to map buffer {} in batch", i);
+      // Unmap already mapped buffers
+      for (auto &[buf_ref, m] : mapped_buffers) {
+        gst_buffer_unmap(buf_ref.get(), &m);
+      }
+      return GST_FLOW_ERROR;
+    }
+    mapped_buffers.emplace_back(buffer_ref, map);
+    payload_buffers.emplace_back(reinterpret_cast<const char *>(map.data), map.size);
+  }
+
+  wolf::platform::batched_send_info_t send_info;
+  send_info.payload_buffers = std::move(payload_buffers);
+  send_info.block_count = num_buffers;
+  send_info.native_socket = udp_sink->socket->native_handle();
+  send_info.target_address = udp_sink->client_endpoint->address();
+  send_info.target_port = udp_sink->client_endpoint->port();
+
+  bool success = wolf::platform::send_batch(send_info);
+
+  // Unmap all buffers
+  for (auto &[buf_ref, m] : mapped_buffers) {
+    gst_buffer_unmap(buf_ref.get(), &m);
+  }
+
+  if (!success) {
+    logs::log(logs::warning, "Failed to send batch of {} packets", num_buffers);
+    return GST_FLOW_ERROR;
+  }
+
+  return GST_FLOW_OK;
+}
+
+/**
+ * Legacy single-buffer send (fallback)
+ */
+static GstFlowReturn
+send_buffer_single(std::shared_ptr<GstBuffer> buffer, std::shared_ptr<GstSample> sample, UDPSink *udp_sink) {
   GstMapInfo map;
   if (gst_buffer_map(buffer.get(), &map, GST_MAP_READ)) {
     std::shared_ptr<GstMapInfo> map_ptr = std::make_shared<GstMapInfo>(map);
     if (!udp_sink->socket->is_open()) {
       logs::log(logs::warning, "UDP Socket is not open");
       udp_sink->socket->open(udp::v4());
+      wolf::platform::configure_socket_for_streaming(*udp_sink->socket, true);
+      wolf::platform::enable_socket_qos(udp_sink->socket->native_handle(), true);
     }
-    udp_sink->socket->async_send_to(
-        boost::asio::buffer(map.data, map.size),
-        *udp_sink->client_endpoint,
-        [buffer, sample, map_ptr](const boost::system::error_code &error, std::size_t bytes_sent) {
-          if (error) {
-            logs::log(logs::error, "Error sending UDP packet: {}", error.message());
-          }
-          gst_buffer_unmap(buffer.get(), map_ptr.get());
-        });
+
+    // Use batch API for single packet
+    std::vector<wolf::platform::buffer_descriptor_t> payload_buffers;
+    payload_buffers.emplace_back(reinterpret_cast<const char *>(map.data), map.size);
+
+    wolf::platform::batched_send_info_t send_info;
+    send_info.payload_buffers = std::move(payload_buffers);
+    send_info.block_count = 1;
+    send_info.native_socket = udp_sink->socket->native_handle();
+    send_info.target_address = udp_sink->client_endpoint->address();
+    send_info.target_port = udp_sink->client_endpoint->port();
+
+    bool success = wolf::platform::send_batch(send_info);
+    gst_buffer_unmap(buffer.get(), map_ptr.get());
+
+    if (!success) {
+      logs::log(logs::error, "Error sending UDP packet");
+      return GST_FLOW_ERROR;
+    }
     return GST_FLOW_OK;
   } else {
     logs::log(logs::error, "Failed to map buffer");
@@ -231,18 +312,10 @@ static GstFlowReturn on_new_sample(GstAppSink *appsink, gpointer user_data) {
   UDPSink *udp_sink = static_cast<UDPSink *>(user_data);
 
   if (GstBufferList *buffer_list = gst_sample_get_buffer_list(sample.get())) {
-    // TODO: use boost to properly send multiple buffers in one go (scatter-gather I/O)
-    for (guint i = 0; i < gst_buffer_list_length(buffer_list); ++i) {
-      GstBuffer *buffer = gst_buffer_list_get(buffer_list, i);
-      std::shared_ptr<GstBuffer> buffer_ptr(gst_buffer_ref(buffer), gst_buffer_unref);
-      if (auto result = send_buffer(buffer_ptr, sample, udp_sink); result != GST_FLOW_OK) {
-        return result;
-      }
-    }
-    return GST_FLOW_OK;
+    return send_buffer_batched(buffer_list, sample, udp_sink);
   } else if (GstBuffer *buffer = gst_sample_get_buffer(sample.get())) {
     std::shared_ptr<GstBuffer> buffer_ptr(gst_buffer_ref(buffer), gst_buffer_unref);
-    return send_buffer(buffer_ptr, sample, udp_sink);
+    return send_buffer_single(buffer_ptr, sample, udp_sink);
   } else {
     logs::log(logs::warning, "Custom sink: failed to get buffer");
     return GST_FLOW_ERROR;
