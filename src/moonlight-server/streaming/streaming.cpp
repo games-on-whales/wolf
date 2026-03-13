@@ -1,5 +1,6 @@
 #include "platforms/hw.hpp"
 
+#include <chrono>
 #include <control/control.hpp>
 #include <gst-video-context.hpp>
 #include <gstreamer-1.0/gst/app/gstappsink.h>
@@ -9,6 +10,7 @@
 #include <memory>
 #include <platform/batched_send.hpp>
 #include <streaming/streaming.hpp>
+#include <thread>
 
 namespace streaming {
 
@@ -192,14 +194,42 @@ void start_audio_producer(const std::string &session_id,
 
 namespace custom_sink {
 
+struct PacingConfig {
+  bool enabled = false;
+  std::size_t max_packets_per_ms = 0;
+  std::size_t max_batch_size = 16;
+  std::chrono::steady_clock::time_point next_frame_start = std::chrono::steady_clock::now();
+};
+
 struct UDPSink {
   std::shared_ptr<udp::socket> socket;
   std::shared_ptr<udp::endpoint> client_endpoint;
+  PacingConfig pacing;
 };
 
-/**
- * Send buffers using Apollo-style batching (sendmmsg)
- */
+static void ensure_socket_open(UDPSink *udp_sink, bool is_video) {
+  if (!udp_sink->socket->is_open()) {
+    logs::log(logs::warning, "UDP Socket is not open");
+    udp_sink->socket->open(udp::v4());
+    wolf::platform::configure_socket_for_streaming(*udp_sink->socket, is_video);
+    wolf::platform::enable_socket_qos(udp_sink->socket->native_handle(), is_video);
+  }
+}
+
+static bool send_sub_batch(const std::vector<wolf::platform::buffer_descriptor_t> &payload_buffers,
+                           std::size_t offset,
+                           std::size_t count,
+                           UDPSink *udp_sink) {
+  wolf::platform::batched_send_info_t send_info;
+  send_info.payload_buffers = payload_buffers;
+  send_info.block_offset = offset;
+  send_info.block_count = count;
+  send_info.native_socket = udp_sink->socket->native_handle();
+  send_info.target_address = udp_sink->client_endpoint->address();
+  send_info.target_port = udp_sink->client_endpoint->port();
+  return wolf::platform::send_batch(send_info);
+}
+
 static GstFlowReturn
 send_buffer_batched(GstBufferList *buffer_list, std::shared_ptr<GstSample> sample, UDPSink *udp_sink) {
   guint num_buffers = gst_buffer_list_length(buffer_list);
@@ -207,22 +237,12 @@ send_buffer_batched(GstBufferList *buffer_list, std::shared_ptr<GstSample> sampl
     return GST_FLOW_OK;
   }
 
-  // Ensure socket is open
-  if (!udp_sink->socket->is_open()) {
-    logs::log(logs::warning, "UDP Socket is not open");
-    udp_sink->socket->open(udp::v4());
-    // Configure socket for high-bandwidth streaming
-    wolf::platform::configure_socket_for_streaming(*udp_sink->socket, true);
-    wolf::platform::enable_socket_qos(udp_sink->socket->native_handle(), true);
-  }
+  ensure_socket_open(udp_sink, true);
 
-  // Collect all buffers into a batch
   std::vector<wolf::platform::buffer_descriptor_t> payload_buffers;
   std::vector<std::pair<std::shared_ptr<GstBuffer>, GstMapInfo>> mapped_buffers;
-
   mapped_buffers.reserve(num_buffers);
 
-  // Map all buffers first
   for (guint i = 0; i < num_buffers; i++) {
     GstBuffer *buffer = gst_buffer_list_get(buffer_list, i);
     auto buffer_ref = std::shared_ptr<GstBuffer>(gst_buffer_ref(buffer), gst_buffer_unref);
@@ -230,7 +250,6 @@ send_buffer_batched(GstBufferList *buffer_list, std::shared_ptr<GstSample> sampl
     GstMapInfo map;
     if (!gst_buffer_map(buffer, &map, GST_MAP_READ)) {
       logs::log(logs::error, "Failed to map buffer {} in batch", i);
-      // Unmap already mapped buffers
       for (auto &[buf_ref, m] : mapped_buffers) {
         gst_buffer_unmap(buf_ref.get(), &m);
       }
@@ -240,16 +259,45 @@ send_buffer_batched(GstBufferList *buffer_list, std::shared_ptr<GstSample> sampl
     payload_buffers.emplace_back(reinterpret_cast<const char *>(map.data), map.size);
   }
 
-  wolf::platform::batched_send_info_t send_info;
-  send_info.payload_buffers = std::move(payload_buffers);
-  send_info.block_count = num_buffers;
-  send_info.native_socket = udp_sink->socket->native_handle();
-  send_info.target_address = udp_sink->client_endpoint->address();
-  send_info.target_port = udp_sink->client_endpoint->port();
+  bool success = true;
 
-  bool success = wolf::platform::send_batch(send_info);
+  if (!udp_sink->pacing.enabled || num_buffers <= udp_sink->pacing.max_batch_size) {
+    success = send_sub_batch(payload_buffers, 0, num_buffers, udp_sink);
+  } else {
+    auto &pacing = udp_sink->pacing;
+    auto frame_start = std::max(pacing.next_frame_start, std::chrono::steady_clock::now());
+    std::size_t packets_sent = 0;
+    std::size_t packets_in_window = 0;
 
-  // Unmap all buffers
+    while (packets_sent < num_buffers) {
+      std::size_t remaining = num_buffers - packets_sent;
+      std::size_t budget = pacing.max_packets_per_ms - packets_in_window;
+
+      if (budget == 0) {
+        auto due = frame_start + std::chrono::nanoseconds(1000000) * packets_sent / pacing.max_packets_per_ms;
+        auto now = std::chrono::steady_clock::now();
+        if (now < due) {
+          std::this_thread::sleep_until(due);
+        }
+        packets_in_window = 0;
+        continue;
+      }
+
+      std::size_t batch = std::min({budget, pacing.max_batch_size, remaining});
+
+      if (!send_sub_batch(payload_buffers, packets_sent, batch, udp_sink)) {
+        success = false;
+        break;
+      }
+
+      packets_sent += batch;
+      packets_in_window += batch;
+    }
+
+    pacing.next_frame_start = frame_start +
+                              std::chrono::nanoseconds(1000000) * packets_sent / pacing.max_packets_per_ms;
+  }
+
   for (auto &[buf_ref, m] : mapped_buffers) {
     gst_buffer_unmap(buf_ref.get(), &m);
   }
@@ -262,33 +310,17 @@ send_buffer_batched(GstBufferList *buffer_list, std::shared_ptr<GstSample> sampl
   return GST_FLOW_OK;
 }
 
-/**
- * Legacy single-buffer send (fallback)
- */
 static GstFlowReturn
 send_buffer_single(std::shared_ptr<GstBuffer> buffer, std::shared_ptr<GstSample> sample, UDPSink *udp_sink) {
   GstMapInfo map;
   if (gst_buffer_map(buffer.get(), &map, GST_MAP_READ)) {
     std::shared_ptr<GstMapInfo> map_ptr = std::make_shared<GstMapInfo>(map);
-    if (!udp_sink->socket->is_open()) {
-      logs::log(logs::warning, "UDP Socket is not open");
-      udp_sink->socket->open(udp::v4());
-      wolf::platform::configure_socket_for_streaming(*udp_sink->socket, true);
-      wolf::platform::enable_socket_qos(udp_sink->socket->native_handle(), true);
-    }
+    ensure_socket_open(udp_sink, false);
 
-    // Use batch API for single packet
     std::vector<wolf::platform::buffer_descriptor_t> payload_buffers;
     payload_buffers.emplace_back(reinterpret_cast<const char *>(map.data), map.size);
 
-    wolf::platform::batched_send_info_t send_info;
-    send_info.payload_buffers = std::move(payload_buffers);
-    send_info.block_count = 1;
-    send_info.native_socket = udp_sink->socket->native_handle();
-    send_info.target_address = udp_sink->client_endpoint->address();
-    send_info.target_port = udp_sink->client_endpoint->port();
-
-    bool success = wolf::platform::send_batch(send_info);
+    bool success = send_sub_batch(payload_buffers, 0, 1, udp_sink);
     gst_buffer_unmap(buffer.get(), map_ptr.get());
 
     if (!success) {
@@ -362,7 +394,13 @@ void start_streaming_video(immer::box<events::VideoSession> video_session,
 
   std::shared_ptr<custom_sink::UDPSink> udp_sink = std::make_shared<custom_sink::UDPSink>(custom_sink::UDPSink{
       .socket = video_socket,
-      .client_endpoint = std::make_shared<udp::endpoint>(boost::asio::ip::make_address(client_ip), client_port)});
+      .client_endpoint = std::make_shared<udp::endpoint>(boost::asio::ip::make_address(client_ip), client_port),
+      .pacing = {
+          .enabled = true,
+          .max_packets_per_ms = static_cast<std::size_t>(
+              std::max(1L, static_cast<long>(1000000000L * 80 / 100 / 1000 / (video_session->packet_size * 8)))),
+          .max_batch_size = std::min<std::size_t>(16, 65536 / video_session->packet_size),
+      }});
   std::shared_ptr<NeedContextData> ctx_data_ptr = std::make_shared<NeedContextData>(
       NeedContextData{.device_path = video_session->render_node, .gst_context = video_context});
   run_pipeline(pipeline, [video_session, event_bus, udp_sink, ctx_data_ptr](auto pipeline) {
