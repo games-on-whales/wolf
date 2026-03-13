@@ -375,21 +375,23 @@ void start_streaming_video(immer::box<events::VideoSession> video_session,
                            std::shared_ptr<udp::socket> video_socket) {
   auto [color_range, color_space] = get_color_params(video_session);
 
-  auto pipeline = fmt::format(fmt::runtime(video_session->gst_pipeline),
-                              fmt::arg("session_id", video_session->session_id),
-                              fmt::arg("width", video_session->display_mode.width),
-                              fmt::arg("height", video_session->display_mode.height),
-                              fmt::arg("fps", video_session->display_mode.refreshRate),
-                              fmt::arg("bitrate", video_session->bitrate_kbps),
-                              fmt::arg("client_port", client_port),
-                              fmt::arg("client_ip", client_ip),
-                              fmt::arg("payload_size", video_session->packet_size),
-                              fmt::arg("fec_percentage", video_session->fec_percentage),
-                              fmt::arg("min_required_fec_packets", video_session->min_required_fec_packets),
-                              fmt::arg("slices_per_frame", video_session->slices_per_frame),
-                              fmt::arg("color_space", color_space),
-                              fmt::arg("color_range", color_range),
-                              fmt::arg("host_port", video_session->port));
+  auto pipeline = fmt::format(
+      fmt::runtime(video_session->gst_pipeline),
+      fmt::arg("session_id", video_session->session_id),
+      fmt::arg("width", video_session->display_mode.width),
+      fmt::arg("height", video_session->display_mode.height),
+      fmt::arg("fps", video_session->display_mode.refreshRate),
+      fmt::arg("bitrate", video_session->bitrate_kbps),
+      fmt::arg("client_port", client_port),
+      fmt::arg("client_ip", client_ip),
+      fmt::arg("payload_size", video_session->packet_size),
+      fmt::arg("fec_percentage", video_session->fec_percentage),
+      fmt::arg("min_required_fec_packets", video_session->min_required_fec_packets),
+      fmt::arg("slices_per_frame", video_session->slices_per_frame),
+      fmt::arg("vbv_buffer_size", video_session->bitrate_kbps / video_session->display_mode.refreshRate),
+      fmt::arg("color_space", color_space),
+      fmt::arg("color_range", color_range),
+      fmt::arg("host_port", video_session->port));
   logs::log(logs::debug, "Starting video pipeline: \n{}", pipeline);
 
   std::shared_ptr<custom_sink::UDPSink> udp_sink = std::make_shared<custom_sink::UDPSink>(custom_sink::UDPSink{
