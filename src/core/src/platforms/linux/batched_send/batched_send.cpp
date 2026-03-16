@@ -1,5 +1,5 @@
-#include <helpers/logger.hpp>
 #include <core/batched_send.hpp>
+#include <helpers/logger.hpp>
 
 #include <arpa/inet.h>
 #include <cerrno>

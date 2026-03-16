@@ -2,13 +2,13 @@
 
 #include <chrono>
 #include <control/control.hpp>
+#include <core/batched_send.hpp>
 #include <gst-video-context.hpp>
 #include <gstreamer-1.0/gst/app/gstappsink.h>
 #include <gstreamer-1.0/gst/app/gstappsrc.h>
 #include <immer/array.hpp>
 #include <immer/box.hpp>
 #include <memory>
-#include <core/batched_send.hpp>
 #include <streaming/streaming.hpp>
 #include <thread>
 
