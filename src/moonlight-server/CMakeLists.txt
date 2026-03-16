@@ -136,7 +136,6 @@ file(GLOB SRC_LIST SRCS
         audio/*.cpp
         control/*.cpp
         gst-plugin/*.cpp
-        platform/*.cpp
         rest/*.cpp
         rtp/*.cpp
         rtsp/*.cpp
@@ -153,7 +152,6 @@ if (UNIX AND NOT APPLE)
     target_link_libraries_system(wolf_runner PRIVATE ICU::uc)
 
     list(APPEND SRC_LIST platforms/input_linux.cpp)
-    list(APPEND SRC_LIST platform/linux/batched_send.cpp)
     pkg_check_modules(LIBDRM IMPORTED_TARGET libdrm)
     pkg_check_modules(LIBPCI IMPORTED_TARGET libpci)
 

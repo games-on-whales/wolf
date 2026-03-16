@@ -56,7 +56,19 @@ struct batched_send_info_t {
    * @param offset The offset in the total payload data (bytes)
    * @return Buffer descriptor describing the region at the given offset
    */
-  buffer_descriptor_t buffer_for_payload_offset(ptrdiff_t offset) const;
+  inline buffer_descriptor_t buffer_for_payload_offset(ptrdiff_t offset) const {
+    for (const auto &desc : payload_buffers) {
+      if (offset < (ptrdiff_t)desc.size) {
+        return {
+            desc.buffer + offset,
+            desc.size - offset,
+        };
+      } else {
+        offset -= desc.size;
+      }
+    }
+    return {};
+  }
 };
 
 /**

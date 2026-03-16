@@ -8,7 +8,7 @@
 #include <immer/array.hpp>
 #include <immer/box.hpp>
 #include <memory>
-#include <platform/batched_send.hpp>
+#include <core/batched_send.hpp>
 #include <streaming/streaming.hpp>
 #include <thread>
 
