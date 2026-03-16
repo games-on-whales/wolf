@@ -173,7 +173,7 @@ chroma-site={color_range}, format=NV12, colorimetry={color_space}, pixel-aspect-
 \
 """
 encoder_pipeline = """
-nvh265enc preset=low-latency-hq zerolatency=true gop-size=-1 rc-mode=cbr-ld-hq bitrate={bitrate} vbv-buffer-size={vbv_buffer_size} aud=false !
+nvh265enc preset=low-latency-hq zerolatency=true gop-size=-1 rc-mode=cbr-ld-hq bitrate={bitrate} aud=false !
 h265parse !
 video/x-h265, profile=main, stream-format=byte-stream
 \
@@ -264,7 +264,7 @@ chroma-site={color_range}, format=NV12, colorimetry={color_space}, pixel-aspect-
 \
 """
 encoder_pipeline = """
-nvh264enc preset=low-latency-hq zerolatency=true gop-size=0 rc-mode=cbr-ld-hq bitrate={bitrate} vbv-buffer-size={vbv_buffer_size} aud=false !
+nvh264enc preset=low-latency-hq zerolatency=true gop-size=0 rc-mode=cbr-ld-hq bitrate={bitrate} aud=false !
 h264parse !
 video/x-h264, profile=main, stream-format=byte-stream
 \

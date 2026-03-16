@@ -239,7 +239,7 @@ video/x-raw, chroma-site={color_range}, width={width}, height={height}, format=N
 plugin_name = "nvcodec"
 check_elements = ["nvh265enc", "cudaconvertscale", "cudaupload"]
 encoder_pipeline = """
-nvh265enc gop-size=-1 bitrate={bitrate} vbv-buffer-size={vbv_buffer_size} aud=false rc-mode=cbr zerolatency=true preset=p1 tune=ultra-low-latency multi-pass=two-pass-quarter !
+nvh265enc gop-size=-1 bitrate={bitrate} aud=false rc-mode=cbr zerolatency=true preset=p1 tune=ultra-low-latency multi-pass=two-pass-quarter !
 h265parse !
 video/x-h265, profile=main, stream-format=byte-stream\
 """
@@ -295,7 +295,7 @@ video/x-h265, profile=main, stream-format=byte-stream\
 plugin_name = "nvcodec"
 check_elements = ["nvh264enc", "cudaconvertscale", "cudaupload"]
 encoder_pipeline = """
-nvh264enc preset=low-latency-hq zerolatency=true gop-size=0 rc-mode=cbr-ld-hq bitrate={bitrate} vbv-buffer-size={vbv_buffer_size} aud=false !
+nvh264enc preset=low-latency-hq zerolatency=true gop-size=0 rc-mode=cbr-ld-hq bitrate={bitrate} aud=false !
 h264parse !
 video/x-h264, profile=main, stream-format=byte-stream\
 """
@@ -350,7 +350,7 @@ video/x-h264, profile=high, stream-format=byte-stream\
 plugin_name = "nvcodec"
 check_elements = ["nvav1enc", "cudaconvertscale", "cudaupload"]
 encoder_pipeline = """
-nvav1enc gop-size=-1 bitrate={bitrate} vbv-buffer-size={vbv_buffer_size} rc-mode=cbr zerolatency=true preset=p1 tune=ultra-low-latency multi-pass=two-pass-quarter !
+nvav1enc gop-size=-1 bitrate={bitrate} rc-mode=cbr zerolatency=true preset=p1 tune=ultra-low-latency multi-pass=two-pass-quarter !
 av1parse !
 video/x-av1, stream-format=obu-stream, alignment=frame, profile=main\
 """
