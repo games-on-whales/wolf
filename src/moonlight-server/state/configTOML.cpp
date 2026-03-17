@@ -217,23 +217,24 @@ Config load_or_default(const std::string &source,
   // First check the version of the config file
   auto base_cfg = rfl::toml::load<BaseConfig, rfl::DefaultIfMissing>(source).value();
   auto version = base_cfg.config_version.value_or(0);
-  if (version <= 5) {
+  if (version <= 6) {
     logs::log(logs::warning, "Found old config file (v{}), migrating to v7", version);
-    std::filesystem::rename(source, source + ".v" + std::to_string(version) + ".old");
-    auto old_cfg = toml::parse_file(source + ".v" + std::to_string(version) + ".old");
+    auto backup = source + ".v" + std::to_string(version) + ".old";
+    std::filesystem::rename(source, backup);
+    auto old_cfg = toml::parse_file(backup);
     create_default(source);
     auto new_cfg = toml::parse_file(source);
     new_cfg.insert_or_assign("hostname", old_cfg.at("hostname"));
     new_cfg.insert_or_assign("uuid", old_cfg.at("uuid"));
     new_cfg.insert_or_assign("paired_clients", old_cfg.at("paired_clients"));
-    if (old_cfg.contains("apps")) {
+    if (old_cfg.contains("profiles")) {
+      new_cfg.insert_or_assign("profiles", old_cfg.at("profiles"));
+    } else if (old_cfg.contains("apps")) {
       auto moonlight_profile = new_cfg["profiles"].as_array()->at(0).as_table();
       new_cfg.insert_or_assign(
           "profiles",
           toml::array{*moonlight_profile,
                       toml::table({{"id", "user"}, {"name", "User"}, {"apps", old_cfg.at("apps")}})});
-    } else if (old_cfg.contains("profiles")) {
-      new_cfg.insert_or_assign("profiles", old_cfg.at("profiles"));
     }
     std::ofstream out_file;
     out_file.open(source);
@@ -243,27 +244,6 @@ Config load_or_default(const std::string &source,
     out_file << new_cfg;
     out_file.close();
     logs::log(logs::debug, "Migrated config from v{} to v7", version);
-  } else if (version <= 6) {
-    logs::log(logs::warning, "Found old config file (v6), migrating to v7");
-    std::filesystem::rename(source, source + ".v6.old");
-    auto old_cfg = toml::parse_file(source + ".v6.old");
-    create_default(source);
-    auto new_cfg = toml::parse_file(source);
-    // gstreamer.video encoders replaced with v7 defaults (VBV buffer + rate-control=cbr)
-    new_cfg.insert_or_assign("hostname", old_cfg.at("hostname"));
-    new_cfg.insert_or_assign("uuid", old_cfg.at("uuid"));
-    new_cfg.insert_or_assign("paired_clients", old_cfg.at("paired_clients"));
-    if (old_cfg.contains("profiles")) {
-      new_cfg.insert_or_assign("profiles", old_cfg.at("profiles"));
-    }
-    std::ofstream out_file;
-    out_file.open(source);
-    if (!out_file.is_open()) {
-      throw std::runtime_error("Failed to open config file for writing");
-    }
-    out_file << new_cfg;
-    out_file.close();
-    logs::log(logs::debug, "Migrated config from v6 to v7");
   }
 
   // Will throw if the config is invalid
