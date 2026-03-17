@@ -3,6 +3,7 @@
 #include <chrono>
 #include <control/control.hpp>
 #include <core/batched_send.hpp>
+#include <helpers/utils.hpp>
 #include <gst-video-context.hpp>
 #include <gstreamer-1.0/gst/app/gstappsink.h>
 #include <gstreamer-1.0/gst/app/gstappsrc.h>
@@ -400,11 +401,12 @@ void start_streaming_video(immer::box<events::VideoSession> video_session,
       fmt::arg("host_port", video_session->port));
   logs::log(logs::debug, "Starting video pipeline: \n{}", pipeline);
 
+  bool enable_pacing = utils::get_env("WOLF_ENABLE_VIDEO_PACING", "TRUE") == std::string("TRUE");
   std::shared_ptr<custom_sink::UDPSink> udp_sink = std::make_shared<custom_sink::UDPSink>(custom_sink::UDPSink{
       .socket = video_socket,
       .client_endpoint = std::make_shared<udp::endpoint>(boost::asio::ip::make_address(client_ip), client_port),
       .pacing = {
-          .enabled = true,
+          .enabled = enable_pacing,
           .max_packets_per_ms = static_cast<std::size_t>(
               std::max(1L, static_cast<long>(1000000000L * 80 / 100 / 1000 / (video_session->packet_size * 8)))),
           .max_batch_size = std::min<std::size_t>(16, 65536 / video_session->packet_size),
