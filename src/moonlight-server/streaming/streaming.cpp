@@ -197,6 +197,12 @@ namespace custom_sink {
 struct PacingConfig {
   bool enabled = false;
   std::size_t max_packets_per_ms = 0;
+  /**
+   * Maximum number of packets per sendmmsg() syscall.
+   * Caps batch size to stay under 64KB per call, following Sunshine's pattern.
+   * Computed at runtime as min(16, 65536 / packet_size).
+   * Does not affect pacing rate — only syscall granularity.
+   */
   std::size_t max_batch_size = 16;
   std::chrono::steady_clock::time_point next_frame_start = std::chrono::steady_clock::now();
 };

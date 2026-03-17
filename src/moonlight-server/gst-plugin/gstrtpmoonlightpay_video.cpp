@@ -102,7 +102,7 @@ static void gst_rtp_moonlight_pay_video_class_init(gst_rtp_moonlight_pay_videoCl
           "Maximum size of RTP packets. If a video payload surpasses this it'll be split in multiple packets",
           0,
           10240,
-          1392,
+          1392, // Default used by Moonlight clients for LAN streaming (moonlight-qt/app/streaming/session.cpp)
           G_PARAM_READWRITE));
 
   g_object_class_install_property(
