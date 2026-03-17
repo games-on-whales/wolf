@@ -3,10 +3,10 @@
 #include <chrono>
 #include <control/control.hpp>
 #include <core/batched_send.hpp>
-#include <helpers/utils.hpp>
 #include <gst-video-context.hpp>
 #include <gstreamer-1.0/gst/app/gstappsink.h>
 #include <gstreamer-1.0/gst/app/gstappsrc.h>
+#include <helpers/utils.hpp>
 #include <immer/array.hpp>
 #include <immer/box.hpp>
 #include <memory>
