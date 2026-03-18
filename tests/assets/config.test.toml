@@ -6,7 +6,7 @@ uuid = "0000-1111-2222-3333"
 support_hevc = true
 support_av1 = false
 # The version of this config file
-config_version = 6
+config_version = 7
 
 
 # A list of paired clients that will be allowed to stream
