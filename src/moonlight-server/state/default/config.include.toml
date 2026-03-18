@@ -323,7 +323,7 @@ default_source = 'interpipesrc name=interpipesrc_{}_video listen-to={session_id}
 default_sink = """
 rtpmoonlightpay_video name=moonlight_pay \
 payload_size={payload_size} fec_percentage={fec_percentage} min_required_fec_packets={min_required_fec_packets} !
-appsink sync=false name=wolf_udp_sink
+appsink sync=false max-buffers=1 drop=true name=wolf_udp_sink
 """
 
 ######################
