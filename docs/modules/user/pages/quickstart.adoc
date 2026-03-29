@@ -2,8 +2,7 @@
 
 Wolf runs as a single container, it'll spin up and down additional containers on-demand.
 
-You can run the quickstart script directly with curl -sSL https://raw.githubusercontent.com/jbailes/wolf/main/quickstart/wolf.sh | bash
- or see the quickstart guide and script at https://github.com/JBailes/wolf/tree/main/quickstart for a fully automated script that will handle setting the environment up for you.
+You can run the quickstart script directly with curl -sSL https://raw.githubusercontent.com/jbailes/wolf/main/quickstart/wolf.sh | bash or see the quickstart guide and script at https://github.com/JBailes/wolf/tree/main/quickstart for a fully automated script that will handle setting the environment up for you.
 
 == Docker
 
