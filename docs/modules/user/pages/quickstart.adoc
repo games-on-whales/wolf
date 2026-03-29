@@ -2,6 +2,8 @@
 
 Wolf runs as a single container, it'll spin up and down additional containers on-demand.
 
+See https://github.com/JBailes/wolf/tree/main/quickstart for a fully automated script that will handle setting the environment up for you.
+
 == Docker
 
 [tabs]
