@@ -12,12 +12,8 @@ ARG REQUIRED_PACKAGES="va-driver-all intel-media-va-driver-non-free \
                        libva-drm2 libva-x11-2 libvpl2"
 
 RUN apt-get update -y && \
-    apt-get install -y --no-install-recommends software-properties-common && \
-    add-apt-repository -y ppa:kisak/kisak-mesa && \
-    apt-get update -y && \
     apt-get install -y --no-install-recommends \
     $REQUIRED_PACKAGES && \
-    apt-get remove -y --purge software-properties-common && \
     rm -rf /var/lib/apt/lists/*
 
 # libmfx is not available in Ubuntu 25.04 so we are building from sources (see: https://github.com/games-on-whales/wolf/issues/221)
