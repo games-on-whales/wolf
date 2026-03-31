@@ -420,6 +420,8 @@ void start_streaming_video(immer::box<events::VideoSession> video_session,
     }
 
     auto bus = gst_pipeline_get_bus(GST_PIPELINE(pipeline.get()));
+    gst_bus_set_sync_handler(bus, bus_sync_handler, ctx_data_ptr.get(), nullptr);
+    gst_object_unref(bus);
 
     /*
      * The force IDR event will be triggered by the control stream.
