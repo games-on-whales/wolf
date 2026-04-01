@@ -48,14 +48,16 @@ bool send_batch(batched_send_info_t &send_info) {
   struct sockaddr_in taddr_v4 = {};
   struct sockaddr_in6 taddr_v6 = {};
 
-  if (send_info.target_address.is_v6()) {
-    taddr_v6 = to_sockaddr_v6(send_info.target_address.to_v6(), send_info.target_port);
-    msg_template.msg_name = &taddr_v6;
-    msg_template.msg_namelen = sizeof(taddr_v6);
-  } else {
-    taddr_v4 = to_sockaddr_v4(send_info.target_address.to_v4(), send_info.target_port);
-    msg_template.msg_name = &taddr_v4;
-    msg_template.msg_namelen = sizeof(taddr_v4);
+  if (!send_info.target_address.is_unspecified()) {
+    if (send_info.target_address.is_v6()) {
+      taddr_v6 = to_sockaddr_v6(send_info.target_address.to_v6(), send_info.target_port);
+      msg_template.msg_name = &taddr_v6;
+      msg_template.msg_namelen = sizeof(taddr_v6);
+    } else {
+      taddr_v4 = to_sockaddr_v4(send_info.target_address.to_v4(), send_info.target_port);
+      msg_template.msg_name = &taddr_v4;
+      msg_template.msg_namelen = sizeof(taddr_v4);
+    }
   }
 
   // Prepare CMSG for source address (IP_PKTINFO/IPV6_PKTINFO)
