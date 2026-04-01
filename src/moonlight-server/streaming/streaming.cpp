@@ -212,6 +212,7 @@ struct UDPSink {
   std::shared_ptr<udp::socket> socket;
   std::shared_ptr<udp::endpoint> client_endpoint;
   PacingConfig pacing;
+  wolf::platform::batched_send_info_t send_info;
 };
 
 static void ensure_socket_open(UDPSink *udp_sink, bool is_video) {
@@ -224,7 +225,6 @@ static void ensure_socket_open(UDPSink *udp_sink, bool is_video) {
 }
 
 static GstFlowReturn send_buffer_batched(GstBufferList *buffer_list, UDPSink *udp_sink) {
-  auto callback_start = std::chrono::steady_clock::now();
   guint num_buffers = gst_buffer_list_length(buffer_list);
   if (num_buffers == 0) {
     return GST_FLOW_OK;
@@ -232,9 +232,8 @@ static GstFlowReturn send_buffer_batched(GstBufferList *buffer_list, UDPSink *ud
 
   ensure_socket_open(udp_sink, true);
 
-  std::vector<wolf::platform::buffer_descriptor_t> payload_buffers;
   std::vector<std::pair<GstBuffer *, GstMapInfo>> mapped_buffers;
-  payload_buffers.reserve(num_buffers);
+  udp_sink->send_info.payload_buffers.resize(num_buffers);
   mapped_buffers.reserve(num_buffers);
 
   for (guint i = 0; i < num_buffers; i++) {
@@ -249,21 +248,20 @@ static GstFlowReturn send_buffer_batched(GstBufferList *buffer_list, UDPSink *ud
       return GST_FLOW_ERROR;
     }
     mapped_buffers.emplace_back(buffer, map);
-    payload_buffers.emplace_back(reinterpret_cast<const char *>(map.data), map.size);
+    udp_sink->send_info.payload_buffers[i] =
+        wolf::platform::buffer_descriptor_t(reinterpret_cast<const char *>(map.data), map.size);
   }
 
-  wolf::platform::batched_send_info_t send_info;
-  send_info.payload_buffers = std::move(payload_buffers);
-  send_info.native_socket = udp_sink->socket->native_handle();
-  send_info.target_address = udp_sink->client_endpoint->address();
-  send_info.target_port = udp_sink->client_endpoint->port();
+  udp_sink->send_info.native_socket = udp_sink->socket->native_handle();
+  udp_sink->send_info.target_address = udp_sink->client_endpoint->address();
+  udp_sink->send_info.target_port = udp_sink->client_endpoint->port();
 
   bool success = true;
 
   if (!udp_sink->pacing.enabled || num_buffers <= udp_sink->pacing.max_batch_size) {
-    send_info.block_offset = 0;
-    send_info.block_count = num_buffers;
-    success = wolf::platform::send_batch(send_info);
+    udp_sink->send_info.block_offset = 0;
+    udp_sink->send_info.block_count = num_buffers;
+    success = wolf::platform::send_batch(udp_sink->send_info);
   } else {
     auto &pacing = udp_sink->pacing;
     auto frame_start = std::max(pacing.next_frame_start, std::chrono::steady_clock::now());
@@ -286,9 +284,9 @@ static GstFlowReturn send_buffer_batched(GstBufferList *buffer_list, UDPSink *ud
 
       std::size_t batch = std::min({budget, pacing.max_batch_size, remaining});
 
-      send_info.block_offset = packets_sent;
-      send_info.block_count = batch;
-      if (!wolf::platform::send_batch(send_info)) {
+      udp_sink->send_info.block_offset = packets_sent;
+      udp_sink->send_info.block_count = batch;
+      if (!wolf::platform::send_batch(udp_sink->send_info)) {
         success = false;
         break;
       }
