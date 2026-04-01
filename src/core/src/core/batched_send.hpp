@@ -26,10 +26,6 @@ struct buffer_descriptor_t {
  * throughput and reduced CPU usage.
  */
 struct batched_send_info_t {
-  // Optional headers to be prepended to each packet (e.g., RTP + NV headers)
-  const char *headers = nullptr;
-  size_t header_size = 0;
-
   // One or more data buffers containing the payloads
   // These must be aligned to payload_size boundaries
   std::vector<buffer_descriptor_t> payload_buffers;
@@ -83,23 +79,6 @@ struct batched_send_info_t {
  * @return false if an error occurred
  */
 bool send_batch(batched_send_info_t &send_info);
-
-/**
- * @brief Send a single UDP packet (fallback for non-batched sends)
- *
- * @param native_socket The native socket handle
- * @param target_address The target IP address
- * @param target_port The target port
- * @param data The data to send
- * @param size The size of the data
- * @return true if the packet was sent successfully
- * @return false if an error occurred
- */
-bool send_single(int native_socket,
-                 const boost::asio::ip::address &target_address,
-                 uint16_t target_port,
-                 const char *data,
-                 size_t size);
 
 /**
  * @brief Configure socket for high-bandwidth streaming

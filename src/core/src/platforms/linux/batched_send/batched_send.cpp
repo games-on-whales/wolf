@@ -122,19 +122,12 @@ bool send_batch(batched_send_info_t &send_info) {
 
       msgs[i].msg_len = 0;
       msgs[i].msg_hdr.msg_iov = &iovs[iov_idx];
-      msgs[i].msg_hdr.msg_iovlen = send_info.headers ? 2 : 1;
+      msgs[i].msg_hdr.msg_iovlen = 1;
       msgs[i].msg_hdr.msg_name = msg_template.msg_name;
       msgs[i].msg_hdr.msg_namelen = msg_template.msg_namelen;
       msgs[i].msg_hdr.msg_control = msg_template.msg_control;
       msgs[i].msg_hdr.msg_controllen = cmbuflen;
       msgs[i].msg_hdr.msg_flags = 0;
-
-      // Add header if present
-      if (send_info.headers) {
-        iovs[iov_idx].iov_base = (void *)&send_info.headers[block_idx * send_info.header_size];
-        iovs[iov_idx].iov_len = send_info.header_size;
-        iov_idx++;
-      }
 
       // Add payload - support both fixed-size and variable-sized buffers
       if (send_info.payload_size > 0 && send_info.payload_buffers.size() == 1) {
@@ -201,30 +194,6 @@ bool send_batch(batched_send_info_t &send_info) {
   }
 
   return blocks_sent >= send_info.block_count;
-}
-
-bool send_single(int native_socket,
-                 const boost::asio::ip::address &target_address,
-                 uint16_t target_port,
-                 const char *data,
-                 size_t size) {
-  struct sockaddr_in taddr_v4 = {};
-  struct sockaddr_in6 taddr_v6 = {};
-  struct sockaddr *addr = nullptr;
-  socklen_t addr_len = 0;
-
-  if (target_address.is_v6()) {
-    taddr_v6 = to_sockaddr_v6(target_address.to_v6(), target_port);
-    addr = (struct sockaddr *)&taddr_v6;
-    addr_len = sizeof(taddr_v6);
-  } else {
-    taddr_v4 = to_sockaddr_v4(target_address.to_v4(), target_port);
-    addr = (struct sockaddr *)&taddr_v4;
-    addr_len = sizeof(taddr_v4);
-  }
-
-  ssize_t sent = sendto(native_socket, data, size, 0, addr, addr_len);
-  return sent == (ssize_t)size;
 }
 
 void configure_socket_for_streaming(boost::asio::ip::udp::socket &socket, bool is_video) {

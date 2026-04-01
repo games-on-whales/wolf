@@ -558,4 +558,5 @@ default_sink = """
 rtpmoonlightpay_audio name=moonlight_pay packet_duration={packet_duration} encrypt={encrypt} \
 aes_key="{aes_key}" aes_iv="{aes_iv}" !
 appsink name=wolf_udp_sink\
-""")for_c++_include"
+"""
+)for_c++_include"
