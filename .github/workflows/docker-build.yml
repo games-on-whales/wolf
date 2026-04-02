@@ -137,17 +137,15 @@ jobs:
         with:
           images: ${{ steps.prep.outputs.images }}
           tags: |
-            type=semver,pattern={{version}}
-            type=semver,pattern={{major}}
-            type=edge,branch=master
-            type=ref,event=branch
-            type=raw,value=alpha
+            type=semver,pattern={{version}},suffix=-fedora
+            type=semver,pattern={{major}},suffix=-fedora
+            type=edge,branch=master,suffix=-fedora
+            type=ref,event=branch,suffix=-fedora
+            type=raw,value=alpha-fedora
             type=raw,value=fedora
             type=raw,value=fedora-43
-            type=sha
-          flavor: |
-            latest=false
-            suffix=-fedora,onlatest=false
+            type=sha,suffix=-fedora
+          flavor: latest=false
 
       - name: Build Wolf (Fedora)
         uses: docker/build-push-action@v3
@@ -160,7 +158,7 @@ jobs:
           labels: ${{ steps.meta.outputs.labels }}
           build-args: |
             BASE_IMAGE=ghcr.io/${{ github.repository_owner }}/gstreamer:1.26.7
-            FEDORA_BASE_IMAGE=ghcr.io/games-on-whales/base-app:fedora
+            FEDORA_BASE_IMAGE=fedora:43
             IMAGE_SOURCE=${{ steps.prep.outputs.github_server_url }}/${{ github.repository }}
           cache-from: type=registry,ref=ghcr.io/${{ github.repository_owner }}/wolf:buildcache-fedora
           cache-to: type=registry,ref=ghcr.io/${{ github.repository_owner }}/wolf:buildcache-fedora,mode=max

@@ -1,5 +1,5 @@
 ARG BASE_IMAGE=ghcr.io/games-on-whales/gstreamer:1.26.7
-ARG FEDORA_BASE_IMAGE=ghcr.io/games-on-whales/base-app:fedora
+ARG FEDORA_BASE_IMAGE=fedora:43
 ########################################################
 FROM $BASE_IMAGE AS wolf-builder
 
@@ -75,7 +75,7 @@ RUN --mount=type=cache,target=/cache/ccache \
 ########################################################
 FROM $FEDORA_BASE_IMAGE AS runner
 
-# Wolf runtime dependencies
+# Wolf runtime dependencies + GStreamer runtime + Wayland/graphics
 RUN dnf install -y \
     ca-certificates \
     openssl-libs \
@@ -86,16 +86,31 @@ RUN dnf install -y \
     libdrm \
     pciutils-libs \
     libunwind \
-    && dnf clean all
-
-# gst-plugin-wayland runtime dependencies + GStreamer runtime
-RUN dnf install -y \
+    wget \
+    curl \
+    jq \
     libwayland-server libinput libxkbcommon mesa-libgbm \
     libglvnd mesa-libGL mesa-libEGL mesa-libGLES xorg-x11-server-Xwayland hwdata \
+    mesa-dri-drivers mesa-vulkan-drivers mesa-va-drivers \
     gstreamer1 gstreamer1-plugins-base gstreamer1-plugins-good \
     gstreamer1-plugins-bad-free gstreamer1-plugins-ugly-free \
     gstreamer1-vaapi \
     && dnf clean all
+
+# Install gosu for entrypoint user switching
+ARG GOSU_VERSION=1.14
+RUN wget --progress=dot:giga \
+    -O /usr/bin/gosu \
+    "https://github.com/tianon/gosu/releases/download/${GOSU_VERSION}/gosu-amd64" && \
+    chmod +x /usr/bin/gosu && \
+    gosu nobody true
+
+# Import GOW base overlay (entrypoint, cont-init.d scripts, bash-lib)
+COPY --from=wolf-builder /entrypoint.sh /entrypoint.sh
+COPY --from=wolf-builder /etc/cont-init.d/ /etc/cont-init.d/
+COPY --from=wolf-builder /opt/gow/bash-lib/ /opt/gow/bash-lib/
+COPY --from=wolf-builder /opt/gow/ensure-groups /opt/gow/ensure-groups
+COPY --from=wolf-builder /opt/gow/startup.sh /opt/gow/startup.sh
 
 ENV GST_PLUGIN_PATH=/usr/local/lib/x86_64-linux-gnu/gstreamer-1.0/
 # Copying out our custom compositor from the build stage
