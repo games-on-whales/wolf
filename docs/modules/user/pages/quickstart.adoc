@@ -2,7 +2,12 @@
 
 Wolf runs as a single container, it'll spin up and down additional containers on-demand.
 
-== Automated setup
+== Automated setup (beta)
+
+[WARNING]
+====
+These scripts are in *beta* — they may not cover every environment. Use at your own risk and please report issues.
+====
 
 The quickstart script auto-detects your environment (Proxmox, LXC, Incus, Unraid, TrueNAS, NixOS, Docker, or Podman) and sets up Wolf + Wolf Den automatically:
 
@@ -12,6 +17,8 @@ curl -fsSLO https://raw.githubusercontent.com/games-on-whales/wolf/stable/quicks
 chmod +x wolf.sh
 sudo ./wolf.sh
 ....
+
+NOTE: `sudo` is required because the script installs udev rules (into `/etc/udev/rules.d/`), creates device passthrough configuration, and manages containers — all of which need root privileges.
 
 The script detects your GPU, configures passthrough, installs udev rules, and deploys Wolf with https://github.com/games-on-whales/wolf-den[Wolf Den] (web management UI). When it finishes, follow the on-screen instructions to pair with Moonlight.
 

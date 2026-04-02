@@ -18,14 +18,12 @@ docker_main() {
 
     [[ "$SELECTED_VENDOR" == "NVIDIA" ]] && build_nvidia_volume docker
 
-    mkdir -p /etc/wolf/cfg /etc/wolf/wolf-den /etc/wolf/covers /etc/wolf/steam /opt/wolf
-
-    write_wolf_config /etc/wolf/cfg
+    mkdir -p /etc/wolf /etc/wolf/wolf-den /etc/wolf/covers /opt/wolf
 
     info "Writing docker-compose.yml"
     write_compose "$SELECTED_VENDOR" "$SELECTED_RENDER_NODE"
 
-    docker_start_wolf
+    compose_start_wolf
 
     local ip; ip=$(get_local_ip)
     cat <<EOF

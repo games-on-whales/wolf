@@ -44,10 +44,9 @@ unraid_main() {
 
     select_gpu
 
-    local cfg_dir="${APPDATA}/cfg"
+    local wolf_dir="${APPDATA}/wolf"
     local wolf_den_dir="${APPDATA}/wolf-den"
     local covers_dir="${APPDATA}/covers"
-    local steam_dir="${APPDATA}/steam"
     local compose_dir="${APPDATA}"
 
     info "Wolf Cloud Gaming Setup (Unraid)"
@@ -58,13 +57,11 @@ unraid_main() {
 
     install_udev_rules_unraid
 
-    mkdir -p "$cfg_dir" "$wolf_den_dir" "$covers_dir" "$steam_dir"
-
-    write_wolf_config "$cfg_dir"
+    mkdir -p "$wolf_dir" "$wolf_den_dir" "$covers_dir"
 
     info "Writing docker-compose.yml for ${SELECTED_VENDOR}"
     write_compose_paths "$SELECTED_VENDOR" "$SELECTED_RENDER_NODE" \
-        "$cfg_dir" "$wolf_den_dir" "$covers_dir" "$steam_dir" "$compose_dir"
+        "$wolf_dir" "$wolf_den_dir" "$covers_dir" "$compose_dir"
 
     if [[ "$SELECTED_VENDOR" == "NVIDIA" ]]; then
         detect_nvidia_version

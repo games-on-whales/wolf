@@ -31,27 +31,23 @@ _write_nix_standard() {
   # Enable Docker (used by Wolf to launch game containers)
   virtualisation.docker.enable = true;
 
-  # Udev rules for Wolf virtual input devices
-  services.udev.extraRules = ''
-    KERNEL=="uinput", SUBSYSTEM=="misc", MODE="0660", GROUP="input", OPTIONS+="static_node=uinput", TAG+="uaccess"
-    KERNEL=="uhid", GROUP="input", MODE="0660", TAG+="uaccess"
-    KERNEL=="hidraw*", ATTRS{name}=="Wolf PS5 (virtual) pad", GROUP="input", MODE="0660", ENV{ID_SEAT}="seat9"
-    SUBSYSTEMS=="input", ATTRS{name}=="Wolf X-Box One (virtual) pad", MODE="0660", ENV{ID_SEAT}="seat9"
-    SUBSYSTEMS=="input", ATTRS{name}=="Wolf PS5 (virtual) pad", MODE="0660", ENV{ID_SEAT}="seat9"
-    SUBSYSTEMS=="input", ATTRS{name}=="Wolf gamepad (virtual) motion sensors", MODE="0660", ENV{ID_SEAT}="seat9"
-    SUBSYSTEMS=="input", ATTRS{name}=="Wolf Nintendo (virtual) pad", MODE="0660", ENV{ID_SEAT}="seat9"
-  '';
-
   # Persistent directories for Wolf data
   systemd.tmpfiles.rules = [
     "d /etc/wolf 0755 root root -"
-    "d /etc/wolf/cfg 0755 root root -"
     "d /etc/wolf/wolf-den 0755 root root -"
     "d /etc/wolf/covers 0755 root root -"
-    "d /etc/wolf/steam 0755 root root -"
   ];
 
 NIXEOF
+
+    # Inject udev rules from canonical source
+    {
+        echo "  # Udev rules for Wolf virtual input devices"
+        echo "  services.udev.extraRules = ''"
+        write_udev_rules_content | sed 's/^/    /'
+        echo "  '';"
+        echo ""
+    } >> "$output"
 
     # Inject the render node (not single-quoted, needs variable substitution)
     cat >> "$output" <<NIXEOF
@@ -63,8 +59,6 @@ NIXEOF
       environment = {
         WOLF_RENDER_NODE = "${render_node}";
         XDG_RUNTIME_DIR = "/tmp/sockets";
-        WOLF_CFG_FILE = "/etc/wolf/cfg/config.toml";
-        WOLF_DOCKER_SOCKET = "/var/run/docker.sock";
       };
       volumes = [
         "/etc/wolf:/etc/wolf:rw"
@@ -134,27 +128,23 @@ in
   # Enable Docker (used by Wolf to launch game containers)
   virtualisation.docker.enable = true;
 
-  # Udev rules for Wolf virtual input devices
-  services.udev.extraRules = ''
-    KERNEL=="uinput", SUBSYSTEM=="misc", MODE="0660", GROUP="input", OPTIONS+="static_node=uinput", TAG+="uaccess"
-    KERNEL=="uhid", GROUP="input", MODE="0660", TAG+="uaccess"
-    KERNEL=="hidraw*", ATTRS{name}=="Wolf PS5 (virtual) pad", GROUP="input", MODE="0660", ENV{ID_SEAT}="seat9"
-    SUBSYSTEMS=="input", ATTRS{name}=="Wolf X-Box One (virtual) pad", MODE="0660", ENV{ID_SEAT}="seat9"
-    SUBSYSTEMS=="input", ATTRS{name}=="Wolf PS5 (virtual) pad", MODE="0660", ENV{ID_SEAT}="seat9"
-    SUBSYSTEMS=="input", ATTRS{name}=="Wolf gamepad (virtual) motion sensors", MODE="0660", ENV{ID_SEAT}="seat9"
-    SUBSYSTEMS=="input", ATTRS{name}=="Wolf Nintendo (virtual) pad", MODE="0660", ENV{ID_SEAT}="seat9"
-  '';
-
   # Persistent directories for Wolf data
   systemd.tmpfiles.rules = [
     "d /etc/wolf 0755 root root -"
-    "d /etc/wolf/cfg 0755 root root -"
     "d /etc/wolf/wolf-den 0755 root root -"
     "d /etc/wolf/covers 0755 root root -"
-    "d /etc/wolf/steam 0755 root root -"
   ];
 
 NIXEOF
+
+    # Inject udev rules from canonical source
+    {
+        echo "  # Udev rules for Wolf virtual input devices"
+        echo "  services.udev.extraRules = ''"
+        write_udev_rules_content | sed 's/^/    /'
+        echo "  '';"
+        echo ""
+    } >> "$output"
 
     # Inject the render node (needs variable substitution)
     cat >> "$output" <<NIXEOF
@@ -167,8 +157,6 @@ NIXEOF
         WOLF_RENDER_NODE = "${render_node}";
         NVIDIA_DRIVER_VOLUME_NAME = "\${wolfNvidiaVol}";
         XDG_RUNTIME_DIR = "/tmp/sockets";
-        WOLF_CFG_FILE = "/etc/wolf/cfg/config.toml";
-        WOLF_DOCKER_SOCKET = "/var/run/docker.sock";
       };
       volumes = [
         "/etc/wolf:/etc/wolf:rw"

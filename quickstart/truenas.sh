@@ -117,10 +117,9 @@ truenas_main() {
         APPDATA="/mnt/${ZFS_POOL}/appdata/wolf"
     fi
 
-    local cfg_dir="${APPDATA}/cfg"
+    local wolf_dir="${APPDATA}/wolf"
     local wolf_den_dir="${APPDATA}/wolf-den"
     local covers_dir="${APPDATA}/covers"
-    local steam_dir="${APPDATA}/steam"
     local compose_dir="${APPDATA}"
     local rules_src="${APPDATA}/wolf-virtual-inputs.rules"
 
@@ -130,7 +129,7 @@ truenas_main() {
     echo "  Node:    ${SELECTED_RENDER_NODE}"
     echo ""
 
-    mkdir -p "$cfg_dir" "$wolf_den_dir" "$covers_dir" "$steam_dir"
+    mkdir -p "$wolf_dir" "$wolf_den_dir" "$covers_dir"
 
     # Write udev rules to the ZFS dataset (persistent) and install live
     info "Setting up udev rules for virtual input"
@@ -139,11 +138,9 @@ truenas_main() {
     udevadm control --reload-rules 2>/dev/null || true
     udevadm trigger 2>/dev/null || true
 
-    write_wolf_config "$cfg_dir"
-
     info "Writing docker-compose.yml for ${SELECTED_VENDOR}"
     write_compose_paths "$SELECTED_VENDOR" "$SELECTED_RENDER_NODE" \
-        "$cfg_dir" "$wolf_den_dir" "$covers_dir" "$steam_dir" "$compose_dir"
+        "$wolf_dir" "$wolf_den_dir" "$covers_dir" "$compose_dir"
 
     if [[ "$SELECTED_VENDOR" == "NVIDIA" ]]; then
         detect_nvidia_version

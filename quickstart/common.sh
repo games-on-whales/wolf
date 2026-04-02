@@ -348,8 +348,6 @@ services:
     environment:
       - WOLF_RENDER_NODE=${render_node}
       - XDG_RUNTIME_DIR=/tmp/sockets
-      - WOLF_CFG_FILE=/etc/wolf/cfg/config.toml
-      - WOLF_DOCKER_SOCKET=/var/run/docker.sock
     volumes:
       - /etc/wolf:/etc/wolf:rw
       - /var/run/docker.sock:/var/run/docker.sock:rw
@@ -394,8 +392,6 @@ services:
       - WOLF_RENDER_NODE=${render_node}
       - NVIDIA_DRIVER_VOLUME_NAME=nvidia-driver-vol
       - XDG_RUNTIME_DIR=/tmp/sockets
-      - WOLF_CFG_FILE=/etc/wolf/cfg/config.toml
-      - WOLF_DOCKER_SOCKET=/var/run/docker.sock
     volumes:
       - /etc/wolf:/etc/wolf:rw
       - /var/run/docker.sock:/var/run/docker.sock:rw
@@ -441,10 +437,10 @@ YAML
 }
 
 # Write compose file with custom paths.
-# Usage: write_compose_paths <vendor> <render_node> <wolf_cfg> <wolf_den> <covers> <steam> <compose_dir>
+# Usage: write_compose_paths <vendor> <render_node> <wolf_dir> <wolf_den> <covers> <compose_dir>
 write_compose_paths() {
     local vendor="$1" render_node="$2"
-    local wolf_cfg="$3" wolf_den="$4" covers="$5" steam="$6" compose_dir="$7"
+    local wolf_dir="$3" wolf_den="$4" covers="$5" compose_dir="$6"
 
     local compose_file="${compose_dir}/docker-compose.yml"
 
@@ -458,11 +454,8 @@ services:
       - WOLF_RENDER_NODE=${render_node}
       - NVIDIA_DRIVER_VOLUME_NAME=nvidia-driver-vol
       - XDG_RUNTIME_DIR=/tmp/sockets
-      - WOLF_CFG_FILE=/etc/wolf/cfg/config.toml
-      - WOLF_DOCKER_SOCKET=/var/run/docker.sock
     volumes:
-      - ${wolf_cfg}:/etc/wolf/cfg:rw
-      - ${steam}:/etc/wolf/steam:rw
+      - ${wolf_dir}:/etc/wolf:rw
       - /var/run/docker.sock:/var/run/docker.sock:rw
       - /dev/:/dev/:rw
       - /run/udev:/run/udev:rw
@@ -512,11 +505,8 @@ services:
     environment:
       - WOLF_RENDER_NODE=${render_node}
       - XDG_RUNTIME_DIR=/tmp/sockets
-      - WOLF_CFG_FILE=/etc/wolf/cfg/config.toml
-      - WOLF_DOCKER_SOCKET=/var/run/docker.sock
     volumes:
-      - ${wolf_cfg}:/etc/wolf/cfg:rw
-      - ${steam}:/etc/wolf/steam:rw
+      - ${wolf_dir}:/etc/wolf:rw
       - /var/run/docker.sock:/var/run/docker.sock:rw
       - /dev/:/dev/:rw
       - /run/udev:/run/udev:rw
@@ -553,56 +543,32 @@ YAML
 }
 
 # =========================================================================
-# Wolf config generation
+# Container runtime helpers
 # =========================================================================
 
-# Write default Wolf config with Steam. Usage: write_wolf_config <cfg_dir>
-# Skips if config already exists.
-write_wolf_config() {
-    local cfg_dir="$1"
-
-    if [[ -f "${cfg_dir}/config.toml" ]]; then
-        info "Wolf config already exists, skipping"
-        return
+# Detect available compose command. Sets COMPOSE_CMD.
+detect_compose_cmd() {
+    if command -v docker &>/dev/null && docker compose version &>/dev/null 2>&1; then
+        COMPOSE_CMD="docker compose"
+    elif command -v podman &>/dev/null && podman compose version &>/dev/null 2>&1; then
+        COMPOSE_CMD="podman compose"
+    else
+        err "No compose command found. Install Docker (https://docs.docker.com/engine/install/) or Podman with compose support."
     fi
-
-    info "Writing Wolf config with Steam"
-    cat > "${cfg_dir}/config.toml" <<'TOML'
-hostname = "Wolf"
-support_hevc = true
-support_av1 = true
-
-[[profiles]]
-uid = "default"
-
-[[profiles.apps]]
-title = "Steam"
-start_virtual_compositor = true
-
-[profiles.apps.runner]
-type = "docker"
-name = "WolfSteam"
-image = "ghcr.io/games-on-whales/steam:edge"
-mounts = ["/etc/wolf/steam:/home/retro:rw"]
-env = ["PROTON_LOG=1", "RUN_SWAY=true"]
-TOML
 }
 
-# =========================================================================
-# Docker helpers
-# =========================================================================
-
-# Pull, start, and verify Wolf via docker compose in /opt/wolf.
-docker_start_wolf() {
-    info "Pulling and starting Wolf + Wolf Den"
-    docker compose -f /opt/wolf/docker-compose.yml pull
-    docker compose -f /opt/wolf/docker-compose.yml up -d
+# Pull, start, and verify Wolf via compose in /opt/wolf.
+compose_start_wolf() {
+    detect_compose_cmd
+    info "Pulling and starting Wolf + Wolf Den (${COMPOSE_CMD})"
+    $COMPOSE_CMD -f /opt/wolf/docker-compose.yml pull
+    $COMPOSE_CMD -f /opt/wolf/docker-compose.yml up -d
 
     sleep 5
-    if docker compose -f /opt/wolf/docker-compose.yml ps --format '{{.Service}} {{.State}}' | grep -q "running"; then
+    if $COMPOSE_CMD -f /opt/wolf/docker-compose.yml ps --format '{{.Service}} {{.State}}' | grep -q "running"; then
         info "Services are running"
     else
-        warn "Some services may not be running yet. Check: docker compose -f /opt/wolf/docker-compose.yml ps"
+        warn "Some services may not be running yet. Check: $COMPOSE_CMD -f /opt/wolf/docker-compose.yml ps"
     fi
 }
 
