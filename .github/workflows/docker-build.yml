@@ -131,6 +131,40 @@ jobs:
           cache-from: ${{ steps.prep.outputs.cache_from }}
           cache-to: ${{ steps.prep.outputs.cache_to }}
 
+      - name: Docker meta (Fedora)
+        id: meta-fedora
+        uses: docker/metadata-action@v4
+        with:
+          images: ${{ steps.prep.outputs.images }}
+          tags: |
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}
+            type=edge,branch=master
+            type=ref,event=branch
+            type=raw,value=alpha
+            type=raw,value=fedora
+            type=raw,value=fedora-43
+            type=sha
+          flavor: |
+            latest=false
+            suffix=-fedora,onlatest=false
+
+      - name: Build Wolf (Fedora)
+        uses: docker/build-push-action@v3
+        with:
+          builder: ${{ steps.buildx.outputs.name }}
+          context: .
+          file: docker/wolf-fedora.Dockerfile
+          push: ${{ steps.prep.outputs.push }}
+          tags: ${{ steps.meta-fedora.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          build-args: |
+            BASE_IMAGE=ghcr.io/${{ github.repository_owner }}/gstreamer:1.26.7
+            FEDORA_BASE_IMAGE=ghcr.io/games-on-whales/base-app:fedora
+            IMAGE_SOURCE=${{ steps.prep.outputs.github_server_url }}/${{ github.repository }}
+          cache-from: type=registry,ref=ghcr.io/${{ github.repository_owner }}/wolf:buildcache-fedora
+          cache-to: type=registry,ref=ghcr.io/${{ github.repository_owner }}/wolf:buildcache-fedora,mode=max
+
   test_devcontainer:
     runs-on: ubuntu-latest
     needs: buildx
