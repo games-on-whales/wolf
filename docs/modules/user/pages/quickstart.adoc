@@ -2,9 +2,24 @@
 
 Wolf runs as a single container, it'll spin up and down additional containers on-demand.
 
-You can run the quickstart script directly with `curl -sSL https://raw.githubusercontent.com/jbailes/wolf/main/quickstart/wolf.sh | bash` or see the quickstart guide and script at https://github.com/JBailes/wolf/tree/main/quickstart for a fully automated script that will handle setting the environment up for you.
+== Automated setup (recommended)
 
-== Docker
+The quickstart script auto-detects your environment (Proxmox, LXC, Incus, Unraid, TrueNAS, NixOS, Docker, or Podman) and sets up Wolf + Wolf Den automatically:
+
+[source,bash]
+....
+curl -fsSLO https://raw.githubusercontent.com/games-on-whales/wolf/stable/quickstart/wolf.sh
+chmod +x wolf.sh
+sudo ./wolf.sh
+....
+
+The script detects your GPU, configures passthrough, installs udev rules, and deploys Wolf with https://github.com/games-on-whales/wolf-den[Wolf Den] (web management UI). When it finishes, follow the on-screen instructions to pair with Moonlight.
+
+See the link:https://github.com/games-on-whales/wolf/tree/stable/quickstart[quickstart README] for the full list of options, supported environments, and troubleshooting.
+
+== Manual setup
+
+=== Docker
 
 [tabs]
 ======
