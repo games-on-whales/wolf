@@ -2,7 +2,7 @@
 
 Wolf runs as a single container, it'll spin up and down additional containers on-demand.
 
-== Automated setup (recommended)
+== Automated setup
 
 The quickstart script auto-detects your environment (Proxmox, LXC, Incus, Unraid, TrueNAS, NixOS, Docker, or Podman) and sets up Wolf + Wolf Den automatically:
 
