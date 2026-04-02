@@ -1,12 +1,8 @@
-ARG BASE_IMAGE=ghcr.io/games-on-whales/gstreamer:1.26.7
-ARG FEDORA_BASE_IMAGE=fedora:43
+ARG BASE_IMAGE=ghcr.io/games-on-whales/gstreamer:fedora
 ########################################################
 FROM $BASE_IMAGE AS wolf-builder
 
-ENV DEBIAN_FRONTEND=noninteractive
-
-RUN apt-get update -y && \
-    apt-get install -y --no-install-recommends \
+RUN dnf install -y \
     curl \
     ca-certificates \
     ninja-build \
@@ -15,19 +11,19 @@ RUN apt-get update -y && \
     ccache \
     git \
     clang \
-    build-essential \
-    libboost-thread-dev libboost-locale-dev libboost-filesystem-dev libboost-log-dev libboost-stacktrace-dev libboost-container-dev \
-    libwayland-dev libwayland-server0 libinput-dev libxkbcommon-dev libgbm-dev \
-    libcurl4-openssl-dev \
-    libssl-dev \
-    libevdev-dev \
-    libpulse-dev \
-    libunwind-dev \
-    libudev-dev \
-    libdrm-dev \
-    libpci-dev \
-    libglib2.0-dev libegl-dev libgles-dev libopengl-dev \
-    && rm -rf /var/lib/apt/lists/*
+    gcc-c++ \
+    boost-devel \
+    wayland-devel libinput-devel libxkbcommon-devel mesa-libgbm-devel \
+    libcurl-devel \
+    openssl-devel \
+    libevdev-devel \
+    pulseaudio-libs-devel \
+    libunwind-devel \
+    systemd-devel \
+    libdrm-devel \
+    pciutils-devel \
+    glib2-devel mesa-libEGL-devel mesa-libGLES-devel mesa-libOpenGL-devel \
+    && dnf clean all
 
 ## Install Rust in order to build our custom compositor
 RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
@@ -73,9 +69,9 @@ RUN --mount=type=cache,target=/cache/ccache \
     cp $CMAKE_BUILD_DIR/src/fake-udev/fake-udev /wolf/fake-udev
 
 ########################################################
-FROM $FEDORA_BASE_IMAGE AS runner
+FROM $BASE_IMAGE AS runner
 
-# Wolf runtime dependencies + GStreamer runtime + Wayland/graphics
+# Wolf runtime dependencies
 RUN dnf install -y \
     ca-certificates \
     openssl-libs \
@@ -86,31 +82,13 @@ RUN dnf install -y \
     libdrm \
     pciutils-libs \
     libunwind \
-    wget \
-    curl \
-    jq \
-    libwayland-server libinput libxkbcommon mesa-libgbm \
-    libglvnd mesa-libGL mesa-libEGL mesa-libGLES xorg-x11-server-Xwayland hwdata \
-    mesa-dri-drivers mesa-vulkan-drivers mesa-va-drivers \
-    gstreamer1 gstreamer1-plugins-base gstreamer1-plugins-good \
-    gstreamer1-plugins-bad-free gstreamer1-plugins-ugly-free \
-    gstreamer1-vaapi \
     && dnf clean all
 
-# Install gosu for entrypoint user switching
-ARG GOSU_VERSION=1.14
-RUN wget --progress=dot:giga \
-    -O /usr/bin/gosu \
-    "https://github.com/tianon/gosu/releases/download/${GOSU_VERSION}/gosu-amd64" && \
-    chmod +x /usr/bin/gosu && \
-    gosu nobody true
-
-# Import GOW base overlay (entrypoint, cont-init.d scripts, bash-lib)
-COPY --from=wolf-builder /entrypoint.sh /entrypoint.sh
-COPY --from=wolf-builder /etc/cont-init.d/ /etc/cont-init.d/
-COPY --from=wolf-builder /opt/gow/bash-lib/ /opt/gow/bash-lib/
-COPY --from=wolf-builder /opt/gow/ensure-groups /opt/gow/ensure-groups
-COPY --from=wolf-builder /opt/gow/startup.sh /opt/gow/startup.sh
+# gst-plugin-wayland runtime dependencies
+RUN dnf install -y \
+    libwayland-server libinput libxkbcommon mesa-libgbm \
+    libglvnd mesa-libGL mesa-libEGL mesa-libGLES xorg-x11-server-Xwayland hwdata \
+    && dnf clean all
 
 ENV GST_PLUGIN_PATH=/usr/local/lib/x86_64-linux-gnu/gstreamer-1.0/
 # Copying out our custom compositor from the build stage

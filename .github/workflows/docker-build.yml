@@ -34,9 +34,9 @@ jobs:
           if [ -n "${{ secrets.GHCR_TOKEN }}" ]; then
             REGISTRY_IMAGE="ghcr.io/${{ github.repository_owner }}/wolf"
             if [ "$IMAGES" = "" ]; then
-              IMAGES="ghcr.io/${REGISTRY_IMAGE}"
+              IMAGES="${REGISTRY_IMAGE}"
             else
-              IMAGES="$IMAGES,ghcr.io/${REGISTRY_IMAGE}"
+              IMAGES="$IMAGES,${REGISTRY_IMAGE}"
             fi
             PUSH=true
             echo "has_github_token=true" >> $GITHUB_OUTPUT
@@ -131,6 +131,7 @@ jobs:
           cache-from: ${{ steps.prep.outputs.cache_from }}
           cache-to: ${{ steps.prep.outputs.cache_to }}
 
+      # ========== Fedora chain ==========
       - name: Docker meta (Fedora)
         id: meta-fedora
         uses: docker/metadata-action@v4
@@ -147,6 +148,35 @@ jobs:
             type=sha,suffix=-fedora
           flavor: latest=false
 
+      - name: Build GPU Drivers (Fedora)
+        uses: docker/build-push-action@v3
+        with:
+          builder: ${{ steps.buildx.outputs.name }}
+          context: docker/
+          file: docker/gpu-drivers-fedora.Dockerfile
+          push: true
+          build-args: |
+            BASE_IMAGE=ghcr.io/games-on-whales/base-app:fedora
+          tags: ghcr.io/${{ github.repository_owner }}/gpu-drivers:fedora,gameonwhales/gpu-drivers:fedora
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=registry,ref=ghcr.io/${{ github.repository_owner }}/gpu-drivers:buildcache-fedora
+          cache-to: type=registry,ref=ghcr.io/${{ github.repository_owner }}/gpu-drivers:buildcache-fedora,mode=max
+
+      - name: Build Gstreamer (Fedora)
+        uses: docker/build-push-action@v3
+        with:
+          builder: ${{ steps.buildx.outputs.name }}
+          context: docker/
+          file: docker/gstreamer-fedora.Dockerfile
+          push: true
+          build-args: |
+            GSTREAMER_VERSION=1.26.7
+            BASE_IMAGE=ghcr.io/${{ github.repository_owner }}/gpu-drivers:fedora
+          tags: ghcr.io/${{ github.repository_owner }}/gstreamer:fedora,gameonwhales/gstreamer:fedora
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=registry,ref=ghcr.io/${{ github.repository_owner }}/gstreamer:buildcache-fedora
+          cache-to: type=registry,ref=ghcr.io/${{ github.repository_owner }}/gstreamer:buildcache-fedora,mode=max
+
       - name: Build Wolf (Fedora)
         uses: docker/build-push-action@v3
         with:
@@ -157,8 +187,7 @@ jobs:
           tags: ${{ steps.meta-fedora.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
           build-args: |
-            BASE_IMAGE=ghcr.io/${{ github.repository_owner }}/gstreamer:1.26.7
-            FEDORA_BASE_IMAGE=fedora:43
+            BASE_IMAGE=ghcr.io/${{ github.repository_owner }}/gstreamer:fedora
             IMAGE_SOURCE=${{ steps.prep.outputs.github_server_url }}/${{ github.repository }}
           cache-from: type=registry,ref=ghcr.io/${{ github.repository_owner }}/wolf:buildcache-fedora
           cache-to: type=registry,ref=ghcr.io/${{ github.repository_owner }}/wolf:buildcache-fedora,mode=max
