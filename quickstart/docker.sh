@@ -25,28 +25,5 @@ docker_main() {
 
     compose_start_wolf
 
-    local ip; ip=$(get_local_ip)
-    cat <<EOF
-
-================================================================
-Wolf cloud gaming is deployed (Docker).
-
-  Wolf:      streaming on ports 47984-48200 (Moonlight)
-  Wolf Den:  http://${ip}:8080 (web management)
-  Compose:   /opt/wolf/docker-compose.yml
-  GPU:       ${SELECTED_VENDOR} ${SELECTED_NAME} (${SELECTED_DRIVER}) at ${SELECTED_RENDER_NODE}
-
-To pair with Moonlight:
-  1. Open Wolf Den at http://${ip}:8080 to manage apps and clients
-  2. Open Moonlight and add server: ${ip}
-  3. Enter the pairing PIN shown in Moonlight into Wolf Den
-
-Manage with:
-  cd /opt/wolf
-  docker compose stop       # stop
-  docker compose restart    # restart
-  docker compose logs -f    # view logs
-  docker compose pull && docker compose up -d   # update
-================================================================
-EOF
+    print_summary "Compose:   /opt/wolf/docker-compose.yml"
 }

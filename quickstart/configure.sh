@@ -42,22 +42,12 @@ configure() {
 
     compose_start_wolf
 
-    local ip; ip=$(get_local_ip)
-    cat <<EOF
-
-================================================================
-Wolf cloud gaming is deployed.
-
-  Wolf:      streaming on ports 47984-48200 (Moonlight)
-  Wolf Den:  http://${ip}:8080 (web management)
-  GPU:       ${gpu_vendor} ${gpu_name} (${gpu_driver}) at ${render_node}
-
-To pair with Moonlight:
-  1. Open Wolf Den at http://${ip}:8080 to manage apps and clients
-  2. Open Moonlight and add server: ${ip}
-  3. Enter the pairing PIN shown in Moonlight into Wolf Den
-================================================================
-EOF
+    # Set SELECTED_* for print_summary (configure.sh receives these as env vars)
+    SELECTED_VENDOR="$gpu_vendor"
+    SELECTED_NAME="$gpu_name"
+    SELECTED_DRIVER="$gpu_driver"
+    SELECTED_RENDER_NODE="$render_node"
+    print_summary
 }
 
 configure

@@ -137,27 +137,5 @@ podman_main() {
         warn "Some services may not be running yet. Check: systemctl status wolf wolf-den"
     fi
 
-    local ip; ip=$(get_local_ip)
-    cat <<EOF
-
-================================================================
-Wolf cloud gaming is deployed (Podman Quadlet).
-
-  Wolf:      streaming on ports 47984-48200 (Moonlight)
-  Wolf Den:  http://${ip}:8080 (web management)
-  Services:  systemctl status wolf wolf-den
-  GPU:       ${SELECTED_VENDOR} ${SELECTED_NAME} (${SELECTED_DRIVER}) at ${SELECTED_RENDER_NODE}
-
-To pair with Moonlight:
-  1. Open Wolf Den at http://${ip}:8080 to manage apps and clients
-  2. Open Moonlight and add server: ${ip}
-  3. Enter the pairing PIN shown in Moonlight into Wolf Den
-
-Manage with:
-  systemctl stop wolf wolf-den       # stop
-  systemctl restart wolf wolf-den    # restart
-  journalctl -u wolf -f              # view Wolf logs
-  journalctl -u wolf-den -f          # view Wolf Den logs
-================================================================
-EOF
+    print_summary "Services:  systemctl status wolf wolf-den"
 }

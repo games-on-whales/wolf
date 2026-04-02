@@ -138,9 +138,11 @@ truenas_main() {
     udevadm control --reload-rules 2>/dev/null || true
     udevadm trigger 2>/dev/null || true
 
+    local compose_file="${compose_dir}/docker-compose.yml"
+
     info "Writing docker-compose.yml for ${SELECTED_VENDOR}"
-    write_compose_paths "$SELECTED_VENDOR" "$SELECTED_RENDER_NODE" \
-        "$wolf_dir" "$wolf_den_dir" "$covers_dir" "$compose_dir"
+    write_compose "$SELECTED_VENDOR" "$SELECTED_RENDER_NODE" \
+        "$compose_file" "$wolf_dir" "$wolf_den_dir" "$covers_dir"
 
     if [[ "$SELECTED_VENDOR" == "NVIDIA" ]]; then
         detect_nvidia_version
@@ -148,47 +150,14 @@ truenas_main() {
     fi
 
     # Write and register the boot init script
-    local compose_file="${compose_dir}/docker-compose.yml"
     write_truenas_init_script "$APPDATA" "$compose_file" "$rules_src"
     register_truenas_init "${APPDATA}/wolf-init.sh"
 
-    info "Pulling and starting Wolf + Wolf Den"
-    docker compose -f "$compose_file" pull
-    docker compose -f "$compose_file" up -d
+    compose_start_wolf "$compose_file"
 
-    sleep 5
-    if docker compose -f "$compose_file" ps --format '{{.Service}} {{.State}}' | grep -q "running"; then
-        info "Services are running"
-    else
-        warn "Some services may not be running yet. Check: docker compose -f ${compose_file} ps"
-    fi
-
-    local ip; ip=$(get_local_ip)
-    cat <<EOF
-
-================================================================
-Wolf cloud gaming is deployed (TrueNAS SCALE).
-
-  Wolf:      streaming on ports 47984-48200 (Moonlight)
-  Wolf Den:  http://${ip}:8080 (web management)
-  Compose:   ${compose_file}
-  Appdata:   ${APPDATA}
-  GPU:       ${SELECTED_VENDOR} ${SELECTED_NAME} (${SELECTED_DRIVER}) at ${SELECTED_RENDER_NODE}
-
-  Persistence: init script registered with TrueNAS (survives updates).
-               View in TrueNAS UI: System > Advanced > Init/Shutdown Scripts
-
-To pair with Moonlight:
-  1. Open Wolf Den at http://${ip}:8080 to manage apps and clients
-  2. Open Moonlight and add server: ${ip}
-  3. Enter the pairing PIN shown in Moonlight into Wolf Den
-
-Manage with:
-  cd ${compose_dir}
-  docker compose stop       # stop
-  docker compose restart    # restart
-  docker compose logs -f    # view logs
-  docker compose pull && docker compose up -d   # update
-================================================================
-EOF
+    print_summary \
+        "Compose:   ${compose_file}" \
+        "Appdata:   ${APPDATA}" \
+        "" \
+        "Persistence: init script registered with TrueNAS (survives updates)"
 }

@@ -59,25 +59,18 @@ unraid_main() {
 
     mkdir -p "$wolf_dir" "$wolf_den_dir" "$covers_dir"
 
+    local compose_file="${compose_dir}/docker-compose.yml"
+
     info "Writing docker-compose.yml for ${SELECTED_VENDOR}"
-    write_compose_paths "$SELECTED_VENDOR" "$SELECTED_RENDER_NODE" \
-        "$wolf_dir" "$wolf_den_dir" "$covers_dir" "$compose_dir"
+    write_compose "$SELECTED_VENDOR" "$SELECTED_RENDER_NODE" \
+        "$compose_file" "$wolf_dir" "$wolf_den_dir" "$covers_dir"
 
     if [[ "$SELECTED_VENDOR" == "NVIDIA" ]]; then
         detect_nvidia_version
         build_nvidia_volume docker
     fi
 
-    info "Pulling and starting Wolf + Wolf Den"
-    docker compose -f "${compose_dir}/docker-compose.yml" pull
-    docker compose -f "${compose_dir}/docker-compose.yml" up -d
-
-    sleep 5
-    if docker compose -f "${compose_dir}/docker-compose.yml" ps --format '{{.Service}} {{.State}}' | grep -q "running"; then
-        info "Services are running"
-    else
-        warn "Some services may not be running yet. Check: docker compose -f ${compose_dir}/docker-compose.yml ps"
-    fi
+    compose_start_wolf "$compose_file"
 
     # Ensure Wolf starts on boot via /boot/config/go
     local go="/boot/config/go"
@@ -87,36 +80,13 @@ unraid_main() {
         cat >> "$go" <<EOF
 
 $marker
-docker compose -f ${compose_dir}/docker-compose.yml up -d &
+docker compose -f ${compose_file} up -d &
 EOF
     fi
 
-    local ip; ip=$(get_local_ip)
-    cat <<EOF
-
-================================================================
-Wolf cloud gaming is deployed (Unraid).
-
-  Wolf:      streaming on ports 47984-48200 (Moonlight)
-  Wolf Den:  http://${ip}:8080 (web management)
-  Compose:   ${compose_dir}/docker-compose.yml
-  Appdata:   ${APPDATA}
-  GPU:       ${SELECTED_VENDOR} ${SELECTED_NAME} (${SELECTED_DRIVER}) at ${SELECTED_RENDER_NODE}
-
-  Persistence: udev rules and auto-start are saved to
-               /boot/config/go (survives reboots)
-
-To pair with Moonlight:
-  1. Open Wolf Den at http://${ip}:8080 to manage apps and clients
-  2. Open Moonlight and add server: ${ip}
-  3. Enter the pairing PIN shown in Moonlight into Wolf Den
-
-Manage with:
-  cd ${compose_dir}
-  docker compose stop       # stop
-  docker compose restart    # restart
-  docker compose logs -f    # view logs
-  docker compose pull && docker compose up -d   # update
-================================================================
-EOF
+    print_summary \
+        "Compose:   ${compose_file}" \
+        "Appdata:   ${APPDATA}" \
+        "" \
+        "Persistence: udev rules and auto-start saved to /boot/config/go"
 }

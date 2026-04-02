@@ -99,15 +99,7 @@ get_local_ip() {
 
 install_udev_rules() {
     info "Setting up udev rules for virtual input"
-    cat > /etc/udev/rules.d/85-wolf-virtual-inputs.rules <<'UDEV'
-KERNEL=="uinput", SUBSYSTEM=="misc", MODE="0660", GROUP="input", OPTIONS+="static_node=uinput", TAG+="uaccess"
-KERNEL=="uhid", GROUP="input", MODE="0660", TAG+="uaccess"
-KERNEL=="hidraw*", ATTRS{name}=="Wolf PS5 (virtual) pad", GROUP="input", MODE="0660", ENV{ID_SEAT}="seat9"
-SUBSYSTEMS=="input", ATTRS{name}=="Wolf X-Box One (virtual) pad", MODE="0660", ENV{ID_SEAT}="seat9"
-SUBSYSTEMS=="input", ATTRS{name}=="Wolf PS5 (virtual) pad", MODE="0660", ENV{ID_SEAT}="seat9"
-SUBSYSTEMS=="input", ATTRS{name}=="Wolf gamepad (virtual) motion sensors", MODE="0660", ENV{ID_SEAT}="seat9"
-SUBSYSTEMS=="input", ATTRS{name}=="Wolf Nintendo (virtual) pad", MODE="0660", ENV{ID_SEAT}="seat9"
-UDEV
+    write_udev_rules_content > /etc/udev/rules.d/85-wolf-virtual-inputs.rules
     udevadm control --reload-rules 2>/dev/null || true
     udevadm trigger 2>/dev/null || true
 }
@@ -328,196 +320,56 @@ clean_lxc_gpu_config() {
 # Docker compose generation
 # =========================================================================
 
-# Write compose file to /opt/wolf/. Usage: write_compose <vendor> <render_node>
+# Write a compose file for Wolf + Wolf Den.
+# Usage: write_compose <vendor> <render_node> [compose_file] [wolf_dir] [wolf_den_dir] [covers_dir]
+# Defaults: compose_file=/opt/wolf/docker-compose.yml, dirs under /etc/wolf/
 write_compose() {
     local vendor="$1" render_node="$2"
+    local compose_file="${3:-/opt/wolf/docker-compose.yml}"
+    local wolf_dir="${4:-/etc/wolf}"
+    local wolf_den_dir="${5:-/etc/wolf/wolf-den}"
+    local covers_dir="${6:-/etc/wolf/covers}"
 
-    case "$vendor" in
-        NVIDIA)  _write_compose_nvidia "$render_node" ;;
-        AMD|Intel) _write_compose_standard "$render_node" ;;
-        *)       err "Unsupported GPU vendor: $vendor" ;;
-    esac
-}
-
-_write_compose_standard() {
-    local render_node="$1"
-    cat > /opt/wolf/docker-compose.yml <<YAML
-services:
-  wolf:
-    image: ghcr.io/games-on-whales/wolf:stable
-    environment:
-      - WOLF_RENDER_NODE=${render_node}
-      - XDG_RUNTIME_DIR=/tmp/sockets
-    volumes:
-      - /etc/wolf:/etc/wolf:rw
-      - /var/run/docker.sock:/var/run/docker.sock:rw
-      - /dev/:/dev/:rw
-      - /run/udev:/run/udev:rw
-      - wolf-socket:/tmp/sockets
-    device_cgroup_rules:
-      - 'c 13:* rmw'
-    devices:
-      - /dev/dri
-      - /dev/uinput
-      - /dev/uhid
-    network_mode: host
-    restart: unless-stopped
-
-  wolf-den:
-    image: ghcr.io/games-on-whales/wolf-den:stable
-    environment:
-      - WOLF_SOCKET_PATH=/tmp/sockets/wolf.sock
-    volumes:
-      - wolf-socket:/tmp/sockets
-      - /etc/wolf/wolf-den:/app/wolf-den
-      - /etc/wolf/covers:/etc/wolf/covers
-    ports:
-      - "8080:8080"
-    restart: unless-stopped
-    depends_on:
-      - wolf
-
-volumes:
-  wolf-socket:
-YAML
-}
-
-_write_compose_nvidia() {
-    local render_node="$1"
-    cat > /opt/wolf/docker-compose.yml <<YAML
-services:
-  wolf:
-    image: ghcr.io/games-on-whales/wolf:stable
-    environment:
-      - WOLF_RENDER_NODE=${render_node}
-      - NVIDIA_DRIVER_VOLUME_NAME=nvidia-driver-vol
-      - XDG_RUNTIME_DIR=/tmp/sockets
-    volumes:
-      - /etc/wolf:/etc/wolf:rw
-      - /var/run/docker.sock:/var/run/docker.sock:rw
-      - /dev/:/dev/:rw
-      - /run/udev:/run/udev:rw
-      - nvidia-driver-vol:/usr/nvidia:rw
-      - wolf-socket:/tmp/sockets
-    devices:
-      - /dev/dri
-      - /dev/uinput
-      - /dev/uhid
-      - /dev/nvidia-uvm
+    local nvidia_env="" nvidia_volumes="" nvidia_devices="" nvidia_ext_vol=""
+    if [[ "$vendor" == "NVIDIA" ]]; then
+        nvidia_env="      - NVIDIA_DRIVER_VOLUME_NAME=nvidia-driver-vol"
+        nvidia_volumes="      - nvidia-driver-vol:/usr/nvidia:rw"
+        nvidia_devices="      - /dev/nvidia-uvm
       - /dev/nvidia-uvm-tools
       - /dev/nvidia-caps/nvidia-cap1
       - /dev/nvidia-caps/nvidia-cap2
       - /dev/nvidiactl
       - /dev/nvidia0
-      - /dev/nvidia-modeset
-    device_cgroup_rules:
-      - 'c 13:* rmw'
-    network_mode: host
-    restart: unless-stopped
+      - /dev/nvidia-modeset"
+        nvidia_ext_vol="  nvidia-driver-vol:
+    external: true"
+    elif [[ "$vendor" != "AMD" && "$vendor" != "Intel" ]]; then
+        err "Unsupported GPU vendor: $vendor"
+    fi
 
-  wolf-den:
-    image: ghcr.io/games-on-whales/wolf-den:stable
-    environment:
-      - WOLF_SOCKET_PATH=/tmp/sockets/wolf.sock
-    volumes:
-      - wolf-socket:/tmp/sockets
-      - /etc/wolf/wolf-den:/app/wolf-den
-      - /etc/wolf/covers:/etc/wolf/covers
-    ports:
-      - "8080:8080"
-    restart: unless-stopped
-    depends_on:
-      - wolf
-
-volumes:
-  nvidia-driver-vol:
-    external: true
-  wolf-socket:
-YAML
-}
-
-# Write compose file with custom paths.
-# Usage: write_compose_paths <vendor> <render_node> <wolf_dir> <wolf_den> <covers> <compose_dir>
-write_compose_paths() {
-    local vendor="$1" render_node="$2"
-    local wolf_dir="$3" wolf_den="$4" covers="$5" compose_dir="$6"
-
-    local compose_file="${compose_dir}/docker-compose.yml"
-
-    case "$vendor" in
-        NVIDIA)
-            cat > "$compose_file" <<YAML
-services:
-  wolf:
-    image: ghcr.io/games-on-whales/wolf:stable
-    environment:
-      - WOLF_RENDER_NODE=${render_node}
-      - NVIDIA_DRIVER_VOLUME_NAME=nvidia-driver-vol
-      - XDG_RUNTIME_DIR=/tmp/sockets
-    volumes:
-      - ${wolf_dir}:/etc/wolf:rw
-      - /var/run/docker.sock:/var/run/docker.sock:rw
-      - /dev/:/dev/:rw
-      - /run/udev:/run/udev:rw
-      - nvidia-driver-vol:/usr/nvidia:rw
-      - wolf-socket:/tmp/sockets
-    devices:
-      - /dev/dri
-      - /dev/uinput
-      - /dev/uhid
-      - /dev/nvidia-uvm
-      - /dev/nvidia-uvm-tools
-      - /dev/nvidia-caps/nvidia-cap1
-      - /dev/nvidia-caps/nvidia-cap2
-      - /dev/nvidiactl
-      - /dev/nvidia0
-      - /dev/nvidia-modeset
-    device_cgroup_rules:
-      - 'c 13:* rmw'
-    network_mode: host
-    restart: unless-stopped
-
-  wolf-den:
-    image: ghcr.io/games-on-whales/wolf-den:stable
-    environment:
-      - WOLF_SOCKET_PATH=/tmp/sockets/wolf.sock
-    volumes:
-      - wolf-socket:/tmp/sockets
-      - ${wolf_den}:/app/wolf-den
-      - ${covers}:/etc/wolf/covers
-    ports:
-      - "8080:8080"
-    restart: unless-stopped
-    depends_on:
-      - wolf
-
-volumes:
-  nvidia-driver-vol:
-    external: true
-  wolf-socket:
-YAML
-            ;;
-        AMD|Intel)
-            cat > "$compose_file" <<YAML
+    cat > "$compose_file" <<YAML
 services:
   wolf:
     image: ghcr.io/games-on-whales/wolf:stable
     environment:
       - WOLF_RENDER_NODE=${render_node}
       - XDG_RUNTIME_DIR=/tmp/sockets
-    volumes:
+${nvidia_env:+${nvidia_env}
+}    volumes:
       - ${wolf_dir}:/etc/wolf:rw
       - /var/run/docker.sock:/var/run/docker.sock:rw
       - /dev/:/dev/:rw
       - /run/udev:/run/udev:rw
       - wolf-socket:/tmp/sockets
-    device_cgroup_rules:
+${nvidia_volumes:+${nvidia_volumes}
+}    device_cgroup_rules:
       - 'c 13:* rmw'
     devices:
       - /dev/dri
       - /dev/uinput
       - /dev/uhid
-    network_mode: host
+${nvidia_devices:+${nvidia_devices}
+}    network_mode: host
     restart: unless-stopped
 
   wolf-den:
@@ -526,8 +378,8 @@ services:
       - WOLF_SOCKET_PATH=/tmp/sockets/wolf.sock
     volumes:
       - wolf-socket:/tmp/sockets
-      - ${wolf_den}:/app/wolf-den
-      - ${covers}:/etc/wolf/covers
+      - ${wolf_den_dir}:/app/wolf-den
+      - ${covers_dir}:/etc/wolf/covers
     ports:
       - "8080:8080"
     restart: unless-stopped
@@ -535,11 +387,9 @@ services:
       - wolf
 
 volumes:
-  wolf-socket:
+${nvidia_ext_vol:+${nvidia_ext_vol}
+}  wolf-socket:
 YAML
-            ;;
-        *) err "Unsupported GPU vendor: $vendor" ;;
-    esac
 }
 
 # =========================================================================
@@ -557,19 +407,46 @@ detect_compose_cmd() {
     fi
 }
 
-# Pull, start, and verify Wolf via compose in /opt/wolf.
+# Pull, start, and verify Wolf via compose.
+# Usage: compose_start_wolf [compose_file]
 compose_start_wolf() {
+    local compose_file="${1:-/opt/wolf/docker-compose.yml}"
     detect_compose_cmd
     info "Pulling and starting Wolf + Wolf Den (${COMPOSE_CMD})"
-    $COMPOSE_CMD -f /opt/wolf/docker-compose.yml pull
-    $COMPOSE_CMD -f /opt/wolf/docker-compose.yml up -d
+    $COMPOSE_CMD -f "$compose_file" pull
+    $COMPOSE_CMD -f "$compose_file" up -d
 
     sleep 5
-    if $COMPOSE_CMD -f /opt/wolf/docker-compose.yml ps --format '{{.Service}} {{.State}}' | grep -q "running"; then
+    if $COMPOSE_CMD -f "$compose_file" ps --format '{{.Service}} {{.State}}' | grep -q "running"; then
         info "Services are running"
     else
-        warn "Some services may not be running yet. Check: $COMPOSE_CMD -f /opt/wolf/docker-compose.yml ps"
+        warn "Some services may not be running yet. Check: $COMPOSE_CMD -f $compose_file ps"
     fi
+}
+
+# Print the standard pairing instructions.
+# Usage: print_summary [extra_lines...]
+# Extra lines are printed between the header and the pairing section.
+print_summary() {
+    local ip; ip=$(get_local_ip)
+    echo ""
+    echo "================================================================"
+    echo "Wolf cloud gaming is deployed."
+    echo ""
+    echo "  Wolf:      streaming on ports 47984-48200 (Moonlight)"
+    echo "  Wolf Den:  http://${ip}:8080 (web management)"
+    echo "  GPU:       $(selected_gpu_label)"
+    # Print any extra context lines passed as arguments
+    local line
+    for line in "$@"; do
+        echo "  $line"
+    done
+    echo ""
+    echo "To pair with Moonlight:"
+    echo "  1. Open Wolf Den at http://${ip}:8080 to manage apps and clients"
+    echo "  2. Open Moonlight and add server: ${ip}"
+    echo "  3. Enter the pairing PIN shown in Moonlight into Wolf Den"
+    echo "================================================================"
 }
 
 # =========================================================================
