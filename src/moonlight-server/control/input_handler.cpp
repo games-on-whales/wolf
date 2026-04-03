@@ -17,6 +17,24 @@ using namespace wolf::core;
 using namespace std::string_literals;
 using namespace moonlight::control;
 
+static std::string virtual_controller_mac(uint64_t session_id, int controller_number) {
+  std::array<uint8_t, 6> bytes = {
+      0x02,
+      0x57,
+      0x7E,
+      static_cast<uint8_t>((session_id >> 16) & 0xFF),
+      static_cast<uint8_t>((session_id >> 8) & 0xFF),
+      static_cast<uint8_t>((controller_number + 1) & 0xFF),
+  };
+  return fmt::format("{:02x}:{:02x}:{:02x}:{:02x}:{:02x}:{:02x}",
+                     bytes[0],
+                     bytes[1],
+                     bytes[2],
+                     bytes[3],
+                     bytes[4],
+                     bytes[5]);
+}
+
 std::shared_ptr<events::JoypadTypes> create_new_joypad(const events::StreamSession &session,
                                                        immer::box<std::shared_ptr<ENetPeer>> connected_client,
                                                        int controller_number,
@@ -132,20 +150,27 @@ std::shared_ptr<events::JoypadTypes> create_new_joypad(const events::StreamSessi
                                         // https://github.com/torvalds/linux/blob/master/drivers/hid/hid-ids.h#L981
                                         .vendor_id = 0x057e,
                                         .product_id = 0x2009,
-                                        .version = 0x8111});
+                                        .version = 0x8111,
+                                        .device_phys = "bluetooth",
+                                        .device_uniq = virtual_controller_mac(session.session_id, controller_number)});
     if (!result) {
       logs::log(logs::error, "Failed to create Switch joypad: {}", result.getErrorMessage());
       return {};
     } else {
       (*result).set_on_rumble(on_rumble_fn);
       new_pad = std::make_shared<events::JoypadTypes>(std::move(*result));
+
+      // Match the mature PS5 path and give the kernel a short moment to bind
+      // the newly-created virtual Bluetooth controller before we snapshot its
+      // sysfs/udev state for downstream consumers.
+      std::this_thread::sleep_for(std::chrono::milliseconds(50));
     }
     break;
   }
 
-  if (capabilities & ACCELEROMETER && final_type == wolf::config::ControllerType::PS) {
+  if (capabilities & ACCELEROMETER &&
+      (final_type == wolf::config::ControllerType::PS || final_type == wolf::config::ControllerType::NINTENDO)) {
     // Request acceleromenter events from the client at 100 Hz
-    logs::log(logs::info, "Requesting accelerometer events for controller {}", controller_number);
     auto accelerometer_pkt = ControlMotionEventPacket{
         .header{.type = MOTION_EVENT, .length = sizeof(ControlMotionEventPacket) - sizeof(ControlPacket)},
         .controller_number = static_cast<uint16_t>(controller_number),
@@ -155,9 +180,9 @@ std::shared_ptr<events::JoypadTypes> create_new_joypad(const events::StreamSessi
     encrypt_and_send(plaintext, session.aes_key, connected_client);
   }
 
-  if (capabilities & GYRO && final_type == wolf::config::ControllerType::PS) {
+  if (capabilities & GYRO &&
+      (final_type == wolf::config::ControllerType::PS || final_type == wolf::config::ControllerType::NINTENDO)) {
     // Request gyroscope events from the client at 100 Hz
-    logs::log(logs::info, "Requesting gyroscope events for controller {}", controller_number);
     auto gyro_pkt = ControlMotionEventPacket{
         .header{.type = MOTION_EVENT, .length = sizeof(ControlMotionEventPacket) - sizeof(ControlPacket)},
         .controller_number = static_cast<uint16_t>(controller_number),
@@ -671,16 +696,21 @@ void controller_motion(const CONTROLLER_MOTION_PACKET &pkt, events::StreamSessio
   std::shared_ptr<events::JoypadTypes> selected_pad;
   if (auto joypad = joypads->find(pkt.controller_number)) {
     selected_pad = std::move(*joypad);
+    auto x = utils::from_netfloat(pkt.x);
+    auto y = utils::from_netfloat(pkt.y);
+    auto z = utils::from_netfloat(pkt.z);
     if (std::holds_alternative<PS5Joypad>(*selected_pad)) {
-      auto x = utils::from_netfloat(pkt.x);
-      auto y = utils::from_netfloat(pkt.y);
-      auto z = utils::from_netfloat(pkt.z);
-
       if (pkt.motion_type == ACCELERATION) {
         std::get<PS5Joypad>(*selected_pad).set_motion(inputtino::PS5Joypad::ACCELERATION, x, y, z);
       } else if (pkt.motion_type == GYROSCOPE) {
         std::get<PS5Joypad>(*selected_pad)
             .set_motion(inputtino::PS5Joypad::GYROSCOPE, deg2rad(x), deg2rad(y), deg2rad(z));
+      }
+    } else if (std::holds_alternative<SwitchJoypad>(*selected_pad)) {
+      if (pkt.motion_type == ACCELERATION) {
+        std::get<SwitchJoypad>(*selected_pad).set_motion(inputtino::SwitchJoypad::ACCELERATION, x, y, z);
+      } else if (pkt.motion_type == GYROSCOPE) {
+        std::get<SwitchJoypad>(*selected_pad).set_motion(inputtino::SwitchJoypad::GYROSCOPE, x, y, z);
       }
     }
   }
