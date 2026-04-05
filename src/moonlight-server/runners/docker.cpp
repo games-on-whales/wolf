@@ -238,11 +238,13 @@ void RunDocker::run(std::string_view session_id,
             for (auto udev_ev : ev->udev_events) {
               udev_ev["ACTION"] = "remove";
               std::string udev_msg = base64_encode(map_to_string(udev_ev));
+              auto subsystem = udev_ev.count("SUBSYSTEM") ? udev_ev["SUBSYSTEM"] : std::string("input");
               std::string cmd;
               if (udev_ev.count("DEVNAME") == 0) {
-                cmd = fmt::format("fake-udev -m {}", udev_msg);
+                cmd = fmt::format("fake-udev -m {} --udev-subsystem {}", udev_msg, subsystem);
               } else {
-                cmd = fmt::format("fake-udev -m {} && rm {}", udev_msg, udev_ev["DEVNAME"]);
+                cmd = fmt::format("rm -f {} ; fake-udev -m {} --udev-subsystem {}",
+                                  udev_ev["DEVNAME"], udev_msg, subsystem);
               }
               logs::log(logs::debug, "[DOCKER] Executing command: {}", cmd);
               docker_api.exec(container_id, {"/bin/bash", "-c", cmd}, "root");

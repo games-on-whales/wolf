@@ -616,18 +616,26 @@ void controller_arrival(const CONTROLLER_ARRIVAL_PACKET &pkt,
                         events::StreamSession &session,
                         immer::box<std::shared_ptr<ENetPeer>> connected_client) {
   auto joypads = session.joypads->load();
-  if (joypads->find(pkt.controller_number)) {
-    // TODO: should we replace it instead?
-    logs::log(logs::debug,
-              "[INPUT] Received CONTROLLER_ARRIVAL for controller {} which is already present; skipping...",
-              pkt.controller_number);
-  } else {
-    create_new_joypad(session,
-                      connected_client,
-                      pkt.controller_number,
-                      (CONTROLLER_TYPE)pkt.controller_type,
-                      pkt.capabilities);
+  if (auto existing = joypads->find(pkt.controller_number)) {
+    // On reconnect the old pad may still be registered.  Unplug it first so
+    // the container removes the stale device before we create a fresh one.
+    logs::log(logs::info, "[INPUT] Replacing existing controller {} on re-arrival", pkt.controller_number);
+    events::UnplugDeviceEvent unplug_ev{.session_id = std::to_string(session.session_id)};
+    std::visit(
+        [&unplug_ev](auto &pad) {
+          unplug_ev.udev_events = pad.get_udev_events();
+          unplug_ev.udev_hw_db_entries = pad.get_udev_hw_db_entries();
+        },
+        **existing);
+    session.event_bus->fire_event(immer::box<events::UnplugDeviceEvent>(unplug_ev));
+    session.joypads->update([&](events::JoypadList joypads) { return joypads.erase(pkt.controller_number); });
   }
+
+  create_new_joypad(session,
+                    connected_client,
+                    pkt.controller_number,
+                    (CONTROLLER_TYPE)pkt.controller_type,
+                    pkt.capabilities);
 }
 
 void controller_multi(const CONTROLLER_MULTI_PACKET &pkt,
