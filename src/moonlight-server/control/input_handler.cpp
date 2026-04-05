@@ -744,10 +744,16 @@ void controller_motion(const CONTROLLER_MOTION_PACKET &pkt, events::StreamSessio
             .set_motion(inputtino::PS5Joypad::GYROSCOPE, deg2rad(x), deg2rad(y), deg2rad(z));
       }
     } else if (std::holds_alternative<SwitchJoypad>(*selected_pad)) {
+      // Moonlight sends motion in SDL's coordinate frame.  SDL applies a
+      // Nintendo-specific remap when reading from a real Pro Controller:
+      //   SDL_X = -kernel_Y,  SDL_Y = kernel_Z,  SDL_Z = -kernel_X
+      // Invert that so hid-nintendo → SDL round-trips back correctly:
+      //   kernel_X = -SDL_Z,  kernel_Y = -SDL_X,  kernel_Z = SDL_Y
+      auto nx = -z, ny = -x, nz = y;
       if (pkt.motion_type == ACCELERATION) {
-        std::get<SwitchJoypad>(*selected_pad).set_motion(SwitchJoypad::ACCELERATION, x, y, z);
+        std::get<SwitchJoypad>(*selected_pad).set_motion(SwitchJoypad::ACCELERATION, nx, ny, nz);
       } else if (pkt.motion_type == GYROSCOPE) {
-        std::get<SwitchJoypad>(*selected_pad).set_motion(SwitchJoypad::GYROSCOPE, x, y, z);
+        std::get<SwitchJoypad>(*selected_pad).set_motion(SwitchJoypad::GYROSCOPE, nx, ny, nz);
       }
     }
   }
