@@ -26,7 +26,7 @@ using namespace moonlight::control;
  */
 static std::uint32_t translate_buttons(std::uint32_t buttons, const events::JoypadTypes &pad) {
   // SDL HIDAPI remaps Nintendo→Xbox on read; pre-swap so apps get correct positions.
-  if (std::holds_alternative<inputtino::SwitchJoypad>(pad)) {
+  if (std::holds_alternative<SwitchJoypad>(pad)) {
     constexpr auto A = inputtino::Joypad::A, B = inputtino::Joypad::B;
     constexpr auto X = inputtino::Joypad::X, Y = inputtino::Joypad::Y;
     std::uint32_t out = buttons & ~(A | B | X | Y);
@@ -737,9 +737,9 @@ void controller_motion(const CONTROLLER_MOTION_PACKET &pkt, events::StreamSessio
       }
     } else if (std::holds_alternative<SwitchJoypad>(*selected_pad)) {
       if (pkt.motion_type == ACCELERATION) {
-        std::get<SwitchJoypad>(*selected_pad).set_motion(inputtino::SwitchJoypad::ACCELERATION, x, y, z);
+        std::get<SwitchJoypad>(*selected_pad).set_motion(SwitchJoypad::ACCELERATION, x, y, z);
       } else if (pkt.motion_type == GYROSCOPE) {
-        std::get<SwitchJoypad>(*selected_pad).set_motion(inputtino::SwitchJoypad::GYROSCOPE, x, y, z);
+        std::get<SwitchJoypad>(*selected_pad).set_motion(SwitchJoypad::GYROSCOPE, x, y, z);
       }
     }
   }
