@@ -193,11 +193,8 @@ std::vector<std::map<std::string, std::string>> SwitchJoypad::get_udev_events() 
         event["SYSTEMD_WANTS"] = "iio-sensor-proxy.service";
         event["UNIQ"] = this->get_mac_address();
       } else {
-        // Skip the evdev joystick node — SDL's HIDAPI backend handles the Switch
-        // Pro Controller via hidraw with correct button remapping and gyro support.
-        // Exposing the evdev joystick causes SDL to create a duplicate controller
-        // with wrong button mapping and no gyro.
-        continue;
+        event["ID_INPUT_JOYSTICK"] = "1";
+        event[".INPUT_CLASS"] = "joystick";
       }
       append_switch_identity(event, identity);
 
@@ -262,8 +259,8 @@ std::vector<std::pair<std::string, std::vector<std::string>>> SwitchJoypad::get_
         entry.second =
             {"E:ID_INPUT=1", "E:ID_INPUT_ACCELEROMETER=1", "G:seat", "G:uaccess", "Q:seat", "Q:uaccess", "V:1"};
       } else {
-        // Skip evdev joystick hw_db entry — HIDAPI handles the controller via hidraw.
-        continue;
+        entry.second =
+            {"E:ID_INPUT=1", "E:ID_INPUT_JOYSTICK=1", "G:seat", "G:uaccess", "Q:seat", "Q:uaccess", "V:1"};
       }
       append_switch_identity(entry.second, identity);
 
