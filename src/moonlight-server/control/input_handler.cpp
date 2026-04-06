@@ -17,32 +17,6 @@ using namespace wolf::core;
 using namespace std::string_literals;
 using namespace moonlight::control;
 
-/**
- * Remap Moonlight (Xbox-layout) buttons for the target controller type.
- *
- * Done here rather than in inputtino so that inputtino's button mapping stays
- * protocol-correct per the HID spec.  Wolf knows both the source format
- * (Moonlight/Xbox) and the target, so it is the right place for this.
- */
-static std::uint32_t translate_buttons(std::uint32_t buttons, const events::JoypadTypes &pad) {
-  // SDL HIDAPI remaps Nintendo→Xbox on read; pre-swap so apps get correct positions.
-  if (std::holds_alternative<SwitchJoypad>(pad)) {
-    constexpr auto A = inputtino::Joypad::A, B = inputtino::Joypad::B;
-    constexpr auto X = inputtino::Joypad::X, Y = inputtino::Joypad::Y;
-    std::uint32_t out = buttons & ~(A | B | X | Y);
-    if (buttons & A)
-      out |= B;
-    if (buttons & B)
-      out |= A;
-    if (buttons & X)
-      out |= Y;
-    if (buttons & Y)
-      out |= X;
-    return out;
-  }
-  return buttons;
-}
-
 static std::string virtual_controller_mac(uint64_t session_id, int controller_number) {
   std::array<uint8_t, 6> bytes = {
       0x02,
@@ -692,8 +666,6 @@ void controller_multi(const CONTROLLER_MULTI_PACKET &pkt,
                 events::ClientWolfUIComboEvent{.session_id = session.session_id}});
           }
 
-          pressed_buttons = translate_buttons(pressed_buttons, *selected_pad);
-
           pad.set_pressed_buttons(pressed_buttons);
           pad.set_stick(inputtino::Joypad::LS, pkt.left_stick_x, pkt.left_stick_y);
           pad.set_stick(inputtino::Joypad::RS, pkt.right_stick_x, pkt.right_stick_y);
@@ -757,23 +729,12 @@ void controller_motion(const CONTROLLER_MOTION_PACKET &pkt, events::StreamSessio
             .set_motion(inputtino::PS5Joypad::GYROSCOPE, deg2rad(x), deg2rad(y), deg2rad(z));
       }
     } else if (std::holds_alternative<SwitchJoypad>(*selected_pad)) {
-      // Moonlight sends motion in SDL's coordinate frame.  SDL applies a
-      // Nintendo-specific remap when reading from a real Pro Controller:
-      //   SDL_X = -kernel_Y,  SDL_Y = kernel_Z,  SDL_Z = -kernel_X
-      // Invert that so hid-nintendo → SDL round-trips back correctly:
-      //   kernel_X = -SDL_Z,  kernel_Y = -SDL_X,  kernel_Z = SDL_Y
-      //
-      // For the right Joy-Con, hid-nintendo additionally negates Y and Z
-      // due to its physical orientation, so we counter-negate those axes.
-      auto &pad = std::get<SwitchJoypad>(*selected_pad);
-      bool is_right_joycon = pad.get_product_id() == 0x2007;
-      auto nx = -z;
-      auto ny = is_right_joycon ? x : -x;
-      auto nz = is_right_joycon ? -y : y;
+      // inputtino's set_motion() accepts SDL coordinates and remaps internally,
+      // matching how PS5Joypad handles it.
       if (pkt.motion_type == ACCELERATION) {
-        pad.set_motion(SwitchJoypad::ACCELERATION, nx, ny, nz);
+        std::get<SwitchJoypad>(*selected_pad).set_motion(SwitchJoypad::ACCELERATION, x, y, z);
       } else if (pkt.motion_type == GYROSCOPE) {
-        pad.set_motion(SwitchJoypad::GYROSCOPE, nx, ny, nz);
+        std::get<SwitchJoypad>(*selected_pad).set_motion(SwitchJoypad::GYROSCOPE, x, y, z);
       }
     }
   }
