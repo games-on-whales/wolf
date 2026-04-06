@@ -170,12 +170,22 @@ std::shared_ptr<events::JoypadTypes> create_new_joypad(const events::StreamSessi
     }
     break;
   }
-  case wolf::config::ControllerType::NINTENDO:
-    logs::log(logs::info, "Creating Nintendo joypad for controller {}", controller_number);
-    auto result = SwitchJoypad::create({.name = "Wolf Nintendo (virtual) pad",
-                                        // https://github.com/torvalds/linux/blob/master/drivers/hid/hid-ids.h#L981
+  case wolf::config::ControllerType::JOYCON_LEFT:
+  case wolf::config::ControllerType::JOYCON_RIGHT:
+  case wolf::config::ControllerType::NINTENDO: {
+    uint16_t pid = 0x2009;
+    std::string name = "Pro Controller";
+    if (final_type == wolf::config::ControllerType::JOYCON_LEFT) {
+      pid = 0x2006;
+      name = "Joy-Con (L)";
+    } else if (final_type == wolf::config::ControllerType::JOYCON_RIGHT) {
+      pid = 0x2007;
+      name = "Joy-Con (R)";
+    }
+    logs::log(logs::info, "Creating {} for controller {}", name, controller_number);
+    auto result = SwitchJoypad::create({.name = name,
                                         .vendor_id = 0x057e,
-                                        .product_id = 0x2009,
+                                        .product_id = pid,
                                         .version = 0x8111,
                                         .device_phys = "bluetooth",
                                         .device_uniq = virtual_controller_mac(session.session_id, controller_number)});
@@ -193,9 +203,13 @@ std::shared_ptr<events::JoypadTypes> create_new_joypad(const events::StreamSessi
     }
     break;
   }
+  } // switch
 
-  if (capabilities & ACCELEROMETER &&
-      (final_type == wolf::config::ControllerType::PS || final_type == wolf::config::ControllerType::NINTENDO)) {
+  auto is_nintendo = final_type == wolf::config::ControllerType::NINTENDO ||
+                     final_type == wolf::config::ControllerType::JOYCON_LEFT ||
+                     final_type == wolf::config::ControllerType::JOYCON_RIGHT;
+
+  if (capabilities & ACCELEROMETER && (final_type == wolf::config::ControllerType::PS || is_nintendo)) {
     // Request acceleromenter events from the client at 100 Hz
     auto accelerometer_pkt = ControlMotionEventPacket{
         .header{.type = MOTION_EVENT, .length = sizeof(ControlMotionEventPacket) - sizeof(ControlPacket)},
@@ -206,8 +220,7 @@ std::shared_ptr<events::JoypadTypes> create_new_joypad(const events::StreamSessi
     encrypt_and_send(plaintext, session.aes_key, connected_client);
   }
 
-  if (capabilities & GYRO &&
-      (final_type == wolf::config::ControllerType::PS || final_type == wolf::config::ControllerType::NINTENDO)) {
+  if (capabilities & GYRO && (final_type == wolf::config::ControllerType::PS || is_nintendo)) {
     // Request gyroscope events from the client at 100 Hz
     auto gyro_pkt = ControlMotionEventPacket{
         .header{.type = MOTION_EVENT, .length = sizeof(ControlMotionEventPacket) - sizeof(ControlPacket)},
@@ -749,11 +762,18 @@ void controller_motion(const CONTROLLER_MOTION_PACKET &pkt, events::StreamSessio
       //   SDL_X = -kernel_Y,  SDL_Y = kernel_Z,  SDL_Z = -kernel_X
       // Invert that so hid-nintendo → SDL round-trips back correctly:
       //   kernel_X = -SDL_Z,  kernel_Y = -SDL_X,  kernel_Z = SDL_Y
-      auto nx = -z, ny = -x, nz = y;
+      //
+      // For the right Joy-Con, hid-nintendo additionally negates Y and Z
+      // due to its physical orientation, so we counter-negate those axes.
+      auto &pad = std::get<SwitchJoypad>(*selected_pad);
+      bool is_right_joycon = pad.get_product_id() == 0x2007;
+      auto nx = -z;
+      auto ny = is_right_joycon ? x : -x;
+      auto nz = is_right_joycon ? -y : y;
       if (pkt.motion_type == ACCELERATION) {
-        std::get<SwitchJoypad>(*selected_pad).set_motion(SwitchJoypad::ACCELERATION, nx, ny, nz);
+        pad.set_motion(SwitchJoypad::ACCELERATION, nx, ny, nz);
       } else if (pkt.motion_type == GYROSCOPE) {
-        std::get<SwitchJoypad>(*selected_pad).set_motion(SwitchJoypad::GYROSCOPE, nx, ny, nz);
+        pad.set_motion(SwitchJoypad::GYROSCOPE, nx, ny, nz);
       }
     }
   }
