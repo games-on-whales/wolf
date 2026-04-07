@@ -384,7 +384,7 @@ video/x-h265, profile=main, stream-format=byte-stream\
 plugin_name = "va"
 check_elements = ["vah265enc", "vapostproc"]
 encoder_pipeline = """
-vah265enc aud=false b-frames=0 ref-frames=1 num-slices={slices_per_frame} bitrate={bitrate} cpb-size={vbv_buffer_size} key-int-max=1024 rate-control=cbr target-usage=6 !
+vah265enc aud=false b-frames=0 ref-frames=1 num-slices={slices_per_frame} bitrate={bitrate} cpb-size={vbv_buffer_size} min-qp=20 key-int-max=1024 rate-control=cbr target-usage=6 !
 h265parse !
 video/x-h265, profile=main, stream-format=byte-stream\
 """
@@ -402,7 +402,7 @@ video/x-h265, profile=main, stream-format=byte-stream\
 plugin_name = "va"
 check_elements = ["vah265lpenc", "vapostproc"] # lp: (Low Power)
 encoder_pipeline = """
-vah265lpenc aud=false b-frames=0 ref-frames=1 num-slices={slices_per_frame} bitrate={bitrate} cpb-size={vbv_buffer_size} key-int-max=1024 rate-control=cbr target-usage=6 !
+vah265lpenc aud=false b-frames=0 ref-frames=1 num-slices={slices_per_frame} bitrate={bitrate} cpb-size={vbv_buffer_size} min-qp=20 key-int-max=1024 rate-control=cbr target-usage=6 !
 h265parse !
 video/x-h265, profile=main, stream-format=byte-stream\
 """
@@ -446,7 +446,7 @@ video/x-h264, profile=main, stream-format=byte-stream\
 plugin_name = "va"
 check_elements = ["vah264enc", "vapostproc"]
 encoder_pipeline = """
-vah264enc aud=false b-frames=0 ref-frames=1 num-slices={slices_per_frame} bitrate={bitrate} cpb-size={vbv_buffer_size} key-int-max=1024 rate-control=cbr target-usage=6 !
+vah264enc aud=false b-frames=0 ref-frames=1 num-slices={slices_per_frame} bitrate={bitrate} cpb-size={vbv_buffer_size} min-qp=20 key-int-max=1024 rate-control=cbr target-usage=6 !
 h264parse !
 video/x-h264, profile=main, stream-format=byte-stream\
 """
@@ -455,7 +455,7 @@ video/x-h264, profile=main, stream-format=byte-stream\
 plugin_name = "va"
 check_elements = ["vah264lpenc", "vapostproc"] # lp: (Low Power)
 encoder_pipeline = """
-vah264lpenc aud=false b-frames=0 ref-frames=1 num-slices={slices_per_frame} bitrate={bitrate} cpb-size={vbv_buffer_size} key-int-max=1024 rate-control=cbr target-usage=6 !
+vah264lpenc aud=false b-frames=0 ref-frames=1 num-slices={slices_per_frame} bitrate={bitrate} cpb-size={vbv_buffer_size} min-qp=20 key-int-max=1024 rate-control=cbr target-usage=6 !
 h264parse !
 video/x-h264, profile=main, stream-format=byte-stream\
 """
@@ -495,7 +495,7 @@ video/x-av1, stream-format=obu-stream, alignment=frame, profile=main\
 plugin_name = "va"
 check_elements = ["vaav1enc", "vapostproc"]
 encoder_pipeline = """
-vaav1enc ref-frames=1 bitrate={bitrate} cpb-size={vbv_buffer_size} key-int-max=1024 rate-control=cbr target-usage=6 !
+vaav1enc ref-frames=1 bitrate={bitrate} cpb-size={vbv_buffer_size} key-int-max=1024 rate-control=cbr min-qp=20 target-usage=6 !
 av1parse !
 video/x-av1, stream-format=obu-stream, alignment=frame, profile=main\
 """
@@ -504,7 +504,7 @@ video/x-av1, stream-format=obu-stream, alignment=frame, profile=main\
 plugin_name = "va"
 check_elements = ["vaav1lpenc", "vapostproc"] # LP = Low Power
 encoder_pipeline = """
-vaav1lpenc ref-frames=1 bitrate={bitrate} cpb-size={vbv_buffer_size} key-int-max=1024 rate-control=cbr target-usage=6 !
+vaav1lpenc ref-frames=1 bitrate={bitrate} cpb-size={vbv_buffer_size} key-int-max=1024 rate-control=cbr min-qp=20 target-usage=6 !
 av1parse !
 video/x-av1, stream-format=obu-stream, alignment=frame, profile=main\
 """
