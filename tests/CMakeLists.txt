@@ -22,7 +22,8 @@ set(SRC_LIST
         testMoonlight.cpp
         testRTSP.cpp
         testWolfAPI.cpp
-        testBatchedSend.cpp)
+        testBatchedSend.cpp
+        testHTTPS.cpp)
 
 if (UNIX AND NOT APPLE)
     if (LINK_RUST_WAYLAND)
