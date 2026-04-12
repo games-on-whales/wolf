@@ -25,7 +25,7 @@ using HTTPS = asio::ssl::stream<asio::ip::tcp::socket>;
  *   while still be able to send back a reply in case of validation error
  */
 template <> class Server<HTTPS> : public ServerBase<HTTPS> {
-  bool set_session_id_context = false;
+  bool set_session_id_context = true;
 
 protected:
   asio::ssl::context context;
