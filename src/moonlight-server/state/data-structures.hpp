@@ -313,8 +313,7 @@ const static immer::array<moonlight::DisplayMode> DISPLAY_CONFIGURATIONS = []() 
   const std::vector<int> extra_hi_refresh = {240, 165, 144};
 
   std::vector<moonlight::DisplayMode> modes;
-  modes.reserve((lo_res.size() * (base_rates.size() + extra_hi_refresh.size())) +
-                (hi_res.size() * base_rates.size()));
+  modes.reserve((lo_res.size() * (base_rates.size() + extra_hi_refresh.size())) + (hi_res.size() * base_rates.size()));
   for (const auto &r : lo_res) {
     for (int rr : extra_hi_refresh)
       modes.push_back({.width = r.w, .height = r.h, .refreshRate = rr});
