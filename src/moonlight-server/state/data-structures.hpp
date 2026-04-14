@@ -22,6 +22,7 @@
 #include <optional>
 #include <state/serialised_config.hpp>
 #include <utility>
+#include <vector>
 
 namespace state {
 using namespace std::chrono_literals;
@@ -246,29 +247,84 @@ static const audio::AudioMode &get_audio_mode(int channels, bool high_quality) {
 }
 
 /**
- * Not many clients will actually look at this but the Nintendo Switch will flat out refuse to connect if the
- * advertised display modes don't match
+ * Advertised display modes. Moonlight clients build their resolution dropdown
+ * (and gate their "custom resolution" field) from this list, so any monitor
+ * mode a user might want to stream at has to appear here — including ultrawide
+ * (21:9, 32:9) and common 16:10 / 3:2 laptop panels.
+ *
+ * Strict clients like Nintendo Switch refuse to connect if their native mode
+ * isn't advertised, so the catalog errs on the side of inclusive.
  */
-const static immer::array<moonlight::DisplayMode> DISPLAY_CONFIGURATIONS = {{
-    // 720p
-    {.width = 1280, .height = 720, .refreshRate = 120},
-    {.width = 1280, .height = 720, .refreshRate = 60},
-    {.width = 1280, .height = 720, .refreshRate = 30},
-    // 1080p
-    {.width = 1920, .height = 1080, .refreshRate = 120},
-    {.width = 1920, .height = 1080, .refreshRate = 60},
-    {.width = 1920, .height = 1080, .refreshRate = 30},
-    // 1440p
-    {.width = 2560, .height = 1440, .refreshRate = 120},
-    {.width = 2560, .height = 1440, .refreshRate = 90},
-    {.width = 2560, .height = 1440, .refreshRate = 60},
-    // 2160p
-    {.width = 3840, .height = 2160, .refreshRate = 120},
-    {.width = 3840, .height = 2160, .refreshRate = 90},
-    {.width = 3840, .height = 2160, .refreshRate = 60},
-    // 8k
-    {.width = 7680, .height = 4320, .refreshRate = 120},
-    {.width = 7680, .height = 4320, .refreshRate = 90},
-    {.width = 7680, .height = 4320, .refreshRate = 60},
-}};
+const static immer::array<moonlight::DisplayMode> DISPLAY_CONFIGURATIONS = []() {
+  struct Res {
+    int w, h;
+  };
+  // Heights <= 1440 also get high-refresh rates (144/165/240);
+  // higher resolutions stay on 30/60/90/120 to keep the list sane.
+  const std::vector<Res> lo_res = {
+      // 16:9
+      {1280, 720},
+      {1600, 900},
+      {1920, 1080},
+      {2560, 1440},
+      // 16:10
+      {1280, 800},
+      {1440, 900},
+      {1680, 1050},
+      {1920, 1200},
+      // 21:9 ultrawide
+      {2560, 1080},
+      {3440, 1440},
+      // 32:9 super-ultrawide
+      {3840, 1080},
+      {5120, 1440},
+      // 4:3 / 5:4 legacy
+      {1024, 768},
+      {1280, 960},
+      {1280, 1024},
+      {1600, 1200},
+  };
+  const std::vector<Res> hi_res = {
+      // 16:9
+      {3200, 1800},
+      {3840, 2160},
+      {5120, 2880},
+      {7680, 4320},
+      // 16:10
+      {2560, 1600},
+      {2880, 1800},
+      {3840, 2400},
+      // 3:2 (Surface / Framework 13 / MBP-style)
+      {2160, 1440},
+      {2256, 1504},
+      {2560, 1700},
+      {3000, 2000},
+      {3240, 2160},
+      // 21:9 ultrawide high-res
+      {3840, 1600},
+      {5120, 2160},
+      // 32:9 super-ultrawide high-res
+      {7680, 2160},
+      // 4:3 high-res
+      {2048, 1536},
+  };
+
+  const std::vector<int> base_rates = {120, 90, 60, 30};
+  const std::vector<int> extra_hi_refresh = {240, 165, 144};
+
+  std::vector<moonlight::DisplayMode> modes;
+  modes.reserve((lo_res.size() * (base_rates.size() + extra_hi_refresh.size())) +
+                (hi_res.size() * base_rates.size()));
+  for (const auto &r : lo_res) {
+    for (int rr : extra_hi_refresh)
+      modes.push_back({.width = r.w, .height = r.h, .refreshRate = rr});
+    for (int rr : base_rates)
+      modes.push_back({.width = r.w, .height = r.h, .refreshRate = rr});
+  }
+  for (const auto &r : hi_res) {
+    for (int rr : base_rates)
+      modes.push_back({.width = r.w, .height = r.h, .refreshRate = rr});
+  }
+  return immer::array<moonlight::DisplayMode>(modes.begin(), modes.end());
+}();
 } // namespace state
