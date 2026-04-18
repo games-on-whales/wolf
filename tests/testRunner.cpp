@@ -3,6 +3,7 @@
 #include <events/events.hpp>
 #include <sessions/handlers.hpp>
 #include <state/data-structures.hpp>
+#include <state/serialised_config.hpp>
 #include <map>
 #include <memory>
 #include <optional>
@@ -29,7 +30,7 @@ public:
   }
 
   events::RunnerTypes serialize() const override {
-    return config::AppCMD{"true"};
+    return wolf::config::AppCMD{"true"};
   }
 };
 
@@ -49,7 +50,8 @@ TEST_CASE("Session runners use the retro user", "[Runner]") {
                                                   "/tmp/wolf-local-state",
                                                   "/tmp/wolf-runtime"}};
 
-  auto client_settings = immer::box<config::ClientSettings>{config::ClientSettings{1000, 1000, {}, 1.0f, 1.0f, 1.0f}};
+  auto client_settings = immer::box<wolf::config::ClientSettings>{
+      wolf::config::ClientSettings{1000, 1000, {}, 1.0f, 1.0f, 1.0f}};
 
   const std::string session_id = "session-123";
   const std::string app_local_state_folder = "/tmp/wolf-app-local";
