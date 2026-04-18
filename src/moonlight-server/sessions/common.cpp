@@ -65,6 +65,7 @@ void start_runner(std::shared_ptr<events::Runner> runner,
 
   full_env.set("PUID", std::to_string(args->client_settings->run_uid));
   full_env.set("PGID", std::to_string(args->client_settings->run_gid));
+  full_env.set("UNAME", "retro");
 
   // Add fake-udev and udev mounts
   mounted_paths.push_back(
