@@ -2,13 +2,16 @@ ARG BASE_IMAGE=ghcr.io/games-on-whales/base-app:fedora
 FROM $BASE_IMAGE
 
 # Intel VA-API / QSV drivers and VPL runtime
-# Fedora ships intel-media-driver (iHD) and libva packages natively
+# intel-media-driver lives in RPM Fusion free on Fedora (not in the base repos),
+# so enable it first; libvpl and mesa-va-drivers come from the main repos.
 ARG REQUIRED_PACKAGES="libva libva-utils \
                        intel-media-driver \
                        libvpl \
                        mesa-va-drivers"
 
-RUN dnf install -y $REQUIRED_PACKAGES && \
+RUN dnf install -y \
+      https://mirrors.rpmfusion.org/free/fedora/rpmfusion-free-release-$(rpm -E %fedora).noarch.rpm && \
+    dnf install -y $REQUIRED_PACKAGES && \
     dnf clean all
 
 # libmfx is not available in Fedora so we build from sources (see: https://github.com/games-on-whales/wolf/issues/221)

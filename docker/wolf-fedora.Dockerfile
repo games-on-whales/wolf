@@ -95,6 +95,12 @@ ENV GST_PLUGIN_PATH=/usr/local/lib/x86_64-linux-gnu/gstreamer-1.0/
 COPY --from=wolf-builder /usr/local/lib/x86_64-linux-gnu/gstreamer-1.0/* $GST_PLUGIN_PATH
 COPY --from=wolf-builder /usr/local/lib/liblibgstwaylanddisplay* /usr/local/lib/
 
+# Bundle the exact libicu the builder linked wolf against, so a builder/runner
+# layer-cache skew (e.g. gstreamer:fedora cached with an older libicu while
+# fedora:43 has bumped to a newer one at runner build time) can't produce a
+# wolf binary that can't resolve its own libicuuc soname at runtime.
+COPY --from=wolf-builder /usr/lib64/libicu*.so.* /usr/lib64/
+
 WORKDIR /wolf
 
 ENV WOLF_CFG_FOLDER=/etc/wolf/cfg
