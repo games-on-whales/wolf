@@ -98,7 +98,8 @@ void start_video_producer(const std::string &session_id,
                           std::shared_ptr<boost::promise<WaylandDisplayReady>> on_ready,
                           std::shared_ptr<events::EventBusType> event_bus) {
   auto pipeline = fmt::format("waylanddisplaysrc name=wolf_wayland_source render_node={render_node} ! "
-                              "capsfilter name=wolf_wayland_caps caps=\"{buffer_format}, width={width}, height={height}, framerate={fps}/1\" ! \n" //
+                              "capsfilter name=wolf_wayland_caps caps=\"{buffer_format}, width={width}, "
+                              "height={height}, framerate={fps}/1\" ! \n"                                  //
                               "interpipesink sync=true async=false name={session_id}_video max-buffers=1", //
                               fmt::arg("buffer_format", buffer_format),
                               fmt::arg("render_node", render_node),
@@ -107,9 +108,8 @@ void start_video_producer(const std::string &session_id,
                               fmt::arg("height", display_mode.height),
                               fmt::arg("fps", display_mode.refreshRate));
   logs::log(logs::debug, "[GSTREAMER] Starting video producer: {}", pipeline);
-  auto bus_data_ptr =
-      std::make_shared<GstBusData>(GstBusData{
-          .on_ready = std::move(on_ready), .wayland_plugin = nullptr, .wayland_capsfilter = nullptr});
+  auto bus_data_ptr = std::make_shared<GstBusData>(
+      GstBusData{.on_ready = std::move(on_ready), .wayland_plugin = nullptr, .wayland_capsfilter = nullptr});
   std::shared_ptr<NeedContextData> ctx_data_ptr =
       std::make_shared<NeedContextData>(NeedContextData{.device_path = render_node, .gst_context = video_context});
   run_pipeline(pipeline, [=](auto pipeline) {
@@ -392,8 +392,18 @@ void set_capsfilter_size(GstElement *capsfilter, int width, int height) {
     return;
   }
 
-  auto caps = gst_caps_new_simple(
-      "video/x-raw", "width", G_TYPE_INT, width, "height", G_TYPE_INT, height, "pixel-aspect-ratio", GST_TYPE_FRACTION, 1, 1, nullptr);
+  auto caps = gst_caps_new_simple("video/x-raw",
+                                  "width",
+                                  G_TYPE_INT,
+                                  width,
+                                  "height",
+                                  G_TYPE_INT,
+                                  height,
+                                  "pixel-aspect-ratio",
+                                  GST_TYPE_FRACTION,
+                                  1,
+                                  1,
+                                  nullptr);
   g_object_set(capsfilter, "caps", caps, nullptr);
   gst_caps_unref(caps);
 }
@@ -422,19 +432,18 @@ void configure_party_video_layout(GstElement *pipeline, bool enabled, int output
 
     if (compositor) {
       if (auto sink0 = gst_element_get_static_pad(compositor, "sink_0")) {
-        g_object_set(
-            sink0,
-            "xpos",
-            0,
-            "ypos",
-            0,
-            "width",
-            layout.tile_width,
-            "height",
-            output_height,
-            "alpha",
-            1.0,
-            nullptr);
+        g_object_set(sink0,
+                     "xpos",
+                     0,
+                     "ypos",
+                     0,
+                     "width",
+                     layout.tile_width,
+                     "height",
+                     output_height,
+                     "alpha",
+                     1.0,
+                     nullptr);
         gst_object_unref(sink0);
       }
       if (auto sink1 = gst_element_get_static_pad(compositor, "sink_1")) {
@@ -460,12 +469,33 @@ void configure_party_video_layout(GstElement *pipeline, bool enabled, int output
 
     if (compositor) {
       if (auto sink0 = gst_element_get_static_pad(compositor, "sink_0")) {
-        g_object_set(sink0, "xpos", 0, "ypos", 0, "width", output_width, "height", output_height, "alpha", 1.0, nullptr);
+        g_object_set(sink0,
+                     "xpos",
+                     0,
+                     "ypos",
+                     0,
+                     "width",
+                     output_width,
+                     "height",
+                     output_height,
+                     "alpha",
+                     1.0,
+                     nullptr);
         gst_object_unref(sink0);
       }
       if (auto sink1 = gst_element_get_static_pad(compositor, "sink_1")) {
-        g_object_set(
-            sink1, "xpos", output_width, "ypos", 0, "width", 0, "height", output_height, "alpha", 0.0, nullptr);
+        g_object_set(sink1,
+                     "xpos",
+                     output_width,
+                     "ypos",
+                     0,
+                     "width",
+                     0,
+                     "height",
+                     output_height,
+                     "alpha",
+                     0.0,
+                     nullptr);
         gst_object_unref(sink1);
       }
     }
@@ -567,8 +597,10 @@ void start_streaming_video(immer::box<events::VideoSession> video_session,
     gst_bus_set_sync_handler(bus, bus_sync_handler, ctx_data_ptr.get(), nullptr);
     gst_object_unref(bus);
 
-    configure_party_video_layout(
-        pipeline.get(), false, video_session->display_mode.width, video_session->display_mode.height);
+    configure_party_video_layout(pipeline.get(),
+                                 false,
+                                 video_session->display_mode.width,
+                                 video_session->display_mode.height);
 
     /*
      * The force IDR event will be triggered by the control stream.
@@ -640,10 +672,9 @@ void start_streaming_video(immer::box<events::VideoSession> video_session,
 
           logs::log(logs::debug, "[GSTREAMER] Updating video party mode for {}: {}", sess_id, party_ev->enabled);
           if (party_ev->enabled && party_ev->secondary_interpipe_src_id) {
-            set_secondary_interpipe_target(
-                pipeline.get(),
-                fmt::format("interpipesrc_{}_video_secondary", sess_id),
-                fmt::format("{}_video", *party_ev->secondary_interpipe_src_id));
+            set_secondary_interpipe_target(pipeline.get(),
+                                           fmt::format("interpipesrc_{}_video_secondary", sess_id),
+                                           fmt::format("{}_video", *party_ev->secondary_interpipe_src_id));
           }
 
           configure_party_video_layout(pipeline.get(), party_ev->enabled, width, height);
@@ -758,10 +789,9 @@ void start_streaming_audio(immer::box<events::AudioSession> audio_session,
 
           logs::log(logs::debug, "[GSTREAMER] Updating audio party mode for {}: {}", session_id, party_ev->enabled);
           if (party_ev->enabled && party_ev->secondary_interpipe_src_id) {
-            set_secondary_interpipe_target(
-                pipeline.get(),
-                fmt::format("interpipesrc_{}_audio_secondary", session_id),
-                fmt::format("{}_audio", *party_ev->secondary_interpipe_src_id));
+            set_secondary_interpipe_target(pipeline.get(),
+                                           fmt::format("interpipesrc_{}_audio_secondary", session_id),
+                                           fmt::format("{}_audio", *party_ev->secondary_interpipe_src_id));
           }
 
           configure_party_audio_layout(pipeline.get(), party_ev->enabled, party_ev->mute_secondary_audio);

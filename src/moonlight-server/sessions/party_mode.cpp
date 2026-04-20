@@ -1,5 +1,5 @@
-#include <sessions/handlers.hpp>
 #include <immer/vector_transient.hpp>
+#include <sessions/handlers.hpp>
 #include <state/config.hpp>
 #include <state/sessions.hpp>
 
@@ -40,10 +40,9 @@ void request_runner_restart(const std::optional<events::StreamSession> &session)
 
 } // namespace
 
-std::shared_ptr<events::StreamSession>
-create_party_mode_secondary_session(const immer::box<state::AppState> &app_state,
-                                    std::size_t primary_session_id,
-                                    bool mute_secondary_audio) {
+std::shared_ptr<events::StreamSession> create_party_mode_secondary_session(const immer::box<state::AppState> &app_state,
+                                                                           std::size_t primary_session_id,
+                                                                           bool mute_secondary_audio) {
   auto sessions = app_state->running_sessions->load();
   auto primary_session = state::get_session_by_id(sessions.get(), primary_session_id);
   if (!primary_session) {
@@ -60,10 +59,9 @@ create_party_mode_secondary_session(const immer::box<state::AppState> &app_state
   }
 
   auto local_client_id = state::gen_uuid();
-  config::PairedClient local_client = {
-      .client_cert = fmt::format("party-mode:{}", local_client_id),
-      .app_state_folder = fmt::format("party-mode/{}", local_client_id),
-      .settings = *primary_session->client_settings};
+  config::PairedClient local_client = {.client_cert = fmt::format("party-mode:{}", local_client_id),
+                                       .app_state_folder = fmt::format("party-mode/{}", local_client_id),
+                                       .settings = *primary_session->client_settings};
   auto party_render_mode = make_party_render_mode(primary_session->display_mode);
 
   auto secondary_session = state::create_stream_session(app_state,
@@ -78,34 +76,33 @@ create_party_mode_secondary_session(const immer::box<state::AppState> &app_state
   apply_render_mode(primary_session, party_render_mode);
   request_runner_restart(primary_session);
 
-  app_state->running_sessions->update([secondary_session](const immer::vector<events::StreamSession> &current_sessions) {
-    return current_sessions.push_back(*secondary_session);
-  });
-  app_state->party_mode_sessions->update([primary_session_id,
-                                          secondary_session_id = secondary_session->session_id,
-                                          mute_secondary_audio](
-                                             const immer::vector<state::PartyModeSession> &current_party_mode_sessions) {
-    auto updated_sessions = state::remove_party_mode_session(current_party_mode_sessions, primary_session_id);
-    updated_sessions = state::remove_party_mode_session(updated_sessions, secondary_session_id);
-    return updated_sessions.push_back(state::PartyModeSession{
-        .primary_session_id = primary_session_id,
-        .secondary_session_id = secondary_session_id,
-        .mute_secondary_audio = mute_secondary_audio});
-  });
+  app_state->running_sessions->update(
+      [secondary_session](const immer::vector<events::StreamSession> &current_sessions) {
+        return current_sessions.push_back(*secondary_session);
+      });
+  app_state->party_mode_sessions->update(
+      [primary_session_id, secondary_session_id = secondary_session->session_id, mute_secondary_audio](
+          const immer::vector<state::PartyModeSession> &current_party_mode_sessions) {
+        auto updated_sessions = state::remove_party_mode_session(current_party_mode_sessions, primary_session_id);
+        updated_sessions = state::remove_party_mode_session(updated_sessions, secondary_session_id);
+        return updated_sessions.push_back(state::PartyModeSession{.primary_session_id = primary_session_id,
+                                                                  .secondary_session_id = secondary_session_id,
+                                                                  .mute_secondary_audio = mute_secondary_audio});
+      });
 
   app_state->event_bus->fire_event(immer::box<events::StreamSession>(*secondary_session));
-  app_state->event_bus->fire_event(
-      immer::box<events::SetPartyModeEvent>(events::SetPartyModeEvent{
-          .session_id = primary_session_id,
-          .enabled = true,
-          .secondary_interpipe_src_id = std::to_string(secondary_session->session_id),
-          .mute_secondary_audio = mute_secondary_audio,
-      }));
+  app_state->event_bus->fire_event(immer::box<events::SetPartyModeEvent>(events::SetPartyModeEvent{
+      .session_id = primary_session_id,
+      .enabled = true,
+      .secondary_interpipe_src_id = std::to_string(secondary_session->session_id),
+      .mute_secondary_audio = mute_secondary_audio,
+  }));
 
   return secondary_session;
 }
 
-bool promote_party_mode_secondary_session(const immer::box<state::AppState> &app_state, std::size_t primary_session_id) {
+bool promote_party_mode_secondary_session(const immer::box<state::AppState> &app_state,
+                                          std::size_t primary_session_id) {
   auto party_mode_sessions = app_state->party_mode_sessions->load();
   auto party_mode_session = state::get_party_mode_session_by_primary(party_mode_sessions.get(), primary_session_id);
   if (!party_mode_session) {
@@ -143,21 +140,21 @@ bool promote_party_mode_secondary_session(const immer::box<state::AppState> &app
   app_state->party_mode_sessions->update([primary_session_id](const auto &current_party_mode_sessions) {
     return state::remove_party_mode_session(current_party_mode_sessions, primary_session_id);
   });
-  app_state->physical_input_devices->update([secondary_session_id = std::to_string(secondary_session->session_id),
-                                             primary_session_id_str = std::to_string(primary_session->session_id)](
-                                                const immer::vector<state::PhysicalInputDeviceAssignment> &assignments) {
-    return assignments |
-           ranges::views::transform([&](state::PhysicalInputDeviceAssignment assignment) {
-             if (assignment.owner_session_id == secondary_session_id) {
-               assignment.owner_session_id = primary_session_id_str;
-             }
-             if (assignment.routed_session_id == secondary_session_id) {
-               assignment.routed_session_id = primary_session_id_str;
-             }
-             return assignment;
-           }) |
-           ranges::to<immer::vector<state::PhysicalInputDeviceAssignment>>();
-  });
+  app_state->physical_input_devices->update(
+      [secondary_session_id = std::to_string(secondary_session->session_id),
+       primary_session_id_str = std::to_string(primary_session->session_id)](
+          const immer::vector<state::PhysicalInputDeviceAssignment> &assignments) {
+        return assignments | ranges::views::transform([&](state::PhysicalInputDeviceAssignment assignment) {
+                 if (assignment.owner_session_id == secondary_session_id) {
+                   assignment.owner_session_id = primary_session_id_str;
+                 }
+                 if (assignment.routed_session_id == secondary_session_id) {
+                   assignment.routed_session_id = primary_session_id_str;
+                 }
+                 return assignment;
+               }) |
+               ranges::to<immer::vector<state::PhysicalInputDeviceAssignment>>();
+      });
 
   app_state->event_bus->fire_event(immer::box<events::SwitchStreamProducerEvents>{
       events::SwitchStreamProducerEvents{.session_id = primary_session->session_id,
@@ -172,7 +169,8 @@ bool promote_party_mode_secondary_session(const immer::box<state::AppState> &app
   return true;
 }
 
-immer::vector<immer::box<events::EventBusHandlers>> setup_party_mode_handlers(const immer::box<state::AppState> &app_state) {
+immer::vector<immer::box<events::EventBusHandlers>>
+setup_party_mode_handlers(const immer::box<state::AppState> &app_state) {
   immer::vector_transient<immer::box<events::EventBusHandlers>> handlers;
 
   handlers.push_back(app_state->event_bus->register_handler<immer::box<events::StopStreamEvent>>(
@@ -199,9 +197,8 @@ immer::vector<immer::box<events::EventBusHandlers>> setup_party_mode_handlers(co
             return state::remove_party_mode_session(sessions, session_id);
           });
 
-          app_state->event_bus->fire_event(
-              immer::box<events::StopStreamEvent>{events::StopStreamEvent{
-                  .session_id = primary_party_mode_session->secondary_session_id}});
+          app_state->event_bus->fire_event(immer::box<events::StopStreamEvent>{
+              events::StopStreamEvent{.session_id = primary_party_mode_session->secondary_session_id}});
           return;
         }
 
@@ -219,11 +216,10 @@ immer::vector<immer::box<events::EventBusHandlers>> setup_party_mode_handlers(co
             return state::remove_party_mode_session(sessions, session_id);
           });
 
-          app_state->event_bus->fire_event(
-              immer::box<events::SetPartyModeEvent>{events::SetPartyModeEvent{
-                  .session_id = secondary_party_mode_session->primary_session_id,
-                  .enabled = false,
-              }});
+          app_state->event_bus->fire_event(immer::box<events::SetPartyModeEvent>{events::SetPartyModeEvent{
+              .session_id = secondary_party_mode_session->primary_session_id,
+              .enabled = false,
+          }});
         }
       }));
 

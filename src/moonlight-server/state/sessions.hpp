@@ -69,10 +69,10 @@ inline std::optional<events::Lobby> get_lobby_by_connected_session(const immer::
 
 inline std::optional<PartyModeSession>
 get_party_mode_session_by_primary(const immer::vector<PartyModeSession> &party_mode_sessions, std::size_t session_id) {
-  auto results =
-      party_mode_sessions | ranges::views::filter([session_id](const PartyModeSession &party_mode_session) {
-        return party_mode_session.primary_session_id == session_id;
-      }) | ranges::views::take(1) | ranges::to_vector;
+  auto results = party_mode_sessions | ranges::views::filter([session_id](const PartyModeSession &party_mode_session) {
+                   return party_mode_session.primary_session_id == session_id;
+                 }) |
+                 ranges::views::take(1) | ranges::to_vector;
   if (results.size() == 1) {
     return results[0];
   }
@@ -80,11 +80,12 @@ get_party_mode_session_by_primary(const immer::vector<PartyModeSession> &party_m
 }
 
 inline std::optional<PartyModeSession>
-get_party_mode_session_by_secondary(const immer::vector<PartyModeSession> &party_mode_sessions, std::size_t session_id) {
-  auto results =
-      party_mode_sessions | ranges::views::filter([session_id](const PartyModeSession &party_mode_session) {
-        return party_mode_session.secondary_session_id == session_id;
-      }) | ranges::views::take(1) | ranges::to_vector;
+get_party_mode_session_by_secondary(const immer::vector<PartyModeSession> &party_mode_sessions,
+                                    std::size_t session_id) {
+  auto results = party_mode_sessions | ranges::views::filter([session_id](const PartyModeSession &party_mode_session) {
+                   return party_mode_session.secondary_session_id == session_id;
+                 }) |
+                 ranges::views::take(1) | ranges::to_vector;
   if (results.size() == 1) {
     return results[0];
   }
@@ -93,8 +94,7 @@ get_party_mode_session_by_secondary(const immer::vector<PartyModeSession> &party
 
 inline immer::vector<PartyModeSession>
 remove_party_mode_session(const immer::vector<PartyModeSession> &party_mode_sessions, std::size_t session_id) {
-  return party_mode_sessions |
-         ranges::views::filter([session_id](const PartyModeSession &party_mode_session) {
+  return party_mode_sessions | ranges::views::filter([session_id](const PartyModeSession &party_mode_session) {
            return party_mode_session.primary_session_id != session_id &&
                   party_mode_session.secondary_session_id != session_id;
          }) |
@@ -104,8 +104,7 @@ remove_party_mode_session(const immer::vector<PartyModeSession> &party_mode_sess
 inline immer::vector<PhysicalInputDeviceAssignment>
 remove_physical_input_device_assignment_by_owner(const immer::vector<PhysicalInputDeviceAssignment> &assignments,
                                                  std::string_view session_id) {
-  return assignments |
-         ranges::views::filter([session_id](const PhysicalInputDeviceAssignment &assignment) {
+  return assignments | ranges::views::filter([session_id](const PhysicalInputDeviceAssignment &assignment) {
            return assignment.owner_session_id != session_id;
          }) |
          ranges::to<immer::vector<PhysicalInputDeviceAssignment>>();
@@ -114,8 +113,7 @@ remove_physical_input_device_assignment_by_owner(const immer::vector<PhysicalInp
 inline immer::vector<PhysicalInputDeviceAssignment>
 remove_physical_input_device_assignment_by_devnode(const immer::vector<PhysicalInputDeviceAssignment> &assignments,
                                                    std::string_view devnode) {
-  return assignments |
-         ranges::views::filter([devnode](const PhysicalInputDeviceAssignment &assignment) {
+  return assignments | ranges::views::filter([devnode](const PhysicalInputDeviceAssignment &assignment) {
            return assignment.devnode != devnode;
          }) |
          ranges::to<immer::vector<PhysicalInputDeviceAssignment>>();
@@ -149,12 +147,11 @@ inline std::shared_ptr<events::StreamSession> create_stream_session(immer::box<s
 
   auto session = events::StreamSession{
       .display_mode = display_mode,
-      .render_display_mode =
-          std::make_shared<immer::atom<virtual_display::DisplayMode>>(virtual_display::DisplayMode{
-              .width = display_mode.width,
-              .height = display_mode.height,
-              .refreshRate = display_mode.refreshRate,
-          }),
+      .render_display_mode = std::make_shared<immer::atom<virtual_display::DisplayMode>>(virtual_display::DisplayMode{
+          .width = display_mode.width,
+          .height = display_mode.height,
+          .refreshRate = display_mode.refreshRate,
+      }),
       .audio_channel_count = audio_channel_count,
       .event_bus = state->event_bus,
       .client_settings = current_client.settings,

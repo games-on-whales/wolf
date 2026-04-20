@@ -35,20 +35,17 @@ wl_state_ptr create_wayland_display(gstreamer::gst_element_ptr wayland_plugin, c
 wl_state_ptr create_wayland_display(gstreamer::gst_element_ptr wayland_plugin,
                                     gstreamer::gst_element_ptr wayland_capsfilter,
                                     const std::string &wayland_socket_name) {
-  return std::make_shared<WaylandState>(
-      WaylandState{.wayland_plugin = wayland_plugin,
-                   .wayland_capsfilter = wayland_capsfilter,
-                   .wayland_socket_name = wayland_socket_name});
+  return std::make_shared<WaylandState>(WaylandState{.wayland_plugin = wayland_plugin,
+                                                     .wayland_capsfilter = wayland_capsfilter,
+                                                     .wayland_socket_name = wayland_socket_name});
 }
 
 std::string get_wayland_socket_name(WaylandState &w_state) {
   return w_state.wayland_socket_name;
 }
 
-std::unique_ptr<GstCaps, decltype(&gst_caps_unref)>
-set_resolution(WaylandState &w_state,
-               const DisplayMode &display_mode,
-               const std::optional<gstreamer::gst_element_ptr> &app_src) {
+std::unique_ptr<GstCaps, decltype(&gst_caps_unref)> set_resolution(
+    WaylandState &w_state, const DisplayMode &display_mode, const std::optional<gstreamer::gst_element_ptr> &app_src) {
   auto caps = gst_caps_new_simple("video/x-raw",
                                   "width",
                                   G_TYPE_INT,

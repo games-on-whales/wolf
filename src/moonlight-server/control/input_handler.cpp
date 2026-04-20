@@ -267,12 +267,10 @@ void mouse_move_abs(const MOUSE_MOVE_ABS_PACKET &pkt, events::StreamSession &ses
     auto absolute_x = (x / window_width) * static_cast<float>(render_display_mode.width) * pointer_acceleration;
     auto absolute_y = (y / window_height) * static_cast<float>(render_display_mode.height) * pointer_acceleration;
 
-    std::visit([absolute_x,
-                absolute_y,
-                screen_width = render_display_mode.width,
-                screen_height = render_display_mode.height](
-                   auto &mouse) { mouse.move_abs(absolute_x, absolute_y, screen_width, screen_height); },
-               session.mouse->value());
+    std::visit(
+        [absolute_x, absolute_y, screen_width = render_display_mode.width, screen_height = render_display_mode.height](
+            auto &mouse) { mouse.move_abs(absolute_x, absolute_y, screen_width, screen_height); },
+        session.mouse->value());
   } else {
     logs::log(logs::warning, "Received MOUSE_MOVE_ABS_PACKET but no mouse device is present");
   }

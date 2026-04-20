@@ -134,9 +134,8 @@ inline std::optional<immer::box<events::App>> get_party_mode_join_app(const Conf
   }
 
   auto apps = moonlight_profile.value()->apps->load().get();
-  auto wolf_ui_app = std::find_if(apps.begin(), apps.end(), [](const events::App &app) {
-    return app.base.title == "Wolf UI";
-  });
+  auto wolf_ui_app =
+      std::find_if(apps.begin(), apps.end(), [](const events::App &app) { return app.base.title == "Wolf UI"; });
   if (wolf_ui_app != apps.end()) {
     return {*wolf_ui_app};
   }

@@ -441,21 +441,21 @@ void UnixSocketServer::endpoint_StreamSessionPartyMode(const HTTPRequest &req, s
     secondary_interpipe_src_id = *party_mode_request.value().secondary_session_id;
   }
 
-  state_->app_state->party_mode_sessions->update([session_id,
-                                                  secondary_session_id,
-                                                  mute_secondary_audio = party_mode_request.value().mute_secondary_audio,
-                                                  enabled = party_mode_request.value().enabled](
-                                                     const immer::vector<state::PartyModeSession> &party_sessions) {
-    auto updated_sessions = state::remove_party_mode_session(party_sessions, session_id);
-    if (enabled && secondary_session_id) {
-      updated_sessions = state::remove_party_mode_session(updated_sessions, *secondary_session_id);
-      updated_sessions = updated_sessions.push_back(state::PartyModeSession{
-          .primary_session_id = session_id,
-          .secondary_session_id = *secondary_session_id,
-          .mute_secondary_audio = mute_secondary_audio});
-    }
-    return updated_sessions;
-  });
+  state_->app_state->party_mode_sessions->update(
+      [session_id,
+       secondary_session_id,
+       mute_secondary_audio = party_mode_request.value().mute_secondary_audio,
+       enabled = party_mode_request.value().enabled](const immer::vector<state::PartyModeSession> &party_sessions) {
+        auto updated_sessions = state::remove_party_mode_session(party_sessions, session_id);
+        if (enabled && secondary_session_id) {
+          updated_sessions = state::remove_party_mode_session(updated_sessions, *secondary_session_id);
+          updated_sessions =
+              updated_sessions.push_back(state::PartyModeSession{.primary_session_id = session_id,
+                                                                 .secondary_session_id = *secondary_session_id,
+                                                                 .mute_secondary_audio = mute_secondary_audio});
+        }
+        return updated_sessions;
+      });
 
   state_->app_state->event_bus->fire_event(immer::box<events::SetPartyModeEvent>(
       events::SetPartyModeEvent{.session_id = session_id,
@@ -481,7 +481,9 @@ void UnixSocketServer::endpoint_StreamSessionPartyModeJoin(const HTTPRequest &re
   }
 
   auto secondary_session = wolf::core::sessions::create_party_mode_secondary_session(
-      state_->app_state, primary_session_id, join_request.value().mute_secondary_audio);
+      state_->app_state,
+      primary_session_id,
+      join_request.value().mute_secondary_audio);
   if (!secondary_session) {
     send_http(socket,
               500,
@@ -491,8 +493,8 @@ void UnixSocketServer::endpoint_StreamSessionPartyModeJoin(const HTTPRequest &re
 
   send_http(socket,
             200,
-            rfl::json::write(StreamSessionCreated{.success = true,
-                                                 .session_id = std::to_string(secondary_session->session_id)}));
+            rfl::json::write(
+                StreamSessionCreated{.success = true, .session_id = std::to_string(secondary_session->session_id)}));
 }
 
 void UnixSocketServer::endpoint_Lobbies(const wolf::api::HTTPRequest &req, std::shared_ptr<UnixSocket> socket) {

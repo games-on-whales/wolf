@@ -1,11 +1,11 @@
 #include <immer/array_transient.hpp>
 #include <immer/map_transient.hpp>
 #include <immer/vector_transient.hpp>
+#include <mutex>
 #include <sessions/common.hpp>
 #include <sessions/handlers.hpp>
 #include <state/sessions.hpp>
 #include <streaming/streaming.hpp>
-#include <mutex>
 #include <unordered_set>
 
 namespace wolf::core::sessions {
@@ -168,8 +168,9 @@ setup_moonlight_handlers(const immer::box<state::AppState> &app_state,
         auto w_display_ready = on_ready->get_future().then([session](auto fut) {
           streaming::WaylandDisplayReady ready = fut.get();
 
-          auto wl_state = virtual_display::create_wayland_display(
-              ready.wayland_plugin, ready.wayland_capsfilter, ready.wayland_socket_name);
+          auto wl_state = virtual_display::create_wayland_display(ready.wayland_plugin,
+                                                                  ready.wayland_capsfilter,
+                                                                  ready.wayland_socket_name);
           // Set the wayland display
           session->wayland_display->store(wl_state);
 

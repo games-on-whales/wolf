@@ -5,9 +5,9 @@
 #include <libevdev/libevdev.h>
 #include <linux/input-event-codes.h>
 #include <state/sessions.hpp>
+#include <sys/ioctl.h>
 #include <sys/stat.h>
 #include <sys/sysmacros.h>
-#include <sys/ioctl.h>
 #include <unistd.h>
 
 namespace wolf::core::sessions {
@@ -50,9 +50,8 @@ std::string gen_udev_hw_db_filename(const std::string &devnode) {
   return fmt::format("c{}:{}", dev_major, dev_minor);
 }
 
-std::map<std::string, std::string> gen_udev_base_event(const std::string &devnode,
-                                                       const std::string &syspath,
-                                                       const std::string &action = "add") {
+std::map<std::string, std::string>
+gen_udev_base_event(const std::string &devnode, const std::string &syspath, const std::string &action = "add") {
   auto [dev_major, dev_minor] = get_major_minor(devnode);
   auto now = std::chrono::system_clock::now();
   auto timestamp = std::chrono::duration_cast<std::chrono::seconds>(now.time_since_epoch()).count();
@@ -109,9 +108,8 @@ std::string bus_type_to_hwdb(unsigned int bustype) {
   }
 }
 
-std::optional<state::PhysicalInputDeviceAssignment> inspect_gamepad_assignment(const std::string &devnode,
-                                                                               libevdev *dev,
-                                                                               std::string owner_session_id) {
+std::optional<state::PhysicalInputDeviceAssignment>
+inspect_gamepad_assignment(const std::string &devnode, libevdev *dev, std::string owner_session_id) {
   auto event_syspath = syspath_for_devnode(devnode);
   if (!event_syspath) {
     return std::nullopt;
@@ -219,7 +217,8 @@ std::optional<std::size_t> find_join_target_session(const immer::box<state::AppS
 
   std::vector<std::size_t> candidates;
   for (const auto &session : *running_sessions) {
-    if (secondary_sessions.count(session.session_id) == 0 && primary_sessions_with_party.count(session.session_id) == 0) {
+    if (secondary_sessions.count(session.session_id) == 0 &&
+        primary_sessions_with_party.count(session.session_id) == 0) {
       candidates.push_back(session.session_id);
     }
   }
@@ -291,7 +290,7 @@ void start_party_mode_join_listener(const immer::box<state::AppState> &app_state
 
       for (auto it = watchers.begin(); it != watchers.end();) {
         auto &watcher = it->second;
-        input_event ev {};
+        input_event ev{};
         int rc = libevdev_next_event(watcher.dev.get(), LIBEVDEV_READ_FLAG_NORMAL, &ev);
         while (rc == LIBEVDEV_READ_STATUS_SUCCESS || rc == LIBEVDEV_READ_STATUS_SYNC) {
           if (ev.type == EV_KEY) {
@@ -316,18 +315,24 @@ void start_party_mode_join_listener(const immer::box<state::AppState> &app_state
                 watcher.chord_triggered = true;
                 auto target_session = find_join_target_session(app_state);
                 if (!target_session) {
-                  logs::log(logs::warning, "[PARTY] Unable to determine a single session to join for {}", watcher.devnode);
-                } else if (auto secondary_session = create_party_mode_secondary_session(app_state, *target_session, false)) {
-                  auto assignment_info =
-                      inspect_gamepad_assignment(watcher.devnode, watcher.dev.get(), std::to_string(secondary_session->session_id));
+                  logs::log(logs::warning,
+                            "[PARTY] Unable to determine a single session to join for {}",
+                            watcher.devnode);
+                } else if (auto secondary_session =
+                               create_party_mode_secondary_session(app_state, *target_session, false)) {
+                  auto assignment_info = inspect_gamepad_assignment(watcher.devnode,
+                                                                    watcher.dev.get(),
+                                                                    std::to_string(secondary_session->session_id));
                   if (assignment_info) {
                     app_state->physical_input_devices->update([assignment_info](const auto &assignments) {
-                      return state::remove_physical_input_device_assignment_by_devnode(assignments, assignment_info->devnode)
+                      return state::remove_physical_input_device_assignment_by_devnode(assignments,
+                                                                                       assignment_info->devnode)
                           .push_back(*assignment_info);
                     });
-                    auto plug_device_event = events::PlugDeviceEvent{.session_id = assignment_info->routed_session_id,
-                                                                     .udev_events = assignment_info->udev_events,
-                                                                     .udev_hw_db_entries = assignment_info->udev_hw_db_entries};
+                    auto plug_device_event = events::PlugDeviceEvent{
+                        .session_id = assignment_info->routed_session_id,
+                        .udev_events = assignment_info->udev_events,
+                        .udev_hw_db_entries = assignment_info->udev_hw_db_entries};
                     app_state->event_bus->fire_event(immer::box<events::PlugDeviceEvent>(plug_device_event));
                     logs::log(logs::info,
                               "[PARTY] Local gamepad {} joined session {} via seat {}",
@@ -342,9 +347,8 @@ void start_party_mode_join_listener(const immer::box<state::AppState> &app_state
                               "[PARTY] Failed to inspect local gamepad {}, tearing down secondary seat {}",
                               watcher.devnode,
                               secondary_session->session_id);
-                    app_state->event_bus->fire_event(
-                        immer::box<events::StopStreamEvent>{
-                            events::StopStreamEvent{.session_id = secondary_session->session_id}});
+                    app_state->event_bus->fire_event(immer::box<events::StopStreamEvent>{
+                        events::StopStreamEvent{.session_id = secondary_session->session_id}});
                   }
                 }
               }
@@ -373,8 +377,8 @@ void start_party_mode_join_listener(const immer::box<state::AppState> &app_state
           app_state->physical_input_devices->update([devnode = assignment.devnode](const auto &current_assignments) {
             return state::remove_physical_input_device_assignment_by_devnode(current_assignments, devnode);
           });
-          app_state->event_bus->fire_event(
-              immer::box<events::StopStreamEvent>{events::StopStreamEvent{.session_id = std::stoull(assignment.owner_session_id)}});
+          app_state->event_bus->fire_event(immer::box<events::StopStreamEvent>{
+              events::StopStreamEvent{.session_id = std::stoull(assignment.owner_session_id)}});
         }
       }
 

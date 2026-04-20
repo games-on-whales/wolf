@@ -67,17 +67,17 @@ void leave_lobby(const immer::box<state::AppState> &app_state,
                                   .udev_hw_db_entries = assignment.udev_hw_db_entries}});
     }
   }
-  app_state->physical_input_devices->update([session_id = std::to_string(session.session_id), lobby_id = lobby.id](
-                                                const immer::vector<state::PhysicalInputDeviceAssignment> &assignments) {
-    return assignments |
-           ranges::views::transform([&](state::PhysicalInputDeviceAssignment assignment) {
-             if (assignment.owner_session_id == session_id && assignment.routed_session_id == lobby_id) {
-               assignment.routed_session_id = session_id;
-             }
-             return assignment;
-           }) |
-           ranges::to<immer::vector<state::PhysicalInputDeviceAssignment>>();
-  });
+  app_state->physical_input_devices->update(
+      [session_id = std::to_string(session.session_id),
+       lobby_id = lobby.id](const immer::vector<state::PhysicalInputDeviceAssignment> &assignments) {
+        return assignments | ranges::views::transform([&](state::PhysicalInputDeviceAssignment assignment) {
+                 if (assignment.owner_session_id == session_id && assignment.routed_session_id == lobby_id) {
+                   assignment.routed_session_id = session_id;
+                 }
+                 return assignment;
+               }) |
+               ranges::to<immer::vector<state::PhysicalInputDeviceAssignment>>();
+      });
 
   // Switch audio/video gstreamer stream producers
   ev_bus->fire_event(immer::box<events::SwitchStreamProducerEvents>{
@@ -136,8 +136,9 @@ setup_lobbies_handlers(const immer::box<state::AppState> &app_state,
               [lobby, runtime_dir, ev_bus, audio_server, lobby_settings, host = app_state->host](auto fut) {
                 streaming::WaylandDisplayReady ready = fut.get();
 
-                auto wl_state = virtual_display::create_wayland_display(
-                    ready.wayland_plugin, ready.wayland_capsfilter, ready.wayland_socket_name);
+                auto wl_state = virtual_display::create_wayland_display(ready.wayland_plugin,
+                                                                        ready.wayland_capsfilter,
+                                                                        ready.wayland_socket_name);
                 // Set the wayland display
                 lobby->wayland_display->store(wl_state);
 
@@ -270,17 +271,17 @@ setup_lobbies_handlers(const immer::box<state::AppState> &app_state,
                                         .udev_hw_db_entries = assignment.udev_hw_db_entries}});
           }
         }
-        app_state->physical_input_devices->update([session_id = std::to_string(session->session_id), lobby_id = lobby->id](
-                                                      const immer::vector<state::PhysicalInputDeviceAssignment> &assignments) {
-          return assignments |
-                 ranges::views::transform([&](state::PhysicalInputDeviceAssignment assignment) {
-                   if (assignment.owner_session_id == session_id && assignment.routed_session_id == session_id) {
-                     assignment.routed_session_id = lobby_id;
-                   }
-                   return assignment;
-                 }) |
-                 ranges::to<immer::vector<state::PhysicalInputDeviceAssignment>>();
-        });
+        app_state->physical_input_devices->update(
+            [session_id = std::to_string(session->session_id),
+             lobby_id = lobby->id](const immer::vector<state::PhysicalInputDeviceAssignment> &assignments) {
+              return assignments | ranges::views::transform([&](state::PhysicalInputDeviceAssignment assignment) {
+                       if (assignment.owner_session_id == session_id && assignment.routed_session_id == session_id) {
+                         assignment.routed_session_id = lobby_id;
+                       }
+                       return assignment;
+                     }) |
+                     ranges::to<immer::vector<state::PhysicalInputDeviceAssignment>>();
+            });
 
         // Switch audio/video gstreamer stream producers
         app_state->event_bus->fire_event(immer::box<events::SwitchStreamProducerEvents>{
