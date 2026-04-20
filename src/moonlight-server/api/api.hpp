@@ -119,6 +119,18 @@ struct StreamSessionHandleInputRequest {
       input_packet_hex;
 };
 
+struct StreamSessionPartyModeRequest {
+  std::string session_id;
+  bool enabled = false;
+  std::optional<std::string> secondary_session_id;
+  bool mute_secondary_audio = false;
+};
+
+struct StreamSessionPartyModeJoinRequest {
+  std::string session_id;
+  bool mute_secondary_audio = false;
+};
+
 struct CreateLobbyRequest {
   rfl::Description<"The profile that originally created the lobby", std::string> profile_id;
   std::string name;
@@ -211,6 +223,8 @@ private:
   void endpoint_StreamSessionPause(const HTTPRequest &req, std::shared_ptr<UnixSocket> socket);
   void endpoint_StreamSessionStop(const HTTPRequest &req, std::shared_ptr<UnixSocket> socket);
   void endpoint_StreamSessionHandleInput(const HTTPRequest &req, std::shared_ptr<UnixSocket> socket);
+  void endpoint_StreamSessionPartyMode(const HTTPRequest &req, std::shared_ptr<UnixSocket> socket);
+  void endpoint_StreamSessionPartyModeJoin(const HTTPRequest &req, std::shared_ptr<UnixSocket> socket);
 
   void endpoint_Lobbies(const HTTPRequest &req, std::shared_ptr<UnixSocket> socket);
   void endpoint_LobbyCreate(const HTTPRequest &req, std::shared_ptr<UnixSocket> socket);

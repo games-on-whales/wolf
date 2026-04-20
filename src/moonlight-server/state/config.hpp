@@ -127,6 +127,27 @@ inline std::optional<immer::box<events::App>> get_moonlight_app_by_id(const Conf
     return std::nullopt;
 }
 
+inline std::optional<immer::box<events::App>> get_party_mode_join_app(const Config &cfg) {
+  auto moonlight_profile = get_moonlight_profile(cfg);
+  if (!moonlight_profile) {
+    return std::nullopt;
+  }
+
+  auto apps = moonlight_profile.value()->apps->load().get();
+  auto wolf_ui_app = std::find_if(apps.begin(), apps.end(), [](const events::App &app) {
+    return app.base.title == "Wolf UI";
+  });
+  if (wolf_ui_app != apps.end()) {
+    return {*wolf_ui_app};
+  }
+
+  if (!apps.empty()) {
+    return {apps.front()};
+  }
+
+  return std::nullopt;
+}
+
 inline bool file_exist(const std::string &filename) {
   std::fstream fs(filename);
   return fs.good();

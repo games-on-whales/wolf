@@ -300,8 +300,19 @@ struct StopStreamEvent {
   std::size_t session_id;
 };
 
+struct RestartRunnerEvent {
+  std::size_t session_id;
+};
+
 struct ClientWolfUIComboEvent {
   std::size_t session_id;
+};
+
+struct SetPartyModeEvent {
+  std::size_t session_id;
+  bool enabled = false;
+  std::optional<std::string> secondary_interpipe_src_id = std::nullopt;
+  bool mute_secondary_audio = false;
 };
 
 struct SwitchStreamProducerEvents {
@@ -344,7 +355,9 @@ using EventBusHandlers = dp::handler_registration<immer::box<PlugDeviceEvent>,
                                                   immer::box<PauseStreamEvent>,
                                                   immer::box<ResumeStreamEvent>,
                                                   immer::box<StopStreamEvent>,
+                                                  immer::box<RestartRunnerEvent>,
                                                   immer::box<ClientWolfUIComboEvent>,
+                                                  immer::box<SetPartyModeEvent>,
                                                   immer::box<RTPVideoPingEvent>,
                                                   immer::box<RTPAudioPingEvent>,
                                                   immer::box<StartRunner>,
@@ -365,7 +378,9 @@ using EventBusType = dp::event_bus<immer::box<PlugDeviceEvent>,
                                    immer::box<PauseStreamEvent>,
                                    immer::box<ResumeStreamEvent>,
                                    immer::box<StopStreamEvent>,
+                                   immer::box<RestartRunnerEvent>,
                                    immer::box<ClientWolfUIComboEvent>,
+                                   immer::box<SetPartyModeEvent>,
                                    immer::box<RTPVideoPingEvent>,
                                    immer::box<RTPAudioPingEvent>,
                                    immer::box<StartRunner>,
@@ -386,7 +401,9 @@ using EventsVariant = std::variant<immer::box<PlugDeviceEvent>,
                                    immer::box<PauseStreamEvent>,
                                    immer::box<ResumeStreamEvent>,
                                    immer::box<StopStreamEvent>,
+                                   immer::box<RestartRunnerEvent>,
                                    immer::box<ClientWolfUIComboEvent>,
+                                   immer::box<SetPartyModeEvent>,
                                    immer::box<RTPVideoPingEvent>,
                                    immer::box<RTPAudioPingEvent>,
                                    immer::box<StartRunner>,
@@ -406,6 +423,8 @@ using EventsVariant = std::variant<immer::box<PlugDeviceEvent>,
  */
 struct StreamSession {
   moonlight::DisplayMode display_mode;
+  std::shared_ptr<immer::atom<virtual_display::DisplayMode>> render_display_mode =
+      std::make_shared<immer::atom<virtual_display::DisplayMode>>();
   int audio_channel_count;
 
   std::shared_ptr<EventBusType> event_bus;

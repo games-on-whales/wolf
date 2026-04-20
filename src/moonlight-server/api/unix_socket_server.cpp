@@ -225,6 +225,28 @@ UnixSocketServer::UnixSocketServer(boost::asio::io_context &io_context,
           .handler = [this](auto req, auto socket) { endpoint_StreamSessionHandleInput(req, socket); },
       });
 
+  state_->http.add(
+      HTTPMethod::POST,
+      "/api/v1/sessions/party-mode",
+      {
+          .summary = "Enable or disable 2-seat party mode for a stream session",
+          .request_description = APIDescription{.json_schema = rfl::json::to_schema<StreamSessionPartyModeRequest>()},
+          .response_description = {{200, {.json_schema = rfl::json::to_schema<GenericSuccessResponse>()}},
+                                   {500, {.json_schema = rfl::json::to_schema<GenericErrorResponse>()}}},
+          .handler = [this](auto req, auto socket) { endpoint_StreamSessionPartyMode(req, socket); },
+      });
+
+  state_->http.add(
+      HTTPMethod::POST,
+      "/api/v1/sessions/party-mode/join",
+      {
+          .summary = "Spawn a hidden Wolf UI seat and enable 2-seat party mode",
+          .request_description = APIDescription{.json_schema = rfl::json::to_schema<StreamSessionPartyModeJoinRequest>()},
+          .response_description = {{200, {.json_schema = rfl::json::to_schema<StreamSessionCreated>()}},
+                                   {500, {.json_schema = rfl::json::to_schema<GenericErrorResponse>()}}},
+          .handler = [this](auto req, auto socket) { endpoint_StreamSessionPartyModeJoin(req, socket); },
+      });
+
   state_->http.add(HTTPMethod::POST,
                    "/api/v1/runners/start",
                    {

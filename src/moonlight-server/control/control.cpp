@@ -116,7 +116,7 @@ std::optional<events::StreamSession> get_current_session(const enet_clients_map 
   } else {
     // The connection has already been established, we'll check for a match in our connected client map
     if (auto client = connected_clients.find(enet_event.peer)) {
-      return client->get();
+      return state::get_session_by_id(running_sessions->load().get(), client->session_id);
     }
   }
   return std::nullopt;
@@ -146,10 +146,10 @@ void run_control(int port,
       [&connected_clients](const immer::box<StopStreamEvent> &ev) {
         auto terminate_pkt = ControlTerminatePacket{};
         std::string plaintext = {(char *)&terminate_pkt, sizeof(terminate_pkt)};
-        for (auto &[peer, session] : *connected_clients.load()) {
-          if (session->session_id == ev->session_id) {
+        for (auto &[peer, client] : *connected_clients.load()) {
+          if (client.session_id == ev->session_id) {
             immer::box<std::shared_ptr<ENetPeer>> enet_client = {to_shared_ptr(peer)};
-            encrypt_and_send(plaintext, session->aes_key, enet_client);
+            encrypt_and_send(plaintext, client.aes_key, enet_client);
             return;
           }
         }
@@ -167,7 +167,8 @@ void run_control(int port,
         case ENET_EVENT_TYPE_CONNECT:
           logs::log(logs::debug, "[ENET] connected client: {}:{}", client_ip, client_port);
           connected_clients.update([peer = event.peer, client_session](const enet_clients_map &m) {
-            return m.set(peer, client_session.value());
+            return m.set(peer,
+                         ConnectedClient{.session_id = client_session->session_id, .aes_key = client_session->aes_key});
           });
           event_bus->fire_event(
               immer::box<ResumeStreamEvent>(ResumeStreamEvent{.session_id = client_session->session_id}));

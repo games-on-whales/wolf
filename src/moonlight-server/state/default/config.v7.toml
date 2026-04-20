@@ -320,7 +320,29 @@ base_create_json = """
 
 [gstreamer.video]
 
-default_source = 'interpipesrc name=interpipesrc_{}_video listen-to={session_id}_video is-live=true stream-sync=restart-ts max-bytes=0 max-buffers=1 leaky-type=downstream'
+default_source = """
+interpipesrc name=interpipesrc_{session_id}_video listen-to={session_id}_video \
+is-live=true stream-sync=restart-ts max-bytes=0 max-buffers=1 leaky-type=downstream ! \
+queue max-size-buffers=1 leaky=downstream ! \
+videoconvertscale ! \
+capsfilter name=wolf_party_primary_caps caps=video/x-raw,width={width},height={height} ! \
+wolf_party_video.sink_0
+input-selector name=wolf_party_video_secondary_selector ! \
+queue max-size-buffers=1 leaky=downstream ! \
+videoconvertscale ! \
+capsfilter name=wolf_party_secondary_caps caps=video/x-raw,width={width},height={height} ! \
+wolf_party_video.sink_1 \
+videotestsrc pattern=black is-live=true ! \
+video/x-raw,format=BGRA,width={width},height={height},framerate={fps}/1 ! \
+wolf_party_video_secondary_selector.sink_0 \
+interpipesrc name=interpipesrc_{session_id}_video_secondary listen-to={session_id}_video \
+is-live=true stream-sync=restart-ts max-bytes=0 max-buffers=1 leaky-type=downstream ! \
+wolf_party_video_secondary_selector.sink_1 \
+compositor name=wolf_party_video background=black \
+sink_0::xpos=0 sink_0::ypos=0 sink_0::width={width} sink_0::height={height} \
+sink_1::xpos={width} sink_1::ypos=0 sink_1::width=0 sink_1::height={height} ! \
+queue max-size-buffers=1 leaky=downstream\
+"""
 default_sink = """
 queue ! \
 rtpmoonlightpay_video name=moonlight_pay \
@@ -546,7 +568,21 @@ video/x-av1, stream-format=obu-stream, alignment=frame, profile=main\
 ###
 [gstreamer.audio]
 default_source = """
-interpipesrc name=interpipesrc_{}_audio listen-to={session_id}_audio is-live=true stream-sync=restart-ts max-bytes=0 max-buffers=3 block=false\
+interpipesrc name=interpipesrc_{session_id}_audio listen-to={session_id}_audio \
+is-live=true stream-sync=restart-ts max-bytes=0 max-buffers=3 block=false ! \
+queue max-size-buffers=3 leaky=downstream ! \
+wolf_party_audio_mixer.sink_0
+input-selector name=wolf_party_audio_secondary_selector ! \
+queue max-size-buffers=3 leaky=downstream ! \
+volume name=wolf_party_secondary_volume volume=0.0 ! \
+wolf_party_audio_mixer.sink_1 \
+audiotestsrc name=wolf_party_audio_secondary_silence wave=silence is-live=true ! \
+audio/x-raw,channels={channels},rate=48000 ! \
+wolf_party_audio_secondary_selector.sink_0 \
+interpipesrc name=interpipesrc_{session_id}_audio_secondary listen-to={session_id}_audio \
+is-live=true stream-sync=restart-ts max-bytes=0 max-buffers=3 block=false ! \
+wolf_party_audio_secondary_selector.sink_1 \
+audiomixer name=wolf_party_audio_mixer\
 """
 
 default_audio_params = "queue max-size-buffers=3 leaky=downstream ! audiorate ! audioconvert"

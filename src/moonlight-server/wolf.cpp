@@ -229,8 +229,10 @@ void run() {
   auto pulse_router_handlers = audio::setup_pulseaudio_router_handlers(local_state, pulse_router_state);
   // Setup event handlers for Moonlight related events (Start/Stop stream, hotplug, etc)
   auto moonlight_sess_handlers = sessions::setup_moonlight_handlers(local_state, runtime_dir, audio_server);
+  auto party_mode_handlers = sessions::setup_party_mode_handlers(local_state);
   // Setup event handlers for player Lobbies
   auto lobbies_handlers = sessions::setup_lobbies_handlers(local_state, runtime_dir, audio_server);
+  sessions::start_party_mode_join_listener(local_state);
 
   http_thread.join(); // Let's park the main thread over here
 }

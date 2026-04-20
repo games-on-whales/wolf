@@ -262,14 +262,15 @@ void mouse_move_abs(const MOUSE_MOVE_ABS_PACKET &pkt, events::StreamSession &ses
     float y = boost::endian::big_to_native(pkt.y);
     float window_width = boost::endian::big_to_native(pkt.width);
     float window_height = boost::endian::big_to_native(pkt.height);
+    auto render_display_mode = *session.render_display_mode->load();
 
-    auto absolute_x = (x / window_width) * static_cast<float>(session.display_mode.width) * pointer_acceleration;
-    auto absolute_y = (y / window_height) * static_cast<float>(session.display_mode.height) * pointer_acceleration;
+    auto absolute_x = (x / window_width) * static_cast<float>(render_display_mode.width) * pointer_acceleration;
+    auto absolute_y = (y / window_height) * static_cast<float>(render_display_mode.height) * pointer_acceleration;
 
     std::visit([absolute_x,
                 absolute_y,
-                screen_width = session.display_mode.width,
-                screen_height = session.display_mode.height](
+                screen_width = render_display_mode.width,
+                screen_height = render_display_mode.height](
                    auto &mouse) { mouse.move_abs(absolute_x, absolute_y, screen_width, screen_height); },
                session.mouse->value());
   } else {

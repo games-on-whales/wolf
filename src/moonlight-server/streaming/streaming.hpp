@@ -28,6 +28,7 @@ struct WaylandDisplayReady {
    * we need a reference so that we can send events directly to it (mouse, keyboard, ...)
    */
   gstreamer::gst_element_ptr wayland_plugin;
+  gstreamer::gst_element_ptr wayland_capsfilter;
 };
 
 void start_video_producer(const std::string &session_id,
