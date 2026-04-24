@@ -20,8 +20,6 @@ jobs:
 
     steps:
       - uses: actions/checkout@v4
-        with:
-          ref: ${{ github.head_ref }}
 
       - uses: DoozyX/clang-format-lint-action@v0.14
         with:
@@ -29,9 +27,10 @@ jobs:
           exclude: 'src/rust'
           extensions: 'h,hpp,cpp,c'
           clangFormatVersion: 18
-          inplace: True
+          inplace: ${{ github.event_name == 'push' }}
 
       - uses: EndBug/add-and-commit@v9
+        if: github.event_name == 'push'
         with:
           committer_name: GitHub Actions
           committer_email: actions@github.com

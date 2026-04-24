@@ -101,7 +101,7 @@ jobs:
 
       - name: Test Report
         uses: dorny/test-reporter@v1
-        if: success() || failure()    # run this step even if previous step failed
+        if: (success() || failure()) && github.event_name == 'push'    # run this step even if previous step failed; skip on fork PRs (no check-run write perms)
         with:
           name: aarch64
           path: ${{runner.workspace}}/report.xml
@@ -240,7 +240,7 @@ jobs:
 
       - name: Test Report
         uses: dorny/test-reporter@v1
-        if: success() || failure()    # run this step even if previous step failed
+        if: (success() || failure()) && github.event_name == 'push'    # run this step even if previous step failed; skip on fork PRs (no check-run write perms)
         with:
           name: ${{matrix.cxx}} - STD ${{ matrix.std }} - Shared ${{ matrix.shared }}
           path: ${{runner.workspace}}/report.xml
