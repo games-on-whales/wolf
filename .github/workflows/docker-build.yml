@@ -123,6 +123,11 @@ jobs:
           context: .
           file: docker/wolf.Dockerfile
           push: ${{ steps.prep.outputs.push }}
+          # Load into the local docker daemon when we aren't pushing to a
+          # registry (fork PRs, missing secrets) so the smoke-test step
+          # below can run `docker image inspect` and `docker run` against
+          # the image we just built.
+          load: ${{ steps.prep.outputs.push != 'true' }}
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
           build-args: |
@@ -130,6 +135,24 @@ jobs:
             IMAGE_SOURCE=${{ steps.prep.outputs.github_server_url }}/${{ github.repository }}
           cache-from: ${{ steps.prep.outputs.cache_from }}
           cache-to: ${{ steps.prep.outputs.cache_to }}
+
+      # Smoke-test the image we just built. Two ingest paths because the
+      # build step's output differs by context:
+      #   * push=true  -> registry got the image; `docker pull` fetches it.
+      #   * push=false -> `load: true` put it in the local daemon; no fetch.
+      # Either way we then invoke bin/test-image.sh, which runs the 3-layer
+      # harness (structural + cont-init smoke + docker/tests/smoke.sh).
+      - name: Smoke test wolf image
+        run: |
+          set -euo pipefail
+          tag='${{ fromJSON(steps.meta.outputs.json).tags[0] }}'
+          if [[ "${{ steps.prep.outputs.push }}" == "true" ]]; then
+            echo "==> pulling ${tag} from registry"
+            docker pull "${tag}"
+          else
+            echo "==> using locally-loaded image (no registry push)"
+          fi
+          ./bin/test-image.sh "${tag}"
 
   test_devcontainer:
     runs-on: ubuntu-latest
