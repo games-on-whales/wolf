@@ -11,13 +11,51 @@ extern "C" {
 #include <helpers/logger.hpp>
 #include <helpers/tsqueue.hpp>
 #include <helpers/utils.hpp>
+#include <algorithm>
+#include <chrono>
 #include <memory>
+#include <optional>
+#include <string>
 #include <sys/mman.h>
 #include <time.h>
 #include <unistd.h>
+#include <vector>
 #include <wayland-client.h>
 
 namespace wolf::core::virtual_display {
+
+enum OutputEventType { OUTPUT_GEOMETRY, OUTPUT_MODE, OUTPUT_DONE, OUTPUT_SCALE, OUTPUT_NAME, OUTPUT_DESCRIPTION };
+struct OutputEvent {
+  OutputEventType type;
+
+  // OUTPUT_GEOMETRY
+  int32_t x = 0;
+  int32_t y = 0;
+  int32_t physical_width = 0;
+  int32_t physical_height = 0;
+  int32_t subpixel = 0;
+  std::string make = {};
+  std::string model = {};
+  int32_t transform = 0;
+
+  // OUTPUT_MODE
+  uint32_t flags = 0;
+  int32_t width = 0;
+  int32_t height = 0;
+  int32_t refresh = 0;
+
+  // OUTPUT_SCALE
+  int32_t scale_factor = 0;
+
+  // OUTPUT_NAME / OUTPUT_DESCRIPTION
+  std::string text = {};
+};
+
+struct ToplevelConfigureEvent {
+  int32_t width;
+  int32_t height;
+  std::vector<uint32_t> states;
+};
 
 struct WClientState { // The trick here to use shared_ptr is so that it'll automatically call the destroy function
   std::shared_ptr<wl_seat> seat = {};
@@ -25,13 +63,21 @@ struct WClientState { // The trick here to use shared_ptr is so that it'll autom
   std::shared_ptr<wl_shm> shm = {};
   std::shared_ptr<xdg_wm_base> xwm_base = {};
   std::shared_ptr<zwp_relative_pointer_manager_v1> relative_pointer_manager = {};
+  std::shared_ptr<wl_output> output = {};
 
   std::shared_ptr<wl_surface> surface = {};
   std::shared_ptr<xdg_surface> xsurface = {};
+  std::shared_ptr<xdg_toplevel> toplevel = {};
 
   std::shared_ptr<wl_keyboard> keyboard = {};
   std::shared_ptr<wl_pointer> pointer = {};
   std::shared_ptr<zwp_relative_pointer_v1> relative_pointer = {};
+
+  // Event queues are allocated up-front so the registry / window-creation listeners
+  // can start pushing into them before the test gets a chance to subscribe.
+  std::shared_ptr<TSQueue<OutputEvent>> output_events = std::make_shared<TSQueue<OutputEvent>>();
+  std::shared_ptr<TSQueue<ToplevelConfigureEvent>> toplevel_configure_events =
+      std::make_shared<TSQueue<ToplevelConfigureEvent>>();
 };
 
 constexpr int WINDOW_WIDTH = 640;
@@ -48,6 +94,99 @@ static const struct xdg_wm_base_listener xdg_wm_base_listener = {
     .ping = [](void *data, struct xdg_wm_base *xdg_wm_base, uint32_t serial) {
       xdg_wm_base_pong(xdg_wm_base, serial);
     }};
+
+static const struct wl_output_listener wl_output_listener = {
+    .geometry =
+        [](void *data,
+           struct wl_output *wl_output,
+           int32_t x,
+           int32_t y,
+           int32_t physical_width,
+           int32_t physical_height,
+           int32_t subpixel,
+           const char *make,
+           const char *model,
+           int32_t transform) {
+          logs::log(logs::debug,
+                    "[OUTPUT] geometry: x={}, y={}, phys={}x{}, make={}, model={}",
+                    x,
+                    y,
+                    physical_width,
+                    physical_height,
+                    make ? make : "",
+                    model ? model : "");
+          auto queue = static_cast<TSQueue<OutputEvent> *>(data);
+          queue->push({.type = OUTPUT_GEOMETRY,
+                       .x = x,
+                       .y = y,
+                       .physical_width = physical_width,
+                       .physical_height = physical_height,
+                       .subpixel = subpixel,
+                       .make = make ? make : "",
+                       .model = model ? model : "",
+                       .transform = transform});
+        },
+    .mode =
+        [](void *data, struct wl_output *wl_output, uint32_t flags, int32_t width, int32_t height, int32_t refresh) {
+          logs::log(logs::debug,
+                    "[OUTPUT] mode: flags={}, width={}, height={}, refresh={}",
+                    flags,
+                    width,
+                    height,
+                    refresh);
+          auto queue = static_cast<TSQueue<OutputEvent> *>(data);
+          queue->push({.type = OUTPUT_MODE, .flags = flags, .width = width, .height = height, .refresh = refresh});
+        },
+    .done =
+        [](void *data, struct wl_output *wl_output) {
+          logs::log(logs::debug, "[OUTPUT] done");
+          auto queue = static_cast<TSQueue<OutputEvent> *>(data);
+          queue->push({.type = OUTPUT_DONE});
+        },
+    .scale =
+        [](void *data, struct wl_output *wl_output, int32_t factor) {
+          logs::log(logs::debug, "[OUTPUT] scale: factor={}", factor);
+          auto queue = static_cast<TSQueue<OutputEvent> *>(data);
+          queue->push({.type = OUTPUT_SCALE, .scale_factor = factor});
+        },
+    .name =
+        [](void *data, struct wl_output *wl_output, const char *name) {
+          logs::log(logs::debug, "[OUTPUT] name: {}", name ? name : "");
+          auto queue = static_cast<TSQueue<OutputEvent> *>(data);
+          queue->push({.type = OUTPUT_NAME, .text = name ? name : ""});
+        },
+    .description =
+        [](void *data, struct wl_output *wl_output, const char *description) {
+          logs::log(logs::debug, "[OUTPUT] description: {}", description ? description : "");
+          auto queue = static_cast<TSQueue<OutputEvent> *>(data);
+          queue->push({.type = OUTPUT_DESCRIPTION, .text = description ? description : ""});
+        },
+};
+
+static const struct xdg_toplevel_listener xdg_toplevel_listener = {
+    .configure =
+        [](void *data, struct xdg_toplevel *xdg_toplevel, int32_t width, int32_t height, struct wl_array *states) {
+          logs::log(logs::debug, "[TOPLEVEL] configure: width={}, height={}", width, height);
+          auto queue = static_cast<TSQueue<ToplevelConfigureEvent> *>(data);
+          std::vector<uint32_t> state_vec;
+          for (auto *st = static_cast<uint32_t *>(states->data);
+               reinterpret_cast<const char *>(st) < static_cast<const char *>(states->data) + states->size;
+               ++st) {
+            state_vec.push_back(*st);
+          }
+          queue->push({.width = width, .height = height, .states = std::move(state_vec)});
+        },
+    .close =
+        [](void *data, struct xdg_toplevel *xdg_toplevel) { logs::log(logs::debug, "[TOPLEVEL] close"); },
+    .configure_bounds =
+        [](void *data, struct xdg_toplevel *xdg_toplevel, int32_t width, int32_t height) {
+          logs::log(logs::debug, "[TOPLEVEL] configure_bounds: width={}, height={}", width, height);
+        },
+    .wm_capabilities =
+        [](void *data, struct xdg_toplevel *xdg_toplevel, struct wl_array *capabilities) {
+          logs::log(logs::debug, "[TOPLEVEL] wm_capabilities");
+        },
+};
 
 std::shared_ptr<WClientState> w_get_state(std::shared_ptr<wl_display> wd) {
   struct wl_registry *registry = wl_display_get_registry(wd.get());
@@ -75,6 +214,15 @@ std::shared_ptr<WClientState> w_get_state(std::shared_ptr<wl_display> wd) {
               (zwp_relative_pointer_manager_v1 *)
                   wl_registry_bind(registry, id, &zwp_relative_pointer_manager_v1_interface, version),
               &zwp_relative_pointer_manager_v1_destroy);
+        } else if (strcmp(interface, "wl_output") == 0) {
+          // wl_output is advertised only after the compositor has been given a VideoInfo
+          // (it's created lazily by the first set_resolution call). Bind the listener
+          // inline so we don't drop the initial geometry/mode/done events.
+          auto bound_version = std::min(version, 4u);
+          state->output = std::shared_ptr<wl_output>(
+              (wl_output *)wl_registry_bind(registry, id, &wl_output_interface, bound_version),
+              &wl_output_destroy);
+          wl_output_add_listener(state->output.get(), &wl_output_listener, state->output_events.get());
         }
       },
       [](void *data, struct wl_registry *registry, uint32_t id) {}};
@@ -198,9 +346,11 @@ void w_display_create_window(WClientState &w_state) {
   w_state.xsurface = std::shared_ptr<xdg_surface>(xdg_surface_ptr, &xdg_surface_destroy);
   xdg_surface_add_listener(xdg_surface_ptr, &xdg_surface_listener, &w_state);
 
-  auto xdg_toplevel = xdg_surface_get_toplevel(w_state.xsurface.get());
-  xdg_toplevel_set_title(xdg_toplevel, "Wolf Wayland Client");
-  xdg_toplevel_set_app_id(xdg_toplevel, "wolf-client");
+  auto xdg_toplevel_ptr = xdg_surface_get_toplevel(w_state.xsurface.get());
+  w_state.toplevel = std::shared_ptr<xdg_toplevel>(xdg_toplevel_ptr, &xdg_toplevel_destroy);
+  xdg_toplevel_add_listener(xdg_toplevel_ptr, &xdg_toplevel_listener, w_state.toplevel_configure_events.get());
+  xdg_toplevel_set_title(xdg_toplevel_ptr, "Wolf Wayland Client");
+  xdg_toplevel_set_app_id(xdg_toplevel_ptr, "wolf-client");
 
   wl_surface_commit(surface);
 }
@@ -394,6 +544,61 @@ std::shared_ptr<TSQueue<MouseEvent>> w_get_mouse_queue(WClientState &w_state) {
   zwp_relative_pointer_v1_add_listener(zwp_pointer, &zwp_relative_pointer_v1_listener, queue.get());
 
   return queue;
+}
+
+// Pops every currently-available OutputEvent from `queue` until a timeout expires
+// without a new event arriving. Useful when a single compositor-side state change
+// (e.g. a mode switch) triggers a burst of geometry/mode/scale/done events and the
+// test needs to reason about the whole batch.
+inline std::vector<OutputEvent> drain_output_events(TSQueue<OutputEvent> &queue,
+                                                    std::chrono::milliseconds per_event_timeout =
+                                                        std::chrono::milliseconds(50)) {
+  std::vector<OutputEvent> out;
+  while (auto ev = queue.pop(per_event_timeout)) {
+    out.push_back(*ev);
+  }
+  return out;
+}
+
+inline std::vector<ToplevelConfigureEvent>
+drain_toplevel_configure_events(TSQueue<ToplevelConfigureEvent> &queue,
+                                std::chrono::milliseconds per_event_timeout = std::chrono::milliseconds(50)) {
+  std::vector<ToplevelConfigureEvent> out;
+  while (auto ev = queue.pop(per_event_timeout)) {
+    out.push_back(*ev);
+  }
+  return out;
+}
+
+// Returns the most recent OUTPUT_MODE event in a drained batch, if any.
+inline std::optional<OutputEvent> latest_mode(const std::vector<OutputEvent> &events) {
+  std::optional<OutputEvent> result;
+  for (const auto &ev : events) {
+    if (ev.type == OUTPUT_MODE) {
+      result = ev;
+    }
+  }
+  return result;
+}
+
+// Returns the most recent OUTPUT_GEOMETRY event in a drained batch, if any.
+inline std::optional<OutputEvent> latest_geometry(const std::vector<OutputEvent> &events) {
+  std::optional<OutputEvent> result;
+  for (const auto &ev : events) {
+    if (ev.type == OUTPUT_GEOMETRY) {
+      result = ev;
+    }
+  }
+  return result;
+}
+
+// Spins the client's event loop a few times to let pending server events land. We
+// roundtrip rather than just dispatch because Wolf's compositor runs in a separate
+// thread and we want a clean barrier before reading the queues.
+inline void w_roundtrip_n(wl_display *wd, int times = 3) {
+  for (int i = 0; i < times; ++i) {
+    wl_display_roundtrip(wd);
+  }
 }
 
 } // namespace wolf::core::virtual_display
