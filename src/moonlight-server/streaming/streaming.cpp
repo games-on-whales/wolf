@@ -392,7 +392,15 @@ void set_capsfilter_size(GstElement *capsfilter, int width, int height) {
     return;
   }
 
+  // Pin format=RGBx to match the producer (waylanddisplaysrc) and the black
+  // placeholder videotestsrc feeding the secondary input-selector. Without
+  // this the compositor can negotiate BGRA based on whichever pad arrives
+  // first, which byte-reinterprets the RGBx stream and gives the encoder a
+  // red/orange cast.
   auto caps = gst_caps_new_simple("video/x-raw",
+                                  "format",
+                                  G_TYPE_STRING,
+                                  "RGBx",
                                   "width",
                                   G_TYPE_INT,
                                   width,
