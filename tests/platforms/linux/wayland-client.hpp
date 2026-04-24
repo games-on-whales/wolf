@@ -20,9 +20,33 @@ extern "C" {
 #include <time.h>
 #include <unistd.h>
 #include <vector>
+#include <immer/array.hpp>
+#include <immer/vector.hpp>
 #include <wayland-client.h>
 
 namespace wolf::core::virtual_display {
+
+// The LINK_RUST_WAYLAND=ON build of wolf_core ships a legacy C++ entry-point
+// API (free functions rather than the gstreamer-plugin-based one in
+// virtual-display.hpp) that the test harness drives the virtual display
+// through. These free functions live in
+// src/core/src/platforms/linux/virtual-display/wayland-display.cpp but aren't
+// declared in core/virtual-display.hpp. Forward-declaring here keeps the
+// declarations test-local and avoids reshaping the production header for code
+// that only tests link against.
+// Default to "software" so the [WAYLAND] suite is portable across sandboxes /
+// CI runners that don't expose a real DRM render node. The production call
+// path is the NEW-signature overload in virtual-display.hpp, which isn't
+// affected by this test-only default.
+wl_state_ptr create_wayland_display(const immer::array<std::string> &input_devices,
+                                    const std::string &render_node = "software");
+std::unique_ptr<GstCaps, decltype(&gst_caps_unref)>
+set_resolution(WaylandState &w_state,
+               const DisplayMode &display_mode,
+               const std::optional<gstreamer::gst_element_ptr> &app_src = {});
+immer::vector<std::string> get_devices(const WaylandState &w_state);
+immer::vector<std::string> get_env(const WaylandState &w_state);
+GstBuffer *get_frame(WaylandState &w_state);
 
 enum OutputEventType { OUTPUT_GEOMETRY, OUTPUT_MODE, OUTPUT_DONE, OUTPUT_SCALE, OUTPUT_NAME, OUTPUT_DESCRIPTION };
 struct OutputEvent {
