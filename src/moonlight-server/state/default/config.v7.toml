@@ -325,15 +325,15 @@ interpipesrc name=interpipesrc_{session_id}_video listen-to={session_id}_video \
 is-live=true stream-sync=restart-ts max-bytes=0 max-buffers=1 leaky-type=downstream ! \
 queue max-size-buffers=1 leaky=downstream ! \
 videoconvertscale ! \
-capsfilter name=wolf_party_primary_caps caps=video/x-raw,width={width},height={height} ! \
+capsfilter name=wolf_party_primary_caps caps=video/x-raw,format=RGBx,width={width},height={height} ! \
 wolf_party_video.sink_0
 input-selector name=wolf_party_video_secondary_selector ! \
 queue max-size-buffers=1 leaky=downstream ! \
 videoconvertscale ! \
-capsfilter name=wolf_party_secondary_caps caps=video/x-raw,width={width},height={height} ! \
+capsfilter name=wolf_party_secondary_caps caps=video/x-raw,format=RGBx,width={width},height={height} ! \
 wolf_party_video.sink_1 \
 videotestsrc pattern=black is-live=true ! \
-video/x-raw,format=BGRA,width={width},height={height},framerate={fps}/1 ! \
+video/x-raw,format=RGBx,width={width},height={height},framerate={fps}/1 ! \
 wolf_party_video_secondary_selector.sink_0 \
 interpipesrc name=interpipesrc_{session_id}_video_secondary listen-to={session_id}_video \
 is-live=true stream-sync=restart-ts max-bytes=0 max-buffers=1 leaky-type=downstream ! \
