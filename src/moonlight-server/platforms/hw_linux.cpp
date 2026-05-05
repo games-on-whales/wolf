@@ -12,8 +12,8 @@
 #include <net/ethernet.h>
 #include <netinet/in.h>
 #include <optional>
-#include <system_error>
 #include <sys/socket.h>
+#include <system_error>
 #include <unistd.h>
 
 extern "C" {
