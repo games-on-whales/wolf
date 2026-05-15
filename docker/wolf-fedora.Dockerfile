@@ -12,6 +12,8 @@ RUN dnf install -y \
     git \
     clang \
     gcc-c++ \
+    glibc-static \
+    libstdc++-static \
     boost-devel \
     wayland-devel libinput-devel libxkbcommon-devel mesa-libgbm-devel \
     libcurl-devel \
