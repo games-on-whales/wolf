@@ -30,6 +30,8 @@ RUN <<_BUILD_LIBMFX
 
     # Patch to fix compilation error on modern gcc
     curl -fsSL https://patch-diff.githubusercontent.com/raw/Intel-Media-SDK/MediaSDK/pull/3005.patch | git apply -
+    grep -q "#include <cstdint>" samples/sample_vpp/src/sample_vpp_frc_adv.cpp || \
+      sed -i "/#include <algorithm>/a #include <cstdint>" samples/sample_vpp/src/sample_vpp_frc_adv.cpp
 
     mkdir build
     cd build
