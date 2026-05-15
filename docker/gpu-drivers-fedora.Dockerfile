@@ -11,7 +11,7 @@ ARG REQUIRED_PACKAGES="libva libva-utils \
 
 RUN dnf install -y \
       https://mirrors.rpmfusion.org/free/fedora/rpmfusion-free-release-$(rpm -E %fedora).noarch.rpm && \
-    dnf install -y $REQUIRED_PACKAGES && \
+    dnf install -y --skip-unavailable $REQUIRED_PACKAGES && \
     dnf clean all
 
 # libmfx is not available in Fedora so we build from sources (see: https://github.com/games-on-whales/wolf/issues/221)

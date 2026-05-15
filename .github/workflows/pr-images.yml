@@ -1,0 +1,154 @@
+name: PR Docker images
+
+on:
+  pull_request:
+    paths-ignore:
+      - "docs/**"
+  workflow_dispatch:
+    inputs:
+      pr_id:
+        description: "Pull request number to use in image tags."
+        required: true
+      os:
+        description: "OS image variant to build."
+        required: true
+        default: all
+        type: choice
+        options:
+          - all
+          - ubuntu
+          - fedora
+
+permissions:
+  contents: read
+  packages: write
+
+env:
+  GSTREAMER_VERSION: 1.26.7
+
+jobs:
+  build_pr_image:
+    name: build ${{ matrix.os }} PR image
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu
+            base_image: ghcr.io/games-on-whales/base-app:edge
+            gpu_file: docker/gpu-drivers.Dockerfile
+            gstreamer_file: docker/gstreamer.Dockerfile
+            wolf_file: docker/wolf.Dockerfile
+          - os: fedora
+            base_image: ghcr.io/games-on-whales/base-app:fedora
+            gpu_file: docker/gpu-drivers-fedora.Dockerfile
+            gstreamer_file: docker/gstreamer-fedora.Dockerfile
+            wolf_file: docker/wolf-fedora.Dockerfile
+
+    steps:
+      - name: Prepare image tag
+        id: vars
+        shell: bash
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          OS_VARIANT: ${{ matrix.os }}
+          PR_ID_INPUT: ${{ inputs.pr_id || '' }}
+          PULL_REQUEST_NUMBER: ${{ github.event.pull_request.number || '' }}
+          SELECTED_OS: ${{ inputs.os || 'all' }}
+        run: |
+          if [ "$EVENT_NAME" = "pull_request" ]; then
+            PR_ID="$PULL_REQUEST_NUMBER"
+          else
+            PR_ID="$PR_ID_INPUT"
+          fi
+
+          if [ -z "$PR_ID" ]; then
+            echo "::error::pr_id is required for manual PR image builds"
+            exit 1
+          fi
+
+          if [ "$SELECTED_OS" != "all" ] && [ "$SELECTED_OS" != "$OS_VARIANT" ]; then
+            echo "enabled=false" >> "$GITHUB_OUTPUT"
+            echo "Skipping $OS_VARIANT; selected OS is $SELECTED_OS"
+            exit 0
+          fi
+
+          echo "enabled=true" >> "$GITHUB_OUTPUT"
+          echo "image_tag=pr-${PR_ID}-${OS_VARIANT}" >> "$GITHUB_OUTPUT"
+
+      - name: Checkout
+        if: steps.vars.outputs.enabled == 'true'
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        if: steps.vars.outputs.enabled == 'true'
+        id: buildx
+        uses: docker/setup-buildx-action@v2
+        with:
+          install: true
+          version: latest
+          driver-opts: image=moby/buildkit:master
+
+      - name: Login to GitHub Container Registry
+        if: steps.vars.outputs.enabled == 'true'
+        uses: docker/login-action@v2
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GHCR_TOKEN || github.token }}
+
+      - name: Build GPU Drivers
+        if: steps.vars.outputs.enabled == 'true'
+        uses: docker/build-push-action@v3
+        with:
+          builder: ${{ steps.buildx.outputs.name }}
+          context: docker/
+          file: ${{ matrix.gpu_file }}
+          push: true
+          build-args: |
+            BASE_IMAGE=${{ matrix.base_image }}
+          tags: ghcr.io/${{ github.repository_owner }}/gpu-drivers:${{ steps.vars.outputs.image_tag }}
+          labels: |
+            org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
+            org.opencontainers.image.revision=${{ github.sha }}
+            org.opencontainers.image.description=Wolf ${{ steps.vars.outputs.image_tag }} GPU driver base
+          cache-from: type=registry,ref=ghcr.io/${{ github.repository_owner }}/gpu-drivers:buildcache-${{ steps.vars.outputs.image_tag }}
+          cache-to: type=registry,ref=ghcr.io/${{ github.repository_owner }}/gpu-drivers:buildcache-${{ steps.vars.outputs.image_tag }},mode=max
+
+      - name: Build GStreamer
+        if: steps.vars.outputs.enabled == 'true'
+        uses: docker/build-push-action@v3
+        with:
+          builder: ${{ steps.buildx.outputs.name }}
+          context: docker/
+          file: ${{ matrix.gstreamer_file }}
+          push: true
+          build-args: |
+            GSTREAMER_VERSION=${{ env.GSTREAMER_VERSION }}
+            BASE_IMAGE=ghcr.io/${{ github.repository_owner }}/gpu-drivers:${{ steps.vars.outputs.image_tag }}
+          tags: ghcr.io/${{ github.repository_owner }}/gstreamer:${{ steps.vars.outputs.image_tag }}
+          labels: |
+            org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
+            org.opencontainers.image.revision=${{ github.sha }}
+            org.opencontainers.image.description=Wolf ${{ steps.vars.outputs.image_tag }} GStreamer base
+          cache-from: type=registry,ref=ghcr.io/${{ github.repository_owner }}/gstreamer:buildcache-${{ steps.vars.outputs.image_tag }}
+          cache-to: type=registry,ref=ghcr.io/${{ github.repository_owner }}/gstreamer:buildcache-${{ steps.vars.outputs.image_tag }},mode=max
+
+      - name: Build Wolf
+        if: steps.vars.outputs.enabled == 'true'
+        uses: docker/build-push-action@v3
+        with:
+          builder: ${{ steps.buildx.outputs.name }}
+          context: .
+          file: ${{ matrix.wolf_file }}
+          push: true
+          build-args: |
+            BASE_IMAGE=ghcr.io/${{ github.repository_owner }}/gstreamer:${{ steps.vars.outputs.image_tag }}
+            IMAGE_SOURCE=${{ github.server_url }}/${{ github.repository }}
+          tags: ghcr.io/${{ github.repository_owner }}/wolf:${{ steps.vars.outputs.image_tag }}
+          labels: |
+            org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
+            org.opencontainers.image.revision=${{ github.sha }}
+            org.opencontainers.image.description=Wolf ${{ steps.vars.outputs.image_tag }}
+          cache-from: type=registry,ref=ghcr.io/${{ github.repository_owner }}/wolf:buildcache-${{ steps.vars.outputs.image_tag }}
+          cache-to: type=registry,ref=ghcr.io/${{ github.repository_owner }}/wolf:buildcache-${{ steps.vars.outputs.image_tag }},mode=max
