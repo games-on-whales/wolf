@@ -1,6 +1,11 @@
 name: PR Docker images
 
 on:
+  push:
+    branches:
+      - "pr-*-image"
+    paths-ignore:
+      - "docs/**"
   pull_request:
     paths-ignore:
       - "docs/**"
@@ -51,6 +56,7 @@ jobs:
         shell: bash
         env:
           EVENT_NAME: ${{ github.event_name }}
+          REF_NAME: ${{ github.ref_name }}
           OS_VARIANT: ${{ matrix.os }}
           PR_ID_INPUT: ${{ inputs.pr_id || '' }}
           PULL_REQUEST_NUMBER: ${{ github.event.pull_request.number || '' }}
@@ -58,6 +64,16 @@ jobs:
         run: |
           if [ "$EVENT_NAME" = "pull_request" ]; then
             PR_ID="$PULL_REQUEST_NUMBER"
+          elif [ "$EVENT_NAME" = "push" ]; then
+            if [[ "$REF_NAME" =~ ^pr-([0-9]+)-([a-z]+)-image$ ]]; then
+              PR_ID="${BASH_REMATCH[1]}"
+              SELECTED_OS="${BASH_REMATCH[2]}"
+            elif [[ "$REF_NAME" =~ ^pr-([0-9]+)-image$ ]]; then
+              PR_ID="${BASH_REMATCH[1]}"
+            else
+              echo "::error::PR image branches must be named pr-{PR_ID}-{OS}-image or pr-{PR_ID}-image"
+              exit 1
+            fi
           else
             PR_ID="$PR_ID_INPUT"
           fi
