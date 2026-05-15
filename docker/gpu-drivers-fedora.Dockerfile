@@ -45,7 +45,6 @@ RUN <<_BUILD_LIBMFX
     ldconfig
 
     # Cleanup
-    dnf remove -y curl git gcc gcc-c++ cmake pkg-config
     dnf clean all
     rm -rf /tmp/*
 _BUILD_LIBMFX
@@ -72,7 +71,6 @@ RUN <<_ADD_NVRTC
     echo "/usr/local/nvidia/lib64" >> /etc/ld.so.conf.d/nvidia.conf
 
     # Cleanup
-    dnf remove -y unzip curl
     dnf clean all
 _ADD_NVRTC
 
