@@ -14,11 +14,11 @@ RUN <<_GSTREAMER_INSTALL
     DEV_PACKAGES=" \
         gcc gcc-c++ ninja-build meson cmake ccache bison \
         ca-certificates git \
-        flex libx265-devel opus-devel nasm zxing-cpp-devel zbar-devel libdrm-devel libva-devel \
+        flex x265-devel opus-devel nasm zxing-cpp-devel zbar-devel libdrm-devel libva-devel \
         libvpl-devel libunwind libcap \
         libX11-devel libxcb-devel libXfixes-devel libXdamage-devel wayland-devel wayland-protocols-devel pulseaudio-libs-devel glib2-devel \
         openjpeg2-devel lcms2-devel cairo-devel cairo-gobject-devel libwebp librsvg2-devel libaom-devel \
-        harfbuzz-devel pango-devel libsoup-devel mesa-libOpenGL-devel mesa-libgbm-devel mesa-libEGL-devel \
+        harfbuzz-devel pango-devel libsoup-devel libglvnd-devel mesa-libgbm-devel mesa-libEGL-devel \
         mesa-libGLU-devel freeglut-devel mesa-libGL-devel mesa-libGLES-devel libgudev-devel
         "
     dnf install -y $DEV_PACKAGES
@@ -72,7 +72,6 @@ RUN <<_GSTREAMER_INSTALL
     meson install -C build
 
     # Final cleanup stage
-    dnf remove -y $DEV_PACKAGES
     dnf clean all
     rm -rf $SOURCE_PATH
 _GSTREAMER_INSTALL

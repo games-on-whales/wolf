@@ -22,7 +22,7 @@ RUN dnf install -y \
     systemd-devel \
     libdrm-devel \
     pciutils-devel \
-    glib2-devel mesa-libEGL-devel mesa-libGLES-devel mesa-libOpenGL-devel \
+    glib2-devel mesa-libEGL-devel mesa-libGLES-devel libglvnd-devel \
     && dnf clean all
 
 ## Install Rust in order to build our custom compositor
