@@ -1,172 +1,84 @@
-name: Docker build
+name: PR 396 Fedora image
 
 on:
   push:
-    paths-ignore:
-      - "docs/**"
-      - ".github/**"
+    branches:
+      - pr-396-fedora-image
+
+env:
+  PR_IMAGE_TAG: pr-396-fedora
 
 jobs:
-  buildx:
+  build_fedora:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
-      # Set derived configuration variables:
-      # - images: images to build (docker and/or github)
-      # - push: if images need to be uploaded to repository (when secrets available)
-      # - has_docker_token
-      # - has_github_token
-      # - cache_from: image tag to use for imported cache
-      # - cache_to: image tag to use for exported cache
-      # - github_server_url: reference to source code repository
-      - name: Prepare
-        id: prep
-        run: |
-          IMAGES=""
-          PUSH=false
-          if [ -n "${{ secrets.DOCKERHUB_TOKEN }}" ]; then
-            IMAGES="gameonwhales/wolf"
-            PUSH=true
-            echo "has_docker_token=true" >> $GITHUB_OUTPUT
-          fi
-          if [ -n "${{ secrets.GHCR_TOKEN }}" ]; then
-            REGISTRY_IMAGE="ghcr.io/${{ github.repository_owner }}/wolf"
-            if [ "$IMAGES" = "" ]; then
-              IMAGES="ghcr.io/${REGISTRY_IMAGE}"
-            else
-              IMAGES="$IMAGES,ghcr.io/${REGISTRY_IMAGE}"
-            fi
-            PUSH=true
-            echo "has_github_token=true" >> $GITHUB_OUTPUT
-            echo "cache_from=type=registry,ref=${REGISTRY_IMAGE}:buildcache" >> $GITHUB_OUTPUT
-            echo "cache_to=type=registry,ref=${REGISTRY_IMAGE}:buildcache,mode=max" >> $GITHUB_OUTPUT
-          else
-            echo "cache_from=type=registry,ref=${REGISTRY_IMAGE}:buildcache" >> $GITHUB_OUTPUT
-            echo "cache_to=" >> $GITHUB_OUTPUT
-          fi
-          echo "images=${IMAGES}" >> $GITHUB_OUTPUT
-          echo "push=${PUSH}" >> $GITHUB_OUTPUT
-          echo "github_server_url=${GITHUB_SERVER_URL}" >> $GITHUB_OUTPUT
-
-      - name: Docker meta
-        id: meta
-        uses: docker/metadata-action@v4
-        with:
-          # list of Docker images to use as base name for tags
-          images: ${{ steps.prep.outputs.images }}
-          # generate Docker tags based on the following events/attributes
-          tags: |
-            type=semver,pattern={{version}}
-            type=semver,pattern={{major}}
-            type=edge,branch=master
-            type=ref,event=branch
-            type=raw,value=alpha
-            type=sha
-          flavor: latest=false # let's not produce a :latest tag
-
       - name: Set up Docker Buildx
+        id: buildx
         uses: docker/setup-buildx-action@v2
         with:
           install: true
           version: latest
           driver-opts: image=moby/buildkit:master
 
-      - name: Login to DockerHub
-        if: steps.prep.outputs.has_docker_token != '' # secrets not available in PRs
-        uses: docker/login-action@v2
-        with:
-          username: abeltramo
-          password: ${{ secrets.DOCKERHUB_TOKEN }}
-
-
       - name: Login to GitHub Container Registry
-        if: steps.prep.outputs.has_github_token != '' # secrets not available in PRs
         uses: docker/login-action@v2
         with:
           registry: ghcr.io
           username: ${{ github.repository_owner }}
           password: ${{ secrets.GHCR_TOKEN }}
 
-      - name: Build GPU Drivers
+      - name: Build GPU Drivers Fedora
         uses: docker/build-push-action@v3
         with:
           builder: ${{ steps.buildx.outputs.name }}
           context: docker/
-          file: docker/gpu-drivers.Dockerfile
+          file: docker/gpu-drivers-fedora.Dockerfile
           push: true
-          tags: ghcr.io/${{ github.repository_owner }}/gpu-drivers:2025.05,gameonwhales/gpu-drivers:2025.05 # TODO: set build version as param
-          labels: ${{ steps.meta.outputs.labels }}
-          cache-from: type=registry,ref=ghcr.io/${{ github.repository_owner }}/gpu-drivers:buildcache
-          cache-to: type=registry,ref=ghcr.io/${{ github.repository_owner }}/gpu-drivers:buildcache,mode=max
+          build-args: |
+            BASE_IMAGE=ghcr.io/games-on-whales/base-app:fedora
+          tags: ghcr.io/${{ github.repository_owner }}/gpu-drivers:${{ env.PR_IMAGE_TAG }}
+          labels: |
+            org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
+            org.opencontainers.image.revision=${{ github.sha }}
+            org.opencontainers.image.description=Wolf PR 396 Fedora GPU driver base
+          cache-from: type=registry,ref=ghcr.io/${{ github.repository_owner }}/gpu-drivers:buildcache-${{ env.PR_IMAGE_TAG }}
+          cache-to: type=registry,ref=ghcr.io/${{ github.repository_owner }}/gpu-drivers:buildcache-${{ env.PR_IMAGE_TAG }},mode=max
 
-      - name: Build Gstreamer
+      - name: Build GStreamer Fedora
         uses: docker/build-push-action@v3
         with:
           builder: ${{ steps.buildx.outputs.name }}
           context: docker/
-          file: docker/gstreamer.Dockerfile
+          file: docker/gstreamer-fedora.Dockerfile
           push: true
           build-args: |
             GSTREAMER_VERSION=1.26.7
-            BASE_IMAGE=ghcr.io/${{ github.repository_owner }}/gpu-drivers:2025.05
-          tags: ghcr.io/${{ github.repository_owner }}/gstreamer:1.26.7,gameonwhales/gstreamer:1.26.7 # TODO: set gstreamer version as param
-          labels: ${{ steps.meta.outputs.labels }}
-          cache-from: type=registry,ref=ghcr.io/${{ github.repository_owner }}/gstreamer:buildcache
-          cache-to: type=registry,ref=ghcr.io/${{ github.repository_owner }}/gstreamer:buildcache,mode=max
+            BASE_IMAGE=ghcr.io/${{ github.repository_owner }}/gpu-drivers:${{ env.PR_IMAGE_TAG }}
+          tags: ghcr.io/${{ github.repository_owner }}/gstreamer:${{ env.PR_IMAGE_TAG }}
+          labels: |
+            org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
+            org.opencontainers.image.revision=${{ github.sha }}
+            org.opencontainers.image.description=Wolf PR 396 Fedora GStreamer base
+          cache-from: type=registry,ref=ghcr.io/${{ github.repository_owner }}/gstreamer:buildcache-${{ env.PR_IMAGE_TAG }}
+          cache-to: type=registry,ref=ghcr.io/${{ github.repository_owner }}/gstreamer:buildcache-${{ env.PR_IMAGE_TAG }},mode=max
 
-      - name: Build Wolf
+      - name: Build Wolf Fedora
         uses: docker/build-push-action@v3
         with:
           builder: ${{ steps.buildx.outputs.name }}
           context: .
-          file: docker/wolf.Dockerfile
-          push: ${{ steps.prep.outputs.push }}
-          tags: ${{ steps.meta.outputs.tags }}
-          labels: ${{ steps.meta.outputs.labels }}
+          file: docker/wolf-fedora.Dockerfile
+          push: true
           build-args: |
-            BASE_IMAGE=ghcr.io/${{ github.repository_owner }}/gstreamer:1.26.7
-            IMAGE_SOURCE=${{ steps.prep.outputs.github_server_url }}/${{ github.repository }}
-          cache-from: ${{ steps.prep.outputs.cache_from }}
-          cache-to: ${{ steps.prep.outputs.cache_to }}
-
-  test_devcontainer:
-    runs-on: ubuntu-latest
-    needs: buildx
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Login to GitHub Container Registry
-        if: steps.prep.outputs.has_github_token != '' # secrets not available in PRs
-        uses: docker/login-action@v2
-        with:
-          registry: ghcr.io
-          username: ${{ github.repository_owner }}
-          password: ${{ secrets.GHCR_TOKEN }}
-
-      - name: Run tests in devcontainer
-        uses: devcontainers/ci@v0.3
-        with:
-          imageTag: devcontainer
-          imageName: ghcr.io/${{ github.repository_owner }}/wolf
-          cacheFrom: ghcr.io/${{ github.repository_owner }}/wolf:buildcache
-          push: never
-          # TODO:
-          # runCmd: |
-          #   cmake -Bbuild \
-          #         -H$GITHUB_WORKSPACE \
-          #         -DCMAKE_BUILD_TYPE=Debug \
-          #         -DCMAKE_CXX_EXTENSIONS=OFF \
-          #         -DTEST_VIRTUAL_INPUT=OFF \
-          #         -DTEST_DOCKER=ON \
-          #         -DTEST_RUST_WAYLAND=ON \
-          #         -DTEST_NVIDIA=OFF \
-          #         -DTEST_EXCEPTIONS=OFF \
-          #         -DTEST_UHID=OFF \
-          #         -G Ninja
-          #
-          #   ninja -j $(nproc) wolftests
-          #
-          #   ./wolftests --reporter JUnit::out=${{runner.workspace}}/report.xml --reporter console::out=-::colour-mode=ansi
+            BASE_IMAGE=ghcr.io/${{ github.repository_owner }}/gstreamer:${{ env.PR_IMAGE_TAG }}
+            IMAGE_SOURCE=${{ github.server_url }}/${{ github.repository }}
+          tags: ghcr.io/${{ github.repository_owner }}/wolf:${{ env.PR_IMAGE_TAG }}
+          labels: |
+            org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
+            org.opencontainers.image.revision=${{ github.sha }}
+            org.opencontainers.image.description=Wolf PR 396 Fedora image
+          cache-from: type=registry,ref=ghcr.io/${{ github.repository_owner }}/wolf:buildcache-${{ env.PR_IMAGE_TAG }}
+          cache-to: type=registry,ref=ghcr.io/${{ github.repository_owner }}/wolf:buildcache-${{ env.PR_IMAGE_TAG }},mode=max
