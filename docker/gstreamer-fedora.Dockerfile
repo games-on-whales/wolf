@@ -12,7 +12,7 @@ RUN <<_GSTREAMER_INSTALL
     set -e
 
     DEV_PACKAGES=" \
-        gcc gcc-c++ ninja-build meson cmake ccache bison \
+        gcc gcc-c++ ninja-build meson cmake ccache bison libatomic \
         ca-certificates git \
         flex x265-devel opus-devel nasm zxing-cpp-devel zbar-devel libdrm-devel libva-devel \
         libvpl-devel libunwind libcap \
