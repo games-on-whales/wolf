@@ -44,4 +44,17 @@ else
     export WOLF_EMBED_PULSE=false
 fi
 
+# Embedded Wolf Den: the .NET management UI runs as another supervised process
+# inside this container instead of the legacy separate "wolf-den" container.
+# Wolf creates its control socket at WOLF_SOCKET_PATH; Wolf Den connects to that
+# same socket (it wants a unix:// URI). Its state (SQLite DB + data-protection
+# keys) lives under the persisted state folder so it survives container replacement.
+export WOLF_SOCKET_PATH=${WOLF_SOCKET_PATH:-/var/run/wolf/wolf.sock}
+mkdir -p "$(dirname "$WOLF_SOCKET_PATH")"
+export WOLF_DEN_SOCKET="unix://$WOLF_SOCKET_PATH"
+mkdir -p "$HOST_APPS_STATE_FOLDER/wolf-den"
+# Enable the embedded Wolf Den by default; set WOLF_EMBED_DEN=false to disable it
+# (e.g. if you run Wolf Den elsewhere). Gates its autostart in supervisord.conf.
+export WOLF_EMBED_DEN=${WOLF_EMBED_DEN:-true}
+
 exec supervisord -c /etc/supervisord.conf

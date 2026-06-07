@@ -107,6 +107,23 @@ RUN apt-get update -y && \
     pulseaudio pulseaudio-utils supervisor \
     && rm -rf /var/lib/apt/lists/*
 
+# Embedded Wolf Den: the .NET management UI runs as another supervised process
+# inside this container (see supervisord.conf + startup.sh) instead of the legacy
+# separate "wolf-den" container. We bring in the published app and the .NET
+# runtime straight from the Wolf Den image; its state (SQLite DB + data-protection
+# keys) lives in /etc/wolf/wolf-den (the persisted Wolf state folder), so it
+# survives container replacement. libstdc++6/zlib1g are the .NET native deps not
+# already pulled in above (libicu76, libssl3, ca-certificates are).
+ARG WOLF_DEN_IMAGE=ghcr.io/games-on-whales/wolf-den:stable
+RUN apt-get update -y && \
+    apt-get install -y --no-install-recommends \
+    libstdc++6 zlib1g \
+    && rm -rf /var/lib/apt/lists/*
+COPY --from=${WOLF_DEN_IMAGE} /usr/share/dotnet /usr/share/dotnet
+COPY --from=${WOLF_DEN_IMAGE} /app /app
+RUN ln -sf /usr/share/dotnet/dotnet /usr/bin/dotnet && \
+    ln -sfn /etc/wolf/wolf-den /app/wolf-den
+
 COPY docker/supervisord.conf /etc/supervisord.conf
 
 ENV GST_PLUGIN_PATH=/usr/local/lib/x86_64-linux-gnu/gstreamer-1.0/
