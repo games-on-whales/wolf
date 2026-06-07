@@ -1,4 +1,12 @@
 ARG BASE_IMAGE=ghcr.io/games-on-whales/gstreamer:1.26.7
+# Wolf Den image we pull the embedded .NET app + runtime from (see runner stage).
+# Declared in the global scope so it can be used in the FROM below; BuildKit does
+# not allow variable expansion directly in `COPY --from=`.
+ARG WOLF_DEN_IMAGE=ghcr.io/games-on-whales/wolf-den:stable
+########################################################
+# Alias stage for the Wolf Den image so the runner can COPY --from it.
+FROM ${WOLF_DEN_IMAGE} AS wolf-den-src
+
 ########################################################
 FROM $BASE_IMAGE AS wolf-builder
 
@@ -113,14 +121,14 @@ RUN apt-get update -y && \
 # runtime straight from the Wolf Den image; its state (SQLite DB + data-protection
 # keys) lives in /etc/wolf/wolf-den (the persisted Wolf state folder), so it
 # survives container replacement. libstdc++6/zlib1g are the .NET native deps not
-# already pulled in above (libicu76, libssl3, ca-certificates are).
-ARG WOLF_DEN_IMAGE=ghcr.io/games-on-whales/wolf-den:stable
+# already pulled in above (libicu76, libssl3, ca-certificates are). The source
+# image is the wolf-den-src stage (set via the WOLF_DEN_IMAGE build arg).
 RUN apt-get update -y && \
     apt-get install -y --no-install-recommends \
     libstdc++6 zlib1g \
     && rm -rf /var/lib/apt/lists/*
-COPY --from=${WOLF_DEN_IMAGE} /usr/share/dotnet /usr/share/dotnet
-COPY --from=${WOLF_DEN_IMAGE} /app /app
+COPY --from=wolf-den-src /usr/share/dotnet /usr/share/dotnet
+COPY --from=wolf-den-src /app /app
 RUN ln -sf /usr/share/dotnet/dotnet /usr/bin/dotnet && \
     ln -sfn /etc/wolf/wolf-den /app/wolf-den
 
