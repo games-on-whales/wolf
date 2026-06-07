@@ -36,9 +36,8 @@ static void persist_udev_db(const std::string &msg) {
       tags = v;
     else if (k == "USEC_INITIALIZED")
       usec = v;
-    else if (!k.empty() && k[0] != '.' && k != "DEVPATH" && k != "SUBSYSTEM" && k != "DEVNAME" &&
-             k != "DEVTYPE" && k != "SEQNUM" && k != "DRIVER" && k != "MODALIAS" && k != "SYNTH_UUID" &&
-             k != "DEVLINKS")
+    else if (!k.empty() && k[0] != '.' && k != "DEVPATH" && k != "SUBSYSTEM" && k != "DEVNAME" && k != "DEVTYPE" &&
+             k != "SEQNUM" && k != "DRIVER" && k != "MODALIAS" && k != "SYNTH_UUID" && k != "DEVLINKS")
       props.emplace_back(k, v);
   }
 
