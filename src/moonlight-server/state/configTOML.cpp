@@ -1,3 +1,5 @@
+#include <algorithm>
+#include <cstdio>
 #include <events/events.hpp>
 #include <events/reflectors.hpp>
 #include <fstream>
@@ -273,6 +275,37 @@ Config load_or_default(const std::string &source,
     use_zero_copy = false;
   }
 
+  // NVIDIA Blackwell (sm_120 / compute capability 12.x) and newer can't consume
+  // the compositor's *direct* BGRA CUDAMemory buffer: `cudaconvertscale` fails to
+  // negotiate it ("could not transform ... not negotiated") on this architecture
+  // (see games-on-whales/wolf#417). The fix keeps zero-copy but routes frames out
+  // of the compositor as DMABuf and imports them on the GPU via glupload (DMABuf
+  // -> GLMemory) + cudaupload (GLMemory -> CUDAMemory), which negotiates fine.
+  // Older NVIDIA GPUs are unaffected and keep the direct CUDAMemory path.
+  bool nvidia_blackwell = false;
+  if (use_zero_copy && vendor == GPU_VENDOR::NVIDIA) {
+    int cc_major = -1;
+    if (FILE *pipe = popen("nvidia-smi --query-gpu=compute_cap --format=csv,noheader,nounits 2>/dev/null", "r")) {
+      char line[64];
+      while (std::fgets(line, sizeof(line), pipe) != nullptr) {
+        try {
+          cc_major = std::max(cc_major, std::stoi(line)); // "12.0" -> 12
+        } catch (const std::exception &) {
+          // ignore unparseable lines (empty / "[N/A]")
+        }
+      }
+      pclose(pipe);
+    }
+    if (cc_major >= 12) {
+      nvidia_blackwell = true;
+      logs::log(logs::info,
+                "NVIDIA Blackwell+ GPU detected (compute capability {}.x): using the DMABuf zero-copy "
+                "pipeline (glupload -> cudaupload) to avoid the broken direct CUDAMemory interop "
+                "(games-on-whales/wolf#417).",
+                cc_major);
+    }
+  }
+
   /* Automatically pick the best encoders */
   auto h264_encoder = get_encoder("h264", default_gst_render_node, default_gst_video_settings.h264_encoders, vendor);
   if (!h264_encoder) {
@@ -301,7 +334,13 @@ Config load_or_default(const std::string &source,
   if (use_zero_copy) {
     switch (video_encoder) {
     case NVIDIA: {
-      default_base_video.producer_buffer_caps = "video/x-raw(memory:CUDAMemory)";
+      // Blackwell: pull DMABuf out of the compositor (imported GL->CUDA in the
+      // encoder); older NVIDIA: direct CUDAMemory. See wolf#417.
+      if (nvidia_blackwell) {
+        default_base_video.producer_buffer_caps = "video/x-raw(memory:DMABuf)";
+      } else {
+        default_base_video.producer_buffer_caps = "video/x-raw(memory:CUDAMemory)";
+      }
       break;
     }
     case VAAPI:
@@ -373,6 +412,20 @@ Config load_or_default(const std::string &source,
   if (av1_encoder) {
     av1_video_params = use_zero_copy ? av1_encoder->video_params_zero_copy.value_or(default_av1.video_params_zero_copy)
                                      : av1_encoder->video_params.value_or(default_av1.video_params);
+  }
+
+  // Blackwell zero-copy emits DMABuf from the compositor; cudaupload can't import
+  // DMABuf directly, so glupload (DMABuf -> GLMemory) feeds cudaupload
+  // (GLMemory -> CUDAMemory) ahead of the existing cudaconvertscale. See wolf#417.
+  if (nvidia_blackwell) {
+    auto with_glupload = [](const std::string &params) { return "glupload !\n" + params; };
+    h264_video_params = with_glupload(h264_video_params);
+    if (hevc_encoder) {
+      hevc_video_params = with_glupload(hevc_video_params);
+    }
+    if (av1_encoder) {
+      av1_video_params = with_glupload(av1_video_params);
+    }
   }
 
   auto clients_atom = std::make_shared<immer::atom<PairedClientList>>(paired_clients);
