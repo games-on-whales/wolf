@@ -43,7 +43,7 @@ RUN <<_GST_WAYLAND_DISPLAY
 
     git clone https://github.com/games-on-whales/gst-wayland-display
     cd gst-wayland-display
-    git checkout 67b1183
+    git checkout fix/nvidia-block-linear
     # Pinned to 0.10.20: 0.10.21+ requires rustc 1.92, upgrade RUST_VERSION above if unpinning
     cargo install cargo-c@0.10.20 --locked
     cargo cinstall --features="cuda" --prefix=/usr/local/lib/x86_64-linux-gnu/ --libdir=/usr/local/lib/x86_64-linux-gnu/gstreamer-1.0
