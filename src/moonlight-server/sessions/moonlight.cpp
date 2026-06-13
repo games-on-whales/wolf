@@ -1,3 +1,4 @@
+#include <atomic>
 #include <immer/array_transient.hpp>
 #include <immer/map_transient.hpp>
 #include <immer/vector_transient.hpp>
@@ -19,15 +20,19 @@ template <typename RTPPingType>
 immer::box<RTPPingType> wait_for_ping(std::shared_ptr<events::EventBusType> ev_bus, const auto &sess) {
   auto ping_promise = std::make_shared<std::promise<RTPPingType>>();
   auto ping_future = ping_promise->get_future();
+  auto resolved = std::make_shared<std::atomic_bool>(false);
 
-  auto handler =
-      ev_bus->register_handler<immer::box<RTPPingType>>([sess, ping_promise](const immer::box<RTPPingType> &ping_ev) {
+  auto handler = ev_bus->register_handler<immer::box<RTPPingType>>(
+      [sess, ping_promise, resolved](const immer::box<RTPPingType> &ping_ev) {
         // Check if this ping is for our session
         if (sess->rtp_secret_payload == ping_ev->payload || // Secret payload matching
             (!ping_ev->payload.has_value() && ping_ev->client_ip == sess->client_ip &&
              ping_ev->client_port == sess->port)) { // Legacy IP+port matching when no payload has been passed
-          // Resolve the promise with the ping event data
-          ping_promise->set_value(*ping_ev);
+          bool expected = false;
+          if (resolved->compare_exchange_strong(expected, true, std::memory_order_acq_rel)) {
+            // Resolve the promise with the ping event data
+            ping_promise->set_value(*ping_ev);
+          }
         }
       });
 
@@ -156,7 +161,7 @@ setup_moonlight_handlers(const immer::box<state::AppState> &app_state,
         }
 
         // TODO: timeout? What if the wayland display is never ready?
-        auto w_display_ready = on_ready->get_future().then([session](auto fut) {
+        auto w_display_ready = on_ready->get_future().then([session, runtime_dir](auto fut) {
           streaming::WaylandDisplayReady ready = fut.get();
 
           auto wl_state = virtual_display::create_wayland_display(ready.wayland_plugin, ready.wayland_socket_name);
@@ -167,6 +172,15 @@ setup_moonlight_handlers(const immer::box<state::AppState> &app_state,
           session->mouse->emplace(virtual_display::WaylandMouse(wl_state));
           session->keyboard->emplace(virtual_display::WaylandKeyboard(wl_state));
           session->touch_screen->emplace(virtual_display::WaylandTouchScreen(wl_state));
+
+          if (!wait_for_wayland_socket(runtime_dir, ready.wayland_socket_name)) {
+            logs::log(logs::error,
+                      "[STREAM_SESSION] Wayland socket {} was not ready, aborting runner startup",
+                      ready.wayland_socket_name);
+            session->event_bus->fire_event(
+                immer::box<events::StopStreamEvent>(events::StopStreamEvent{.session_id = session->session_id}));
+            return;
+          }
 
           logs::log(logs::debug, "[STREAM_SESSION] Start runner");
           session->event_bus->fire_event(immer::box<events::StartRunner>(

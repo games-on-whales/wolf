@@ -39,6 +39,10 @@ typedef guint64 CUtexObject;
 typedef guintptr CUdeviceptr;
 typedef gint CUdevice;
 
+typedef struct CUuuid_st { /**< CUDA definition of UUID */
+  char bytes[16];
+} CUuuid;
+
 typedef enum {
   CUDA_SUCCESS = 0,
   CUDA_ERROR_NO_DEVICE = 100,

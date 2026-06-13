@@ -61,6 +61,11 @@ struct Container {
  */
 void init();
 
+/**
+ * Container engines do not all use the same status code for name conflicts.
+ */
+bool is_container_name_conflict_response(long status_code, std::string_view response_body);
+
 class DockerAPI {
 private:
   std::string socket_path; // TODO: add B64 registry_auth

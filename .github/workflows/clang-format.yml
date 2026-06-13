@@ -19,21 +19,17 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
+      # Default checkout (PR merge ref) works for fork PRs too; an explicit
+      # `ref: github.head_ref` fails for forks because that branch isn't in this repo.
       - uses: actions/checkout@v4
 
+      # Run in check-only mode: fail the job on formatting violations instead of
+      # auto-committing fixes. Auto-commit can't push back to fork PRs (read-only
+      # token), so a verifying lint is the only behaviour that works for every PR.
       - uses: DoozyX/clang-format-lint-action@v0.14
         with:
           source: 'src'
           exclude: 'src/rust'
           extensions: 'h,hpp,cpp,c'
           clangFormatVersion: 18
-          inplace: ${{ github.event_name == 'push' }}
-
-      - uses: EndBug/add-and-commit@v9
-        if: github.event_name == 'push'
-        with:
-          committer_name: GitHub Actions
-          committer_email: actions@github.com
-          message: 'Committing clang-format changes'
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          inplace: False

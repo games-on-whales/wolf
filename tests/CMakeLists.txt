@@ -111,4 +111,6 @@ configure_file(assets/config.test.toml ${CMAKE_CURRENT_BINARY_DIR}/config.test.E
 list(APPEND CMAKE_MODULE_PATH ${catch2_SOURCE_DIR}/extras)
 include(CTest)
 include(Catch)
-catch_discover_tests(wolftests)
+catch_discover_tests(wolftests
+        PROPERTIES
+        ENVIRONMENT "WOLF_SKIP_WAYLAND_SOCKET_WAIT=TRUE")

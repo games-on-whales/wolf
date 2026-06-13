@@ -3,6 +3,7 @@
 #include <catch2/matchers/catch_matchers_contains.hpp>
 #include <catch2/matchers/catch_matchers_string.hpp>
 #include <catch2/matchers/catch_matchers_vector.hpp>
+#include <algorithm>
 #include <filesystem>
 #include <helpers/logger.hpp>
 #include <platforms/hw.hpp>
@@ -36,7 +37,11 @@ TEST_CASE("libdrm find linked devices", "[NVIDIA]") {
   REQUIRE_THAT(devices, Contains("/dev/nvidia0"));
   REQUIRE_THAT(devices, Contains("/dev/nvidia-modeset"));
   REQUIRE_THAT(devices, Contains("/dev/nvidia-uvm"));
-  REQUIRE_THAT(devices, Contains("/dev/nvidia-uvm-tools"));
+  if (std::filesystem::is_character_file("/dev/nvidia-uvm-tools")) {
+    REQUIRE_THAT(devices, Contains("/dev/nvidia-uvm-tools"));
+  } else {
+    REQUIRE(std::find(devices.begin(), devices.end(), "/dev/nvidia-uvm-tools") == devices.end());
+  }
   REQUIRE_THAT(devices, Contains("/dev/nvidiactl"));
 
   REQUIRE_THAT(linked_devices("/dev/dri/a_non_existing_thing"), SizeIs(0));

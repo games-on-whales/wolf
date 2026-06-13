@@ -25,13 +25,5 @@ target_link_libraries_system(wolf_helpers INTERFACE fmt::fmt-header-only)
 
 target_link_libraries(wolf_helpers INTERFACE ${Boost_LIBRARIES})
 
-FetchContent_Declare(
-        boost_json
-        GIT_REPOSITORY https://github.com/boostorg/json.git
-        GIT_TAG "boost-1.77.0")
-set(BOOST_JSON_BUILD_TESTS OFF)
-FetchContent_MakeAvailable(boost_json)
-target_link_libraries(wolf_helpers INTERFACE Boost::json)
-
 # All users of this library will need at least C++17
 target_compile_features(wolf_helpers INTERFACE cxx_std_17)

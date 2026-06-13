@@ -691,6 +691,20 @@ These are the default values, if you want to assign custom ports you can set the
 
 ====
 
+[TIP]
+====
+Apps run as UID/GID `1000:1000` by default. Newly paired clients inherit this,
+and you can change it per client later from xref:wolf-ui.adoc[]. If your host
+uses a different convention (for example Unraid, where `nobody` is `99:100`),
+set the defaults for every new client with the environment variables:
+
+* `WOLF_DEFAULT_RUN_UID`
+* `WOLF_DEFAULT_RUN_GID`
+
+These only affect the defaults applied to *new* clients; existing clients keep
+their saved values.
+====
+
 == Moonlight pairing
 
 You should now be able to point Moonlight to the IP address of the server and start the pairing process:
@@ -739,3 +753,5 @@ Reload the udev rules either by rebooting or run:
 ....
 udevadm control --reload-rules && udevadm trigger
 ....
+
+Also restart Wolf container if it's already running.

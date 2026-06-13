@@ -15,7 +15,7 @@ RUN apt-get update -y && \
     git \
     clang \
     build-essential \
-    libboost-thread-dev libboost-locale-dev libboost-filesystem-dev libboost-log-dev libboost-stacktrace-dev libboost-container-dev \
+    libboost-thread-dev libboost-locale-dev libboost-filesystem-dev libboost-log-dev libboost-stacktrace-dev libboost-container-dev libboost-json-dev \
     libwayland-dev libwayland-server0 libinput-dev libxkbcommon-dev libgbm-dev \
     libcurl4-openssl-dev \
     libssl-dev \
@@ -43,7 +43,9 @@ RUN <<_GST_WAYLAND_DISPLAY
 
     git clone https://github.com/games-on-whales/gst-wayland-display
     cd gst-wayland-display
-    git checkout 67b1183
+    # Includes e89c1a2 (proper VideoFormat-from-fourcc): without it the
+    # compositor's AR24 CUDA buffers decode to black frames on NVIDIA, see #417.
+    git checkout c49af96
     # Pinned to 0.10.20: 0.10.21+ requires rustc 1.92, upgrade RUST_VERSION above if unpinning
     cargo install cargo-c@0.10.20 --locked
     cargo cinstall --features="cuda" --prefix=/usr/local/lib/x86_64-linux-gnu/ --libdir=/usr/local/lib/x86_64-linux-gnu/gstreamer-1.0
@@ -96,6 +98,19 @@ RUN apt-get update -y && \
     libglvnd0 libgl1 libglx0 libegl1 libgles2 xwayland hwdata \
     && rm -rf /var/lib/apt/lists/*
 
+# Embedded PulseAudio: Wolf runs its own PulseAudio server inside this container
+# (supervised by supervisord, see startup.sh + supervisord.conf) so audio is
+# available as soon as Wolf boots, without the legacy external "WolfPulseAudio"
+# sidecar container and its startup race. supervisord starts PA before Wolf,
+# restarts it if it dies, and stops both cleanly on container shutdown.
+# pulseaudio-utils ships pactl, handy for debugging audio from inside the container.
+RUN apt-get update -y && \
+    apt-get install -y --no-install-recommends \
+    pulseaudio pulseaudio-utils supervisor \
+    && rm -rf /var/lib/apt/lists/*
+
+COPY docker/supervisord.conf /etc/supervisord.conf
+
 ENV GST_PLUGIN_PATH=/usr/local/lib/x86_64-linux-gnu/gstreamer-1.0/
 # Copying out our custom compositor from the build stage
 COPY --from=wolf-builder /usr/local/lib/x86_64-linux-gnu/gstreamer-1.0/* $GST_PLUGIN_PATH
@@ -119,7 +134,10 @@ ENV GST_GL_API=gles2 \
     WOLF_PULSE_IMAGE=ghcr.io/games-on-whales/pulseaudio:master \
     WOLF_RENDER_NODE=/dev/dri/renderD128 \
     WOLF_STOP_CONTAINER_ON_EXIT=TRUE \
+    WOLF_WAYLAND_SOCKET_WAIT_TIMEOUT_MS=5000 \
     WOLF_DOCKER_SOCKET=/var/run/docker.sock \
+    WOLF_DEFAULT_RUN_UID=1000 \
+    WOLF_DEFAULT_RUN_GID=1000 \
     RUST_BACKTRACE=full \
     RUST_LOG=WARN \
     HOST_APPS_STATE_FOLDER=/etc/wolf \

@@ -28,7 +28,7 @@ void tag_invoke(value_from_tag, value &jv, const std::vector<docker::Port> &port
         ]
         }
      */
-    obj[key] = {{{"HostPort", std::to_string(port.private_port)}}};
+    obj[key] = array{object{{"HostPort", std::to_string(port.private_port)}}};
   }
   jv = obj;
 }

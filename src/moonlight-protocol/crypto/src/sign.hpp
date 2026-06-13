@@ -1,6 +1,7 @@
 #pragma once
 
 #include <crypto/utils.hpp>
+#include <cstdint>
 #include <openssl/evp.h>
 #include <openssl/pem.h>
 

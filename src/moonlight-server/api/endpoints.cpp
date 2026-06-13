@@ -568,7 +568,7 @@ void UnixSocketServer::endpoint_UpdateClientSettings(const HTTPRequest &req, std
       .client_cert = current_client->client_cert, // Immutable, changing this would mean a new client
       .app_state_folder = payload.app_state_folder.get().value_or(current_client->app_state_folder),
       .settings = config::ClientSettings{
-          .run_uid = new_settings.run_gid.value_or(current_settings.run_uid),
+          .run_uid = new_settings.run_uid.value_or(current_settings.run_uid),
           .run_gid = new_settings.run_gid.value_or(current_settings.run_gid),
           .controllers_override = new_settings.controllers_override.value_or(current_settings.controllers_override),
           .mouse_acceleration = new_settings.mouse_acceleration.value_or(current_settings.mouse_acceleration),

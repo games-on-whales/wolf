@@ -55,6 +55,14 @@ struct Server {
   pa_mainloop *loop;
   boost::promise<bool> on_ready;
   boost::future<bool> on_ready_fut;
+  // Guards on_ready against being set more than once. The PA state callback
+  // fires for every state change, and READY/TERMINATED/FAILED all resolve the
+  // promise; without this, a connection that goes READY and later TERMINATED
+  // (e.g. the PulseAudio server going away) would call set_value twice and
+  // throw promise_already_satisfied. Only the single PA mainloop thread sets
+  // it, so a plain bool is sufficient. Reset in disconnect() when the promise
+  // is recreated.
+  bool ready_set = false;
 };
 
 pa_context *context(const std::shared_ptr<Server> &server) {
@@ -76,15 +84,24 @@ std::shared_ptr<Server> connect(std::string_view server) {
           switch (pa_context_get_state(ctx)) {
           case PA_CONTEXT_READY:
             logs::log(logs::debug, "[PULSE] Pulse connection ready");
-            state->on_ready.set_value(true);
+            if (!state->ready_set) {
+              state->ready_set = true;
+              state->on_ready.set_value(true);
+            }
             break;
           case PA_CONTEXT_TERMINATED:
             logs::log(logs::debug, "[PULSE] Terminated connection");
-            state->on_ready.set_value(false);
+            if (!state->ready_set) {
+              state->ready_set = true;
+              state->on_ready.set_value(false);
+            }
             break;
           case PA_CONTEXT_FAILED:
             logs::log(logs::debug, "[PULSE] Context failed");
-            state->on_ready.set_value(false);
+            if (!state->ready_set) {
+              state->ready_set = true;
+              state->on_ready.set_value(false);
+            }
             break;
           case PA_CONTEXT_CONNECTING:
             logs::log(logs::debug, "[PULSE] Connecting...");
@@ -179,6 +196,7 @@ void delete_virtual_sink(const std::shared_ptr<Server> &server, const std::share
 
 void disconnect(const std::shared_ptr<Server> &server) {
   server->on_ready = boost::promise<bool>(); // Creates a new promise
+  server->ready_set = false;                 // ...so allow it to be set again
   pa_context_disconnect(server->ctx);
 }
 

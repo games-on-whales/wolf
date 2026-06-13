@@ -2,7 +2,9 @@
 #include <catch2/catch_test_macros.hpp>
 #include <catch2/matchers/catch_matchers_string.hpp>
 #include <curl/curl.h>
+#include <filesystem>
 #include <helpers/tsqueue.hpp>
+#include <helpers/utils.hpp>
 #include <rfl/toml.hpp>
 #include <sessions/handlers.hpp>
 #include <state/config.hpp>
@@ -12,6 +14,14 @@ using Catch::Matchers::Equals;
 
 using namespace wolf::api;
 using curl_ptr = std::unique_ptr<CURL, decltype(&curl_easy_cleanup)>;
+
+std::string api_runtime_dir() {
+  return utils::get_env("XDG_RUNTIME_DIR", "/tmp/");
+}
+
+std::string api_socket_path() {
+  return (std::filesystem::path(api_runtime_dir()) / "wolf.sock").string();
+}
 
 /**
  * Perform a HTTP request using curl
@@ -104,14 +114,16 @@ TEST_CASE("Pair APIs", "[API]") {
       .event_bus = event_bus,
       .running_sessions = running_sessions});
 
+  auto runtime_dir = api_runtime_dir();
+  auto socket_path = api_socket_path();
   // Start the server
-  std::thread server_thread([app_state]() { wolf::api::start_server("/tmp/", app_state); });
+  std::thread server_thread([app_state, runtime_dir]() { wolf::api::start_server(runtime_dir, app_state); });
   server_thread.detach();
   std::this_thread::sleep_for(std::chrono::milliseconds(42)); // Wait for the server to start
 
   auto curl = curl_ptr(curl_easy_init(), ::curl_easy_cleanup);
 
-  curl_easy_setopt(curl.get(), CURLOPT_UNIX_SOCKET_PATH, "/tmp/wolf.sock");
+  curl_easy_setopt(curl.get(), CURLOPT_UNIX_SOCKET_PATH, socket_path.c_str());
   curl_easy_setopt(curl.get(), CURLOPT_HTTP_VERSION, CURL_HTTP_VERSION_1_0);
 
   auto response = req(curl.get(), HTTPMethod::GET, "http://localhost/api/v1/pair/pending");
@@ -211,14 +223,16 @@ TEST_CASE("APPs APIs", "[API]") {
       .event_bus = event_bus,
       .running_sessions = running_sessions});
 
+  auto runtime_dir = api_runtime_dir();
+  auto socket_path = api_socket_path();
   // Start the server
-  std::thread server_thread([app_state]() { wolf::api::start_server("/tmp/", app_state); });
+  std::thread server_thread([app_state, runtime_dir]() { wolf::api::start_server(runtime_dir, app_state); });
   server_thread.detach();
   std::this_thread::sleep_for(std::chrono::milliseconds(42)); // Wait for the server to start
 
   auto curl = curl_ptr(curl_easy_init(), ::curl_easy_cleanup);
 
-  curl_easy_setopt(curl.get(), CURLOPT_UNIX_SOCKET_PATH, "/tmp/wolf.sock");
+  curl_easy_setopt(curl.get(), CURLOPT_UNIX_SOCKET_PATH, socket_path.c_str());
   curl_easy_setopt(curl.get(), CURLOPT_HTTP_VERSION, CURL_HTTP_VERSION_1_0);
 
   // Test that the initial list of apps matches what's in the test config file
@@ -289,14 +303,16 @@ TEST_CASE("Profile APIs", "[API]") {
       .event_bus = event_bus,
       .running_sessions = running_sessions});
 
+  auto runtime_dir = api_runtime_dir();
+  auto socket_path = api_socket_path();
   // Start the server
-  std::thread server_thread([app_state]() { wolf::api::start_server("/tmp/", app_state); });
+  std::thread server_thread([app_state, runtime_dir]() { wolf::api::start_server(runtime_dir, app_state); });
   server_thread.detach();
   std::this_thread::sleep_for(std::chrono::milliseconds(42)); // Wait for the server to start
 
   auto curl = curl_ptr(curl_easy_init(), ::curl_easy_cleanup);
 
-  curl_easy_setopt(curl.get(), CURLOPT_UNIX_SOCKET_PATH, "/tmp/wolf.sock");
+  curl_easy_setopt(curl.get(), CURLOPT_UNIX_SOCKET_PATH, socket_path.c_str());
   curl_easy_setopt(curl.get(), CURLOPT_HTTP_VERSION, CURL_HTTP_VERSION_1_0);
 
   // Test the initial profile list only has the default user
@@ -370,14 +386,16 @@ TEST_CASE("Sessions APIs", "[API]") {
       .event_bus = event_bus,
       .running_sessions = running_sessions});
 
+  auto runtime_dir = api_runtime_dir();
+  auto socket_path = api_socket_path();
   // Start the server
-  std::thread server_thread([app_state]() { wolf::api::start_server("/tmp/", app_state); });
+  std::thread server_thread([app_state, runtime_dir]() { wolf::api::start_server(runtime_dir, app_state); });
   server_thread.detach();
   std::this_thread::sleep_for(std::chrono::milliseconds(42)); // Wait for the server to start
 
   auto curl = curl_ptr(curl_easy_init(), ::curl_easy_cleanup);
 
-  curl_easy_setopt(curl.get(), CURLOPT_UNIX_SOCKET_PATH, "/tmp/wolf.sock");
+  curl_easy_setopt(curl.get(), CURLOPT_UNIX_SOCKET_PATH, socket_path.c_str());
   curl_easy_setopt(curl.get(), CURLOPT_HTTP_VERSION, CURL_HTTP_VERSION_1_0);
 
   // Test that the initial list of sessions is empty
@@ -440,14 +458,16 @@ TEST_CASE("Session APIs without app_id or client_id", "[API]") {
       .event_bus = event_bus,
       .running_sessions = running_sessions});
 
+  auto runtime_dir = api_runtime_dir();
+  auto socket_path = api_socket_path();
   // Start the server
-  std::thread server_thread([app_state]() { wolf::api::start_server("/tmp/", app_state); });
+  std::thread server_thread([app_state, runtime_dir]() { wolf::api::start_server(runtime_dir, app_state); });
   server_thread.detach();
   std::this_thread::sleep_for(std::chrono::milliseconds(42)); // Wait for the server to start
 
   auto curl = curl_ptr(curl_easy_init(), ::curl_easy_cleanup);
 
-  curl_easy_setopt(curl.get(), CURLOPT_UNIX_SOCKET_PATH, "/tmp/wolf.sock");
+  curl_easy_setopt(curl.get(), CURLOPT_UNIX_SOCKET_PATH, socket_path.c_str());
   curl_easy_setopt(curl.get(), CURLOPT_HTTP_VERSION, CURL_HTTP_VERSION_1_0);
 
   // Test that the initial list of sessions is empty
@@ -485,18 +505,20 @@ TEST_CASE("Lobbies APIs", "[API]") {
       .event_bus = event_bus,
       .lobbies = std::make_shared<immer::atom<immer::vector<events::Lobby>>>(),
       .running_sessions = running_sessions});
+  auto runtime_dir = api_runtime_dir();
+  auto socket_path = api_socket_path();
   // Start the server
-  std::thread server_thread([app_state]() { wolf::api::start_server("/tmp/", app_state); });
+  std::thread server_thread([app_state, runtime_dir]() { wolf::api::start_server(runtime_dir, app_state); });
   server_thread.detach();
 
   // Setup the event bus handlers for the lobbies events
-  auto lobbies_handlers = sessions::setup_lobbies_handlers(app_state, "/tmp/", {});
+  auto lobbies_handlers = sessions::setup_lobbies_handlers(app_state, runtime_dir, {});
 
   // Wait for the server to start
   std::this_thread::sleep_for(std::chrono::milliseconds(42));
 
   auto curl = curl_ptr(curl_easy_init(), ::curl_easy_cleanup);
-  curl_easy_setopt(curl.get(), CURLOPT_UNIX_SOCKET_PATH, "/tmp/wolf.sock");
+  curl_easy_setopt(curl.get(), CURLOPT_UNIX_SOCKET_PATH, socket_path.c_str());
   curl_easy_setopt(curl.get(), CURLOPT_HTTP_VERSION, CURL_HTTP_VERSION_1_0);
 
   { // Test that the initial list of lobbies is empty
@@ -638,15 +660,17 @@ TEST_CASE("Utils APIs", "[API]") {
       .event_bus = event_bus,
       .lobbies = std::make_shared<immer::atom<immer::vector<events::Lobby>>>(),
       .running_sessions = running_sessions});
+  auto runtime_dir = api_runtime_dir();
+  auto socket_path = api_socket_path();
   // Start the server
-  std::thread server_thread([app_state]() { wolf::api::start_server("/tmp/", app_state); });
+  std::thread server_thread([app_state, runtime_dir]() { wolf::api::start_server(runtime_dir, app_state); });
   server_thread.detach();
 
   // Wait for the server to start
   std::this_thread::sleep_for(std::chrono::milliseconds(42));
 
   auto curl = curl_ptr(curl_easy_init(), ::curl_easy_cleanup);
-  curl_easy_setopt(curl.get(), CURLOPT_UNIX_SOCKET_PATH, "/tmp/wolf.sock");
+  curl_easy_setopt(curl.get(), CURLOPT_UNIX_SOCKET_PATH, socket_path.c_str());
   curl_easy_setopt(curl.get(), CURLOPT_HTTP_VERSION, CURL_HTTP_VERSION_1_0);
 
   { // Test that calling
@@ -714,14 +738,16 @@ TEST_CASE("SSE APIs", "[API]") {
       .event_bus = event_bus,
       .running_sessions = running_sessions});
 
+  auto runtime_dir = api_runtime_dir();
+  auto socket_path = api_socket_path();
   // Start the server
-  std::thread server_thread([app_state]() { wolf::api::start_server("/tmp/", app_state); });
+  std::thread server_thread([app_state, runtime_dir]() { wolf::api::start_server(runtime_dir, app_state); });
   server_thread.detach();
   std::this_thread::sleep_for(std::chrono::milliseconds(42)); // Wait for the server to start
 
   auto curl = curl_ptr(curl_easy_init(), ::curl_easy_cleanup);
 
-  curl_easy_setopt(curl.get(), CURLOPT_UNIX_SOCKET_PATH, "/tmp/wolf.sock");
+  curl_easy_setopt(curl.get(), CURLOPT_UNIX_SOCKET_PATH, socket_path.c_str());
 
   auto queue = std::make_shared<TSQueue<SSEEvent>>();
 

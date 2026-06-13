@@ -7,9 +7,10 @@ set(BOOST_COMPONENTS
         process
         # Align needed by boost::json
         align
+        json
         system
 )
-find_package(Boost ${BOOST_VERSION} EXACT COMPONENTS ${BOOST_COMPONENTS} QUIET)
+find_package(Boost ${BOOST_VERSION} COMPONENTS ${BOOST_COMPONENTS} QUIET)
 if (NOT Boost_FOUND)
     message(STATUS "Boost (or some required components) not found, falling back to FetchContent instead")
 

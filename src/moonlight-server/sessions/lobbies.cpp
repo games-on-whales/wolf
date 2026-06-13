@@ -115,6 +115,14 @@ setup_lobbies_handlers(const immer::box<state::AppState> &app_state,
                 // Set the wayland display
                 lobby->wayland_display->store(wl_state);
 
+                if (!wait_for_wayland_socket(runtime_dir, ready.wayland_socket_name)) {
+                  logs::log(logs::error,
+                            "[LOBBY] Wayland socket {} was not ready, aborting runner startup",
+                            ready.wayland_socket_name);
+                  ev_bus->fire_event(immer::box<events::StopLobbyEvent>{events::StopLobbyEvent{.lobby_id = lobby->id}});
+                  return;
+                }
+
                 { // Start runner
                   logs::log(logs::debug, "[LOBBY] Start runner");
                   auto full_path = std::filesystem::path(host->local_base_state_folder) /

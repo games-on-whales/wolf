@@ -1,4 +1,5 @@
 #include <api/api.hpp>
+#include <atomic>
 #include <audio/pulse_router.hpp>
 #include <boost/asio.hpp>
 #include <chrono>
@@ -28,6 +29,17 @@ namespace fs = std::filesystem;
 using namespace std::string_literals;
 using namespace std::chrono_literals;
 using namespace wolf::core;
+
+/**
+ * Set by the SIGINT/SIGTERM handler. We can't touch AppState (or do anything
+ * that isn't async-signal-safe) from inside the handler, so it just flips this
+ * flag and the main thread performs the actual graceful shutdown.
+ */
+static std::atomic_bool shutdown_requested = false;
+
+static void graceful_shutdown_handler(int signum) {
+  shutdown_requested.store(true, std::memory_order_relaxed);
+}
 
 /**
  * @brief Will try to load the config file and fallback to defaults
@@ -139,7 +151,7 @@ std::optional<sessions::AudioServer> setup_audio_server(const std::string &host_
             .status = docker::CREATED,
             .ports = {},
             .mounts = {docker::MountPoint{.source = host_runtime_dir, .destination = "/tmp/pulse/", .mode = "rw"}},
-            .env = {"XDG_RUNTIME_DIR=/tmp/pulse/", "UNAME=retro", "UID=1000", "GID=1000"}},
+            .env = {"XDG_RUNTIME_DIR=/tmp/pulse/", "UNAME=retro", "UID=1000", "GID=1000", "HOME=/home/retro"}},
         // The following is needed when using podman (or any container that uses SELINUX). This way we can access the
         // socket that is created by PulseAudio from other containers (including this one).
         R"({
@@ -177,10 +189,10 @@ void run() {
   auto local_state = initialize(config_file, p_key_file, p_cert_file);
 
   // HTTP APIs
-  auto http_thread = std::thread([local_state]() {
+  std::thread([local_state]() {
     HttpServer server = HttpServer();
     HTTPServers::startServer(&server, local_state, state::get_port(state::HTTP_PORT));
-  });
+  }).detach();
 
   // HTTPS APIs
   std::thread([local_state, p_key_file, p_cert_file]() {
@@ -232,14 +244,44 @@ void run() {
   // Setup event handlers for player Lobbies
   auto lobbies_handlers = sessions::setup_lobbies_handlers(local_state, runtime_dir, audio_server);
 
-  http_thread.join(); // Let's park the main thread over here
+  // Park the main thread until a termination signal arrives. supervisord sends
+  // SIGINT on container stop (stopsignal=INT) and waits stopwaitsecs for us to
+  // exit, so we use that window to tear everything down cleanly.
+  while (!shutdown_requested.load(std::memory_order_relaxed)) {
+    std::this_thread::sleep_for(200ms);
+  }
+
+  logs::log(logs::info, "Received shutdown signal, stopping all sessions and lobbies");
+
+  // Stop lobbies first: each one makes its connected sessions leave gracefully.
+  for (const auto &lobby : local_state->lobbies->load().get()) {
+    local_state->event_bus->fire_event(
+        immer::box<events::StopLobbyEvent>(events::StopLobbyEvent{.lobby_id = lobby.id}));
+  }
+
+  // Then stop any remaining standalone streams.
+  for (const auto &session : local_state->running_sessions->load().get()) {
+    local_state->event_bus->fire_event(
+        immer::box<events::StopStreamEvent>(events::StopStreamEvent{.session_id = session.session_id}));
+  }
+
+  // fire_event is synchronous, but container/pipeline teardown can still settle
+  // asynchronously; wait (bounded) for the state to drain before we exit.
+  for (int i = 0;
+       i < 100 && (!local_state->running_sessions->load().get().empty() || !local_state->lobbies->load().get().empty());
+       i++) {
+    std::this_thread::sleep_for(100ms);
+  }
+
+  logs::log(logs::info, "Graceful shutdown complete");
 }
 
 int main(int argc, char *argv[]) try {
   logs::init(logs::parse_level(utils::get_env("WOLF_LOG_LEVEL", "INFO")));
-  // Exception and termination handling
-  std::signal(SIGINT, shutdown_handler);
-  std::signal(SIGTERM, shutdown_handler);
+  // Graceful termination: stop all sessions/lobbies before exiting (see run()).
+  std::signal(SIGINT, graceful_shutdown_handler);
+  std::signal(SIGTERM, graceful_shutdown_handler);
+  // Crash/abort handling: dump a stacktrace and exit immediately.
   std::signal(SIGQUIT, shutdown_handler);
   std::signal(SIGSEGV, shutdown_handler);
   std::signal(SIGABRT, shutdown_handler);

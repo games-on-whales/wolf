@@ -108,6 +108,22 @@ TEST_CASE("Docker TOML", "[DOCKER]") {
   REQUIRE_THAT(container.base_create_json.value(), Equals("{'HostConfig': {}}"));
 }
 
+TEST_CASE("Docker create detects container name conflicts", "[DOCKER]") {
+  REQUIRE(docker::is_container_name_conflict_response(409, R"({"message":"Conflict"})"));
+
+  REQUIRE(docker::is_container_name_conflict_response(
+      500,
+      R"({"cause":"that name is already in use",)"
+      R"("message":"container create: the container name \"Wolf-UI_123\" is already in use","response":500})"));
+
+  REQUIRE(docker::is_container_name_conflict_response(
+      500,
+      R"(container create: the container name "Wolf-UI_123" is already in use)"));
+
+  REQUIRE(!docker::is_container_name_conflict_response(500, R"({"message":"storage backend failed"})"));
+  REQUIRE(!docker::is_container_name_conflict_response(404, R"({"message":"No such image"})"));
+}
+
 TEST_CASE("Parse nulls in json reply", "[DOCKER]") {
   // This is a reply that has been reported in the wild when using Podman
   // Notice the `null` like in the port definition ({"4713/tcp": null})
