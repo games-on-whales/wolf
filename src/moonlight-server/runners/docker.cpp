@@ -215,6 +215,13 @@ void RunDocker::run(std::string_view session_id,
           }
         });
 
+    auto restart_handler = this->ev_bus->register_handler<immer::box<events::RestartRunnerEvent>>(
+        [session_id, container_id, this](const immer::box<events::RestartRunnerEvent> &restart_ev) {
+          if (std::to_string(restart_ev->session_id) == session_id) {
+            docker_api.stop_by_id(container_id);
+          }
+        });
+
     auto terminate_lobby_handler = this->ev_bus->register_handler<immer::box<events::StopLobbyEvent>>(
         [session_id, container_id, this](const immer::box<events::StopLobbyEvent> &terminate_ev) {
           if (terminate_ev->lobby_id == session_id) {
@@ -298,6 +305,7 @@ void RunDocker::run(std::string_view session_id,
     }
 
     logs::log(logs::info, "Stopped container: {}", docker_container->name);
+    restart_handler.unregister();
     try {
       std::filesystem::remove_all(udev_base_path);
     } catch (const std::filesystem::filesystem_error &e) {

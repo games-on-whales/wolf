@@ -13,6 +13,7 @@ struct WaylandState {
    * we need a reference so that we can send events directly to it (mouse, keyboard, ...)
    */
   gstreamer::gst_element_ptr wayland_plugin;
+  gstreamer::gst_element_ptr wayland_capsfilter;
 
   std::string wayland_socket_name;
 
@@ -28,12 +29,41 @@ struct WaylandState {
 };
 
 wl_state_ptr create_wayland_display(gstreamer::gst_element_ptr wayland_plugin, const std::string &wayland_socket_name) {
-  return std::make_shared<WaylandState>(
-      WaylandState{.wayland_plugin = wayland_plugin, .wayland_socket_name = wayland_socket_name});
+  return create_wayland_display(std::move(wayland_plugin), nullptr, wayland_socket_name);
+}
+
+wl_state_ptr create_wayland_display(gstreamer::gst_element_ptr wayland_plugin,
+                                    gstreamer::gst_element_ptr wayland_capsfilter,
+                                    const std::string &wayland_socket_name) {
+  return std::make_shared<WaylandState>(WaylandState{.wayland_plugin = wayland_plugin,
+                                                     .wayland_capsfilter = wayland_capsfilter,
+                                                     .wayland_socket_name = wayland_socket_name});
 }
 
 std::string get_wayland_socket_name(WaylandState &w_state) {
   return w_state.wayland_socket_name;
+}
+
+std::unique_ptr<GstCaps, decltype(&gst_caps_unref)> set_resolution(
+    WaylandState &w_state, const DisplayMode &display_mode, const std::optional<gstreamer::gst_element_ptr> &app_src) {
+  auto caps = gst_caps_new_simple("video/x-raw",
+                                  "width",
+                                  G_TYPE_INT,
+                                  display_mode.width,
+                                  "height",
+                                  G_TYPE_INT,
+                                  display_mode.height,
+                                  "framerate",
+                                  GST_TYPE_FRACTION,
+                                  display_mode.refreshRate,
+                                  1,
+                                  nullptr);
+
+  if (w_state.wayland_capsfilter) {
+    g_object_set(w_state.wayland_capsfilter.get(), "caps", caps, nullptr);
+  }
+
+  return {caps, gst_caps_unref};
 }
 
 bool add_input_device(WaylandState &w_state, const std::string &device_path) {

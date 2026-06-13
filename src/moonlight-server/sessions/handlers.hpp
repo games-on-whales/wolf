@@ -22,6 +22,17 @@ setup_moonlight_handlers(const immer::box<state::AppState> &app_state,
                          const std::optional<AudioServer> &audio_server);
 
 immer::vector<immer::box<events::EventBusHandlers>>
+setup_party_mode_handlers(const immer::box<state::AppState> &app_state);
+
+bool promote_party_mode_secondary_session(const immer::box<state::AppState> &app_state, std::size_t primary_session_id);
+
+std::shared_ptr<events::StreamSession> create_party_mode_secondary_session(const immer::box<state::AppState> &app_state,
+                                                                           std::size_t primary_session_id,
+                                                                           bool mute_secondary_audio = false);
+
+void start_party_mode_join_listener(const immer::box<state::AppState> &app_state);
+
+immer::vector<immer::box<events::EventBusHandlers>>
 setup_lobbies_handlers(const immer::box<state::AppState> &app_state,
                        const std::string &runtime_dir,
                        const std::optional<AudioServer> &audio_server);

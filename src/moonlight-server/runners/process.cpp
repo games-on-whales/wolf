@@ -53,6 +53,13 @@ void RunProcess::run(std::string_view session_id,
         }
       });
 
+  auto restart_handler = this->ev_bus->register_handler<immer::box<RestartRunnerEvent>>(
+      [&group_proc, session_id](const immer::box<RestartRunnerEvent> &restart_ev) {
+        if (std::to_string(restart_ev->session_id) == session_id) {
+          group_proc.terminate();
+        }
+      });
+
   auto terminate_lobby_handler = this->ev_bus->register_handler<immer::box<StopLobbyEvent>>(
       [&group_proc, session_id](const immer::box<StopLobbyEvent> &terminate_ev) {
         if (terminate_ev->lobby_id == session_id) {
@@ -74,6 +81,7 @@ void RunProcess::run(std::string_view session_id,
   }
 
   terminate_handler.unregister();
+  restart_handler.unregister();
 }
 
 } // namespace process

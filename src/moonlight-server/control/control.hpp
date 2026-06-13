@@ -21,7 +21,12 @@ void run_control(int port,
                  std::chrono::milliseconds timeout = 1000ms,
                  const std::string &host_ip = "0.0.0.0");
 
-using enet_clients_map = immer::map<ENetPeer *, immer::box<events::StreamSession>>;
+struct ConnectedClient {
+  std::size_t session_id;
+  std::string aes_key;
+};
+
+using enet_clients_map = immer::map<ENetPeer *, ConnectedClient>;
 
 std::shared_ptr<ENetPeer> to_shared_ptr(ENetPeer *peer);
 

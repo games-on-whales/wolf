@@ -2,6 +2,7 @@
 #include <control/input_handler.hpp>
 #include <core/docker.hpp>
 #include <rtp/udp-ping.hpp>
+#include <sessions/handlers.hpp>
 #include <state/config.hpp>
 #include <state/sessions.hpp>
 #include <state/utils.hpp>
@@ -263,7 +264,10 @@ void UnixSocketServer::endpoint_StreamSessionAdd(const HTTPRequest &req, std::sh
       choosen_client = *client;
     } else {
       // Create a dummy client
-      choosen_client = {.client_cert = "", .app_state_folder = state::gen_uuid(), .settings = {}};
+      auto local_client_id = state::gen_uuid();
+      choosen_client = {.client_cert = fmt::format("local-session:{}", local_client_id),
+                        .app_state_folder = local_client_id,
+                        .settings = {}};
     }
 
     choosen_client.settings = ss.client_settings.value_or(config::ClientSettings{});
@@ -392,6 +396,102 @@ void UnixSocketServer::endpoint_StreamSessionHandleInput(const HTTPRequest &req,
     logs::log(logs::warning, "[API] Invalid event: {} - {}", req.body, input_request.error().what());
     send_http(socket, 500, rfl::json::write(GenericErrorResponse{.error = input_request.error().what()}));
   }
+}
+
+void UnixSocketServer::endpoint_StreamSessionPartyMode(const HTTPRequest &req, std::shared_ptr<UnixSocket> socket) {
+  auto party_mode_request = rfl::json::read<StreamSessionPartyModeRequest>(req.body);
+  if (!party_mode_request) {
+    logs::log(logs::warning, "[API] Invalid event: {} - {}", req.body, party_mode_request.error().what());
+    send_http(socket, 500, rfl::json::write(GenericErrorResponse{.error = party_mode_request.error().what()}));
+    return;
+  }
+
+  const auto &body = party_mode_request.value();
+  auto sessions = state_->app_state->running_sessions->load();
+  auto session_id = std::stoul(body.session_id);
+  if (!state::get_session_by_id(sessions.get(), session_id)) {
+    logs::log(logs::warning, "[API] Invalid session_id: {}", body.session_id);
+    send_http(socket, 500, rfl::json::write(GenericErrorResponse{.error = "Invalid session_id"}));
+    return;
+  }
+
+  std::optional<std::string> secondary_interpipe_src_id = std::nullopt;
+  std::optional<std::size_t> secondary_session_id = std::nullopt;
+  if (body.enabled) {
+    if (!body.secondary_session_id) {
+      send_http(socket,
+                500,
+                rfl::json::write(GenericErrorResponse{.error = "secondary_session_id is required when enabling"}));
+      return;
+    }
+
+    secondary_session_id = std::stoul(*body.secondary_session_id);
+    if (*secondary_session_id == session_id) {
+      send_http(socket,
+                500,
+                rfl::json::write(GenericErrorResponse{.error = "secondary_session_id must differ from session_id"}));
+      return;
+    }
+    if (!state::get_session_by_id(sessions.get(), *secondary_session_id)) {
+      logs::log(logs::warning, "[API] Invalid secondary_session_id: {}", *body.secondary_session_id);
+      send_http(socket, 500, rfl::json::write(GenericErrorResponse{.error = "Invalid secondary_session_id"}));
+      return;
+    }
+    secondary_interpipe_src_id = *body.secondary_session_id;
+  }
+
+  state_->app_state->party_mode_sessions->update(
+      [session_id, secondary_session_id, mute_secondary_audio = body.mute_secondary_audio, enabled = body.enabled](
+          const immer::vector<state::PartyModeSession> &party_sessions) {
+        auto updated_sessions = state::remove_party_mode_session(party_sessions, session_id);
+        if (enabled && secondary_session_id) {
+          updated_sessions = state::remove_party_mode_session(updated_sessions, *secondary_session_id);
+          updated_sessions =
+              updated_sessions.push_back(state::PartyModeSession{.primary_session_id = session_id,
+                                                                 .secondary_session_id = *secondary_session_id,
+                                                                 .mute_secondary_audio = mute_secondary_audio});
+        }
+        return updated_sessions;
+      });
+
+  state_->app_state->event_bus->fire_event(immer::box<events::SetPartyModeEvent>(
+      events::SetPartyModeEvent{.session_id = session_id,
+                                .enabled = body.enabled,
+                                .secondary_interpipe_src_id = secondary_interpipe_src_id,
+                                .mute_secondary_audio = body.mute_secondary_audio}));
+  send_http(socket, 200, rfl::json::write(GenericSuccessResponse{.success = true}));
+}
+
+void UnixSocketServer::endpoint_StreamSessionPartyModeJoin(const HTTPRequest &req, std::shared_ptr<UnixSocket> socket) {
+  auto join_request = rfl::json::read<StreamSessionPartyModeJoinRequest>(req.body);
+  if (!join_request) {
+    logs::log(logs::warning, "[API] Invalid event: {} - {}", req.body, join_request.error().what());
+    send_http(socket, 500, rfl::json::write(GenericErrorResponse{.error = join_request.error().what()}));
+    return;
+  }
+
+  const auto &body = join_request.value();
+  auto primary_session_id = std::stoul(body.session_id);
+  if (!state::get_session_by_id(state_->app_state->running_sessions->load().get(), primary_session_id)) {
+    logs::log(logs::warning, "[API] Invalid session_id: {}", body.session_id);
+    send_http(socket, 500, rfl::json::write(GenericErrorResponse{.error = "Invalid session_id"}));
+    return;
+  }
+
+  auto secondary_session = wolf::core::sessions::create_party_mode_secondary_session(state_->app_state,
+                                                                                     primary_session_id,
+                                                                                     body.mute_secondary_audio);
+  if (!secondary_session) {
+    send_http(socket,
+              500,
+              rfl::json::write(GenericErrorResponse{.error = "Unable to create party mode secondary session"}));
+    return;
+  }
+
+  send_http(socket,
+            200,
+            rfl::json::write(
+                StreamSessionCreated{.success = true, .session_id = std::to_string(secondary_session->session_id)}));
 }
 
 void UnixSocketServer::endpoint_Lobbies(const wolf::api::HTTPRequest &req, std::shared_ptr<UnixSocket> socket) {

@@ -249,6 +249,13 @@ Config load_or_default(const std::string &source,
   auto base_cfg = rfl::toml::load<BaseConfig, rfl::DefaultIfMissing>(source).value();
   auto version = base_cfg.config_version.value_or(0);
   if (version <= 7) {
+    // v8 rewrites the default gstreamer video pipeline: it adds the 10-bit SDR
+    // encoders and the party-mode compositor (wolf_party_video) with its
+    // primary/secondary capsfilters. Pipelines authored against v7-or-older
+    // templates contain none of these, so 10-bit and party-mode layout changes
+    // silently no-op on them. Regenerate the file from the current defaults and
+    // carry over identity, pairings, and profiles; user-authored per-app
+    // pipelines in profiles are preserved as-is.
     logs::log(logs::warning, "Found old config file (v{}), migrating to v8", version);
     auto backup = source + ".v" + std::to_string(version) + ".old";
     std::filesystem::rename(source, backup);
@@ -285,12 +292,12 @@ Config load_or_default(const std::string &source,
   if (default_gst_video_settings.default_source.find("name=interpipesrc") == std::string::npos) {
     logs::log(logs::debug, "Found interpipesrc without name, adding it");
     default_gst_video_settings.default_source =
-        default_gst_video_settings.default_source.replace(0, 12, "interpipesrc name=interpipesrc_{}_video");
+        default_gst_video_settings.default_source.replace(0, 12, "interpipesrc name=interpipesrc_{session_id}_video");
   }
   if (default_gst_audio_settings.default_source.find("name=interpipesrc") == std::string::npos) {
     logs::log(logs::debug, "Found interpipesrc without name, adding it");
     default_gst_audio_settings.default_source =
-        default_gst_audio_settings.default_source.replace(0, 12, "interpipesrc name=interpipesrc_{}_audio");
+        default_gst_audio_settings.default_source.replace(0, 12, "interpipesrc name=interpipesrc_{session_id}_audio");
   }
 
   auto default_gst_encoder_settings = default_gst_video_settings.defaults;
