@@ -27,8 +27,9 @@ assert_version /wolf/fake-udev --help
 
 # --- gstreamer custom compositor -------------------------------------------
 # Wolf builds its own gst plugin (gst-wayland-display) and the runtime
-# stage copies it into GST_PLUGIN_PATH alongside the companion .so in
-# /usr/local/lib. Registration data should be cached on first use.
+# stage copies the plugin artefacts (.so/.a/.pc) into GST_PLUGIN_PATH. The
+# gst-wayland-display C API is linked statically into wolf, so there is no
+# separate companion .so to ship. Registration data is cached on first use.
 assert_has gst-inspect-1.0
 assert_env GST_PLUGIN_PATH gstreamer-1.0
 
@@ -37,28 +38,24 @@ assert_env GST_PLUGIN_PATH gstreamer-1.0
 # expands to nothing.
 shopt -s nullglob
 gst_plugins=("$GST_PLUGIN_PATH"/libgstwaylanddisplay*)
-companion_libs=(/usr/local/lib/liblibgstwaylanddisplay*)
 shopt -u nullglob
 if (( ${#gst_plugins[@]} > 0 )); then
   ok "gst-plugin-waylanddisplay present (${gst_plugins[*]})"
 else
   bad "gst-plugin-waylanddisplay present in $GST_PLUGIN_PATH"
 fi
-if (( ${#companion_libs[@]} > 0 )); then
-  ok "liblibgstwaylanddisplay present (${companion_libs[*]})"
-else
-  bad "liblibgstwaylanddisplay present in /usr/local/lib"
-fi
 
 # End-to-end plugin load: gst-inspect-1.0 dlopens the plugin and queries
-# its element factories. This catches ABI drift between the builder and
-# runtime stages' gstreamer (e.g. someone bumps GSTREAMER_VERSION in the
-# build-args for one stage but not the other) in a way that pure ldd
-# can't -- gstreamer uses its own symbol-version dance on top of ld.so.
-if timeout 15 gst-inspect-1.0 waylanddisplay >/dev/null 2>&1; then
-  ok "gst-inspect-1.0 waylanddisplay loads the plugin"
+# its element factory. waylanddisplaysrc is the element wolf instantiates
+# in its pipelines (see streaming.cpp), so this is the name that has to
+# resolve. This catches ABI drift between the builder and runtime stages'
+# gstreamer (e.g. someone bumps GSTREAMER_VERSION in the build-args for one
+# stage but not the other) in a way that pure ldd can't -- gstreamer uses
+# its own symbol-version dance on top of ld.so.
+if timeout 15 gst-inspect-1.0 waylanddisplaysrc >/dev/null 2>&1; then
+  ok "gst-inspect-1.0 waylanddisplaysrc loads the plugin"
 else
-  bad "gst-inspect-1.0 waylanddisplay loads the plugin (see: gst-inspect-1.0 waylanddisplay)"
+  bad "gst-inspect-1.0 waylanddisplaysrc loads the plugin (see: gst-inspect-1.0 waylanddisplaysrc)"
 fi
 
 # --- runtime helpers wolf shells out to ------------------------------------
