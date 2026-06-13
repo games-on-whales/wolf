@@ -112,9 +112,10 @@ RUN apt-get update -y && \
 COPY docker/supervisord.conf /etc/supervisord.conf
 
 ENV GST_PLUGIN_PATH=/usr/local/lib/x86_64-linux-gnu/gstreamer-1.0/
-# Copying out our custom compositor from the build stage
+# Copying out our custom compositor from the build stage. The gst-wayland-display
+# C API is statically linked into wolf, so the plugin artefacts (.so/.a/.pc) in
+# GST_PLUGIN_PATH are all the runtime needs.
 COPY --from=wolf-builder /usr/local/lib/x86_64-linux-gnu/gstreamer-1.0/* $GST_PLUGIN_PATH
-COPY --from=wolf-builder /usr/local/lib/liblibgstwaylanddisplay* /usr/local/lib/
 
 WORKDIR /wolf
 
