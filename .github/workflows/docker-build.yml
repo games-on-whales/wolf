@@ -2,6 +2,9 @@ name: Docker build
 
 on:
   push:
+    branches:
+      - master
+      - stable
     paths-ignore:
       - "docs/**"
       - ".github/**"
