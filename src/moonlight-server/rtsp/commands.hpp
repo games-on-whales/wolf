@@ -170,6 +170,10 @@ announce(const RTSP_PACKET &req, const events::StreamSession &session) {
   bool video_format_hevc = args["x-nv-vqos[0].bitStreamFormat"].value_or(0) == 1;
   bool video_format_av1 = args["x-nv-vqos[0].bitStreamFormat"].value_or(0) == 2;
   auto csc = args["x-nv-video[0].encoderCscMode"].value_or(0);
+  // The client sets dynamicRangeMode=1 whenever it negotiated a 10-bit (Main10) format. Wolf treats
+  // this as 10-bit SDR: it selects a Main10 encoder pipeline but never enables HDR over the control
+  // stream, so the client keeps decoding 10-bit while displaying SDR (BT.709).
+  bool ten_bit = args["x-nv-video[0].dynamicRangeMode"].value_or(0) == 1;
 
   // Video session
   moonlight::DisplayMode display = {.width = args["x-nv-video[0].clientViewportWd"].value(),
@@ -180,11 +184,13 @@ announce(const RTSP_PACKET &req, const events::StreamSession &session) {
 
   std::string gst_pipeline;
   if (video_format_av1) {
-    logs::log(logs::debug, "[RTSP] Moonlight requested video format AV1");
-    gst_pipeline = session.app->av1_gst_pipeline;
+    bool use_10bit = ten_bit && !session.app->av1_gst_pipeline_10bit.empty();
+    logs::log(logs::debug, "[RTSP] Moonlight requested video format AV1{}", use_10bit ? " (10-bit)" : "");
+    gst_pipeline = use_10bit ? session.app->av1_gst_pipeline_10bit : session.app->av1_gst_pipeline;
   } else if (video_format_hevc) {
-    logs::log(logs::debug, "[RTSP] Moonlight requested video format HEVC");
-    gst_pipeline = session.app->hevc_gst_pipeline;
+    bool use_10bit = ten_bit && !session.app->hevc_gst_pipeline_10bit.empty();
+    logs::log(logs::debug, "[RTSP] Moonlight requested video format HEVC{}", use_10bit ? " (10-bit)" : "");
+    gst_pipeline = use_10bit ? session.app->hevc_gst_pipeline_10bit : session.app->hevc_gst_pipeline;
   } else {
     logs::log(logs::debug, "[RTSP] Moonlight requested video format H264");
     gst_pipeline = session.app->h264_gst_pipeline;
