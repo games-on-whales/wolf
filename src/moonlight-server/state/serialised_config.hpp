@@ -138,7 +138,7 @@ struct Profile {
 struct WolfConfig {
   std::string hostname;
   std::string uuid;
-  int config_version = 7;
+  int config_version = 8;
   std::vector<PairedClient> paired_clients;
   std::vector<Profile> profiles;
   GstreamerSettings gstreamer;

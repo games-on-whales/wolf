@@ -1,4 +1,3 @@
-R"for_c++_include(
 # The name that will be displayed in Moonlight
 hostname = "Wolf"
 # The version of this config file
@@ -641,4 +640,3 @@ rtpmoonlightpay_audio name=moonlight_pay packet_duration={packet_duration} encry
 aes_key="{aes_key}" aes_iv="{aes_iv}" !
 appsink name=wolf_udp_sink\
 """
-)for_c++_include"
