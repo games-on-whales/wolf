@@ -346,6 +346,20 @@ cudaconvertscale add-borders=true !
 video/x-raw(memory:CUDAMemory),format=NV12, width={width}, height={height}, pixel-aspect-ratio=1/1
 """
 
+# 10-bit (P010) variants for Main10 sessions. Colorimetry stays as negotiated (SDR/BT.709).
+video_params_10bit = """
+cudaupload !
+cudaconvertscale add-borders=true !
+video/x-raw(memory:CUDAMemory), width={width}, height={height}, \
+chroma-site={color_range}, format=P010_10LE, colorimetry={color_space}, pixel-aspect-ratio=1/1\
+"""
+
+video_params_zero_copy_10bit = """
+cudaupload !
+cudaconvertscale add-borders=true !
+video/x-raw(memory:CUDAMemory),format=P010_10LE, width={width}, height={height}, pixel-aspect-ratio=1/1
+"""
+
 [gstreamer.video.defaults.qsv]
 video_params = """
 videoconvertscale !
@@ -356,6 +370,17 @@ colorimetry={color_space}, pixel-aspect-ratio=1/1\
 video_params_zero_copy = """
 vapostproc add-borders=true !
 video/x-raw(memory:VAMemory), format=NV12, width={width}, height={height}, pixel-aspect-ratio=1/1\
+"""
+
+video_params_10bit = """
+videoconvertscale !
+video/x-raw, chroma-site={color_range}, width={width}, height={height}, format=P010_10LE,
+colorimetry={color_space}, pixel-aspect-ratio=1/1\
+"""
+
+video_params_zero_copy_10bit = """
+vapostproc add-borders=true !
+video/x-raw(memory:VAMemory), format=P010_10LE, width={width}, height={height}, pixel-aspect-ratio=1/1\
 """
 
 [gstreamer.video.defaults.va]
@@ -370,6 +395,17 @@ vapostproc add-borders=true !
 video/x-raw(memory:VAMemory), format=NV12, width={width}, height={height}, pixel-aspect-ratio=1/1\
 """
 
+video_params_10bit = """
+vapostproc add-borders=true !
+video/x-raw, chroma-site={color_range}, width={width}, height={height}, format=P010_10LE,
+colorimetry={color_space}, pixel-aspect-ratio=1/1\
+"""
+
+video_params_zero_copy_10bit = """
+vapostproc add-borders=true !
+video/x-raw(memory:VAMemory), format=P010_10LE, width={width}, height={height}, pixel-aspect-ratio=1/1\
+"""
+
 ######################
 # HEVC encoders
 # Order here matters: Wolf will try them in order and pick the first one that's not failing
@@ -382,6 +418,11 @@ nvh265enc gop-size=-1 bitrate={bitrate} vbv-buffer-size={vbv_buffer_size} aud=fa
 h265parse !
 video/x-h265, profile=main, stream-format=byte-stream\
 """
+encoder_pipeline_10bit = """
+nvh265enc gop-size=-1 bitrate={bitrate} vbv-buffer-size={vbv_buffer_size} aud=false rc-mode=cbr zerolatency=true preset=p1 tune=ultra-low-latency multi-pass=two-pass-quarter !
+h265parse !
+video/x-h265, profile=main-10, stream-format=byte-stream\
+"""
 
 [[gstreamer.video.hevc_encoders]]
 plugin_name = "va"
@@ -390,6 +431,11 @@ encoder_pipeline = """
 vah265enc aud=false b-frames=0 ref-frames=1 num-slices={slices_per_frame} bitrate={bitrate} cpb-size={vbv_buffer_size} min-qp=20 key-int-max=1024 rate-control=cbr target-usage=6 !
 h265parse !
 video/x-h265, profile=main, stream-format=byte-stream\
+"""
+encoder_pipeline_10bit = """
+vah265enc aud=false b-frames=0 ref-frames=1 num-slices={slices_per_frame} bitrate={bitrate} cpb-size={vbv_buffer_size} min-qp=20 key-int-max=1024 rate-control=cbr target-usage=6 !
+h265parse !
+video/x-h265, profile=main-10, stream-format=byte-stream\
 """
 
 [[gstreamer.video.hevc_encoders]]
@@ -400,6 +446,11 @@ qsvh265enc b-frames=0 gop-size=0 idr-interval=1 ref-frames=1 bitrate={bitrate} r
 h265parse !
 video/x-h265, profile=main, stream-format=byte-stream\
 """
+encoder_pipeline_10bit = """
+qsvh265enc b-frames=0 gop-size=0 idr-interval=1 ref-frames=1 bitrate={bitrate} rate-control=cbr low-latency=1 target-usage=6 !
+h265parse !
+video/x-h265, profile=main-10, stream-format=byte-stream\
+"""
 
 [[gstreamer.video.hevc_encoders]]
 plugin_name = "va"
@@ -408,6 +459,11 @@ encoder_pipeline = """
 vah265lpenc aud=false b-frames=0 ref-frames=1 num-slices={slices_per_frame} bitrate={bitrate} cpb-size={vbv_buffer_size} min-qp=20 key-int-max=1024 rate-control=cbr target-usage=6 !
 h265parse !
 video/x-h265, profile=main, stream-format=byte-stream\
+"""
+encoder_pipeline_10bit = """
+vah265lpenc aud=false b-frames=0 ref-frames=1 num-slices={slices_per_frame} bitrate={bitrate} cpb-size={vbv_buffer_size} min-qp=20 key-int-max=1024 rate-control=cbr target-usage=6 !
+h265parse !
+video/x-h265, profile=main-10, stream-format=byte-stream\
 """
 
 [[gstreamer.video.hevc_encoders]]
@@ -493,11 +549,23 @@ nvav1enc gop-size=-1 bitrate={bitrate} vbv-buffer-size={vbv_buffer_size} rc-mode
 av1parse !
 video/x-av1, stream-format=obu-stream, alignment=frame, profile=main\
 """
+# AV1 Main profile covers both 8 and 10-bit; the 10-bit path differs only by the P010 input
+# supplied via video_params_10bit, so the encoder segment is the same.
+encoder_pipeline_10bit = """
+nvav1enc gop-size=-1 bitrate={bitrate} vbv-buffer-size={vbv_buffer_size} rc-mode=cbr zerolatency=true preset=p1 tune=ultra-low-latency multi-pass=two-pass-quarter !
+av1parse !
+video/x-av1, stream-format=obu-stream, alignment=frame, profile=main\
+"""
 
 [[gstreamer.video.av1_encoders]]
 plugin_name = "va"
 check_elements = ["vaav1enc", "vapostproc"]
 encoder_pipeline = """
+vaav1enc ref-frames=1 bitrate={bitrate} cpb-size={vbv_buffer_size} key-int-max=1024 rate-control=cbr min-qp=20 target-usage=6 !
+av1parse !
+video/x-av1, stream-format=obu-stream, alignment=frame, profile=main\
+"""
+encoder_pipeline_10bit = """
 vaav1enc ref-frames=1 bitrate={bitrate} cpb-size={vbv_buffer_size} key-int-max=1024 rate-control=cbr min-qp=20 target-usage=6 !
 av1parse !
 video/x-av1, stream-format=obu-stream, alignment=frame, profile=main\
@@ -511,11 +579,21 @@ vaav1lpenc ref-frames=1 bitrate={bitrate} cpb-size={vbv_buffer_size} key-int-max
 av1parse !
 video/x-av1, stream-format=obu-stream, alignment=frame, profile=main\
 """
+encoder_pipeline_10bit = """
+vaav1lpenc ref-frames=1 bitrate={bitrate} cpb-size={vbv_buffer_size} key-int-max=1024 rate-control=cbr min-qp=20 target-usage=6 !
+av1parse !
+video/x-av1, stream-format=obu-stream, alignment=frame, profile=main\
+"""
 
 [[gstreamer.video.av1_encoders]]
 plugin_name = "qsv"
 check_elements = ["qsvav1enc", "vapostproc"]
 encoder_pipeline = """
+qsvav1enc gop-size=0 ref-frames=1 bitrate={bitrate} rate-control=cbr low-latency=1 target-usage=6 !
+av1parse !
+video/x-av1, stream-format=obu-stream, alignment=frame, profile=main\
+"""
+encoder_pipeline_10bit = """
 qsvav1enc gop-size=0 ref-frames=1 bitrate={bitrate} rate-control=cbr low-latency=1 target-usage=6 !
 av1parse !
 video/x-av1, stream-format=obu-stream, alignment=frame, profile=main\

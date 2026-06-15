@@ -135,6 +135,8 @@ parse_apps(const std::vector<BaseApp> &apps,
            const std::string &h264_video_params,
            const std::string &hevc_video_params,
            const std::string &av1_video_params,
+           const std::string &hevc_video_params_10bit,
+           const std::string &av1_video_params_10bit,
            const BaseAppAudioOverride &default_audio_settings,
            SessionsAtoms running_sessions,
            const std::shared_ptr<events::EventBusType> &ev_bus) {
@@ -179,6 +181,32 @@ parse_apps(const std::vector<BaseApp> &apps,
                               app_video_settings.sink.value_or(default_video_settings.sink.value()))
                 : "";
 
+        // 10-bit (Main10) pipelines: only built when the encoder exposes a Main10 variant. The app
+        // may override the 10-bit encoder segment independently of the 8-bit one.
+        auto hevc_10bit_encoder = app_video_settings.hevc_encoder_10bit.has_value()
+                                      ? app_video_settings.hevc_encoder_10bit
+                                      : default_video_settings.hevc_encoder_10bit;
+        auto hevc_gst_pipeline_10bit =
+            hevc_10bit_encoder.has_value()
+                ? fmt::format("{} !\n{} !\n{} !\n{}", //
+                              app_video_settings.source.value_or(default_video_settings.source.value()),
+                              app_video_settings.video_params.value_or(hevc_video_params_10bit),
+                              hevc_10bit_encoder.value(),
+                              app_video_settings.sink.value_or(default_video_settings.sink.value()))
+                : "";
+
+        auto av1_10bit_encoder = app_video_settings.av1_encoder_10bit.has_value()
+                                     ? app_video_settings.av1_encoder_10bit
+                                     : default_video_settings.av1_encoder_10bit;
+        auto av1_gst_pipeline_10bit =
+            av1_10bit_encoder.has_value()
+                ? fmt::format("{} !\n{} !\n{} !\n{}", //
+                              app_video_settings.source.value_or(default_video_settings.source.value()),
+                              app_video_settings.video_params.value_or(av1_video_params_10bit),
+                              av1_10bit_encoder.value(),
+                              app_video_settings.sink.value_or(default_video_settings.sink.value()))
+                : "";
+
         auto opus_gst_pipeline = fmt::format(
             "{} !\n{} !\n{} !\n{}", //
             app_audio_settings.source.value_or(default_audio_settings.source.value()),
@@ -195,6 +223,8 @@ parse_apps(const std::vector<BaseApp> &apps,
                         .h264_gst_pipeline = h264_gst_pipeline,
                         .hevc_gst_pipeline = hevc_gst_pipeline,
                         .av1_gst_pipeline = av1_gst_pipeline,
+                        .hevc_gst_pipeline_10bit = hevc_gst_pipeline_10bit,
+                        .av1_gst_pipeline_10bit = av1_gst_pipeline_10bit,
                         .render_node = app_render_node,
 
                         .opus_gst_pipeline = opus_gst_pipeline,
@@ -307,35 +337,13 @@ Config load_or_default(const std::string &source,
     }
     case VAAPI:
     case QUICKSYNC: {
-      auto sink_caps = gstreamer::get_dma_caps("vapostproc", GST_PAD_SINK);
-      // waylanddisplaysrc only advertises the render-node's real drm-formats once it has opened
-      // the device, so we have to query a live instance rather than its static pad template. The
-      // compositor runs on the app render node (which may differ from the encoder node), so query
-      // with that one to get the formats it'll actually produce.
-      auto source_caps =
-          gstreamer::get_dma_caps_runtime("waylanddisplaysrc", {{"render-node", default_app_render_node}});
-      logs::log(logs::debug, "Required DMA formats for vapostproc: {}", sink_caps);
-      logs::log(logs::debug, "Available DMA formats for waylanddisplaysrc: {}", source_caps);
-      auto gst_caps = source_caps | //
-                      ranges::views::filter([&sink_caps](const std::string &cap) {
-                        return std::find(sink_caps.begin(), sink_caps.end(), cap) != sink_caps.end();
-                      }) | //
-                      ranges::views::remove_if([](const std::string &cap) {
-                        // TODO: HDR isn't supported by Wolf yet (so we remove P010 and AR30 format)
-                        return cap.find("P010") != std::string::npos || cap.find("AR30") != std::string::npos ||
-                               // We also remove formats that are padded with spaces since they need escaping
-                               cap.find(" ") != std::string::npos;
-                      }) | //
-                      ranges::to<std::vector>();
-      if (gst_caps.empty()) {
-        logs::log(logs::warning,
-                  "Unable to find any compatible DMA formats between waylanddisplaysrc and vapostproc, disabling "
-                  "zero copy pipeline.");
-        use_zero_copy = false;
-      } else {
-        default_base_video.producer_buffer_caps =
-            fmt::format("video/x-raw(memory:DMABuf), drm-format={{{}}}", utils::join(gst_caps, ","));
-      }
+      // Advertise a generic DMA-BUF producer buffer and let the compositor (waylanddisplaysrc) and
+      // the consumer's vapostproc negotiate the concrete drm-format at runtime across the interpipe
+      // boundary. The compositor only exposes its real drm-formats once it has opened the device, so
+      // a static config-time intersection can't see them anyway. Runtime negotiation typically lands
+      // on a 10-bit format (e.g. AR30); vapostproc then converts down to NV12 for 8-bit sessions or
+      // to P010 for Main10 sessions, so a single producer buffer feeds every codec/bit-depth.
+      default_base_video.producer_buffer_caps = "video/x-raw(memory:DMABuf)";
       break;
     }
     default: {
@@ -352,12 +360,14 @@ Config load_or_default(const std::string &source,
   default_base_video.h264_encoder = h264_encoder.value().encoder_pipeline;
   if (hevc_encoder) {
     default_base_video.hevc_encoder = hevc_encoder.value().encoder_pipeline;
+    default_base_video.hevc_encoder_10bit = hevc_encoder.value().encoder_pipeline_10bit;
   } else {
     logs::log(logs::warning, "Unable to find an HEVC encoder, disabling it");
   }
 
   if (av1_encoder) {
     default_base_video.av1_encoder = av1_encoder.value().encoder_pipeline;
+    default_base_video.av1_encoder_10bit = av1_encoder.value().encoder_pipeline_10bit;
   } else {
     logs::log(logs::warning, "Unable to find an AV1 encoder, disabling it");
   }
@@ -387,6 +397,15 @@ Config load_or_default(const std::string &source,
                                      : av1_encoder->video_params.value_or(default_av1.video_params);
   }
 
+  // 10-bit (P010) colour-convert segments, used for Main10 sessions. Falls back to the 8-bit
+  // params when a vendor default doesn't define a 10-bit variant.
+  auto pick_10bit_params = [&](const GstEncoderDefault &def, const std::string &fallback) {
+    const auto &p = use_zero_copy ? def.video_params_zero_copy_10bit : def.video_params_10bit;
+    return p.value_or(fallback);
+  };
+  std::string hevc_video_params_10bit = hevc_encoder ? pick_10bit_params(default_hevc, hevc_video_params) : "";
+  std::string av1_video_params_10bit = av1_encoder ? pick_10bit_params(default_av1, av1_video_params) : "";
+
   auto clients_atom = std::make_shared<immer::atom<PairedClientList>>(paired_clients);
 
   /* Get profiles, for each app defined will merge with default settings */
@@ -403,6 +422,8 @@ Config load_or_default(const std::string &source,
                                                               h264_video_params,
                                                               hevc_video_params,
                                                               av1_video_params,
+                                                              hevc_video_params_10bit,
+                                                              av1_video_params_10bit,
                                                               default_base_audio,
                                                               running_sessions,
                                                               ev_bus)};
@@ -415,6 +436,9 @@ Config load_or_default(const std::string &source,
                 .config_source = source,
                 .support_hevc = hevc_encoder.has_value(),
                 .support_av1 = av1_encoder.has_value() && encoder_type(*av1_encoder) != SOFTWARE,
+                .support_hevc_main10 = hevc_encoder.has_value() && hevc_encoder->encoder_pipeline_10bit.has_value(),
+                .support_av1_main10 = av1_encoder.has_value() && encoder_type(*av1_encoder) != SOFTWARE &&
+                                      av1_encoder->encoder_pipeline_10bit.has_value(),
                 .paired_clients = clients_atom,
                 .profiles = profiles_atom};
 }

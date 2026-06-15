@@ -40,6 +40,9 @@ struct PairedClient {
 struct GstEncoderDefault {
   std::string video_params;
   std::string video_params_zero_copy;
+  // 10-bit (P010) variants of the colour-convert/scale segment, used for Main10 sessions.
+  std::optional<std::string> video_params_10bit;
+  std::optional<std::string> video_params_zero_copy_10bit;
 };
 
 struct GstEncoder {
@@ -48,6 +51,9 @@ struct GstEncoder {
   std::optional<std::string> video_params;
   std::optional<std::string> video_params_zero_copy;
   std::string encoder_pipeline;
+  // Optional Main10 (10-bit) encoder pipeline. When present, Wolf advertises the codec's Main10
+  // format and uses this pipeline for 10-bit SDR sessions.
+  std::optional<std::string> encoder_pipeline_10bit;
 };
 
 struct GstVideoCfg {
@@ -97,6 +103,8 @@ struct BaseAppVideoOverride {
   std::optional<std::string> h264_encoder;
   std::optional<std::string> hevc_encoder;
   std::optional<std::string> av1_encoder;
+  std::optional<std::string> hevc_encoder_10bit;
+  std::optional<std::string> av1_encoder_10bit;
 };
 
 struct BaseAppAudioOverride {

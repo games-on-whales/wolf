@@ -69,6 +69,11 @@ struct App {
   std::string hevc_gst_pipeline;
   std::string av1_gst_pipeline;
 
+  // 10-bit (Main10) pipelines, empty when the encoder has no Main10 variant. Selected per-session
+  // when the client negotiates a 10-bit format (x-nv-video[0].dynamicRangeMode=1).
+  std::string hevc_gst_pipeline_10bit;
+  std::string av1_gst_pipeline_10bit;
+
   std::string render_node;
 
   std::string opus_gst_pipeline;

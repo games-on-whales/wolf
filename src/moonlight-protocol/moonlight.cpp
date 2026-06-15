@@ -5,11 +5,13 @@ namespace pt = boost::property_tree;
 
 namespace moonlight {
 
+// Values must match moonlight-common-c Limelight.h VIDEO_FORMAT_* exactly, since
+// the client matches our ServerCodecModeSupport bitmask against them.
 constexpr int VIDEO_FORMAT_H264 = 0x0001;
 constexpr int VIDEO_FORMAT_H265 = 0x0100;
-constexpr int VIDEO_FORMAT_H265_MAIN10 = 0x00200;
-constexpr int VIDEO_FORMAT_AV1_MAIN8 = 0x10000;
-constexpr int VIDEO_FORMAT_AV1_MAIN10 = 0x20000;
+constexpr int VIDEO_FORMAT_H265_MAIN10 = 0x0200;
+constexpr int VIDEO_FORMAT_AV1_MAIN8 = 0x1000;
+constexpr int VIDEO_FORMAT_AV1_MAIN10 = 0x2000;
 
 XML serverinfo(bool isServerBusy,
                int current_appid,
@@ -22,7 +24,9 @@ XML serverinfo(bool isServerBusy,
                const immer::array<DisplayMode> &display_modes,
                int pair_status,
                bool support_hevc,
-               bool support_av1) {
+               bool support_av1,
+               bool support_hevc_main10,
+               bool support_av1_main10) {
   XML resp;
 
   resp.put("root.<xmlattr>.status_code", 200);
@@ -37,9 +41,17 @@ XML serverinfo(bool isServerBusy,
   if (support_hevc) {
     max_luma_pixels = 1869449984;
     codec_support |= VIDEO_FORMAT_H265;
+    // 10-bit (Main10) only enables a higher-precision decode profile on the client; it stays SDR
+    // unless we additionally signal HDR over the control stream, which Wolf does not (yet) do.
+    if (support_hevc_main10) {
+      codec_support |= VIDEO_FORMAT_H265_MAIN10;
+    }
   }
   if (support_av1) {
     codec_support |= VIDEO_FORMAT_AV1_MAIN8;
+    if (support_av1_main10) {
+      codec_support |= VIDEO_FORMAT_AV1_MAIN10;
+    }
   }
 
   resp.put("root.MaxLumaPixelsHEVC", std::to_string(max_luma_pixels));

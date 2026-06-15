@@ -80,6 +80,10 @@ struct Config {
   std::string config_source;
   bool support_hevc;
   bool support_av1;
+  // Whether a 10-bit (Main10) encoder pipeline is available for each codec. Advertised to the
+  // client as the Main10 video formats; enables 10-bit SDR streaming (less compression banding).
+  bool support_hevc_main10 = false;
+  bool support_av1_main10 = false;
 
   /**
    * Mutable, paired_clients will be loaded up on startup
