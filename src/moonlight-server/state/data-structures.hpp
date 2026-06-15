@@ -22,6 +22,7 @@
 #include <optional>
 #include <state/serialised_config.hpp>
 #include <utility>
+#include <vector>
 
 namespace state {
 using namespace std::chrono_literals;
@@ -156,6 +157,25 @@ struct PairCache {
 
 using SessionsAtoms = std::shared_ptr<immer::atom<immer::vector<events::StreamSession>>>;
 
+struct PartyModeSession {
+  std::size_t primary_session_id;
+  std::size_t secondary_session_id;
+  bool mute_secondary_audio = false;
+};
+
+using PartyModeSessionsAtom = std::shared_ptr<immer::atom<immer::vector<PartyModeSession>>>;
+
+struct PhysicalInputDeviceAssignment {
+  std::string devnode;
+  std::string owner_session_id;
+  std::string routed_session_id;
+  std::vector<std::map<std::string, std::string>> udev_events;
+  std::vector<std::pair<std::string, std::vector<std::string>>> udev_hw_db_entries;
+  bool stop_session_on_disconnect = true;
+};
+
+using PhysicalInputDevicesAtom = std::shared_ptr<immer::atom<immer::vector<PhysicalInputDeviceAssignment>>>;
+
 /**
  * The whole application state as a composition of immutable datastructures
  */
@@ -198,6 +218,17 @@ struct AppState {
    * A list of all currently running (and paused) streaming sessions
    */
   SessionsAtoms running_sessions;
+
+  /**
+   * Active party-mode links between the stream-owning session and its hidden secondary seat.
+   */
+  PartyModeSessionsAtom party_mode_sessions = std::make_shared<immer::atom<immer::vector<PartyModeSession>>>();
+
+  /**
+   * Host physical input devices currently assigned to seats and optionally rerouted into lobbies.
+   */
+  PhysicalInputDevicesAtom physical_input_devices =
+      std::make_shared<immer::atom<immer::vector<PhysicalInputDeviceAssignment>>>();
 };
 
 const static immer::array<audio::AudioMode> AUDIO_CONFIGURATIONS = {

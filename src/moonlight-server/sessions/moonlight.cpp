@@ -2,10 +2,12 @@
 #include <immer/array_transient.hpp>
 #include <immer/map_transient.hpp>
 #include <immer/vector_transient.hpp>
+#include <mutex>
 #include <sessions/common.hpp>
 #include <sessions/handlers.hpp>
 #include <state/sessions.hpp>
 #include <streaming/streaming.hpp>
+#include <unordered_set>
 
 namespace wolf::core::sessions {
 
@@ -56,6 +58,8 @@ setup_moonlight_handlers(const immer::box<state::AppState> &app_state,
    * This way we can accumulate devices here until the docker container is up and running
    */
   auto plugged_devices_queue = std::make_shared<immer::atom<session_devices>>();
+  auto restarting_runners = std::make_shared<std::unordered_set<std::size_t>>();
+  auto restarting_runners_mutex = std::make_shared<std::mutex>();
 
   handlers.push_back(app_state->event_bus->register_handler<immer::box<events::StopStreamEvent>>(
       [&app_state, plugged_devices_queue](const immer::box<events::StopStreamEvent> &ev) {
@@ -85,6 +89,12 @@ setup_moonlight_handlers(const immer::box<state::AppState> &app_state,
         }
       }));
 
+  handlers.push_back(app_state->event_bus->register_handler<immer::box<events::RestartRunnerEvent>>(
+      [restarting_runners, restarting_runners_mutex](const immer::box<events::RestartRunnerEvent> &restart_ev) {
+        std::lock_guard lock(*restarting_runners_mutex);
+        restarting_runners->insert(restart_ev->session_id);
+      }));
+
   // Run process and our custom wayland as soon as a new StreamSession is created
   handlers.push_back(app_state->event_bus->register_handler<immer::box<events::StreamSession>>(
       [=](const immer::box<events::StreamSession> &session) {
@@ -98,15 +108,14 @@ setup_moonlight_handlers(const immer::box<state::AppState> &app_state,
 
         if (session->app->start_virtual_compositor) {
           logs::log(logs::debug, "[STREAM_SESSION] Create wayland compositor");
+          auto render_display_mode = session->render_display_mode->load();
 
           // Start Gstreamer producer pipeline
-          std::thread([session, on_ready, gst_context = app_state->gst_context]() {
+          std::thread([session, on_ready, gst_context = app_state->gst_context, render_display_mode]() {
             streaming::start_video_producer(std::to_string(session->session_id),
                                             session->app->video_producer_buffer_caps,
                                             session->app->render_node,
-                                            {.width = session->display_mode.width,
-                                             .height = session->display_mode.height,
-                                             .refreshRate = session->display_mode.refreshRate},
+                                            render_display_mode,
                                             gst_context,
                                             on_ready,
                                             session->event_bus);
@@ -164,7 +173,9 @@ setup_moonlight_handlers(const immer::box<state::AppState> &app_state,
         auto w_display_ready = on_ready->get_future().then([session](auto fut) {
           streaming::WaylandDisplayReady ready = fut.get();
 
-          auto wl_state = virtual_display::create_wayland_display(ready.wayland_plugin, ready.wayland_socket_name);
+          auto wl_state = virtual_display::create_wayland_display(ready.wayland_plugin,
+                                                                  ready.wayland_capsfilter,
+                                                                  ready.wayland_socket_name);
           // Set the wayland display
           session->wayland_display->store(wl_state);
 
@@ -192,6 +203,7 @@ setup_moonlight_handlers(const immer::box<state::AppState> &app_state,
         }
 
         std::thread([=]() {
+          auto render_display_mode = *run_session->stream_session->render_display_mode->load();
           start_runner(
               run_session->runner,
               *devices_q,
@@ -199,9 +211,9 @@ setup_moonlight_handlers(const immer::box<state::AppState> &app_state,
                   .session_id = session_id,
                   .video_settings =
                       {
-                          .width = run_session->stream_session->display_mode.width,
-                          .height = run_session->stream_session->display_mode.height,
-                          .refresh_rate = run_session->stream_session->display_mode.refreshRate,
+                          .width = render_display_mode.width,
+                          .height = render_display_mode.height,
+                          .refresh_rate = render_display_mode.refreshRate,
                           .wayland_render_node = run_session->stream_session->app->render_node,
                           .runner_render_node = run_session->stream_session->app->render_node,
                           .video_producer_buffer_caps = run_session->stream_session->app->video_producer_buffer_caps,
@@ -215,8 +227,26 @@ setup_moonlight_handlers(const immer::box<state::AppState> &app_state,
                   .xdg_runtime_dir = runtime_dir,
                   .client_settings = run_session->stream_session->client_settings}});
 
+          bool should_restart_runner = false;
+          {
+            std::lock_guard lock(*restarting_runners_mutex);
+            should_restart_runner = restarting_runners->erase(run_session->stream_session->session_id) > 0;
+          }
+          if (should_restart_runner) {
+            logs::log(logs::info, "[STREAM_SESSION] Restarting runner for session {}", session_id);
+            run_session->stream_session->event_bus->fire_event(immer::box<events::StartRunner>(
+                events::StartRunner{.stop_stream_when_over = run_session->stop_stream_when_over,
+                                    .runner = run_session->runner,
+                                    .stream_session = run_session->stream_session}));
+            return;
+          }
+
           // Runner process ended
           if (run_session->stop_stream_when_over) {
+            if (promote_party_mode_secondary_session(app_state, run_session->stream_session->session_id)) {
+              return;
+            }
+
             run_session->stream_session->wayland_display->store(nullptr);
 
             app_state->event_bus->fire_event(immer::box<events::StopStreamEvent>(

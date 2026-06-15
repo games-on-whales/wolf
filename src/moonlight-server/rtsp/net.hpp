@@ -209,9 +209,10 @@ protected:
 class tcp_server {
 public:
   tcp_server(boost::asio::io_context &io_context, int port, state::SessionsAtoms state)
-      : io_context_(io_context), acceptor_(io_context, tcp::endpoint(tcp::v4(), port)),
-        stream_sessions(std::move(state)) {
+      : io_context_(io_context), acceptor_(io_context), stream_sessions(std::move(state)) {
+    acceptor_.open(tcp::v4());
     acceptor_.set_option(boost::asio::socket_base::reuse_address{true});
+    acceptor_.bind(tcp::endpoint(tcp::v4(), port));
     acceptor_.listen(4096);
     start_accept();
   }

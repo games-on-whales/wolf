@@ -2,11 +2,28 @@
 #include <control/input_handler.hpp>
 #include <core/docker.hpp>
 #include <rtp/udp-ping.hpp>
+#include <sessions/handlers.hpp>
 #include <state/config.hpp>
 #include <state/sessions.hpp>
 #include <state/utils.hpp>
 
 namespace wolf::api {
+
+namespace {
+/**
+ * Parse a numeric session id coming from an API request body. Returns
+ * std::nullopt for malformed input so the caller can reply with an error
+ * instead of letting std::stoul throw out of the asio handler thread, which
+ * would propagate uncaught and terminate the daemon.
+ */
+std::optional<std::size_t> parse_session_id(const std::string &raw) {
+  try {
+    return std::stoull(raw);
+  } catch (const std::exception &) {
+    return std::nullopt;
+  }
+}
+} // namespace
 
 void UnixSocketServer::endpoint_Events(const HTTPRequest &req, std::shared_ptr<UnixSocket> socket) {
   // curl -N --unix-socket /tmp/wolf.sock http://localhost/api/v1/events
@@ -263,7 +280,10 @@ void UnixSocketServer::endpoint_StreamSessionAdd(const HTTPRequest &req, std::sh
       choosen_client = *client;
     } else {
       // Create a dummy client
-      choosen_client = {.client_cert = "", .app_state_folder = state::gen_uuid(), .settings = {}};
+      auto local_client_id = state::gen_uuid();
+      choosen_client = {.client_cert = fmt::format("local-session:{}", local_client_id),
+                        .app_state_folder = local_client_id,
+                        .settings = {}};
     }
 
     choosen_client.settings = ss.client_settings.value_or(config::ClientSettings{});
@@ -300,7 +320,13 @@ void UnixSocketServer::endpoint_StreamSessionStart(const HTTPRequest &req, std::
   auto start_req = rfl::json::read<StreamSessionStartRequest>(req.body);
   if (start_req) {
     auto sessions = state_->app_state->running_sessions->load();
-    auto session_id = std::stoul(start_req.value().session_id);
+    auto session_id_opt = parse_session_id(start_req.value().session_id);
+    if (!session_id_opt) {
+      logs::log(logs::warning, "[API] Invalid session_id: {}", start_req.value().session_id);
+      send_http(socket, 500, rfl::json::write(GenericErrorResponse{.error = "Invalid session_id"}));
+      return;
+    }
+    auto session_id = *session_id_opt;
     if (auto session = state::get_session_by_id(sessions.get(), session_id)) {
       auto video_session = start_req.value().video_session;
       video_session.session_id = session_id; // Can't be JSON encoded
@@ -316,7 +342,7 @@ void UnixSocketServer::endpoint_StreamSessionStart(const HTTPRequest &req, std::
       auto res = GenericSuccessResponse{.success = true};
       send_http(socket, 200, rfl::json::write(res));
     } else {
-      logs::log(logs::warning, "[API] Invalid session_id: {}", session.value().session_id);
+      logs::log(logs::warning, "[API] Invalid session_id: {}", start_req.value().session_id);
       auto res = GenericErrorResponse{.error = "Invalid session_id"};
       send_http(socket, 500, rfl::json::write(res));
     }
@@ -331,7 +357,13 @@ void UnixSocketServer::endpoint_StreamSessionPause(const HTTPRequest &req, std::
   auto session = rfl::json::read<StreamSessionPauseRequest>(req.body);
   if (session) {
     auto sessions = state_->app_state->running_sessions->load();
-    auto session_id = std::stoul(session.value().session_id);
+    auto session_id_opt = parse_session_id(session.value().session_id);
+    if (!session_id_opt) {
+      logs::log(logs::warning, "[API] Invalid session_id: {}", session.value().session_id);
+      send_http(socket, 500, rfl::json::write(GenericErrorResponse{.error = "Invalid session_id"}));
+      return;
+    }
+    auto session_id = *session_id_opt;
     if (state::get_session_by_id(sessions.get(), session_id)) {
       this->state_->app_state->event_bus->fire_event(
           immer::box<events::PauseStreamEvent>(events::PauseStreamEvent{.session_id = session_id}));
@@ -353,7 +385,13 @@ void UnixSocketServer::endpoint_StreamSessionStop(const HTTPRequest &req, std::s
   auto session = rfl::json::read<StreamSessionStopRequest>(req.body);
   if (session) {
     auto sessions = state_->app_state->running_sessions->load();
-    auto session_id = std::stoul(session.value().session_id);
+    auto session_id_opt = parse_session_id(session.value().session_id);
+    if (!session_id_opt) {
+      logs::log(logs::warning, "[API] Invalid session_id: {}", session.value().session_id);
+      send_http(socket, 500, rfl::json::write(GenericErrorResponse{.error = "Invalid session_id"}));
+      return;
+    }
+    auto session_id = *session_id_opt;
     if (state::get_session_by_id(sessions.get(), session_id)) {
       this->state_->app_state->event_bus->fire_event(
           immer::box<events::StopStreamEvent>(events::StopStreamEvent{.session_id = session_id}));
@@ -376,7 +414,13 @@ void UnixSocketServer::endpoint_StreamSessionHandleInput(const HTTPRequest &req,
   auto input_request = rfl::json::read<StreamSessionHandleInputRequest>(req.body);
   if (input_request) {
     auto sessions = state_->app_state->running_sessions->load();
-    auto session_id = std::stoul(input_request.value().session_id);
+    auto session_id_opt = parse_session_id(input_request.value().session_id);
+    if (!session_id_opt) {
+      logs::log(logs::warning, "[API] Invalid session_id: {}", input_request.value().session_id);
+      send_http(socket, 500, rfl::json::write(GenericErrorResponse{.error = "Invalid session_id"}));
+      return;
+    }
+    auto session_id = *session_id_opt;
     if (auto session = state::get_session_by_id(sessions.get(), session_id)) {
       auto hex_pkt = input_request.value().input_packet_hex.get();
       auto pkt_parsed = crypto::hex_to_str(hex_pkt);
@@ -392,6 +436,110 @@ void UnixSocketServer::endpoint_StreamSessionHandleInput(const HTTPRequest &req,
     logs::log(logs::warning, "[API] Invalid event: {} - {}", req.body, input_request.error().what());
     send_http(socket, 500, rfl::json::write(GenericErrorResponse{.error = input_request.error().what()}));
   }
+}
+
+void UnixSocketServer::endpoint_StreamSessionPartyMode(const HTTPRequest &req, std::shared_ptr<UnixSocket> socket) {
+  auto party_mode_request = rfl::json::read<StreamSessionPartyModeRequest>(req.body);
+  if (!party_mode_request) {
+    logs::log(logs::warning, "[API] Invalid event: {} - {}", req.body, party_mode_request.error().what());
+    send_http(socket, 500, rfl::json::write(GenericErrorResponse{.error = party_mode_request.error().what()}));
+    return;
+  }
+
+  const auto &body = party_mode_request.value();
+  auto sessions = state_->app_state->running_sessions->load();
+  auto session_id_opt = parse_session_id(body.session_id);
+  if (!session_id_opt || !state::get_session_by_id(sessions.get(), *session_id_opt)) {
+    logs::log(logs::warning, "[API] Invalid session_id: {}", body.session_id);
+    send_http(socket, 500, rfl::json::write(GenericErrorResponse{.error = "Invalid session_id"}));
+    return;
+  }
+  auto session_id = *session_id_opt;
+
+  std::optional<std::string> secondary_interpipe_src_id = std::nullopt;
+  std::optional<std::size_t> secondary_session_id = std::nullopt;
+  if (body.enabled) {
+    if (!body.secondary_session_id) {
+      send_http(socket,
+                500,
+                rfl::json::write(GenericErrorResponse{.error = "secondary_session_id is required when enabling"}));
+      return;
+    }
+
+    secondary_session_id = parse_session_id(*body.secondary_session_id);
+    if (!secondary_session_id) {
+      logs::log(logs::warning, "[API] Invalid secondary_session_id: {}", *body.secondary_session_id);
+      send_http(socket, 500, rfl::json::write(GenericErrorResponse{.error = "Invalid secondary_session_id"}));
+      return;
+    }
+    if (*secondary_session_id == session_id) {
+      send_http(socket,
+                500,
+                rfl::json::write(GenericErrorResponse{.error = "secondary_session_id must differ from session_id"}));
+      return;
+    }
+    if (!state::get_session_by_id(sessions.get(), *secondary_session_id)) {
+      logs::log(logs::warning, "[API] Invalid secondary_session_id: {}", *body.secondary_session_id);
+      send_http(socket, 500, rfl::json::write(GenericErrorResponse{.error = "Invalid secondary_session_id"}));
+      return;
+    }
+    secondary_interpipe_src_id = *body.secondary_session_id;
+  }
+
+  state_->app_state->party_mode_sessions->update(
+      [session_id, secondary_session_id, mute_secondary_audio = body.mute_secondary_audio, enabled = body.enabled](
+          const immer::vector<state::PartyModeSession> &party_sessions) {
+        auto updated_sessions = state::remove_party_mode_session(party_sessions, session_id);
+        if (enabled && secondary_session_id) {
+          updated_sessions = state::remove_party_mode_session(updated_sessions, *secondary_session_id);
+          updated_sessions =
+              updated_sessions.push_back(state::PartyModeSession{.primary_session_id = session_id,
+                                                                 .secondary_session_id = *secondary_session_id,
+                                                                 .mute_secondary_audio = mute_secondary_audio});
+        }
+        return updated_sessions;
+      });
+
+  state_->app_state->event_bus->fire_event(immer::box<events::SetPartyModeEvent>(
+      events::SetPartyModeEvent{.session_id = session_id,
+                                .enabled = body.enabled,
+                                .secondary_interpipe_src_id = secondary_interpipe_src_id,
+                                .mute_secondary_audio = body.mute_secondary_audio}));
+  send_http(socket, 200, rfl::json::write(GenericSuccessResponse{.success = true}));
+}
+
+void UnixSocketServer::endpoint_StreamSessionPartyModeJoin(const HTTPRequest &req, std::shared_ptr<UnixSocket> socket) {
+  auto join_request = rfl::json::read<StreamSessionPartyModeJoinRequest>(req.body);
+  if (!join_request) {
+    logs::log(logs::warning, "[API] Invalid event: {} - {}", req.body, join_request.error().what());
+    send_http(socket, 500, rfl::json::write(GenericErrorResponse{.error = join_request.error().what()}));
+    return;
+  }
+
+  const auto &body = join_request.value();
+  auto primary_session_id_opt = parse_session_id(body.session_id);
+  if (!primary_session_id_opt ||
+      !state::get_session_by_id(state_->app_state->running_sessions->load().get(), *primary_session_id_opt)) {
+    logs::log(logs::warning, "[API] Invalid session_id: {}", body.session_id);
+    send_http(socket, 500, rfl::json::write(GenericErrorResponse{.error = "Invalid session_id"}));
+    return;
+  }
+  auto primary_session_id = *primary_session_id_opt;
+
+  auto secondary_session = wolf::core::sessions::create_party_mode_secondary_session(state_->app_state,
+                                                                                     primary_session_id,
+                                                                                     body.mute_secondary_audio);
+  if (!secondary_session) {
+    send_http(socket,
+              500,
+              rfl::json::write(GenericErrorResponse{.error = "Unable to create party mode secondary session"}));
+    return;
+  }
+
+  send_http(socket,
+            200,
+            rfl::json::write(
+                StreamSessionCreated{.success = true, .session_id = std::to_string(secondary_session->session_id)}));
 }
 
 void UnixSocketServer::endpoint_Lobbies(const wolf::api::HTTPRequest &req, std::shared_ptr<UnixSocket> socket) {
@@ -524,8 +672,10 @@ void UnixSocketServer::endpoint_LobbyStop(const wolf::api::HTTPRequest &req, std
 void UnixSocketServer::endpoint_RunnerStart(const wolf::api::HTTPRequest &req, std::shared_ptr<UnixSocket> socket) {
   auto event = rfl::json::read<RunnerStartRequest>(req.body);
   if (event) {
-    auto session = state::get_session_by_id(this->state_->app_state->running_sessions->load(),
-                                            std::stoul(event.value().session_id));
+    auto session_id_opt = parse_session_id(event.value().session_id);
+    auto session = session_id_opt
+                       ? state::get_session_by_id(this->state_->app_state->running_sessions->load(), *session_id_opt)
+                       : std::nullopt;
     if (!session) {
       logs::log(logs::warning, "[API] Invalid session_id: {}", event.value().session_id);
       auto res = GenericErrorResponse{.error = "Invalid session_id"};

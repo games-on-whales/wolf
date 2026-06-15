@@ -19,8 +19,14 @@ typedef struct WaylandState WaylandState;
 using wl_state_ptr = std::shared_ptr<WaylandState>;
 
 wl_state_ptr create_wayland_display(gstreamer::gst_element_ptr wayland_plugin, const std::string &wayland_socket_name);
+wl_state_ptr create_wayland_display(gstreamer::gst_element_ptr wayland_plugin,
+                                    gstreamer::gst_element_ptr wayland_capsfilter,
+                                    const std::string &wayland_socket_name);
 
 std::string get_wayland_socket_name(WaylandState &w_state);
+
+std::unique_ptr<GstCaps, decltype(&gst_caps_unref)> set_resolution(WaylandState &w_state,
+                                                                  const DisplayMode &display_mode);
 
 bool add_input_device(WaylandState &w_state, const std::string &device_path);
 

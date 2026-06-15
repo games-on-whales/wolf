@@ -6,6 +6,7 @@
 #include <rfl/toml.hpp>
 #include <sessions/handlers.hpp>
 #include <state/config.hpp>
+#include <state/sessions.hpp>
 
 using Catch::Matchers::ContainsSubstring;
 using Catch::Matchers::Equals;
@@ -396,6 +397,7 @@ TEST_CASE("Sessions APIs", "[API]") {
   response = req(curl.get(), HTTPMethod::POST, "http://localhost/api/v1/sessions/add", rfl::json::write(session));
   REQUIRE(response);
   REQUIRE_THAT(response->second, Catch::Matchers::ContainsSubstring("{\"success\":true,\"session_id\":"));
+  auto primary_session = rfl::json::read<StreamSessionCreated>(response->second).value();
 
   // Test that the new session is in the list
   response = req(curl.get(), HTTPMethod::GET, "http://localhost/api/v1/sessions");
@@ -403,6 +405,114 @@ TEST_CASE("Sessions APIs", "[API]") {
   auto sessions2 = rfl::json::read<StreamSessionListResponse>(response->second).value();
   REQUIRE(sessions2.success);
   REQUIRE(sessions2.sessions.size() == 1);
+
+  auto party_mode_events = std::make_shared<TSQueue<events::SetPartyModeEvent>>();
+  auto party_mode_handler = event_bus->register_handler<immer::box<events::SetPartyModeEvent>>(
+      [party_mode_events](const immer::box<events::SetPartyModeEvent> &event) { party_mode_events->push(*event); });
+
+  auto join_request = StreamSessionPartyModeJoinRequest{.session_id = primary_session.session_id};
+  response = req(
+      curl.get(), HTTPMethod::POST, "http://localhost/api/v1/sessions/party-mode/join", rfl::json::write(join_request));
+  REQUIRE(response);
+  REQUIRE_THAT(response->second, Catch::Matchers::ContainsSubstring("{\"success\":true,\"session_id\":"));
+  auto secondary_session = rfl::json::read<StreamSessionCreated>(response->second).value();
+  REQUIRE(secondary_session.session_id != primary_session.session_id);
+
+  response = req(curl.get(), HTTPMethod::GET, "http://localhost/api/v1/sessions");
+  REQUIRE(response);
+  auto joined_sessions = rfl::json::read<StreamSessionListResponse>(response->second).value();
+  REQUIRE(joined_sessions.success);
+  REQUIRE(joined_sessions.sessions.size() == 2);
+  REQUIRE_THAT(response->second, ContainsSubstring("\"client_id\":\"10594003729173467913\""));
+  REQUIRE_THAT(response->second, ContainsSubstring(fmt::format("\"client_id\":\"{}\"", secondary_session.session_id)));
+  REQUIRE(state::get_session_by_id(app_state->running_sessions->load().get(), std::stoull(primary_session.session_id)));
+  REQUIRE(state::get_session_by_id(app_state->running_sessions->load().get(), std::stoull(secondary_session.session_id)));
+
+  auto party_mode_event = party_mode_events->pop();
+  REQUIRE(party_mode_event);
+  REQUIRE(party_mode_event->session_id == std::stoull(primary_session.session_id));
+  REQUIRE(party_mode_event->enabled);
+  REQUIRE(party_mode_event->secondary_interpipe_src_id == std::optional<std::string>{secondary_session.session_id});
+  REQUIRE(!party_mode_event->mute_secondary_audio);
+  REQUIRE(app_state->party_mode_sessions->load()->size() == 1);
+
+  auto party_mode_lifecycle_handlers = sessions::setup_party_mode_handlers(app_state);
+  (void)party_mode_lifecycle_handlers;
+  event_bus->fire_event(
+      immer::box<events::StopStreamEvent>{events::StopStreamEvent{.session_id = std::stoull(secondary_session.session_id)}});
+
+  auto teardown_party_mode_event = party_mode_events->pop();
+  REQUIRE(teardown_party_mode_event);
+  REQUIRE(teardown_party_mode_event->session_id == std::stoull(primary_session.session_id));
+  REQUIRE(!teardown_party_mode_event->enabled);
+  REQUIRE(app_state->party_mode_sessions->load()->empty());
+
+  auto disable_party_mode_request = StreamSessionPartyModeRequest{.session_id = primary_session.session_id, .enabled = false};
+  response = req(
+      curl.get(), HTTPMethod::POST, "http://localhost/api/v1/sessions/party-mode", rfl::json::write(disable_party_mode_request));
+  REQUIRE(response);
+  REQUIRE_THAT(response->second, Equals("{\"success\":true}"));
+
+  auto disable_party_mode_event = party_mode_events->pop();
+  REQUIRE(disable_party_mode_event);
+  REQUIRE(disable_party_mode_event->session_id == std::stoull(primary_session.session_id));
+  REQUIRE(!disable_party_mode_event->enabled);
+  REQUIRE(app_state->party_mode_sessions->load()->empty());
+
+  auto enable_party_mode_request = StreamSessionPartyModeRequest{
+      .session_id = primary_session.session_id, .enabled = true, .secondary_session_id = secondary_session.session_id};
+  response = req(
+      curl.get(), HTTPMethod::POST, "http://localhost/api/v1/sessions/party-mode", rfl::json::write(enable_party_mode_request));
+  REQUIRE(response);
+  REQUIRE_THAT(response->second, Equals("{\"success\":true}"));
+
+  auto enable_party_mode_event = party_mode_events->pop();
+  REQUIRE(enable_party_mode_event);
+  REQUIRE(enable_party_mode_event->session_id == std::stoull(primary_session.session_id));
+  REQUIRE(enable_party_mode_event->enabled);
+  REQUIRE(enable_party_mode_event->secondary_interpipe_src_id == std::optional<std::string>{secondary_session.session_id});
+
+  auto invalid_party_mode_request = StreamSessionPartyModeRequest{
+      .session_id = primary_session.session_id, .enabled = true, .secondary_session_id = primary_session.session_id};
+  response = req(curl.get(),
+                 HTTPMethod::POST,
+                 "http://localhost/api/v1/sessions/party-mode",
+                 rfl::json::write(invalid_party_mode_request));
+  REQUIRE(response);
+  REQUIRE_THAT(response->second,
+               Equals("{\"success\":false,\"error\":\"secondary_session_id must differ from session_id\"}"));
+
+  auto switch_stream_events = std::make_shared<TSQueue<events::SwitchStreamProducerEvents>>();
+  auto switch_stream_handler = event_bus->register_handler<immer::box<events::SwitchStreamProducerEvents>>(
+      [switch_stream_events](const immer::box<events::SwitchStreamProducerEvents> &event) {
+        switch_stream_events->push(*event);
+      });
+
+  REQUIRE(sessions::promote_party_mode_secondary_session(app_state, std::stoull(primary_session.session_id)));
+  auto promoted_switch_event = switch_stream_events->pop();
+  REQUIRE(promoted_switch_event);
+  REQUIRE(promoted_switch_event->session_id == std::stoull(primary_session.session_id));
+  REQUIRE(promoted_switch_event->interpipe_src_id == secondary_session.session_id);
+
+  auto promoted_disable_event = party_mode_events->pop();
+  REQUIRE(promoted_disable_event);
+  REQUIRE(promoted_disable_event->session_id == std::stoull(primary_session.session_id));
+  REQUIRE(!promoted_disable_event->enabled);
+  REQUIRE(app_state->party_mode_sessions->load()->empty());
+  REQUIRE(app_state->running_sessions->load()->size() == 1);
+  auto promoted_primary_session = state::get_session_by_id(app_state->running_sessions->load().get(),
+                                                           std::stoull(primary_session.session_id));
+  REQUIRE(promoted_primary_session);
+  REQUIRE(promoted_primary_session->session_id == std::stoull(primary_session.session_id));
+
+  response = req(curl.get(), HTTPMethod::GET, "http://localhost/api/v1/sessions");
+  REQUIRE(response);
+  auto promoted_sessions = rfl::json::read<StreamSessionListResponse>(response->second).value();
+  REQUIRE(promoted_sessions.success);
+  REQUIRE(promoted_sessions.sessions.size() == 1);
+  REQUIRE_THAT(response->second, !ContainsSubstring(fmt::format("\"client_id\":\"{}\"", secondary_session.session_id)));
+  switch_stream_handler.unregister();
+  party_mode_handler.unregister();
 
   // TODO: breaks Github CI
   // // Test that we can send input to a session
@@ -416,14 +526,14 @@ TEST_CASE("Sessions APIs", "[API]") {
   // REQUIRE_THAT(response->second, Equals("{\"success\":true}"));
 
   // Test that we can pause a session
-  auto pause_request = StreamSessionPauseRequest{.session_id = "10594003729173467913"};
+  auto pause_request = StreamSessionPauseRequest{.session_id = primary_session.session_id};
   response =
       req(curl.get(), HTTPMethod::POST, "http://localhost/api/v1/sessions/pause", rfl::json::write(pause_request));
   REQUIRE(response);
   REQUIRE_THAT(response->second, Equals("{\"success\":true}"));
 
   // Test that we can stop a session
-  auto stop_request = StreamSessionStopRequest{.session_id = "10594003729173467913"};
+  auto stop_request = StreamSessionStopRequest{.session_id = primary_session.session_id};
   response = req(curl.get(), HTTPMethod::POST, "http://localhost/api/v1/sessions/stop", rfl::json::write(stop_request));
   REQUIRE(response);
   REQUIRE_THAT(response->second, Equals("{\"success\":true}"));

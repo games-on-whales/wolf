@@ -14,7 +14,8 @@ namespace wolf::core::sessions {
  * @note Leaving a lobby may have side effects,
  * like terminating the lobby if it becomes empty or triggering additional events.
  */
-void leave_lobby(const std::shared_ptr<events::EventBusType> &ev_bus,
+void leave_lobby(const immer::box<state::AppState> &app_state,
+                 const std::shared_ptr<events::EventBusType> &ev_bus,
                  const events::Lobby &lobby,
                  const events::StreamSession &session) {
   logs::log(logs::info, "[LOBBY] Session {} leaving lobby {}", session.session_id, lobby.id);
@@ -52,6 +53,31 @@ void leave_lobby(const std::shared_ptr<events::EventBusType> &ev_bus,
                                   .udev_hw_db_entries = plug_ev.udev_hw_db_entries}});
   }
   // TODO: hotplug pen_tablet and touch_screen
+
+  auto physical_input_devices = app_state->physical_input_devices->load();
+  for (const auto &assignment : *physical_input_devices) {
+    if (assignment.owner_session_id == std::to_string(session.session_id) && assignment.routed_session_id == lobby.id) {
+      ev_bus->fire_event(immer::box<events::UnplugDeviceEvent>{
+          events::UnplugDeviceEvent{.session_id = lobby.id,
+                                    .udev_events = assignment.udev_events,
+                                    .udev_hw_db_entries = assignment.udev_hw_db_entries}});
+      ev_bus->fire_event(immer::box<events::PlugDeviceEvent>{
+          events::PlugDeviceEvent{.session_id = std::to_string(session.session_id),
+                                  .udev_events = assignment.udev_events,
+                                  .udev_hw_db_entries = assignment.udev_hw_db_entries}});
+    }
+  }
+  app_state->physical_input_devices->update(
+      [session_id = std::to_string(session.session_id),
+       lobby_id = lobby.id](const immer::vector<state::PhysicalInputDeviceAssignment> &assignments) {
+        return assignments | ranges::views::transform([&](state::PhysicalInputDeviceAssignment assignment) {
+                 if (assignment.owner_session_id == session_id && assignment.routed_session_id == lobby_id) {
+                   assignment.routed_session_id = session_id;
+                 }
+                 return assignment;
+               }) |
+               ranges::to<immer::vector<state::PhysicalInputDeviceAssignment>>();
+      });
 
   // Switch audio/video gstreamer stream producers
   ev_bus->fire_event(immer::box<events::SwitchStreamProducerEvents>{
@@ -110,8 +136,9 @@ setup_lobbies_handlers(const immer::box<state::AppState> &app_state,
               [lobby, runtime_dir, ev_bus, audio_server, lobby_settings, host = app_state->host](auto fut) {
                 streaming::WaylandDisplayReady ready = fut.get();
 
-                auto wl_state =
-                    virtual_display::create_wayland_display(ready.wayland_plugin, ready.wayland_socket_name);
+                auto wl_state = virtual_display::create_wayland_display(ready.wayland_plugin,
+                                                                        ready.wayland_capsfilter,
+                                                                        ready.wayland_socket_name);
                 // Set the wayland display
                 lobby->wayland_display->store(wl_state);
 
@@ -230,6 +257,32 @@ setup_lobbies_handlers(const immer::box<state::AppState> &app_state,
         }
         // TODO: hotplug pen_tablet
 
+        auto physical_input_devices = app_state->physical_input_devices->load();
+        for (const auto &assignment : *physical_input_devices) {
+          if (assignment.owner_session_id == std::to_string(session->session_id) &&
+              assignment.routed_session_id == std::to_string(session->session_id)) {
+            app_state->event_bus->fire_event(immer::box<events::UnplugDeviceEvent>{
+                events::UnplugDeviceEvent{.session_id = std::to_string(session->session_id),
+                                          .udev_events = assignment.udev_events,
+                                          .udev_hw_db_entries = assignment.udev_hw_db_entries}});
+            lobby->plugged_devices_queue->push(immer::box<events::PlugDeviceEvent>{
+                events::PlugDeviceEvent{.session_id = lobby->id,
+                                        .udev_events = assignment.udev_events,
+                                        .udev_hw_db_entries = assignment.udev_hw_db_entries}});
+          }
+        }
+        app_state->physical_input_devices->update(
+            [session_id = std::to_string(session->session_id),
+             lobby_id = lobby->id](const immer::vector<state::PhysicalInputDeviceAssignment> &assignments) {
+              return assignments | ranges::views::transform([&](state::PhysicalInputDeviceAssignment assignment) {
+                       if (assignment.owner_session_id == session_id && assignment.routed_session_id == session_id) {
+                         assignment.routed_session_id = lobby_id;
+                       }
+                       return assignment;
+                     }) |
+                     ranges::to<immer::vector<state::PhysicalInputDeviceAssignment>>();
+            });
+
         // Switch audio/video gstreamer stream producers
         app_state->event_bus->fire_event(immer::box<events::SwitchStreamProducerEvents>{
             events::SwitchStreamProducerEvents{.session_id = session->session_id, .interpipe_src_id = lobby->id}});
@@ -250,7 +303,7 @@ setup_lobbies_handlers(const immer::box<state::AppState> &app_state,
                     leave_lobby_event->lobby_id,
                     leave_lobby_event->moonlight_session_id);
         } else {
-          leave_lobby(app_state->event_bus, lobby.value(), session.value());
+          leave_lobby(app_state, app_state->event_bus, lobby.value(), session.value());
         }
       }));
 

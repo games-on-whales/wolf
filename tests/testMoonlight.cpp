@@ -38,7 +38,7 @@ TEST_CASE("LocalState load TOML", "[LocalState]") {
     REQUIRE_THAT(first_app->base.title, Equals("Firefox"));
     REQUIRE_THAT(first_app->base.id, Equals("304556286"));
     REQUIRE_THAT(first_app->base.icon_png_path.value(), Equals("firefox.png"));
-    auto default_video_source = "interpipesrc name=interpipesrc_{}_video";
+    auto default_video_source = "interpipesrc name=interpipesrc_{session_id}_video";
     REQUIRE_THAT(first_app->h264_gst_pipeline,
                  Equals(fmt::format("{} !\ndefault !\nh264_pipeline !\nvideo_sink", default_video_source)));
     REQUIRE_THAT(first_app->hevc_gst_pipeline,
