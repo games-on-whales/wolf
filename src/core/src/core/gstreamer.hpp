@@ -143,7 +143,9 @@ get_dma_caps_runtime(const std::string &gst_plugin_name,
     ret = gst_element_get_state(element, nullptr, nullptr, 5 * GST_SECOND);
   }
   if (ret == GST_STATE_CHANGE_FAILURE) {
-    logs::log(logs::warning, "[GSTREAMER] '{}' failed to reach PAUSED while querying runtime DMA caps", gst_plugin_name);
+    logs::log(logs::warning,
+              "[GSTREAMER] '{}' failed to reach PAUSED while querying runtime DMA caps",
+              gst_plugin_name);
   } else if (auto pad = gst_element_get_static_pad(element, pad_name.c_str())) {
     if (auto pad_caps = gst_pad_query_caps(pad, nullptr)) {
       caps = parse_dma_drm_formats(pad_caps);
