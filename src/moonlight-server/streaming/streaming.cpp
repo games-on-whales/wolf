@@ -375,18 +375,6 @@ static void configure_appsink(GstElement *appsink, UDPSink *udp_sink) {
 
 namespace {
 
-struct TwoSeatLayout {
-  int tile_width;
-  int divider_width;
-  int secondary_x;
-};
-
-TwoSeatLayout make_two_seat_layout(int output_width) {
-  auto divider_width = (output_width % 2 == 0) ? 10 : 9;
-  auto tile_width = (output_width - divider_width) / 2;
-  return {.tile_width = tile_width, .divider_width = divider_width, .secondary_x = tile_width + divider_width};
-}
-
 void set_capsfilter_size(GstElement *capsfilter, int width, int height) {
   if (!capsfilter) {
     return;

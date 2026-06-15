@@ -2,6 +2,7 @@
 #include <sessions/handlers.hpp>
 #include <state/config.hpp>
 #include <state/sessions.hpp>
+#include <streaming/streaming.hpp>
 
 namespace wolf::core::sessions {
 
@@ -12,8 +13,7 @@ virtual_display::DisplayMode to_render_mode(const moonlight::DisplayMode &displa
 }
 
 virtual_display::DisplayMode make_party_render_mode(const moonlight::DisplayMode &display_mode) {
-  auto divider_width = (display_mode.width % 2 == 0) ? 10 : 9;
-  auto tile_width = (display_mode.width - divider_width) / 2;
+  auto tile_width = streaming::make_two_seat_layout(display_mode.width).tile_width;
   return {.width = tile_width, .height = display_mode.height, .refreshRate = display_mode.refreshRate};
 }
 

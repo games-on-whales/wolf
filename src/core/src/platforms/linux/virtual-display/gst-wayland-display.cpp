@@ -44,20 +44,46 @@ std::string get_wayland_socket_name(WaylandState &w_state) {
   return w_state.wayland_socket_name;
 }
 
-std::unique_ptr<GstCaps, decltype(&gst_caps_unref)> set_resolution(
-    WaylandState &w_state, const DisplayMode &display_mode, const std::optional<gstreamer::gst_element_ptr> &app_src) {
-  auto caps = gst_caps_new_simple("video/x-raw",
-                                  "width",
-                                  G_TYPE_INT,
-                                  display_mode.width,
-                                  "height",
-                                  G_TYPE_INT,
-                                  display_mode.height,
-                                  "framerate",
-                                  GST_TYPE_FRACTION,
-                                  display_mode.refreshRate,
-                                  1,
-                                  nullptr);
+std::unique_ptr<GstCaps, decltype(&gst_caps_unref)> set_resolution(WaylandState &w_state,
+                                                                  const DisplayMode &display_mode) {
+  GstCaps *caps = nullptr;
+
+  // Reuse the caps the producer was started with (media type, format and, crucially,
+  // any memory feature such as memory:CUDAMemory / memory:DMABuf) and only override
+  // the geometry. Rebuilding a bare "video/x-raw" here would silently drop the
+  // zero-copy memory feature and force a renegotiation/copy on every resize.
+  if (w_state.wayland_capsfilter) {
+    GstCaps *current = nullptr;
+    g_object_get(w_state.wayland_capsfilter.get(), "caps", &current, nullptr);
+    if (current) {
+      if (!gst_caps_is_any(current) && !gst_caps_is_empty(current)) {
+        caps = gst_caps_copy(current);
+        for (guint i = 0; i < gst_caps_get_size(caps); i++) {
+          gst_structure_set(gst_caps_get_structure(caps, i),
+                            "width", G_TYPE_INT, display_mode.width,
+                            "height", G_TYPE_INT, display_mode.height,
+                            "framerate", GST_TYPE_FRACTION, display_mode.refreshRate, 1,
+                            nullptr);
+        }
+      }
+      gst_caps_unref(current);
+    }
+  }
+
+  if (!caps) {
+    caps = gst_caps_new_simple("video/x-raw",
+                               "width",
+                               G_TYPE_INT,
+                               display_mode.width,
+                               "height",
+                               G_TYPE_INT,
+                               display_mode.height,
+                               "framerate",
+                               GST_TYPE_FRACTION,
+                               display_mode.refreshRate,
+                               1,
+                               nullptr);
+  }
 
   if (w_state.wayland_capsfilter) {
     g_object_set(w_state.wayland_capsfilter.get(), "caps", caps, nullptr);

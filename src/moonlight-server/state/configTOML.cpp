@@ -248,15 +248,15 @@ Config load_or_default(const std::string &source,
   // First check the version of the config file
   auto base_cfg = rfl::toml::load<BaseConfig, rfl::DefaultIfMissing>(source).value();
   auto version = base_cfg.config_version.value_or(0);
-  if (version <= 7) {
-    // v8 rewrites the default gstreamer video pipeline: it adds the 10-bit SDR
-    // encoders and the party-mode compositor (wolf_party_video) with its
-    // primary/secondary capsfilters. Pipelines authored against v7-or-older
-    // templates contain none of these, so 10-bit and party-mode layout changes
-    // silently no-op on them. Regenerate the file from the current defaults and
-    // carry over identity, pairings, and profiles; user-authored per-app
-    // pipelines in profiles are preserved as-is.
-    logs::log(logs::warning, "Found old config file (v{}), migrating to v8", version);
+  if (version <= 8) {
+    // v8 added the 10-bit SDR encoders; v9 layers the party-mode compositor
+    // (wolf_party_video) and its primary/secondary capsfilters on top. Pipelines
+    // authored against v8-or-older templates contain none of the party elements,
+    // so party-mode layout changes silently no-op on them (and v7 installs are
+    // also missing the 10-bit encoders). Regenerate the file from the current
+    // defaults and carry over identity, pairings, and profiles; user-authored
+    // per-app pipelines in profiles are preserved as-is.
+    logs::log(logs::warning, "Found old config file (v{}), migrating to v9", version);
     auto backup = source + ".v" + std::to_string(version) + ".old";
     std::filesystem::rename(source, backup);
     auto old_cfg = toml::parse_file(backup);
@@ -281,7 +281,7 @@ Config load_or_default(const std::string &source,
     }
     out_file << new_cfg;
     out_file.close();
-    logs::log(logs::debug, "Migrated config from v{} to v8", version);
+    logs::log(logs::debug, "Migrated config from v{} to v9", version);
   }
 
   // Will throw if the config is invalid
@@ -340,6 +340,12 @@ Config load_or_default(const std::string &source,
     switch (video_encoder) {
     case NVIDIA: {
       default_base_video.producer_buffer_caps = "video/x-raw(memory:CUDAMemory)";
+      // The system-memory party compositor (videoconvertscale/compositor) cannot ingest
+      // CUDAMemory, so swap in the CUDA compositor variant when one is configured. This keeps
+      // the whole producer -> compositor -> encoder path in CUDA memory (zero-copy).
+      if (default_gst_video_settings.default_source_cuda) {
+        default_base_video.source = *default_gst_video_settings.default_source_cuda;
+      }
       break;
     }
     case VAAPI:
@@ -351,6 +357,11 @@ Config load_or_default(const std::string &source,
       // on a 10-bit format (e.g. AR30); vapostproc then converts down to NV12 for 8-bit sessions or
       // to P010 for Main10 sessions, so a single producer buffer feeds every codec/bit-depth.
       default_base_video.producer_buffer_caps = "video/x-raw(memory:DMABuf)";
+      // Same reasoning as the NVIDIA branch: use the VA compositor variant (vapostproc +
+      // vacompositor) so the split is composited in VA memory instead of forcing a download.
+      if (default_gst_video_settings.default_source_va) {
+        default_base_video.source = *default_gst_video_settings.default_source_va;
+      }
       break;
     }
     default: {

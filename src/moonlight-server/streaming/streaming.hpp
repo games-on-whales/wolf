@@ -18,6 +18,24 @@ namespace streaming {
 using namespace wolf::core;
 using boost::asio::ip::udp;
 
+/**
+ * Geometry for the 2-seat party-mode split: two equal tiles separated by a
+ * centred divider. Shared between the session layer (which sizes each seat's
+ * render surface) and the streaming layer (which sizes the compositor pads) so
+ * the two never drift out of sync.
+ */
+struct TwoSeatLayout {
+  int tile_width;
+  int divider_width;
+  int secondary_x;
+};
+
+inline TwoSeatLayout make_two_seat_layout(int output_width) {
+  auto divider_width = (output_width % 2 == 0) ? 10 : 9;
+  auto tile_width = (output_width - divider_width) / 2;
+  return {.tile_width = tile_width, .divider_width = divider_width, .secondary_x = tile_width + divider_width};
+}
+
 struct WaylandDisplayReady {
   /**
    * The name of the wayland socket that our custom compositor is listening on

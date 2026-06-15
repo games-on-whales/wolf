@@ -25,10 +25,8 @@ wl_state_ptr create_wayland_display(gstreamer::gst_element_ptr wayland_plugin,
 
 std::string get_wayland_socket_name(WaylandState &w_state);
 
-std::unique_ptr<GstCaps, decltype(&gst_caps_unref)>
-set_resolution(WaylandState &w_state,
-               const DisplayMode &display_mode,
-               const std::optional<gstreamer::gst_element_ptr> &app_src = std::nullopt);
+std::unique_ptr<GstCaps, decltype(&gst_caps_unref)> set_resolution(WaylandState &w_state,
+                                                                  const DisplayMode &display_mode);
 
 bool add_input_device(WaylandState &w_state, const std::string &device_path);
 

@@ -58,6 +58,12 @@ struct GstEncoder {
 
 struct GstVideoCfg {
   std::string default_source;
+  // Party-mode split compositor sources for the zero-copy paths. The compositor and
+  // convert/scale elements are memory-specific (vacompositor + vapostproc for VA/QSV,
+  // cudacompositor + cudaconvertscale for NVIDIA), so each vendor needs its own source.
+  // When unset (or zero-copy disabled) the system-memory default_source is used.
+  std::optional<std::string> default_source_va;
+  std::optional<std::string> default_source_cuda;
   std::string default_sink;
   std::map<std::string, GstEncoderDefault> defaults;
 
@@ -138,7 +144,7 @@ struct Profile {
 struct WolfConfig {
   std::string hostname;
   std::string uuid;
-  int config_version = 8;
+  int config_version = 9;
   std::vector<PairedClient> paired_clients;
   std::vector<Profile> profiles;
   GstreamerSettings gstreamer;
