@@ -11,112 +11,20 @@ on:
       - "docker/**"
 
 jobs:
-  test-arm:
-    # Avoid workflows to run twice for PRs (https://github.com/orgs/community/discussions/57827)
-    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name != github.event.pull_request.base.repo.full_name
-    timeout-minutes: 30
-    runs-on: [ self-hosted, ARM64 ] # self-hosted, using Oracle free tier instance
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Prepare environment
-        run: |
-          sudo apt-get update -y
-          sudo apt-get install -y \
-              g++ \
-              cmake \
-              meson \
-              ninja-build \
-              extra-cmake-modules \
-              libclang-dev \
-              libboost-locale-dev libboost-thread-dev libboost-filesystem-dev libboost-log-dev libboost-stacktrace-dev libboost-container-dev libboost-json-dev \
-              libssl-dev \
-              libgstreamer1.0-dev libgstreamer-plugins-base1.0-dev \
-              libwayland-dev wayland-protocols libinput-dev libxkbcommon-dev libgbm-dev \
-              libcurl4-openssl-dev \
-              libpulse-dev \
-              libevdev-dev \
-              libudev-dev \
-              libdrm-dev \
-              libpci-dev \
-              libunwind-dev
-
-      - name: Setup Rust
-        uses: dtolnay/rust-toolchain@stable
-        with:
-          toolchain: stable
-
-      - name: Setup gst-wayland-display
-        run: |
-          git clone https://github.com/games-on-whales/gst-wayland-display
-          cd gst-wayland-display
-          git checkout b15285a
-          cargo install --locked cargo-c
-          cargo cinstall -p gst-plugin-wayland-display --prefix=/usr/local
-
-      - name: Setup gst-interpipe
-        run : |
-          git clone https://github.com/games-on-whales/gst-interpipe.git
-          cd gst-interpipe
-          mkdir build
-          meson build -Denable-gtk-doc=false
-          sudo meson install -C build
-
-      - name: Archive libgstwaylanddisplay-aarch64
-        uses: actions/upload-artifact@v4
-        with:
-          name: libgstwaylanddisplay-aarch64
-          path: |
-            /usr/local/lib/aarch64-linux-gnu/liblibgstwaylanddisplay*
-            /usr/local/lib/aarch64-linux-gnu/pkgconfig/
-            /usr/local/lib/aarch64-linux-gnu/gstreamer-1.0/
-            /usr/local/include/libgstwaylanddisplay/*
-          if-no-files-found: error
-
-      - name: Configure build
-        working-directory: ${{runner.workspace}}
-        run: |
-          cmake -Bbuild \
-                -H$GITHUB_WORKSPACE \
-                -DCMAKE_BUILD_TYPE=Debug \
-                -DCMAKE_CXX_EXTENSIONS=OFF \
-                -DTEST_VIRTUAL_INPUT=OFF \
-                -DTEST_DOCKER=ON \
-                -DTEST_NVIDIA=OFF \
-                -DTEST_EXCEPTIONS=OFF \
-                -DTEST_UHID=OFF \
-                -G Ninja
-
-      - name: Build tests + lib
-        working-directory: ${{runner.workspace}}/build
-        run: ninja -j $(nproc) wolftests
-
-      - name: Run tests
-        working-directory: ${{runner.workspace}}/build/tests
-        env:
-          GST_PLUGIN_PATH: /usr/local/lib/aarch64-linux-gnu/
-          RUST_BACKTRACE: FULL
-          RUST_LOG: FATAL
-          XDG_RUNTIME_DIR: /tmp
-          HOST_APPS_STATE_FOLDER: ${{runner.workspace}}
-        run: ./wolftests --reporter JUnit::out=${{runner.workspace}}/report.xml --reporter console::out=-::colour-mode=ansi
-
-      - name: Test Report
-        uses: dorny/test-reporter@v1
-        if: success() || failure()    # run this step even if previous step failed
-        # Fork PRs get a read-only token, so creating the check run fails with
-        # "Resource not accessible by integration". Don't let that fail the job:
-        # the actual test result is already gated by the "Run tests" step above.
-        continue-on-error: true
-        with:
-          name: aarch64
-          path: ${{runner.workspace}}/report.xml
-          reporter: java-junit
-
-  # First build the common dependencies: Rust-based libgstwaylanddisplay
+  # Build the Rust-based libgstwaylanddisplay for both architectures
   build-gst-wayland:
     if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name != github.event.pull_request.base.repo.full_name
-    runs-on: ubuntu-24.04
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: ubuntu-26.04
+            arch: x86_64
+            lib_path: x86_64-linux-gnu
+          - runner: ubuntu-26.04-arm
+            arch: aarch64
+            lib_path: aarch64-linux-gnu
     steps:
       - name: Prepare environment
         # ubuntu-latest breaks without libunwind-dev,
@@ -141,44 +49,98 @@ jobs:
           cargo install --locked cargo-c
           cargo cinstall -p gst-plugin-wayland-display --prefix=/usr/local --destdir=${{runner.workspace}}
 
-      - name: Archive libgstwaylanddisplay-x86_64
+      - name: Archive libgstwaylanddisplay-${{ matrix.arch }}
         uses: actions/upload-artifact@v4
         with:
-          name: libgstwaylanddisplay-x86_64
+          name: libgstwaylanddisplay-${{ matrix.arch }}
           path: |
-            ${{runner.workspace}}/usr/local/lib/x86_64-linux-gnu/liblibgstwaylanddisplay*
-            ${{runner.workspace}}/usr/local/lib/x86_64-linux-gnu/pkgconfig/
-            ${{runner.workspace}}/usr/local/lib/x86_64-linux-gnu/gstreamer-1.0/
+            ${{runner.workspace}}/usr/local/lib/${{ matrix.lib_path }}/liblibgstwaylanddisplay*
+            ${{runner.workspace}}/usr/local/lib/${{ matrix.lib_path }}/pkgconfig/
+            ${{runner.workspace}}/usr/local/lib/${{ matrix.lib_path }}/gstreamer-1.0/
             ${{runner.workspace}}/usr/local/include/libgstwaylanddisplay/*
           if-no-files-found: error
 
   test:
     if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name != github.event.pull_request.base.repo.full_name
-    runs-on: ubuntu-24.04
+    runs-on: ${{ matrix.runner }}
     needs: build-gst-wayland
+    timeout-minutes: 30
     strategy:
       fail-fast: false
       matrix:
-        cxx:
-          - g++-12
-          - clang++
-        build_type: [ Release ]
-        shared: [ true, false ]
-        std: [ 20 ]
         include:
-          - cxx: g++-12
-            other_pkgs: [ g++-12 ]
-          - cxx: clang++
-            other_pkgs: [ clang-18 ]
-
+          - runner: ubuntu-26.04-arm
+            arch: aarch64
+            cxx: g++
+            shared: true
+            std: 20
+            test_docker: ON
+            test_nvidia: OFF
+            test_virtual_input: OFF
+            test_exceptions: OFF
+            test_uhid: OFF
+            test_sdl: ON
+            name: aarch64
+          - runner: ubuntu-26.04
+            arch: x86_64
+            cxx: g++-12
+            other_pkgs: g++-12
+            shared: true
+            std: 20
+            test_docker: OFF
+            test_nvidia: OFF
+            test_virtual_input: OFF
+            test_exceptions: ON
+            test_uhid: ON
+            test_sdl: OFF
+            name: g++-12 - STD 20 - Shared true
+          - runner: ubuntu-26.04
+            arch: x86_64
+            cxx: g++-12
+            other_pkgs: g++-12
+            shared: false
+            std: 20
+            test_docker: OFF
+            test_nvidia: OFF
+            test_virtual_input: OFF
+            test_exceptions: ON
+            test_uhid: ON
+            test_sdl: OFF
+            name: g++-12 - STD 20 - Shared false
+          - runner: ubuntu-26.04
+            arch: x86_64
+            cxx: clang++
+            other_pkgs: clang-18
+            shared: true
+            std: 20
+            test_docker: OFF
+            test_nvidia: OFF
+            test_virtual_input: OFF
+            test_exceptions: ON
+            test_uhid: ON
+            test_sdl: OFF
+            name: clang++ - STD 20 - Shared true
+          - runner: ubuntu-26.04
+            arch: x86_64
+            cxx: clang++
+            other_pkgs: clang-18
+            shared: false
+            std: 20
+            test_docker: OFF
+            test_nvidia: OFF
+            test_virtual_input: OFF
+            test_exceptions: ON
+            test_uhid: ON
+            test_sdl: OFF
+            name: clang++ - STD 20 - Shared false
 
     steps:
       - uses: actions/checkout@v4
 
-      - name: Download pre-built libgstwaylanddisplay-x86_64
+      - name: Download pre-built libgstwaylanddisplay-${{ matrix.arch }}
         uses: actions/download-artifact@v4
         with:
-          name: libgstwaylanddisplay-x86_64
+          name: libgstwaylanddisplay-${{ matrix.arch }}
           path: ${{runner.workspace}}/libgstwaylanddisplay
 
       - name: Prepare environment
@@ -202,10 +164,15 @@ jobs:
               libdrm-dev \
               libpci-dev \
               libunwind-dev \
-              ${{ join(matrix.other_pkgs, ' ') }}
+              ${{ matrix.other_pkgs }}
+
+      - name: ccache
+        uses: hendrikmuhs/ccache-action@v1.2
+        with:
+          key: ${{ matrix.cxx }}-${{ matrix.arch }}
 
       - name: Setup gst-interpipe
-        run : |
+        run: |
           git clone https://github.com/games-on-whales/gst-interpipe.git
           cd gst-interpipe
           mkdir build
@@ -216,21 +183,24 @@ jobs:
         working-directory: ${{runner.workspace}}
         env:
           CXX: ${{matrix.cxx}}
-          CXXFLAGS: ${{matrix.cxxflags}}
         # Note: $GITHUB_WORKSPACE is distinct from ${{runner.workspace}}.
         #       This is important
         run: |
           cmake -Bbuild \
                 -H$GITHUB_WORKSPACE \
-                -DCMAKE_BUILD_TYPE=${{ matrix.build_type }} \
+                -DCMAKE_BUILD_TYPE=Release \
                 -DCMAKE_CXX_STANDARD=${{ matrix.std }} \
                 -DCMAKE_CXX_EXTENSIONS=OFF \
+                -DCMAKE_CXX_COMPILER_LAUNCHER=ccache \
+                -DCMAKE_C_COMPILER_LAUNCHER=ccache \
                 -DBUILD_SHARED_LIBS=${{ matrix.shared }} \
                 -DCATCH_DEVELOPMENT_BUILD=ON \
-                -DTEST_VIRTUAL_INPUT=OFF \
-                -DTEST_DOCKER=OFF \
-                -DTEST_NVIDIA=OFF \
-                -DTEST_SDL=OFF \
+                -DTEST_VIRTUAL_INPUT=${{ matrix.test_virtual_input }} \
+                -DTEST_DOCKER=${{ matrix.test_docker }} \
+                -DTEST_NVIDIA=${{ matrix.test_nvidia }} \
+                -DTEST_SDL=${{ matrix.test_sdl }} \
+                -DTEST_EXCEPTIONS=${{ matrix.test_exceptions }} \
+                -DTEST_UHID=${{ matrix.test_uhid }} \
                 -G Ninja
 
       - name: Build tests + lib
@@ -255,6 +225,6 @@ jobs:
         # the actual test result is already gated by the "Run tests" step above.
         continue-on-error: true
         with:
-          name: ${{matrix.cxx}} - STD ${{ matrix.std }} - Shared ${{ matrix.shared }}
+          name: ${{ matrix.name }}
           path: ${{runner.workspace}}/report.xml
           reporter: java-junit
