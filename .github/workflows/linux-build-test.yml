@@ -10,6 +10,9 @@ on:
       - "docs/**"
       - "docker/**"
 
+env:
+  GST_WAYLAND_COMMIT: b15285a
+
 jobs:
   # Build the Rust-based libgstwaylanddisplay for both architectures
   build-gst-wayland:
@@ -26,7 +29,15 @@ jobs:
             arch: aarch64
             lib_path: aarch64-linux-gnu
     steps:
+      - name: Restore cached libgstwaylanddisplay-${{ matrix.arch }}
+        id: cache-gst-wayland
+        uses: actions/cache@v4
+        with:
+          path: ${{runner.workspace}}/usr
+          key: libgstwaylanddisplay-${{ matrix.arch }}-${{ env.GST_WAYLAND_COMMIT }}
+
       - name: Prepare environment
+        if: steps.cache-gst-wayland.outputs.cache-hit != 'true'
         # ubuntu-latest breaks without libunwind-dev,
         # see: https://github.com/actions/runner-images/issues/6399#issuecomment-1286050292
         run: |
@@ -37,15 +48,17 @@ jobs:
               libgstreamer1.0-dev libgstreamer-plugins-base1.0-dev
 
       - name: Setup Rust
+        if: steps.cache-gst-wayland.outputs.cache-hit != 'true'
         uses: dtolnay/rust-toolchain@stable
         with:
           toolchain: stable
 
       - name: Setup gst-wayland-display
+        if: steps.cache-gst-wayland.outputs.cache-hit != 'true'
         run: |
           git clone https://github.com/games-on-whales/gst-wayland-display
           cd gst-wayland-display
-          git checkout b15285a
+          git checkout ${{ env.GST_WAYLAND_COMMIT }}
           cargo install --locked cargo-c
           cargo cinstall -p gst-plugin-wayland-display --prefix=/usr/local --destdir=${{runner.workspace}}
 
@@ -153,6 +166,7 @@ jobs:
               ninja-build \
               meson \
               extra-cmake-modules \
+              libicu-dev \
               libboost-locale-dev libboost-thread-dev libboost-filesystem-dev libboost-log-dev libboost-stacktrace-dev libboost-container-dev libboost-json-dev \
               libssl-dev \
               libgstreamer1.0-dev libgstreamer-plugins-base1.0-dev \
