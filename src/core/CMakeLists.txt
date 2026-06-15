@@ -13,13 +13,6 @@ target_link_libraries(wolf_core PUBLIC wolf::docker)
 file(GLOB CORE_HEADERS CONFIGURE_DEPENDS src/core/*.hpp)
 set(CORE_SRC "")
 
-find_package(PkgConfig)
-option(LINK_RUST_WAYLAND "Link to our custom Rust wayland compositor" OFF)
-if (LINK_RUST_WAYLAND AND UNIX AND NOT APPLE)
-    pkg_check_modules(libgstwaylanddisplay REQUIRED IMPORTED_TARGET libgstwaylanddisplay>=0.3.0)
-    target_link_libraries(wolf_core PUBLIC PkgConfig::libgstwaylanddisplay)
-endif ()
-
 FetchContent_Declare(
         immer
         GIT_REPOSITORY https://github.com/arximboldi/immer.git
@@ -34,6 +27,7 @@ FetchContent_MakeAvailable(immer)
 target_link_libraries_system(wolf_core PUBLIC immer)
 unset(FPHSA_NAME_MISMATCHED)
 
+find_package(PkgConfig)
 pkg_check_modules(GSTREAMER REQUIRED IMPORTED_TARGET gstreamer-1.0 gstreamer-base-1.0 gstreamer-app-1.0 gstreamer-video-1.0)
 pkg_check_modules(GLIB2 REQUIRED IMPORTED_TARGET glib-2.0)
 
@@ -65,13 +59,8 @@ if (UNIX AND NOT APPLE)
     add_subdirectory(src/platforms/linux/uinput)
     target_link_libraries(wolf_core PUBLIC wolf::uinput)
 
-    if (LINK_RUST_WAYLAND)
-        message(STATUS "Using Rust C bindings for Wayland")
-        list(APPEND CORE_SRC src/platforms/linux/virtual-display/wayland-display.cpp)
-    else ()
-        message(STATUS "Using Gstreamer bindings for Wayland")
-        list(APPEND CORE_SRC src/platforms/linux/virtual-display/gst-wayland-display.cpp)
-    endif ()
+    message(STATUS "Using Gstreamer bindings for Wayland")
+    list(APPEND CORE_SRC src/platforms/linux/virtual-display/gst-wayland-display.cpp)
 else ()
     file(GLOB CORE_SRC SRCS platforms/unknown/*.cpp)
 endif ()

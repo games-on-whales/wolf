@@ -48,7 +48,7 @@ jobs:
         run: |
           git clone https://github.com/games-on-whales/gst-wayland-display
           cd gst-wayland-display
-          git checkout 67b1183
+          git checkout b15285a
           cargo install --locked cargo-c
           cargo cinstall -p gst-plugin-wayland-display --prefix=/usr/local
 
@@ -135,7 +135,7 @@ jobs:
         run: |
           git clone https://github.com/games-on-whales/gst-wayland-display
           cd gst-wayland-display
-          git checkout 67b1183
+          git checkout b15285a
           cargo install --locked cargo-c
           cargo cinstall -p gst-plugin-wayland-display --prefix=/usr/local --destdir=${{runner.workspace}}
 
@@ -226,7 +226,6 @@ jobs:
                 -DCATCH_DEVELOPMENT_BUILD=ON \
                 -DTEST_VIRTUAL_INPUT=OFF \
                 -DTEST_DOCKER=OFF \
-                -DLINK_RUST_WAYLAND=OFF \
                 -DTEST_NVIDIA=OFF \
                 -DTEST_SDL=OFF \
                 -G Ninja
@@ -240,6 +239,9 @@ jobs:
         env:
           HOST_APPS_STATE_FOLDER: ${{runner.workspace}}
           GST_PLUGIN_PATH: ${{runner.workspace}}/libgstwaylanddisplay
+          XDG_RUNTIME_DIR: /tmp
+          RUST_BACKTRACE: FULL
+          RUST_LOG: FATAL
         run: ./wolftests --reporter JUnit::out=${{runner.workspace}}/report.xml --reporter console::out=-::colour-mode=ansi
 
       - name: Test Report

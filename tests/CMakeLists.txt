@@ -24,8 +24,9 @@ set(SRC_LIST
         testWolfAPI.cpp
         testBatchedSend.cpp)
 
+option(TEST_RUST_WAYLAND "Test our custom Rust wayland compositor" ON)
 if (UNIX AND NOT APPLE)
-    if (LINK_RUST_WAYLAND)
+    if (TEST_RUST_WAYLAND)
         find_package(PkgConfig)
         pkg_check_modules(wayland-client REQUIRED IMPORTED_TARGET wayland-client)
 
@@ -47,6 +48,7 @@ if (UNIX AND NOT APPLE)
 
         list(APPEND SRC_LIST
                 "platforms/linux/wayland-client.hpp"
+                "platforms/linux/wayland-display.hpp"
                 "platforms/linux/wayland-display.cpp"
         )
         target_link_libraries(wolftests PRIVATE PkgConfig::wayland-client)

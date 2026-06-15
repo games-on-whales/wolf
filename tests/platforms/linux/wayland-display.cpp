@@ -1,4 +1,5 @@
 #include "wayland-client.hpp"
+#include "wayland-display.hpp"
 #include <catch2/catch_test_macros.hpp>
 #include <catch2/matchers/catch_matchers_container_properties.hpp>
 #include <catch2/matchers/catch_matchers_contains.hpp>
@@ -6,7 +7,6 @@
 #include <catch2/matchers/catch_matchers_vector.hpp>
 #include <control/input_handler.hpp>
 #include <core/virtual-display.hpp>
-#include <csignal>
 
 using Catch::Matchers::Contains;
 using Catch::Matchers::Equals;
@@ -17,55 +17,17 @@ using namespace wolf::core;
 using namespace wolf::core::virtual_display;
 using namespace moonlight::control;
 
-TEST_CASE("Wayland C APIs", "[WAYLAND]") {
-  auto w_state = create_wayland_display({});
-
-  auto env_vars = get_env(*w_state);
-  REQUIRE_THAT(env_vars, SizeIs(1));
-  REQUIRE_THAT(env_vars, Contains(StartsWith("WAYLAND_DISPLAY=wayland-")));
-
-  auto graphic_devices = get_devices(*w_state);
-  REQUIRE_THAT(graphic_devices, SizeIs(2));
-  REQUIRE_THAT(graphic_devices, Contains(StartsWith("/dev/dri/renderD")));
-  REQUIRE_THAT(graphic_devices, Contains(StartsWith("/dev/dri/card")));
-
-  { // Set resolution to 1080p
-    auto caps = set_resolution(*w_state, {1920, 1080, 60});
-
-    auto gst_buffer = get_frame(*w_state);
-    REQUIRE(GST_IS_BUFFER(gst_buffer));
-    REQUIRE(gst_buffer_get_size(gst_buffer) == 1920 * 1080 * 4);
-    REQUIRE_THAT(
-        gst_caps_to_string(caps.get()),
-        Equals("video/x-raw, width=(int)1920, height=(int)1080, framerate=(fraction)60/1, format=(string)RGBx"));
-
-    gst_buffer_unref(gst_buffer);
-  }
-
-  { // Set resolution to 720p
-    auto caps = set_resolution(*w_state, {1280, 720, 30});
-
-    auto gst_buffer = get_frame(*w_state);
-    REQUIRE(GST_IS_BUFFER(gst_buffer));
-    REQUIRE(gst_buffer_get_size(gst_buffer) == 1280 * 720 * 4);
-    REQUIRE_THAT(
-        gst_caps_to_string(caps.get()),
-        Equals("video/x-raw, width=(int)1280, height=(int)720, framerate=(fraction)30/1, format=(string)RGBx"));
-
-    gst_buffer_unref(gst_buffer);
-  }
-}
-
 TEST_CASE("Wayland virtual inputs", "[WAYLAND]") {
-  auto w_state = create_wayland_display({});
   const auto FPS = 60;
-  set_resolution(*w_state, {WINDOW_WIDTH, WINDOW_HEIGHT, FPS});
-  auto mouse = wolf::core::virtual_display::WaylandMouse(w_state);
-  auto keyboard = wolf::core::virtual_display::WaylandKeyboard(w_state);
-  auto session = events::StreamSession{.mouse = std::make_shared<std::optional<events::MouseTypes>>(mouse),
-                                       .keyboard = std::make_shared<std::optional<events::KeyboardTypes>>(keyboard)};
 
-  auto wd = w_connect(w_state);
+  TestWaylandDisplay display({.width = WINDOW_WIDTH, .height = WINDOW_HEIGHT, .refreshRate = FPS});
+
+  auto session = events::StreamSession{
+      .mouse = std::make_shared<std::optional<events::MouseTypes>>(WaylandMouse(display.w_state)),
+      .keyboard = std::make_shared<std::optional<events::KeyboardTypes>>(WaylandKeyboard(display.w_state))};
+
+  auto display_name = get_wayland_socket_name(*display.w_state);
+  auto wd = w_connect(display_name);
   auto w_objects = w_get_state(wd);
 
   w_display_create_window(*w_objects);

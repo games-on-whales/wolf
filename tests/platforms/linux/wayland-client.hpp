@@ -37,8 +37,7 @@ struct WClientState { // The trick here to use shared_ptr is so that it'll autom
 constexpr int WINDOW_WIDTH = 640;
 constexpr int WINDOW_HEIGHT = 480;
 
-std::shared_ptr<wl_display> w_connect(std::shared_ptr<WaylandState> w_state) {
-  auto display_name = utils::split(get_env(*w_state)[0], '=')[1];
+std::shared_ptr<wl_display> w_connect(const std::string &display_name) {
   auto display = wl_display_connect(display_name.data());
   REQUIRE(display != nullptr);
   return std::shared_ptr<wl_display>(display, &wl_display_disconnect);
