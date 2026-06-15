@@ -364,6 +364,15 @@ static const struct wl_pointer_listener wl_pointer_listener = {
           logs::log(logs::debug, "[MOUSE] Got mouse axis value120 event: axis={}, value120={}", axis, value120);
           auto queue = static_cast<TSQueue<MouseEvent> *>(data);
           queue->push({.type = MouseEventType::AXIS_VALUE120});
+        },
+    // wl_pointer v9: must be present or the compositor's axis_relative_direction events
+    // cause "interface 'wl_pointer' has no event 10" and break scroll event delivery.
+    .axis_relative_direction =
+        [](void *data, struct wl_pointer *wl_pointer, uint32_t axis, uint32_t direction) {
+          logs::log(logs::debug,
+                    "[MOUSE] Got mouse axis relative direction event: axis={}, direction={}",
+                    axis,
+                    direction);
         }};
 
 static const struct zwp_relative_pointer_v1_listener zwp_relative_pointer_v1_listener = {

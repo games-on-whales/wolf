@@ -1,5 +1,5 @@
-#include "wayland-client.hpp"
 #include "wayland-display.hpp"
+#include "wayland-client.hpp"
 #include <catch2/catch_test_macros.hpp>
 #include <catch2/matchers/catch_matchers_container_properties.hpp>
 #include <catch2/matchers/catch_matchers_contains.hpp>
@@ -56,7 +56,10 @@ TEST_CASE("Wayland virtual inputs", "[WAYLAND]") {
     m_ev = mouse_events_q->pop();
     REQUIRE(m_ev.has_value());
     REQUIRE(m_ev.value().type == MouseEventType::MOTION);
-    // TODO: why are dx=655360, dy=1310720 ???
+    // Values come from zwp_relative_pointer_v1 as wl_fixed_t.
+    // Smithay encodes the delta with an internal 256x scale, so 1 pixel = 65536 raw units.
+    REQUIRE(m_ev.value().x == 10 * 65536);
+    REQUIRE(m_ev.value().y == 20 * 65536);
 
     m_ev = mouse_events_q->pop();
     REQUIRE(m_ev.has_value());
@@ -120,9 +123,24 @@ TEST_CASE("Wayland virtual inputs", "[WAYLAND]") {
     auto scroll_packet = pkts::MOUSE_SCROLL_PACKET{.scroll_amt1 = boost::endian::native_to_big(scroll_amt)};
     scroll_packet.type = pkts::MOUSE_SCROLL;
     control::handle_input(session, {}, &scroll_packet);
-    //    wl_display_roundtrip(wd.get());
+    wl_display_roundtrip(wd.get());
 
-    // TODO: seems that I don't get those events
-    //       > interface 'wl_pointer' has no event 10
+    // Compositor sends: axis_source, axis, axis_value120, axis_relative_direction (v9), frame.
+    // axis_relative_direction is silently dropped (no queue entry) since we only log it.
+    auto s_ev = mouse_events_q->pop();
+    REQUIRE(s_ev.has_value());
+    REQUIRE(s_ev.value().type == MouseEventType::AXIS_SOURCE);
+
+    s_ev = mouse_events_q->pop();
+    REQUIRE(s_ev.has_value());
+    REQUIRE((s_ev.value().type == MouseEventType::AXIS_VALUE120 || s_ev.value().type == MouseEventType::AXIS));
+
+    s_ev = mouse_events_q->pop();
+    REQUIRE(s_ev.has_value());
+    REQUIRE((s_ev.value().type == MouseEventType::AXIS_VALUE120 || s_ev.value().type == MouseEventType::AXIS));
+
+    s_ev = mouse_events_q->pop();
+    REQUIRE(s_ev.has_value());
+    REQUIRE(s_ev.value().type == MouseEventType::FRAME);
   }
 }
