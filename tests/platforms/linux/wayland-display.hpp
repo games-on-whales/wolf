@@ -1,5 +1,6 @@
 #pragma once
 
+#include <chrono>
 #include <core/gstreamer.hpp>
 #include <core/virtual-display.hpp>
 #include <future>
@@ -78,8 +79,15 @@ public:
       gst_element_set_state(captured_pipeline.get(), GST_STATE_NULL);
     });
 
-    auto socket_name = socket_future.get();
-    w_state = create_wayland_display(wayland_plugin, socket_name);
+    if (socket_future.wait_for(std::chrono::seconds(5)) == std::future_status::timeout) {
+      if (main_loop_ && *main_loop_)
+        g_main_loop_quit(main_loop_->get());
+      if (pipeline_thread_.joinable())
+        pipeline_thread_.join();
+      throw std::runtime_error("Timed out waiting for wayland.src socket message");
+    }
+
+    w_state = create_wayland_display(wayland_plugin, socket_future.get());
   }
 
   ~TestWaylandDisplay() {
