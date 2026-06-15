@@ -12,10 +12,13 @@ target_sources(wolf_docker
         docker/docker.cpp)
 
 find_package(CURL) # REQUIRED UnixSockets removed because it doesn't work in Github Actions
-target_link_libraries_system(wolf_docker
+target_link_libraries(wolf_docker
         PRIVATE
-        CURL::libcurl
-        wolf::helpers)
+        wolf::helpers
+
+        PUBLIC
+        Boost::json
+        CURL::libcurl)
 
 # All users of this library will need at least C++17
 target_compile_features(wolf_docker PUBLIC cxx_std_17)

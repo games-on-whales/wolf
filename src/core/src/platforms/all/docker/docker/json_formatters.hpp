@@ -1,5 +1,5 @@
 #pragma once
-#include <boost/json/src.hpp>
+#include <boost/json.hpp>
 #include <core/docker.hpp>
 #include <fmt/core.h>
 #include <helpers/utils.hpp>
@@ -8,7 +8,7 @@ using namespace wolf::core;
 
 namespace boost::json {
 
-void tag_invoke(value_from_tag, value &jv, const std::vector<docker::Port> &ports) {
+inline void tag_invoke(value_from_tag, value &jv, const std::vector<docker::Port> &ports) {
   object obj;
   for (const auto &port : ports) {
     auto key = fmt::format("{}/{}", port.public_port, port.type == docker::TCP ? "tcp" : "udp");
@@ -33,11 +33,11 @@ void tag_invoke(value_from_tag, value &jv, const std::vector<docker::Port> &port
   jv = obj;
 }
 
-void tag_invoke(value_from_tag, value &jv, const docker::MountPoint &mount) {
+inline void tag_invoke(value_from_tag, value &jv, const docker::MountPoint &mount) {
   jv = fmt::format("{}:{}:{}", mount.source, mount.destination, mount.mode);
 }
 
-docker::MountPoint tag_invoke(value_to_tag<docker::MountPoint>, value const &jv) {
+inline docker::MountPoint tag_invoke(value_to_tag<docker::MountPoint>, value const &jv) {
   object const &obj = jv.as_object();
   return docker::MountPoint{
       .source = json::value_to<std::string>(obj.at("Source")),
@@ -46,14 +46,14 @@ docker::MountPoint tag_invoke(value_to_tag<docker::MountPoint>, value const &jv)
   };
 }
 
-void tag_invoke(value_from_tag, value &jv, const docker::Device &dev) {
+inline void tag_invoke(value_from_tag, value &jv, const docker::Device &dev) {
   // example: { "PathOnHost": "/dev/deviceName", "PathInContainer": "/dev/deviceName", "CgroupPermissions": "mrw"}
   jv = {{"PathOnHost", dev.path_on_host},
         {"PathInContainer", dev.path_in_container},
         {"CgroupPermissions", dev.cgroup_permission}};
 }
 
-docker::Device tag_invoke(value_to_tag<docker::Device>, value const &jv) {
+inline docker::Device tag_invoke(value_to_tag<docker::Device>, value const &jv) {
   object const &obj = jv.as_object();
   return docker::Device{
       .path_on_host = json::value_to<std::string>(obj.at("PathOnHost")),
@@ -62,7 +62,7 @@ docker::Device tag_invoke(value_to_tag<docker::Device>, value const &jv) {
   };
 }
 
-docker::Container tag_invoke(value_to_tag<docker::Container>, value const &jv) {
+inline docker::Container tag_invoke(value_to_tag<docker::Container>, value const &jv) {
   object const &obj = jv.as_object();
 
   docker::ContainerStatus status;
