@@ -308,7 +308,12 @@ Config load_or_default(const std::string &source,
     case VAAPI:
     case QUICKSYNC: {
       auto sink_caps = gstreamer::get_dma_caps("vapostproc", GST_PAD_SINK);
-      auto source_caps = gstreamer::get_dma_caps("waylanddisplaysrc", GST_PAD_SRC);
+      // waylanddisplaysrc only advertises the render-node's real drm-formats once it has opened
+      // the device, so we have to query a live instance rather than its static pad template. The
+      // compositor runs on the app render node (which may differ from the encoder node), so query
+      // with that one to get the formats it'll actually produce.
+      auto source_caps =
+          gstreamer::get_dma_caps_runtime("waylanddisplaysrc", {{"render-node", default_app_render_node}});
       logs::log(logs::debug, "Required DMA formats for vapostproc: {}", sink_caps);
       logs::log(logs::debug, "Available DMA formats for waylanddisplaysrc: {}", source_caps);
       auto gst_caps = source_caps | //
