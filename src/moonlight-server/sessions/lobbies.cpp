@@ -8,6 +8,55 @@
 
 namespace wolf::core::sessions {
 
+namespace {
+
+/**
+ * @brief Hand a joypad over from one container to another without letting input leak into the one we leave.
+ *
+ * Wolf shares a single virtual device between containers by mknod-ing the same node into each and faking the
+ * matching udev events. Removing the node on unplug does NOT close a file descriptor that a process already
+ * opened against it (for example the Wolf-UI Godot process), so that process keeps receiving input even after
+ * the node is gone — input ends up landing in both containers at once.
+ *
+ * To stop the leak we destroy and re-create the device in place (see inputtino::Joypad::recreate_device, which
+ * issues UI_DEV_DESTROY) right after unplugging it from the source: the source's stale fd is invalidated, and a
+ * brand-new node (new major:minor) is plugged into the target. The joypad object and its callbacks (rumble, LED,
+ * ...) survive the swap, so feedback keeps working and the input handler keeps writing to the same object.
+ */
+void migrate_joypad(const std::shared_ptr<events::EventBusType> &ev_bus,
+                    events::JoypadTypes &joypad,
+                    const std::string &source_session_id,
+                    const std::string &target_session_id,
+                    const std::shared_ptr<events::devices_atom_queue> &target_queue) {
+  // 1. Unplug the *current* node from the source container (rm + REMOVE uevent), using the live device info.
+  events::UnplugDeviceEvent unplug_ev{.session_id = source_session_id};
+  std::visit(
+      [&unplug_ev](auto &pad) {
+        unplug_ev.udev_events = pad.get_udev_events();
+        unplug_ev.udev_hw_db_entries = pad.get_udev_hw_db_entries();
+      },
+      joypad);
+  ev_bus->fire_event(immer::box<events::UnplugDeviceEvent>{unplug_ev});
+
+  // 2. Destroy + re-create the device so the source container's still-open fd is severed before we hand it over.
+  std::visit([](auto &pad) { pad.recreate_device(); }, joypad);
+
+  // 3. Plug the freshly created device into the target container (note: udev info is re-read post-recreate).
+  events::PlugDeviceEvent plug_ev{.session_id = target_session_id};
+  std::visit(
+      [&plug_ev](auto &pad) {
+        plug_ev.udev_events = pad.get_udev_events();
+        plug_ev.udev_hw_db_entries = pad.get_udev_hw_db_entries();
+      },
+      joypad);
+  ev_bus->fire_event(immer::box<events::PlugDeviceEvent>(plug_ev));
+  if (target_queue) {
+    target_queue->push(immer::box<events::PlugDeviceEvent>{plug_ev});
+  }
+}
+
+} // namespace
+
 /**
  * @brief Removes the StreamSession from the input Lobby and switches everything to the original session
  *
@@ -33,23 +82,16 @@ void leave_lobby(const std::shared_ptr<events::EventBusType> &ev_bus,
   session.keyboard->emplace(virtual_display::WaylandKeyboard(wl_state));
   session.touch_screen->emplace(virtual_display::WaylandTouchScreen(wl_state));
 
-  // Switch over all joypads present in the lobby back into the original session
+  // Switch over all joypads present in the lobby back into the original session.
+  // Unplug from the lobby and re-create the device so the lobby container can't keep reading it (see
+  // migrate_joypad), then plug the fresh device back into the original session.
   events::JoypadList joypads = session.joypads->load();
   for (auto [_joypad_nr, joypad] : joypads) {
-    // Plug them into original session
-    events::PlugDeviceEvent plug_ev{.session_id = std::to_string(session.session_id)};
-    std::visit(
-        [&plug_ev](auto &pad) {
-          plug_ev.udev_events = pad.get_udev_events();
-          plug_ev.udev_hw_db_entries = pad.get_udev_hw_db_entries();
-        },
-        *joypad);
-    ev_bus->fire_event(immer::box<events::PlugDeviceEvent>(plug_ev));
-    // Unplug them from the current lobby
-    ev_bus->fire_event(immer::box<events::UnplugDeviceEvent>{
-        events::UnplugDeviceEvent{.session_id = lobby.id,
-                                  .udev_events = plug_ev.udev_events,
-                                  .udev_hw_db_entries = plug_ev.udev_hw_db_entries}});
+    migrate_joypad(ev_bus,
+                   *joypad,
+                   /* source (unplug) */ lobby.id,
+                   /* target (plug)   */ std::to_string(session.session_id),
+                   /* target_queue    */ nullptr);
   }
   // TODO: hotplug pen_tablet and touch_screen
 
@@ -216,25 +258,17 @@ setup_lobbies_handlers(const immer::box<state::AppState> &app_state,
         session->keyboard->emplace(virtual_display::WaylandKeyboard(wl_state));
         session->touch_screen->emplace(virtual_display::WaylandTouchScreen(wl_state));
 
-        // Switch over all joypads present in the session into the lobby
+        // Switch over all joypads present in the session into the lobby.
+        // Unplug from the session container and re-create the device so its still-open fd can't keep reading
+        // input (see migrate_joypad), then plug the fresh device into the lobby. The plug event is stamped with
+        // the session id on purpose: the PlugDeviceEvent handler below re-stamps it to the lobby it just joined.
         events::JoypadList joypads = session->joypads->load();
         for (auto [_joypad_nr, joypad] : joypads) {
-          events::PlugDeviceEvent plug_ev{.session_id = std::to_string(session->session_id)};
-          std::visit(
-              [&plug_ev](auto &pad) {
-                plug_ev.udev_events = pad.get_udev_events();
-                plug_ev.udev_hw_db_entries = pad.get_udev_hw_db_entries();
-              },
-              *joypad);
-          app_state->event_bus->fire_event(immer::box<events::PlugDeviceEvent>(plug_ev));
-          // Unplug it from the current session
-          app_state->event_bus->fire_event(immer::box<events::UnplugDeviceEvent>{
-              events::UnplugDeviceEvent{.session_id = std::to_string(session->session_id),
-                                        .udev_events = plug_ev.udev_events,
-                                        .udev_hw_db_entries = plug_ev.udev_hw_db_entries}});
-
-          // Add it to the current lobby devices queue
-          lobby->plugged_devices_queue->push(immer::box<events::PlugDeviceEvent>{plug_ev});
+          migrate_joypad(app_state->event_bus,
+                         *joypad,
+                         /* source (unplug) */ std::to_string(session->session_id),
+                         /* target (plug)   */ std::to_string(session->session_id),
+                         /* target_queue    */ lobby->plugged_devices_queue);
         }
         // TODO: hotplug pen_tablet
 
