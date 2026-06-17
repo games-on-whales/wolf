@@ -71,7 +71,17 @@ void start_video_producer(const std::string &session_id,
                           const wolf::core::virtual_display::DisplayMode &display_mode,
                           std::shared_ptr<boost::promise<WaylandDisplayReady>> on_ready,
                           std::shared_ptr<events::EventBusType> event_bus) {
-  auto pipeline = fmt::format("waylanddisplaysrc name=wolf_wayland_source render_node={render_node} ! "
+  // await-listener defers caps negotiation until a consumer (interpipesrc)
+  // attaches, so the compositor picks its output format jointly with the encoder
+  // instead of fixing an arbitrary default while nothing is listening. Without
+  // it the DMA-BUF producer settles on the first advertised drm-format (a 64-bit
+  // float on AMD/Intel) that vapostproc can't ingest, failing with
+  // not-negotiated once the client connects. The CUDA path only avoids this by
+  // luck (it advertises just BGRA/RGBA), so we coordinate every producer rather
+  // than rely on a usable default. The wayland compositor comes up regardless,
+  // so the app renders while negotiation is deferred.
+  auto pipeline = fmt::format("waylanddisplaysrc name=wolf_wayland_source render_node={render_node} "
+                              "await-listener=true ! "
                               "{buffer_format}, width={width}, height={height}, framerate={fps}/1 ! \n"    //
                               "interpipesink sync=true async=false name={session_id}_video max-buffers=1", //
                               fmt::arg("buffer_format", buffer_format),

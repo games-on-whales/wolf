@@ -43,7 +43,11 @@ RUN <<_GST_WAYLAND_DISPLAY
 
     git clone https://github.com/games-on-whales/gst-wayland-display
     cd gst-wayland-display
-    git checkout b15285a
+    # Pinned to the await-listener fix: the compositor defers caps negotiation
+    # until the encoder (interpipesrc) connects, so the DMA-BUF format is chosen
+    # jointly instead of fixing an unusable default (games-on-whales/gst-wayland-display#34).
+    # Bump to a stable tag once that PR merges.
+    git checkout 8acb12d
     # Pinned because it can cause issues when RUST_VERSION isn't the absolute latest
     cargo install cargo-c@0.10.23 --locked
     cargo cinstall --features="cuda" --prefix=/usr/local/lib/x86_64-linux-gnu/ --libdir=/usr/local/lib/x86_64-linux-gnu/gstreamer-1.0

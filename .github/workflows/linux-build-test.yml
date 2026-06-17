@@ -11,7 +11,8 @@ on:
       - "docker/**"
 
 env:
-  GST_WAYLAND_COMMIT: b15285a
+  # await-listener fix (games-on-whales/gst-wayland-display#34); bump to a stable tag once merged
+  GST_WAYLAND_COMMIT: 8acb12d
 
 jobs:
   # Build the Rust-based libgstwaylanddisplay for both architectures
