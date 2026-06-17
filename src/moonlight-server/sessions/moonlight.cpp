@@ -100,14 +100,13 @@ setup_moonlight_handlers(const immer::box<state::AppState> &app_state,
           logs::log(logs::debug, "[STREAM_SESSION] Create wayland compositor");
 
           // Start Gstreamer producer pipeline
-          std::thread([session, on_ready, gst_context = app_state->gst_context]() {
+          std::thread([session, on_ready]() {
             streaming::start_video_producer(std::to_string(session->session_id),
                                             session->app->video_producer_buffer_caps,
                                             session->app->render_node,
                                             {.width = session->display_mode.width,
                                              .height = session->display_mode.height,
                                              .refreshRate = session->display_mode.refreshRate},
-                                            gst_context,
                                             on_ready,
                                             session->event_bus);
           }).detach();
@@ -235,10 +234,9 @@ setup_moonlight_handlers(const immer::box<state::AppState> &app_state,
       }));
 
   handlers.push_back(app_state->event_bus->register_handler<immer::box<events::VideoSession>>(
-      [ev_bus = app_state->event_bus,
-       gst_context = app_state->gst_context](const immer::box<events::VideoSession> &sess) {
+      [ev_bus = app_state->event_bus](const immer::box<events::VideoSession> &sess) {
         // Start a thread that will wait for the RTP ping event
-        std::thread([sess, ev_bus, gst_context]() {
+        std::thread([sess, ev_bus]() {
           auto ping_ev = wait_for_ping<events::RTPVideoPingEvent>(ev_bus, sess);
 
           // Start streaming
@@ -246,7 +244,6 @@ setup_moonlight_handlers(const immer::box<state::AppState> &app_state,
                                            ev_bus,
                                            ping_ev->client_ip,
                                            ping_ev->client_port,
-                                           gst_context,
                                            ping_ev->video_socket.get());
         }).detach();
       }));

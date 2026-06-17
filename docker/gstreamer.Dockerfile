@@ -91,10 +91,6 @@ RUN <<_GSTREAMER_INSTALL
     # Add GstInterpipe
     git clone https://github.com/games-on-whales/gst-interpipe.git $SOURCE_PATH/gst-interpipe
     cd $SOURCE_PATH/gst-interpipe
-    # Pinned to the commit that forwards GST_QUERY_CONTEXT across the interpipe
-    # boundary, so VA/DMABuf elements on either side share a VADisplay context
-    # (games-on-whales/gst-interpipe#2). Unpin once that PR is merged to master.
-    git checkout 17d88c0aa8603cccabf8a89aa4845503ff8f3003
     mkdir build
     meson build -Denable-gtk-doc=false
     meson install -C build

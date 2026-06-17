@@ -178,7 +178,6 @@ void run() {
   streaming::init(); // Need to initialise gstreamer once
   control::init();   // Need to initialise enet once
   docker::init();    // Need to initialise libcurl once
-  gst_video_context::init();
 
   auto runtime_dir = utils::get_env("XDG_RUNTIME_DIR", "/tmp/sockets");
   logs::log(logs::debug, "XDG_RUNTIME_DIR={}", runtime_dir);
