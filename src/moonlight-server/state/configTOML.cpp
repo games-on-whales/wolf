@@ -301,7 +301,12 @@ Config load_or_default(const std::string &source,
   if (use_zero_copy) {
     switch (video_encoder) {
     case NVIDIA: {
-      default_base_video.producer_buffer_caps = "video/x-raw(memory:CUDAMemory)";
+      // Carry an NV12 DMABuf over the interpipe and import it into CUDA in the
+      // consumer (dmabuftocuda, see nvcodec video_params_zero_copy). A CUDAMemory
+      // buffer can't cross the interpipe -- it's tied to a CUDA context/stream the
+      // per-client encoder pipeline doesn't share -- so the producer must hand off
+      // the context-free dmabuf, exactly like the VAAPI path below.
+      default_base_video.producer_buffer_caps = "video/x-raw(memory:DMABuf), drm-format=NV12";
       break;
     }
     case VAAPI:

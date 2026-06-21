@@ -339,8 +339,14 @@ video/x-raw(memory:CUDAMemory), width={width}, height={height}, \
 chroma-site={color_range}, format=NV12, colorimetry={color_space}, pixel-aspect-ratio=1/1\
 """
 
+# Zero-copy carries an NV12 DMABuf over the interpipe (a CUDAMemory buffer can't
+# cross the interpipe boundary -- it's bound to a CUDA context/stream the consumer
+# pipeline doesn't share). dmabuftocuda imports that DMABuf into CUDA here in the
+# consumer (via EGLImage, no system-memory copy), where the encoder's CUDA context
+# is available; cudaupload can't (it has no DMABuf sink caps).
 video_params_zero_copy = """
-cudaupload !
+queue !
+dmabuftocuda !
 cudaconvertscale add-borders=true !
 video/x-raw(memory:CUDAMemory),format=NV12, width={width}, height={height}, pixel-aspect-ratio=1/1
 """
