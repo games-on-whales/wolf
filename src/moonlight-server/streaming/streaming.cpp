@@ -95,9 +95,15 @@ void start_video_producer(const std::string &session_id,
                           std::shared_ptr<immer::atom<gst_video_context::gst_context_ptr>> video_context,
                           std::shared_ptr<boost::promise<WaylandDisplayReady>> on_ready,
                           std::shared_ptr<events::EventBusType> event_bus) {
-  auto pipeline = fmt::format("waylanddisplaysrc name=wolf_wayland_source render_node={render_node} ! "
+  // When the producer caps ask for NV12, set nv12=true so waylanddisplaysrc pins LINEAR NV12.
+  // The consumer (vapostproc) imports LINEAR cleanly on every driver; without the pin an
+  // unconstrained interpipesink fixates a tiled modifier radeonsi-VA reads as green. RGBA and
+  // software paths leave nv12 unset, so they are unchanged.
+  const std::string nv12_prop = buffer_format.find("NV12") != std::string::npos ? "nv12=true " : "";
+  auto pipeline = fmt::format("waylanddisplaysrc name=wolf_wayland_source {nv12}render_node={render_node} ! "
                               "{buffer_format}, width={width}, height={height}, framerate={fps}/1 ! \n"    //
                               "interpipesink sync=true async=false name={session_id}_video max-buffers=1", //
+                              fmt::arg("nv12", nv12_prop),
                               fmt::arg("buffer_format", buffer_format),
                               fmt::arg("render_node", render_node),
                               fmt::arg("session_id", session_id),
