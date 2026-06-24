@@ -59,6 +59,8 @@ struct PartialClientSettings {
   std::optional<float> v_scroll_acceleration;
   std::optional<float> h_scroll_acceleration;
   std::optional<wolf::config::ControllerType> motion_controller_override;
+  std::optional<std::vector<std::string>> allowed_profiles;
+  std::optional<bool> show_coop_games;
 };
 
 struct UpdateClientSettingsRequest {

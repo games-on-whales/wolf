@@ -39,6 +39,12 @@ struct ClientSettings {
    * same shape of "operator wants type X" but gated on the client
    * actually having motion to forward. */
   ControllerType motion_controller_override = ControllerType::AUTO;
+  /* Profile IDs this client may see and launch. Empty (default) = unrestricted
+   * (all profiles). Lets a shared host scope which clients see which profiles. */
+  std::vector<std::string> allowed_profiles = {};
+  /* Whether this client may see and join other clients' co-op (multi-user)
+   * lobbies. Default true. */
+  bool show_coop_games = true;
 };
 
 struct PairedClient {

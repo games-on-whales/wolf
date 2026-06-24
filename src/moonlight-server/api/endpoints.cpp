@@ -433,7 +433,10 @@ void UnixSocketServer::endpoint_LobbyCreate(const wolf::api::HTTPRequest &req, s
                 .h_scroll_acceleration =
                     client_settings.h_scroll_acceleration.value_or(default_client_settings.h_scroll_acceleration),
                 .motion_controller_override = client_settings.motion_controller_override.value_or(
-                    default_client_settings.motion_controller_override)},
+                    default_client_settings.motion_controller_override),
+                .allowed_profiles = client_settings.allowed_profiles.value_or(default_client_settings.allowed_profiles),
+                .show_coop_games =
+                    client_settings.show_coop_games.value_or(default_client_settings.show_coop_games)},
         .runner_state_folder = event.value().runner_state_folder,
         .runner = state::get_runner(event.value().runner, this->state_->app_state->event_bus)};
     // Fire the event
@@ -578,6 +581,8 @@ void UnixSocketServer::endpoint_UpdateClientSettings(const HTTPRequest &req, std
           .h_scroll_acceleration = new_settings.h_scroll_acceleration.value_or(current_settings.h_scroll_acceleration),
           .motion_controller_override =
               new_settings.motion_controller_override.value_or(current_settings.motion_controller_override),
+          .allowed_profiles = new_settings.allowed_profiles.value_or(current_settings.allowed_profiles),
+          .show_coop_games = new_settings.show_coop_games.value_or(current_settings.show_coop_games),
       }};
 
   update_client_settings(this->state_->app_state->config, std::stoull(payload.client_id.value()), merged_client);
