@@ -1,6 +1,7 @@
 #pragma once
 
 #include <helpers/utils.hpp>
+#include <map>
 #include <rfl.hpp>
 #include <string>
 
@@ -124,6 +125,12 @@ struct BaseApp {
   std::optional<BaseAppAudioOverride> audio;
   std::optional<bool> start_virtual_compositor;
   std::optional<bool> start_audio_server;
+  /**
+   * Free-form, app-specific settings that wolf itself does not interpret — the app
+   * image / runner does (e.g. "steam_library_dirs"). Kept generic so new app types
+   * need no schema changes here.
+   */
+  std::optional<std::map<std::string, std::string>> properties;
   rfl::TaggedUnion<"type", AppCMD, AppDocker> runner =
       AppCMD{}; // We have to provide a default or rfl::DefaultIfMissing will fail
 };

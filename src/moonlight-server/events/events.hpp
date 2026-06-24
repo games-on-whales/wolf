@@ -4,6 +4,7 @@
 #define BOOST_THREAD_PROVIDES_FUTURE
 #include <boost/thread.hpp>
 #include <boost/thread/future.hpp>
+#include <map>
 #include <core/audio.hpp>
 #include <core/input.hpp>
 #include <core/virtual-display.hpp>
@@ -74,6 +75,8 @@ struct App {
   std::string opus_gst_pipeline;
   bool start_virtual_compositor;
   bool start_audio_server;
+  /** App-specific settings wolf passes through verbatim; interpreted by the app runner. */
+  std::map<std::string, std::string> properties;
   std::shared_ptr<Runner> runner;
 };
 

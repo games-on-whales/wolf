@@ -199,6 +199,7 @@ parse_apps(const std::vector<BaseApp> &apps,
                         .opus_gst_pipeline = opus_gst_pipeline,
                         .start_virtual_compositor = app.start_virtual_compositor.value_or(true),
                         .start_audio_server = app.start_audio_server.value_or(true),
+                        .properties = app.properties.value_or(std::map<std::string, std::string>{}),
                         .runner = get_runner(app.runner, ev_bus)}};
       }) |                                                  //
       ranges::to<immer::vector<immer::box<events::App>>>(); //
@@ -488,6 +489,9 @@ void update_profiles(const Config &cfg, const ProfilesList &profiles) {
                                                 .render_node = app->render_node,
                                                 .start_virtual_compositor = app->start_virtual_compositor,
                                                 .start_audio_server = app->start_audio_server,
+                                                .properties = app->properties.empty()
+                                                                  ? std::nullopt
+                                                                  : std::make_optional(app->properties),
                                                 .runner = app->runner->serialize()};
                                }) | //
                                ranges::to_vector,

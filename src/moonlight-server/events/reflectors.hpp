@@ -4,6 +4,7 @@
 #include "state/data-structures.hpp"
 
 #include <events/events.hpp>
+#include <map>
 #include <rfl.hpp>
 #include <rfl/parsing/Parser.hpp>
 #include <state/serialised_config.hpp>
@@ -57,6 +58,7 @@ template <> struct Reflector<events::App> {
     std::string opus_gst_pipeline;
     bool start_virtual_compositor;
     bool start_audio_server;
+    std::map<std::string, std::string> properties;
     Reflector<events::Runner>::ReflType runner;
   };
 
@@ -72,6 +74,7 @@ template <> struct Reflector<events::App> {
             .opus_gst_pipeline = v.opus_gst_pipeline,
             .start_virtual_compositor = v.start_virtual_compositor,
             .start_audio_server = v.start_audio_server,
+            .properties = v.properties,
             .runner = v.runner->serialize()};
   }
 
@@ -85,6 +88,7 @@ template <> struct Reflector<events::App> {
         .render_node = app.render_node,
         .opus_gst_pipeline = app.opus_gst_pipeline,
         .start_virtual_compositor = app.start_virtual_compositor,
+        .properties = app.properties,
         .runner = runner,
     };
   }
