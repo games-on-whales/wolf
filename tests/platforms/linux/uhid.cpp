@@ -18,6 +18,7 @@ using namespace wolf::core;
 using namespace moonlight::control;
 using namespace std::string_literals;
 
+
 TEST_CASE("Create PS5 pad with CONTROLLER_ARRIVAL", "[UHID]") {
   events::App app = {};
   auto session = events::StreamSession{.event_bus = std::make_shared<events::EventBusType>(),
@@ -34,7 +35,7 @@ TEST_CASE("Create PS5 pad with CONTROLLER_ARRIVAL", "[UHID]") {
 
   auto joypad = session.joypads->load()->at(controller_number);
   std::vector<std::string> dev_nodes;
-  std::visit([&dev_nodes](auto &joypad) { dev_nodes = joypad.get_nodes(); }, *joypad);
+  dev_nodes = joypad->get_nodes();
   REQUIRE(session.joypads->load()->size() == 1);
   REQUIRE(dev_nodes.size() >= 4);
 
@@ -199,7 +200,7 @@ TEST_CASE("Create PS5 pad with CONTROLLER_ARRIVAL", "[UHID]") {
 
   { // UDEV
     std::vector<std::map<std::string, std::string>> udev_events;
-    std::visit([&udev_events](auto &joypad) { udev_events = joypad.get_udev_events(); }, *joypad);
+    udev_events = joypad->get_udev_events();
 
     for (auto event : udev_events) {
       std::stringstream ss;
@@ -234,7 +235,7 @@ TEST_CASE("Plug a PS5 pad with its hidraw node before its input nodes", "[UHID]"
   control::handle_input(session, {}, &c_pkt);
   std::this_thread::sleep_for(std::chrono::milliseconds(400));
 
-  auto udev_events = std::get<PS5Joypad>(*session.joypads->load()->at(0)).get_udev_events();
+  auto udev_events = session.joypads->load()->at(0)->get_udev_events();
   auto plugged = docker::hidraw_events_first(udev_events);
 
   REQUIRE(plugged.size() == udev_events.size());
@@ -254,7 +255,7 @@ TEST_CASE("fake-udev command carries the subsystem of the event", "[UHID]") {
   std::this_thread::sleep_for(std::chrono::milliseconds(400));
 
   auto udev_events =
-      docker::hidraw_events_first(std::get<PS5Joypad>(*session.joypads->load()->at(0)).get_udev_events());
+      docker::hidraw_events_first(session.joypads->load()->at(0)->get_udev_events());
 
   REQUIRE_THAT(docker::fake_udev_command(udev_events.front()), EndsWith("--udev-subsystem hidraw"));
   REQUIRE_THAT(docker::fake_udev_command(udev_events.back()), EndsWith("--udev-subsystem input"));
@@ -296,7 +297,7 @@ TEST_CASE("Joining a lobby plugs all joypads in one event", "[UHID]") {
 
   std::size_t expected_events = 0;
   for (auto [_controller_number, joypad] : *session.joypads->load()) {
-    std::visit([&](auto &pad) { expected_events += pad.get_udev_events().size(); }, *joypad);
+    expected_events += joypad->get_udev_events().size();
   }
 
   auto lobbies_handlers = sessions::setup_lobbies_handlers(app_state, "/tmp", {});

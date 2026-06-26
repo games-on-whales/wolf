@@ -343,6 +343,21 @@ Sibling of `controllers_override`: same shape of "operator wants type X" but gat
 motion_controller_override = "PS" # motion-capable clients get a DualSense
 ....
 
+==== uhid and uinput joypads
+
+When `/dev/uhid` is available to Wolf, the PlayStation pad is a full virtual DualSense (gyro, touchpad, LED, adaptive triggers).
+Without it, Wolf falls back to a basic uinput DualSense with just buttons and sticks, and logs a warning when that happens.
+Xbox and Nintendo pads are uinput pads either way.
+
+An app can opt out of the uhid pad, for example a game that doesn't handle the full DualSense well:
+
+[source,toml]
+....
+[[profiles.apps]]
+title = "Some game"
+use_uhid = false # this app always gets the basic uinput pads
+....
+
 Available values are the same as `controllers_override` (`auto` (default) / `xbox` / `nintendo` / `ps`); `auto` defers to the auto-detection above.
 
 Precedence: per-slot `controllers_override` > per-client `motion_controller_override` > auto-detection.
