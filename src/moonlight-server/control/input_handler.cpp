@@ -17,6 +17,24 @@ using namespace wolf::core;
 using namespace std::string_literals;
 using namespace moonlight::control;
 
+static std::string virtual_controller_mac(uint64_t session_id, int controller_number) {
+  std::array<uint8_t, 6> bytes = {
+      0x02,
+      0x57,
+      0x7E,
+      static_cast<uint8_t>((session_id >> 16) & 0xFF),
+      static_cast<uint8_t>((session_id >> 8) & 0xFF),
+      static_cast<uint8_t>((controller_number + 1) & 0xFF),
+  };
+  return fmt::format("{:02x}:{:02x}:{:02x}:{:02x}:{:02x}:{:02x}",
+                     bytes[0],
+                     bytes[1],
+                     bytes[2],
+                     bytes[3],
+                     bytes[4],
+                     bytes[5]);
+}
+
 std::shared_ptr<events::JoypadTypes> create_new_joypad(const events::StreamSession &session,
                                                        immer::box<std::shared_ptr<ENetPeer>> connected_client,
                                                        int controller_number,
@@ -98,78 +116,78 @@ std::shared_ptr<events::JoypadTypes> create_new_joypad(const events::StreamSessi
       }
     }
   }
+  // Map the resolved wolf ControllerType to an inputtino joypad type. inputtino
+  // owns each pad's identity (name/vendor/product) via default_definition; wolf
+  // only stamps a stable per-session uniq on the Nintendo pads so the in-container
+  // udev sees a consistent device.
+  inputtino::Joypad::TYPE kind;
   switch (final_type) {
-  case wolf::config::ControllerType::AUTO:
-  case wolf::config::ControllerType::XBOX: {
-    logs::log(logs::info,
-              "Creating Xbox joypad for controller {} in session {}",
-              controller_number,
-              session.session_id);
-    auto result =
-        XboxOneJoypad::create({.name = "Wolf X-Box One (virtual) pad",
-                               // https://github.com/torvalds/linux/blob/master/drivers/input/joystick/xpad.c#L147
-                               .vendor_id = 0x045E,
-                               .product_id = 0x02EA,
-                               .version = 0x0408});
-    if (!result) {
-      logs::log(logs::error, "Failed to create Xbox One joypad: {}", result.getErrorMessage());
-      return {};
-    } else {
-      (*result).set_on_rumble(on_rumble_fn);
-      new_pad = std::make_shared<events::JoypadTypes>(std::move(*result));
-    }
+  case wolf::config::ControllerType::PS:
+    kind = inputtino::Joypad::TYPE::PS;
     break;
-  }
-  case wolf::config::ControllerType::PS: {
-    logs::log(logs::info, "Creating PS joypad for controller {}", controller_number);
-    auto result = PS5Joypad::create(
-        {.name = "Wolf DualSense (virtual) pad", .vendor_id = 0x054C, .product_id = 0x0CE6, .version = 0x8111});
-    if (!result) {
-      logs::log(logs::error, "Failed to create PS5 joypad: {}", result.getErrorMessage());
-      return {};
-    } else {
-      (*result).set_on_rumble(on_rumble_fn);
-      (*result).set_on_led(on_led_fn);
-      (*result).set_on_trigger_effect(on_adaptive_trigger_fn);
-      new_pad = std::make_shared<events::JoypadTypes>(std::move(*result));
-
-      // Let's wait for the kernel to pick it up and mount the /dev/ devices
-      std::this_thread::sleep_for(std::chrono::milliseconds(50));
-
-      std::visit(
-          [&session](auto &pad) {
-            if (auto wl = *session.wayland_display->load()) {
-              for (const auto node : pad.get_udev_events()) {
-                if (node.find("ID_INPUT_TOUCHPAD") != node.end()) {
-                  add_input_device(*wl, node.at("DEVNAME"));
-                }
-              }
-            }
-          },
-          *new_pad);
-    }
+  case wolf::config::ControllerType::JOYCON_LEFT:
+    kind = inputtino::Joypad::TYPE::JOYCON_LEFT;
     break;
-  }
+  case wolf::config::ControllerType::JOYCON_RIGHT:
+    kind = inputtino::Joypad::TYPE::JOYCON_RIGHT;
+    break;
   case wolf::config::ControllerType::NINTENDO:
-    logs::log(logs::info, "Creating Nintendo joypad for controller {}", controller_number);
-    auto result = SwitchJoypad::create({.name = "Wolf Nintendo (virtual) pad",
-                                        // https://github.com/torvalds/linux/blob/master/drivers/hid/hid-ids.h#L981
-                                        .vendor_id = 0x057e,
-                                        .product_id = 0x2009,
-                                        .version = 0x8111});
-    if (!result) {
-      logs::log(logs::error, "Failed to create Switch joypad: {}", result.getErrorMessage());
-      return {};
-    } else {
-      (*result).set_on_rumble(on_rumble_fn);
-      new_pad = std::make_shared<events::JoypadTypes>(std::move(*result));
-    }
+    kind = inputtino::Joypad::TYPE::NINTENDO;
+    break;
+  case wolf::config::ControllerType::AUTO:
+  case wolf::config::ControllerType::XBOX:
+  default:
+    kind = inputtino::Joypad::TYPE::XBOX;
     break;
   }
 
-  if (capabilities & ACCELEROMETER && final_type == wolf::config::ControllerType::PS) {
+  auto def = inputtino::Joypad::default_definition(kind);
+  if (kind == inputtino::Joypad::TYPE::NINTENDO || kind == inputtino::Joypad::TYPE::JOYCON_LEFT ||
+      kind == inputtino::Joypad::TYPE::JOYCON_RIGHT) {
+    def.device_phys = "bluetooth";
+    def.device_uniq = virtual_controller_mac(session.session_id, controller_number);
+  }
+
+  // Pick the rich uhid backend when the host exposes /dev/uhid and the app allows
+  // it; otherwise fall back to the basic uinput pad. Either way it is used through
+  // the generic inputtino::Joypad base (rich features no-op on the uinput fallback).
+  const bool prefer_uhid = inputtino::is_uhid_supported() && (session.app ? session.app->use_uhid : true);
+  auto created = inputtino::Joypad::create(kind, def, prefer_uhid);
+  if (!created) {
+    logs::log(logs::error,
+              "Failed to create joypad for controller {}: {}",
+              controller_number,
+              created.getErrorMessage());
+    return {};
+  }
+  new_pad = std::move(*created);
+  logs::log(logs::info,
+            "Created joypad for controller {} (type {}, backend {})",
+            controller_number,
+            (int)final_type,
+            prefer_uhid ? "uhid" : "uinput");
+
+  new_pad->set_on_rumble(on_rumble_fn);
+  new_pad->set_on_led(on_led_fn);                         // no-op unless this is a DualSense
+  new_pad->set_on_trigger_effect(on_adaptive_trigger_fn); // no-op unless this is a DualSense
+
+  // inputtino's Joypad::create() already blocks until the kernel has enumerated
+  // the device's nodes (uhid pads wait for sysfs in create(); uinput pads are
+  // ready immediately), so the udev reads below see a fully-bound device.
+
+  // Plug any touchpad sub-node (DualSense) into the Wayland compositor.
+  if (auto wl = *session.wayland_display->load()) {
+    for (const auto &node : new_pad->get_udev_events()) {
+      if (node.find("ID_INPUT_TOUCHPAD") != node.end()) {
+        add_input_device(*wl, node.at("DEVNAME"));
+      }
+    }
+  }
+
+  // Only ask the client to stream motion when the pad we created can actually
+  // forward it (the uinput fallback can't), so we don't request data nothing consumes.
+  if (capabilities & ACCELEROMETER && new_pad->supports_motion()) {
     // Request acceleromenter events from the client at 100 Hz
-    logs::log(logs::info, "Requesting accelerometer events for controller {}", controller_number);
     auto accelerometer_pkt = ControlMotionEventPacket{
         .header{.type = MOTION_EVENT, .length = sizeof(ControlMotionEventPacket) - sizeof(ControlPacket)},
         .controller_number = static_cast<uint16_t>(controller_number),
@@ -179,9 +197,8 @@ std::shared_ptr<events::JoypadTypes> create_new_joypad(const events::StreamSessi
     encrypt_and_send(plaintext, session.aes_key, connected_client);
   }
 
-  if (capabilities & GYRO && final_type == wolf::config::ControllerType::PS) {
+  if (capabilities & GYRO && new_pad->supports_motion()) {
     // Request gyroscope events from the client at 100 Hz
-    logs::log(logs::info, "Requesting gyroscope events for controller {}", controller_number);
     auto gyro_pkt = ControlMotionEventPacket{
         .header{.type = MOTION_EVENT, .length = sizeof(ControlMotionEventPacket) - sizeof(ControlPacket)},
         .controller_number = static_cast<uint16_t>(controller_number),
@@ -198,12 +215,8 @@ std::shared_ptr<events::JoypadTypes> create_new_joypad(const events::StreamSessi
               (int)final_type);
 
     events::PlugDeviceEvent plug_ev{.session_id = std::to_string(session.session_id)};
-    std::visit(
-        [&plug_ev](auto &pad) {
-          plug_ev.udev_events = pad.get_udev_events();
-          plug_ev.udev_hw_db_entries = pad.get_udev_hw_db_entries();
-        },
-        *new_pad);
+    plug_ev.udev_events = new_pad->get_udev_events();
+    plug_ev.udev_hw_db_entries = new_pad->get_udev_hw_db_entries();
     session.event_bus->fire_event(immer::box<events::PlugDeviceEvent>(plug_ev));
     return joypads.set(controller_number, new_pad);
   });
@@ -616,12 +629,8 @@ void controller_multi(const CONTROLLER_MULTI_PACKET &pkt,
       logs::log(logs::debug, "Removing joypad {}", pkt.controller_number);
       // Send the event downstream, Docker will pick it up and remove the device
       events::UnplugDeviceEvent unplug_ev{.session_id = std::to_string(session.session_id)};
-      std::visit(
-          [&unplug_ev](auto &pad) {
-            unplug_ev.udev_events = pad.get_udev_events();
-            unplug_ev.udev_hw_db_entries = pad.get_udev_hw_db_entries();
-          },
-          *selected_pad);
+      unplug_ev.udev_events = selected_pad->get_udev_events();
+      unplug_ev.udev_hw_db_entries = selected_pad->get_udev_hw_db_entries();
       session.event_bus->fire_event(immer::box<events::UnplugDeviceEvent>(unplug_ev));
 
       // Remove the joypad, this will delete the last reference
@@ -632,23 +641,21 @@ void controller_multi(const CONTROLLER_MULTI_PACKET &pkt,
     selected_pad = create_new_joypad(session, connected_client, pkt.controller_number, XBOX, ANALOG_TRIGGERS | RUMBLE);
   }
   if (selected_pad) {
-    std::visit(
-        [pkt, session](inputtino::Joypad &pad) {
-          std::uint16_t bf = pkt.button_flags;
-          std::uint32_t bf2 = pkt.buttonFlags2;
-          auto pressed_buttons = bf | (bf2 << 16);
-          // Check for our special WOLF-UI combo (START + UP + RB)
-          if (pressed_buttons & inputtino::Joypad::START && pressed_buttons & inputtino::Joypad::DPAD_UP &&
-              pressed_buttons & inputtino::Joypad::RIGHT_BUTTON) {
-            session.event_bus->fire_event(immer::box<events::ClientWolfUIComboEvent>{
-                events::ClientWolfUIComboEvent{.session_id = session.session_id}});
-          }
-          pad.set_pressed_buttons(pressed_buttons);
-          pad.set_stick(inputtino::Joypad::LS, pkt.left_stick_x, pkt.left_stick_y);
-          pad.set_stick(inputtino::Joypad::RS, pkt.right_stick_x, pkt.right_stick_y);
-          pad.set_triggers(pkt.left_trigger, pkt.right_trigger);
-        },
-        *selected_pad);
+    inputtino::Joypad &pad = *selected_pad;
+    std::uint16_t bf = pkt.button_flags;
+    std::uint32_t bf2 = pkt.buttonFlags2;
+    auto pressed_buttons = bf | (bf2 << 16);
+    // Check for our special WOLF-UI combo (START + UP + RB)
+    if (pressed_buttons & inputtino::Joypad::START && pressed_buttons & inputtino::Joypad::DPAD_UP &&
+        pressed_buttons & inputtino::Joypad::RIGHT_BUTTON) {
+      session.event_bus->fire_event(immer::box<events::ClientWolfUIComboEvent>{
+          events::ClientWolfUIComboEvent{.session_id = session.session_id}});
+    }
+
+    pad.set_pressed_buttons(pressed_buttons);
+    pad.set_stick(inputtino::Joypad::LS, pkt.left_stick_x, pkt.left_stick_y);
+    pad.set_stick(inputtino::Joypad::RS, pkt.right_stick_x, pkt.right_stick_y);
+    pad.set_triggers(pkt.left_trigger, pkt.right_trigger);
   }
 }
 
@@ -662,20 +669,16 @@ void controller_touch(const CONTROLLER_TOUCH_PACKET &pkt, events::StreamSession 
     case TOUCH_EVENT_DOWN:
     case TOUCH_EVENT_HOVER:
     case TOUCH_EVENT_MOVE: {
-      if (std::holds_alternative<PS5Joypad>(*selected_pad)) {
-        std::get<PS5Joypad>(*selected_pad)
-            .place_finger(pointer_id,
-                          netfloat_to_0_1(pkt.x) * (uint16_t)inputtino::PS5Joypad::touchpad_width,
-                          netfloat_to_0_1(pkt.y) * (uint16_t)inputtino::PS5Joypad::touchpad_height);
-      }
+      // No-op on pads without a touchpad.
+      selected_pad->place_finger(pointer_id,
+                                 netfloat_to_0_1(pkt.x) * (uint16_t)inputtino::Joypad::touchpad_width,
+                                 netfloat_to_0_1(pkt.y) * (uint16_t)inputtino::Joypad::touchpad_height);
       break;
     }
     case TOUCH_EVENT_UP:
     case TOUCH_EVENT_HOVER_LEAVE:
     case TOUCH_EVENT_CANCEL: {
-      if (std::holds_alternative<PS5Joypad>(*selected_pad)) {
-        std::get<PS5Joypad>(*selected_pad).release_finger(pointer_id);
-      }
+      selected_pad->release_finger(pointer_id); // no-op on pads without a touchpad
       break;
     }
     case TOUCH_EVENT_CANCEL_ALL:
@@ -695,17 +698,16 @@ void controller_motion(const CONTROLLER_MOTION_PACKET &pkt, events::StreamSessio
   std::shared_ptr<events::JoypadTypes> selected_pad;
   if (auto joypad = joypads->find(pkt.controller_number)) {
     selected_pad = std::move(*joypad);
-    if (std::holds_alternative<PS5Joypad>(*selected_pad)) {
-      auto x = utils::from_netfloat(pkt.x);
-      auto y = utils::from_netfloat(pkt.y);
-      auto z = utils::from_netfloat(pkt.z);
-
-      if (pkt.motion_type == ACCELERATION) {
-        std::get<PS5Joypad>(*selected_pad).set_motion(inputtino::PS5Joypad::ACCELERATION, x, y, z);
-      } else if (pkt.motion_type == GYROSCOPE) {
-        std::get<PS5Joypad>(*selected_pad)
-            .set_motion(inputtino::PS5Joypad::GYROSCOPE, deg2rad(x), deg2rad(y), deg2rad(z));
-      }
+    auto x = utils::from_netfloat(pkt.x);
+    auto y = utils::from_netfloat(pkt.y);
+    auto z = utils::from_netfloat(pkt.z);
+    // Forward Moonlight's units straight through (accel m/s^2, gyro deg/s); each
+    // inputtino backend converts internally as needed, and this no-ops on pads
+    // that don't forward motion.
+    if (pkt.motion_type == ACCELERATION) {
+      selected_pad->set_accel(x, y, z);
+    } else if (pkt.motion_type == GYROSCOPE) {
+      selected_pad->set_gyro(x, y, z);
     }
   }
 }
@@ -715,28 +717,26 @@ void controller_battery(const CONTROLLER_BATTERY_PACKET &pkt, events::StreamSess
   std::shared_ptr<events::JoypadTypes> selected_pad;
   if (auto joypad = joypads->find(pkt.controller_number)) {
     selected_pad = std::move(*joypad);
-    if (std::holds_alternative<PS5Joypad>(*selected_pad)) {
-      inputtino::PS5Joypad::BATTERY_STATE state;
-      switch (pkt.battery_state) {
-      case BATTERY_STATE_UNKNOWN:
-      case BATTERY_NOT_PRESENT:
-        return; // We can't set it, let's return
-      case BATTERY_DISCHARGHING:
-        state = inputtino::PS5Joypad::BATTERY_DISCHARGING;
-        break;
-      case BATTERY_CHARGING:
-        state = inputtino::PS5Joypad::BATTERY_CHARGHING;
-        break;
-      case BATTERY_NOT_CHARGING:
-        state = inputtino::PS5Joypad::CHARGHING_ERROR;
-        break;
-      case BATTERY_FULL:
-        state = inputtino::PS5Joypad::BATTERY_FULL;
-        break;
-      }
-      if (pkt.battery_percentage != BATTERY_PERCENTAGE_UNKNOWN) {
-        std::get<PS5Joypad>(*selected_pad).set_battery(state, pkt.battery_percentage);
-      }
+    inputtino::Joypad::BATTERY_STATE state;
+    switch (pkt.battery_state) {
+    case BATTERY_STATE_UNKNOWN:
+    case BATTERY_NOT_PRESENT:
+      return; // We can't set it, let's return
+    case BATTERY_DISCHARGHING:
+      state = inputtino::Joypad::BATTERY_DISCHARGING;
+      break;
+    case BATTERY_CHARGING:
+      state = inputtino::Joypad::BATTERY_CHARGHING;
+      break;
+    case BATTERY_NOT_CHARGING:
+      state = inputtino::Joypad::CHARGHING_ERROR;
+      break;
+    case BATTERY_FULL:
+      state = inputtino::Joypad::BATTERY_FULL;
+      break;
+    }
+    if (pkt.battery_percentage != BATTERY_PERCENTAGE_UNKNOWN) {
+      selected_pad->set_battery(state, pkt.battery_percentage); // no-op on non-DualSense
     }
   }
 }

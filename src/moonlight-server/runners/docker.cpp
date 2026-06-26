@@ -46,6 +46,7 @@ void RunDocker::run(std::string_view session_id,
     full_env.push_back(fmt::format("{}={}", env_var.first, env_var.second));
   }
 
+
   std::vector<Device> devices;
   devices.insert(devices.end(), this->container.devices.begin(), this->container.devices.end());
   for (const auto &v_input : virtual_inputs) {
@@ -258,21 +259,48 @@ void RunDocker::run(std::string_view session_id,
             create_udev_hw_files(hw_db_path, device_ev->get().udev_hw_db_entries);
           }
 
-          for (auto udev_ev : device_ev->get().udev_events) {
+          // Send hidraw events before input events so that SDL's HIDAPI backend
+          // claims the device first.  When the evdev events arrive afterwards,
+          // SDL's HIDAPI_IsDevicePresent() dedup will recognise the device and
+          // skip the evdev duplicate.
+          auto &udev_events = device_ev->get().udev_events;
+          std::vector<std::map<std::string, std::string>> hidraw_events;
+          std::vector<std::map<std::string, std::string>> input_events;
+          for (const auto &udev_ev : udev_events) {
+            if (udev_ev.count("SUBSYSTEM") && udev_ev.at("SUBSYSTEM") == "hidraw") {
+              hidraw_events.push_back(udev_ev);
+            } else {
+              input_events.push_back(udev_ev);
+            }
+          }
+
+          auto exec_udev_event = [&](const std::map<std::string, std::string> &udev_ev) {
             std::string cmd;
             std::string udev_msg = base64_encode(map_to_string(udev_ev));
+            auto subsystem = udev_ev.count("SUBSYSTEM") ? udev_ev.at("SUBSYSTEM") : std::string("input");
+            auto fake_udev_cmd = fmt::format("fake-udev -m {} --udev-subsystem {}", udev_msg, subsystem);
             if (udev_ev.count("DEVNAME") == 0) {
-              cmd = fmt::format("fake-udev -m {}", udev_msg);
+              cmd = fake_udev_cmd;
             } else {
-              cmd = fmt::format("mkdir -p /dev/input && mknod {} c {} {} && chmod 777 {} && fake-udev -m {}",
-                                udev_ev["DEVNAME"],
-                                udev_ev["MAJOR"],
-                                udev_ev["MINOR"],
-                                udev_ev["DEVNAME"],
-                                udev_msg);
+              auto devname = udev_ev.at("DEVNAME");
+              auto major = udev_ev.at("MAJOR");
+              auto minor = udev_ev.at("MINOR");
+              auto mkdir_path = subsystem == "hidraw" ? "/dev" : "/dev/input";
+              cmd = fmt::format("mkdir -p {} && mknod {} c {} {} && chmod 777 {} && {}",
+                                mkdir_path, devname, major, minor, devname, fake_udev_cmd);
             }
             logs::log(logs::debug, "[DOCKER] Executing command: {}", cmd);
             docker_api.exec(container_id, {"/bin/bash", "-c", cmd}, "root");
+          };
+
+          for (const auto &ev : hidraw_events) {
+            exec_udev_event(ev);
+          }
+          if (!hidraw_events.empty() && !input_events.empty()) {
+            std::this_thread::sleep_for(std::chrono::milliseconds(100));
+          }
+          for (const auto &ev : input_events) {
+            exec_udev_event(ev);
           }
         }
       }
