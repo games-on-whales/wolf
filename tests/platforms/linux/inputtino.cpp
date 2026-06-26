@@ -308,7 +308,7 @@ TEST_CASE("uinput - joypad", "[UINPUT]") {
 
     REQUIRE(session.joypads->load()->size() == 1);
     auto joypad = session.joypads->load()->at(controller_number);
-    std::visit([](auto &joypad) { REQUIRE(joypad.get_nodes().size() == 2); }, *joypad);
+    REQUIRE(joypad->get_nodes().size() == 2);
   }
 
   SECTION("NEW Moonlight: create joypad with CONTROLLER_ARRIVAL") {
@@ -326,7 +326,7 @@ TEST_CASE("uinput - joypad", "[UINPUT]") {
 
     auto joypad = session.joypads->load()->at(controller_number);
     std::vector<std::string> dev_nodes;
-    std::visit([&dev_nodes](auto &joypad) { dev_nodes = joypad.get_nodes(); }, *joypad);
+    dev_nodes = joypad->get_nodes();
     REQUIRE(session.joypads->load()->size() == 1);
     REQUIRE(dev_nodes.size() >= 2);
 
@@ -334,7 +334,7 @@ TEST_CASE("uinput - joypad", "[UINPUT]") {
 
     { // UDEV
       std::vector<std::map<std::string, std::string>> udev_events;
-      std::visit([&udev_events](auto &joypad) { udev_events = joypad.get_udev_events(); }, *joypad);
+      udev_events = joypad->get_udev_events();
 
       for (auto event : udev_events) {
         std::stringstream ss;
