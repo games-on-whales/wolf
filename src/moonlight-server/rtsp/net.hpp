@@ -6,6 +6,7 @@
 #include <boost/lexical_cast.hpp>
 #include <boost/shared_ptr.hpp>
 #include <rtsp/commands.hpp>
+#include <rtsp/rtsp_handshake.hpp>
 #include <state/sessions.hpp>
 #include <string_view>
 #include <thread>
@@ -69,13 +70,44 @@ public:
     if (auto host = packet.options.find("Host"); host != packet.options.end()) {
       host_option = host->second;
     }
+    // 1. Exact match on the per-session fake IP (in the URI or the Host header).
     for (const events::StreamSession &session : sessions) {
       if (session.rtsp_fake_ip == packet.request.uri.ip || host_option == session.rtsp_fake_ip) {
         logs::log(logs::debug, "[RTSP] found session by matching payload: {}", session.rtsp_fake_ip);
         return session;
-      } else if ((host_option == "0.0.0.0" || host_option.empty()) && session.ip == user_ip) {
-        logs::log(logs::debug, "[RTSP] found session by matching IP: {}", session.ip);
-        return session;
+      }
+    }
+    // 2. Ambiguous `Host: 0.0.0.0` (moonlight below the HQ-audio threshold): the
+    // client doesn't tell us which session it means, so resolve it through the
+    // launch->RTSP coupling — the session that currently owns the RTSP handshake
+    // window for this source IP (see rtsp_handshake.hpp). Every packet of a live
+    // handshake lands here while that window is open.
+    if (host_option == "0.0.0.0" || host_option.empty()) {
+      const std::string ip{user_ip};
+      if (auto active = RtspHandshake::instance().active_session(ip)) {
+        for (const events::StreamSession &session : sessions) {
+          if (session.session_id == *active) {
+            logs::log(logs::debug, "[RTSP] resolved session {} via the RTSP handshake window", *active);
+            return session;
+          }
+        }
+      }
+      // No open window (an established session sending a stray ambiguous packet,
+      // or a handshake that outran the safety timeout): fall back to the source
+      // IP, but only when it's unambiguous — exactly one session on this IP. With
+      // two same-IP sessions the window above is the only correct demux, so we
+      // never guess between them here.
+      std::optional<events::StreamSession> unique;
+      std::size_t matches = 0;
+      for (const events::StreamSession &session : sessions) {
+        if (session.ip == user_ip) {
+          unique = session;
+          ++matches;
+        }
+      }
+      if (matches == 1) {
+        logs::log(logs::debug, "[RTSP] found session by matching IP: {}", unique->ip);
+        return unique;
       }
     }
     return std::nullopt;
@@ -108,6 +140,11 @@ public:
       if (parsed_msg) {
         auto session = get_session(self->stream_sessions->load(), parsed_msg.value(), user_ip);
         if (session) {
+          // The RTSP handshake ends at PLAY: close this session's window so a
+          // same-IP launch waiting on it can proceed (see rtsp_handshake.hpp).
+          if (parsed_msg->request.cmd == "PLAY") {
+            RtspHandshake::instance().complete(session->session_id);
+          }
           auto response = commands::message_handler(parsed_msg.value(), session.value());
           self->send_message(response, [self](auto bytes) { self->close(); });
         } else {
