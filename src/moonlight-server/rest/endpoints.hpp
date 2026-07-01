@@ -16,6 +16,7 @@
 #include <rest/helpers.hpp>
 #include <rest/rest.hpp>
 #include <rtp/udp-ping.hpp>
+#include <rtsp/rtsp_handshake.hpp>
 #include <state/config.hpp>
 #include <state/sessions.hpp>
 #include <state/utils.hpp>
@@ -419,6 +420,11 @@ void launch(const std::shared_ptr<typename SimpleWeb::Server<SimpleWeb::HTTPS>::
   state->running_sessions->update(
       [new_session](const immer::vector<events::StreamSession> &ses_v) { return ses_v.push_back(*new_session); });
 
+  // Couple this launch with the RTSP handshake that follows it: claim the RTSP
+  // window for this client IP so a concurrent same-NAT launch waits and the two
+  // RTSP handshakes don't get crossed (see rtsp/rtsp_handshake.hpp).
+  rtsp::RtspHandshake::instance().begin(new_session->session_id, client_ip);
+
   auto rtsp_ip = get_rtsp_ip_string(get_host_ip<SimpleWeb::HTTPS>(request, state), *new_session);
   auto xml = moonlight::launch_success(rtsp_ip, std::to_string(get_port(state::RTSP_SETUP_PORT)));
   send_xml<SimpleWeb::HTTPS>(response, SimpleWeb::StatusCode::success_ok, xml);
@@ -447,6 +453,9 @@ void resume(const std::shared_ptr<typename SimpleWeb::Server<SimpleWeb::HTTPS>::
     state->running_sessions->update([&old_session, new_session](const immer::vector<events::StreamSession> ses_v) {
       return state::remove_session(ses_v, old_session.value()).push_back(*new_session);
     });
+
+    // Same RTSP-handshake coupling as launch() (see rtsp/rtsp_handshake.hpp).
+    rtsp::RtspHandshake::instance().begin(new_session->session_id, client_ip);
 
     auto rtsp_ip = get_rtsp_ip_string(get_host_ip<SimpleWeb::HTTPS>(request, state), *new_session);
     auto xml = moonlight::launch_resume(rtsp_ip, std::to_string(get_port(state::RTSP_SETUP_PORT)));
