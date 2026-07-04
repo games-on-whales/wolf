@@ -740,9 +740,9 @@ KERNEL=="uinput", SUBSYSTEM=="misc", MODE="0660", GROUP="input", OPTIONS+="stati
 KERNEL=="uhid", GROUP="input", MODE="0660", TAG+="uaccess"
 
 # Joypads
-KERNEL=="hidraw*",   ATTRS{name}=="Wolf PS5 (virtual) pad", GROUP="root", MODE="0660", ENV{ID_SEAT}="seat9"
+KERNEL=="hidraw*",   ATTRS{name}=="Wolf DualSense (virtual) pad", GROUP="root", MODE="0660", ENV{ID_SEAT}="seat9"
 SUBSYSTEMS=="input", ATTRS{name}=="Wolf X-Box One (virtual) pad", GROUP="root", MODE="0660", ENV{ID_SEAT}="seat9"
-SUBSYSTEMS=="input", ATTRS{name}=="Wolf PS5 (virtual) pad", GROUP="root", MODE="0660", ENV{ID_SEAT}="seat9"
+SUBSYSTEMS=="input", ATTRS{name}=="Wolf DualSense (virtual) pad", GROUP="root", MODE="0660", ENV{ID_SEAT}="seat9"
 SUBSYSTEMS=="input", ATTRS{name}=="Wolf gamepad (virtual) motion sensors", GROUP="root", MODE="0660", ENV{ID_SEAT}="seat9"
 SUBSYSTEMS=="input", ATTRS{name}=="Wolf Nintendo (virtual) pad", GROUP="root", MODE="0660", ENV{ID_SEAT}="seat9"
 ....
