@@ -733,18 +733,23 @@ crw------- 1 root root 10, 223 Jan 17 09:08 /dev/uinput
 .Create `udev` rules under `/etc/udev/rules.d/85-wolf-virtual-inputs.rules`
 [source,bash]
 ....
-# Allows Wolf to acces /dev/uinput (only needed for joypad support)
+# Allows Wolf to access /dev/uinput (needed to create the virtual gamepad/keyboard/mouse)
 KERNEL=="uinput", SUBSYSTEM=="misc", MODE="0660", GROUP="input", OPTIONS+="static_node=uinput", TAG+="uaccess"
 
-# Allows Wolf to access /dev/uhid (only needed for DualSense emulation)
-KERNEL=="uhid", GROUP="input", MODE="0660", TAG+="uaccess"
+# Allows Wolf to access /dev/uhid (needed for DualSense emulation)
+KERNEL=="uhid", MODE="0660", GROUP="input", TAG+="uaccess"
 
-# Joypads
-KERNEL=="hidraw*",   ATTRS{name}=="Wolf PS5 (virtual) pad", GROUP="root", MODE="0660", ENV{ID_SEAT}="seat9"
-SUBSYSTEMS=="input", ATTRS{name}=="Wolf X-Box One (virtual) pad", GROUP="root", MODE="0660", ENV{ID_SEAT}="seat9"
-SUBSYSTEMS=="input", ATTRS{name}=="Wolf PS5 (virtual) pad", GROUP="root", MODE="0660", ENV{ID_SEAT}="seat9"
-SUBSYSTEMS=="input", ATTRS{name}=="Wolf gamepad (virtual) motion sensors", GROUP="root", MODE="0660", ENV{ID_SEAT}="seat9"
-SUBSYSTEMS=="input", ATTRS{name}=="Wolf Nintendo (virtual) pad", GROUP="root", MODE="0660", ENV{ID_SEAT}="seat9"
+# Move the virtual keyboard and mouse onto a phantom seat (seat9)
+SUBSYSTEMS=="input", ATTRS{id/vendor}=="ab00", MODE="0660", GROUP="input", ENV{ID_SEAT}="seat9"
+
+# Wolf virtual controllers: the gamepads plus, for the DualSense, its "Touchpad"
+# and "Motion Sensors" child devices and its /dev/hidraw* node. Matching the
+# "Wolf " name prefix (glob) covers every current and future sub-device, then
+# parks them on seat9 and strips the uaccess ACL so the host desktop user can't
+# read them. See https://github.com/games-on-whales/wolf/issues/451
+SUBSYSTEM=="input",  ATTR{name}=="Wolf *",  MODE="0660", GROUP="input", ENV{ID_SEAT}="seat9", TAG-="uaccess"
+SUBSYSTEMS=="input", ATTRS{name}=="Wolf *", MODE="0660", GROUP="input", ENV{ID_SEAT}="seat9", TAG-="uaccess"
+KERNEL=="hidraw*",   ATTRS{name}=="Wolf *", MODE="0660", GROUP="input", ENV{ID_SEAT}="seat9", TAG-="uaccess"
 ....
 
 Reload the udev rules either by rebooting or run:
