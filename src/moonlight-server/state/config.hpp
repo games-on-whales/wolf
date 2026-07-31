@@ -111,6 +111,24 @@ inline std::optional<immer::box<events::Profile>> get_moonlight_profile(const Co
 }
 
 /**
+ * Returns whether the encoder and at least one currently advertised Moonlight
+ * application can service an HDR connection.
+ */
+inline bool supports_hdr(const Config &cfg) {
+  if (!cfg.support_hdr)
+    return false;
+
+  auto moonlight_profile = get_moonlight_profile(cfg);
+  if (!moonlight_profile)
+    return false;
+
+  immer::vector<immer::box<events::App>> apps = moonlight_profile.value()->apps->load();
+  return std::any_of(apps.begin(), apps.end(), [](const immer::box<events::App> &app) {
+    return app->base.support_hdr;
+  });
+}
+
+/**
  * Returns the app with the given app_id (if it exists)
  */
 inline std::optional<immer::box<events::App>> get_moonlight_app_by_id(const Config &cfg, std::string_view app_id) {

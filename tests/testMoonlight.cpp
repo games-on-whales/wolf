@@ -37,6 +37,7 @@ TEST_CASE("LocalState load TOML", "[LocalState]") {
     auto first_app = apps.at(0);
     REQUIRE_THAT(first_app->base.title, Equals("Firefox"));
     REQUIRE_THAT(first_app->base.id, Equals("304556286"));
+    REQUIRE(first_app->base.support_hdr);
     REQUIRE_THAT(first_app->base.icon_png_path.value(), Equals("firefox.png"));
     auto default_video_source = "interpipesrc name=interpipesrc_{}_video";
     REQUIRE_THAT(first_app->h264_gst_pipeline,
@@ -53,6 +54,7 @@ TEST_CASE("LocalState load TOML", "[LocalState]") {
     auto second_app = apps.at(1);
     REQUIRE_THAT(second_app->base.title, Equals("Test ball"));
     REQUIRE_THAT(second_app->base.id, Equals("378473508"));
+    REQUIRE_FALSE(second_app->base.support_hdr);
     REQUIRE(second_app->base.icon_png_path.has_value() == false);
     REQUIRE_THAT(second_app->h264_gst_pipeline,
                  Equals("override DEFAULT SOURCE !\ndefault !\nh264_pipeline !\nvideo_sink"));
@@ -221,6 +223,66 @@ TEST_CASE("Mocked serverinfo", "[MoonlightProtocol]") {
             "</root>");
     REQUIRE(result.get<bool>("root.PairStatus") == true);
   }
+
+  SECTION("server_info advertises AV1 Main10 for an HDR-capable host") {
+    auto result = serverinfo(false,
+                             0,
+                             0,
+                             1,
+                             cfg.uuid,
+                             cfg.hostname,
+                             "AA:BB:CC:DD",
+                             "192.168.1.1",
+                             displayModes,
+                             true,
+                             false,
+                             true,
+                             true);
+
+    REQUIRE(result.get<int>("root.ServerCodecModeSupport") == 196609);
+  }
+}
+
+TEST_CASE("HDR video pipeline selects a 10-bit encoder path", "[Streaming][HDR]") {
+  auto pipeline = "vapostproc ! video/x-raw(memory:VAMemory), format=NV12, colorimetry={color_space} ! "
+                  "vah265enc ! video/x-h265, profile=main, stream-format=byte-stream";
+
+  auto hdr = streaming::prepare_video_pipeline(pipeline, true);
+  REQUIRE_THAT(hdr, Catch::Matchers::ContainsSubstring("format=P010_10LE"));
+  REQUIRE_THAT(hdr, Catch::Matchers::ContainsSubstring("profile=main-10"));
+  REQUIRE(streaming::prepare_video_pipeline(pipeline, false) == pipeline);
+}
+
+TEST_CASE("HDR transport remains PQ while SDR producer frames are converted", "[Streaming][HDR]") {
+  REQUIRE(streaming::initial_video_colorimetry(true, events::ColorSpace::BT2020) == "bt2100-pq");
+  REQUIRE(streaming::initial_video_colorimetry(true, events::ColorSpace::BT709) == "bt2100-pq");
+  REQUIRE(streaming::initial_video_colorimetry(false, events::ColorSpace::BT601) == "bt601");
+  REQUIRE(streaming::initial_video_colorimetry(false, events::ColorSpace::BT709) == "bt709");
+  REQUIRE(streaming::initial_video_colorimetry(false, events::ColorSpace::BT2020) == "bt2020");
+}
+
+TEST_CASE("HDR host capability requires an encoder and a live HDR application", "[LocalState][HDR]") {
+  auto apps =
+      std::make_shared<immer::atom<immer::vector<immer::box<events::App>>>>(immer::vector<immer::box<events::App>>{
+          events::App{.base = moonlight::App{.title = "SDR", .support_hdr = false}},
+      });
+  auto profiles = std::make_shared<immer::atom<state::ProfilesList>>(state::ProfilesList{events::Profile{
+      .id = std::string{events::MOONLIGHT_PROFILE_ID},
+      .name = "Moonlight",
+      .icon_png_path = "",
+      .apps = apps,
+  }});
+  auto cfg = state::Config{.support_hdr = false, .profiles = profiles};
+
+  REQUIRE_FALSE(state::supports_hdr(cfg));
+
+  cfg.support_hdr = true;
+  REQUIRE_FALSE(state::supports_hdr(cfg));
+
+  apps->update([](auto current) {
+    return current.push_back(events::App{.base = moonlight::App{.title = "HDR", .support_hdr = true}});
+  });
+  REQUIRE(state::supports_hdr(cfg));
 }
 
 // Stuff generated from Moonlight

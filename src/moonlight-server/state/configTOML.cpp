@@ -134,6 +134,7 @@ parse_apps(const std::vector<BaseApp> &apps,
            const std::string &default_app_render_node,
            const std::string &default_gst_render_node,
            const BaseAppVideoOverride &default_video_settings,
+           bool default_support_hdr,
            const std::string &h264_video_params,
            const std::string &hevc_video_params,
            const std::string &av1_video_params,
@@ -155,6 +156,14 @@ parse_apps(const std::vector<BaseApp> &apps,
         }
         auto app_video_settings = app.video.value_or(default_video_settings);
         auto app_audio_settings = app.audio.value_or(default_audio_settings);
+        const bool support_hdr = app.support_hdr.value_or(default_support_hdr);
+        auto producer_buffer_caps =
+            app_video_settings.producer_buffer_caps.value_or(default_video_settings.producer_buffer_caps.value());
+        if (support_hdr && producer_buffer_caps.find("memory:VulkanImage") != std::string::npos) {
+          producer_buffer_caps = "video/x-raw(memory:VulkanImage), format=P010_10LE";
+        } else if (support_hdr && producer_buffer_caps.find("memory:DMABuf") != std::string::npos) {
+          producer_buffer_caps = "video/x-raw(memory:DMABuf), drm-format=P010";
+        }
 
         auto h264_gst_pipeline = fmt::format(
             "{} !\n{} !\n{} !\n{}", //
@@ -191,9 +200,9 @@ parse_apps(const std::vector<BaseApp> &apps,
         return immer::box<events::App>{
             events::App{.base = {.title = app.title,
                                  .id = generate_app_id(app),
-                                 .support_hdr = false,
+                                 .support_hdr = support_hdr,
                                  .icon_png_path = app.icon_png_path},
-                        .video_producer_buffer_caps = default_video_settings.producer_buffer_caps.value(),
+                        .video_producer_buffer_caps = producer_buffer_caps,
                         .h264_gst_pipeline = h264_gst_pipeline,
                         .hevc_gst_pipeline = hevc_gst_pipeline,
                         .av1_gst_pipeline = av1_gst_pipeline,
@@ -440,6 +449,7 @@ Config load_or_default(const std::string &source,
                                                               default_app_render_node,
                                                               default_gst_render_node,
                                                               default_base_video,
+                                                              default_gst_video_settings.hdr,
                                                               h264_video_params,
                                                               hevc_video_params,
                                                               av1_video_params,
@@ -449,13 +459,14 @@ Config load_or_default(const std::string &source,
                   }) |
                   ranges::to<ProfilesList>();
   auto profiles_atom = std::make_shared<immer::atom<ProfilesList>>(profiles);
+  const bool hardware_av1 = av1_encoder.has_value() && encoder_type(*av1_encoder) != SOFTWARE;
 
   return Config{.uuid = cfg.uuid,
                 .hostname = cfg.hostname,
                 .config_source = source,
                 .support_hevc = hevc_encoder.has_value(),
-                .support_av1 = av1_encoder.has_value() && encoder_type(*av1_encoder) != SOFTWARE,
-                .support_hdr = default_gst_video_settings.hdr && hevc_encoder.has_value(),
+                .support_av1 = hardware_av1,
+                .support_hdr = hevc_encoder.has_value() || hardware_av1,
                 .paired_clients = clients_atom,
                 .profiles = profiles_atom};
 }

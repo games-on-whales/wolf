@@ -78,7 +78,7 @@ void serverinfo(const std::shared_ptr<typename SimpleWeb::Server<T>::Response> &
                                    is_https,
                                    cfg->support_hevc,
                                    cfg->support_av1,
-                                   cfg->support_hdr);
+                                   state::supports_hdr(*cfg));
 
   send_xml<T>(response, SimpleWeb::StatusCode::success_ok, xml);
 }

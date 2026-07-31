@@ -94,6 +94,13 @@ bool encrypt_and_send(std::string_view payload,
   }
 }
 
+bool send_hdr_mode(const events::StreamSession &session, immer::box<std::shared_ptr<ENetPeer>> client, bool enabled) {
+  auto packet = moonlight::control::hdr_mode_packet(enabled);
+  std::string_view plaintext{reinterpret_cast<const char *>(&packet), sizeof(packet)};
+  logs::log(logs::debug, "[ENET] Sending HDR mode {} to session {}", enabled, session.session_id);
+  return encrypt_and_send(plaintext, session.aes_key, client);
+}
+
 std::optional<events::StreamSession> get_current_session(const enet_clients_map &connected_clients,
                                                          const state::SessionsAtoms &running_sessions,
                                                          std::string_view client_ip,
@@ -141,9 +148,11 @@ void run_control(int port,
   ENetEvent event;
 
   immer::atom<enet_clients_map> connected_clients;
+  immer::atom<immer::map<std::size_t, bool>> hdr_modes;
 
   auto stop_ev = event_bus->register_handler<immer::box<StopStreamEvent>>(
-      [&connected_clients](const immer::box<StopStreamEvent> &ev) {
+      [&connected_clients, &hdr_modes](const immer::box<StopStreamEvent> &ev) {
+        hdr_modes.update([ev](const immer::map<std::size_t, bool> &m) { return m.erase(ev->session_id); });
         auto terminate_pkt = ControlTerminatePacket{};
         std::string plaintext = {(char *)&terminate_pkt, sizeof(terminate_pkt)};
         for (auto &[peer, session] : *connected_clients.load()) {
@@ -156,22 +165,17 @@ void run_control(int port,
         logs::log(logs::debug, "[ENET] Client not found for session: {}", ev->session_id);
       });
 
-  auto hdr_mode_ev =
-      event_bus->register_handler<immer::box<HDRModeEvent>>([&connected_clients](const immer::box<HDRModeEvent> &ev) {
-        // Build the HDR_MODE control packet; metadata defaults to the BT.2020/Rec.2100
-        // values (ignored by the client when enableHdr == 0).
-        auto hdr_pkt = ControlHdrModePacket{};
-        hdr_pkt.enableHdr = ev->enable_hdr ? 1 : 0;
-        std::string plaintext = {(char *)&hdr_pkt, sizeof(hdr_pkt)};
+  auto video_ev = event_bus->register_handler<immer::box<VideoSession>>(
+      [&connected_clients, &hdr_modes](const immer::box<VideoSession> &video) {
+        hdr_modes.update(
+            [video](const immer::map<std::size_t, bool> &m) { return m.set(video->session_id, video->hdr_requested); });
+
         for (auto &[peer, session] : *connected_clients.load()) {
-          if (session->session_id == ev->session_id) {
-            immer::box<std::shared_ptr<ENetPeer>> enet_client = {to_shared_ptr(peer)};
-            encrypt_and_send(plaintext, session->aes_key, enet_client);
-            logs::log(logs::info, "[ENET] Sent HDR_MODE ({}) for session: {}", hdr_pkt.enableHdr, ev->session_id);
+          if (session->session_id == video->session_id) {
+            send_hdr_mode(*session, immer::box<std::shared_ptr<ENetPeer>>{to_shared_ptr(peer)}, video->hdr_requested);
             return;
           }
         }
-        logs::log(logs::debug, "[ENET] Client not found for HDR mode session: {}", ev->session_id);
       });
 
   while (true) {
@@ -189,6 +193,11 @@ void run_control(int port,
           });
           event_bus->fire_event(
               immer::box<ResumeStreamEvent>(ResumeStreamEvent{.session_id = client_session->session_id}));
+          if (auto hdr = hdr_modes.load()->find(client_session->session_id)) {
+            send_hdr_mode(client_session.value(),
+                          immer::box<std::shared_ptr<ENetPeer>>{to_shared_ptr(event.peer)},
+                          *hdr);
+          }
           break;
         case ENET_EVENT_TYPE_DISCONNECT:
           logs::log(logs::debug, "[ENET] disconnected client: {}:{}", client_ip, client_port);
@@ -249,7 +258,7 @@ void run_control(int port,
   }
 
   stop_ev.unregister();
-  hdr_mode_ev.unregister();
+  video_ev.unregister();
 }
 
 } // namespace control
