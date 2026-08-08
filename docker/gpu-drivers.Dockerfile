@@ -1,29 +1,26 @@
-ARG BASE_IMAGE=ghcr.io/games-on-whales/base-app:edge
+ARG BASE_IMAGE=ghcr.io/games-on-whales/base-app:fedora
 FROM $BASE_IMAGE
-ENV DEBIAN_FRONTEND=noninteractive
-ENV BUILD_ARCHITECTURE=amd64
-ENV DEB_BUILD_OPTIONS=noddebs
 
-# Intel (Quick Synk) specific:
-# - libmfx Provides MSDK runtime (libmfxhw64.so.1) for 11th Gen Rocket Lake and older
-# - libmfx-gen1.2 Provides VPL runtime (libmfx-gen.so.1.2) for 11th Gen Tiger Lake and newer
-ARG REQUIRED_PACKAGES="va-driver-all intel-media-va-driver-non-free \
-                       libmfx-gen1.2 libigfxcmrt7 \
-                       libva-drm2 libva-x11-2 libvpl2"
+# Intel VA-API / QSV drivers and VPL runtime
+# intel-media-driver lives in RPM Fusion free on Fedora (not in the base repos),
+# so enable it first; libvpl and mesa-va-drivers come from the main repos.
+ARG REQUIRED_PACKAGES="libva libva-utils \
+                       intel-media-driver \
+                       libvpl \
+                       mesa-va-drivers"
 
-RUN apt-get update -y && \
-    apt-get install -y --no-install-recommends \
-    $REQUIRED_PACKAGES && \
-    rm -rf /var/lib/apt/lists/*
+RUN dnf install -y \
+      https://mirrors.rpmfusion.org/free/fedora/rpmfusion-free-release-$(rpm -E %fedora).noarch.rpm && \
+    dnf install -y --skip-unavailable $REQUIRED_PACKAGES && \
+    dnf clean all
 
-# libmfx is not available in Ubuntu 25.04 so we are building from sources (see: https://github.com/games-on-whales/wolf/issues/221)
+# libmfx is not available in Fedora so we build from sources (see: https://github.com/games-on-whales/wolf/issues/221)
 RUN <<_BUILD_LIBMFX
     #!/bin/bash
     set -e
 
-    apt-get update -y
-    apt-get install -y curl git build-essential cmake pkg-config \
-                       libdrm-dev libva-dev libx11-dev libx11-xcb-dev libxcb-present-dev libxcb-dri3-dev
+    dnf install -y curl git gcc gcc-c++ cmake pkg-config \
+                   libdrm-devel libva-devel libX11-devel libxcb-devel libXext-devel
 
     cd /tmp
     git clone https://github.com/Intel-Media-SDK/MediaSDK msdk
@@ -33,6 +30,8 @@ RUN <<_BUILD_LIBMFX
 
     # Patch to fix compilation error on modern gcc
     curl -fsSL https://patch-diff.githubusercontent.com/raw/Intel-Media-SDK/MediaSDK/pull/3005.patch | git apply -
+    grep -q "#include <cstdint>" samples/sample_vpp/src/sample_vpp_frc_adv.cpp || \
+      sed -i "/#include <algorithm>/a #include <cstdint>" samples/sample_vpp/src/sample_vpp_frc_adv.cpp
 
     mkdir build
     cd build
@@ -46,8 +45,8 @@ RUN <<_BUILD_LIBMFX
     ldconfig
 
     # Cleanup
-    apt-get remove -y --purge curl git build-essential cmake pkg-config
-    rm -rf /var/lib/apt/lists/* /tmp/*
+    dnf clean all
+    rm -rf /tmp/*
 _BUILD_LIBMFX
 
 # Adding missing libnvrtc.so and libnvrtc-bulletins.so for Nvidia
@@ -56,9 +55,7 @@ RUN <<_ADD_NVRTC
     #!/bin/bash
     set -e
 
-    #Extra deps
-    apt-get update -y
-    apt-get install -y unzip curl
+    dnf install -y unzip curl
 
     cd /tmp
     curl -fsSL -o nvidia_cuda_nvrtc_linux_x86_64.whl "https://developer.download.nvidia.com/compute/redist/nvidia-cuda-nvrtc/nvidia_cuda_nvrtc-11.0.221-cp36-cp36m-linux_x86_64.whl"
@@ -74,9 +71,8 @@ RUN <<_ADD_NVRTC
     echo "/usr/local/nvidia/lib64" >> /etc/ld.so.conf.d/nvidia.conf
 
     # Cleanup
-    apt-get remove -y --purge unzip curl
-    rm -rf /var/lib/apt/lists/*
+    dnf clean all
 _ADD_NVRTC
 
 LABEL org.opencontainers.image.source="https://github.com/games-on-whales/wolf/"
-LABEL org.opencontainers.image.description="A base image with all the required GPU drivers"
+LABEL org.opencontainers.image.description="A base image with all the required GPU drivers (Fedora)"

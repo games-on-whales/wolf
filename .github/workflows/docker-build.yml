@@ -131,6 +131,25 @@ jobs:
           cache-from: ${{ steps.prep.outputs.cache_from }}
           cache-to: ${{ steps.prep.outputs.cache_to }}
 
+      # Native-Vulkan variant: built on ghcr.io/<owner>/gst-wayland-display:vulkan
+      # (patched GStreamer 1.28.4 vulkan-video + the plugin), published as wolf:vulkan.
+      # The gst-Vulkan + plugin build happens once in gst-wayland-display:vulkan; here
+      # we only compile Wolf on top. See docker/wolf.vulkan.Dockerfile.
+      - name: Build Wolf (Vulkan)
+        uses: docker/build-push-action@v3
+        with:
+          builder: ${{ steps.buildx.outputs.name }}
+          context: .
+          file: docker/wolf.vulkan.Dockerfile
+          push: ${{ steps.prep.outputs.push }}
+          tags: ghcr.io/${{ github.repository_owner }}/wolf:vulkan
+          labels: ${{ steps.meta.outputs.labels }}
+          build-args: |
+            BASE_IMAGE=ghcr.io/${{ github.repository_owner }}/gst-wayland-display:vulkan
+            IMAGE_SOURCE=${{ steps.prep.outputs.github_server_url }}/${{ github.repository }}
+          cache-from: type=registry,ref=ghcr.io/${{ github.repository_owner }}/wolf:vulkan-buildcache
+          cache-to: ${{ steps.prep.outputs.push == 'true' && format('type=registry,ref=ghcr.io/{0}/wolf:vulkan-buildcache,mode=max', github.repository_owner) || '' }}
+
   test_devcontainer:
     runs-on: ubuntu-latest
     needs: buildx

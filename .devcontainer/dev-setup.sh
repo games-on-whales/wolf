@@ -1,17 +1,16 @@
 #!/bin/bash
 set -e
-export DEBIAN_FRONTEND=noninteractive
 
-apt-get update
+# The devcontainer is built on the Fedora wolf-builder stage, so use dnf.
 
 # Install debugger
-apt-get install -y gdb
+dnf install -y gdb
 
 # Install wayland-protocols
-apt-get install -y wayland-protocols
+dnf install -y wayland-protocols-devel
 
 # Build and install nvtop
-apt-get install -y libdrm-dev libsystemd-dev libncurses5-dev libncursesw5-dev
+dnf install -y libdrm-devel systemd-devel ncurses-devel
 cd /tmp/
 git clone https://github.com/Syllo/nvtop.git
 mkdir -p nvtop/build && cd nvtop/build

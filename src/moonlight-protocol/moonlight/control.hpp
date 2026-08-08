@@ -311,6 +311,46 @@ struct ControlTerminatePacket {
   std::uint32_t reason = TERMINATE_REASON_GRACEFULL;
 };
 
+// The HDR mode packet carries a tightly-packed payload (1-byte flag immediately
+// followed by the 26-byte metadata blob, no padding) that must match the
+// Sunshine / moonlight-common-c wire layout, so force 1-byte packing here.
+#pragma pack(push, 1)
+
+/**
+ * HDR static metadata, mirrors the Sunshine / moonlight-common-c SS_HDR_METADATA layout.
+ *
+ * displayPrimaries and whitePoint are CIE 1931 xy chromaticity coordinates scaled
+ * by 50000 (i.e. units of 0.00002). The defaults below are the BT.2020 / Rec.2100
+ * values matching the mastering-display + content-light metadata emitted by the
+ * gst-wayland-display encoder caps:
+ *   HDR_MASTERING "35400:14600:8500:39850:6550:2300:15635:16450:10000000:1"
+ *   HDR_CLL       "1000:400"
+ * The gst mastering string is ordered R G B WP maxLum minLum, which maps 1:1 onto
+ * displayPrimaries[0..2] (R, G, B) and whitePoint here. The gst luminances are in
+ * 0.0001-nit units: max 10000000 -> 1000 nits, min 1 -> 1 (kept in 0.0001-nit units).
+ */
+struct SS_HDR_METADATA {
+  struct {
+    std::uint16_t x, y;
+  } displayPrimaries[3] = {{35400, 14600}, {8500, 39850}, {6550, 2300}}; // R, G, B  (coords * 50000)
+  struct {
+    std::uint16_t x, y;
+  } whitePoint = {15635, 16450};                 // D65 (coords * 50000)
+  std::uint16_t maxDisplayLuminance = 1000;      // nits
+  std::uint16_t minDisplayLuminance = 1;         // 0.0001-nit units (0.0001 nit)
+  std::uint16_t maxContentLightLevel = 1000;     // MaxCLL, nits
+  std::uint16_t maxFrameAverageLightLevel = 400; // MaxFALL, nits
+  std::uint16_t maxFullFrameLuminance = 0;       // nits (SDR reference white; ignored by clients)
+};
+
+struct ControlHdrModePacket {
+  ControlPacket header = {.type = pkts::HDR_MODE, .length = sizeof(std::uint8_t) + sizeof(SS_HDR_METADATA)};
+  std::uint8_t enableHdr = 0; // 0 = SDR, 1 = HDR; metadata is ignored by clients when 0
+  SS_HDR_METADATA metadata;
+};
+
+#pragma pack(pop)
+
 struct ControlRumblePacket {
   ControlPacket header;
 

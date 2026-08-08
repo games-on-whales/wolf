@@ -1,3 +1,4 @@
+#include <cstdlib>
 #include <events/events.hpp>
 #include <events/reflectors.hpp>
 #include <fstream>
@@ -41,6 +42,8 @@ static Encoder encoder_type(const GstEncoder &settings) {
     return QUICKSYNC;
   case (utils::hash("applemedia")):
     return APPLE;
+  case (utils::hash("vulkan")):
+    return VULKAN;
   case (utils::hash("x264")):
   case (utils::hash("x265")):
   case (utils::hash("aom")):
@@ -301,7 +304,12 @@ Config load_or_default(const std::string &source,
   if (use_zero_copy) {
     switch (video_encoder) {
     case NVIDIA: {
-      default_base_video.producer_buffer_caps = "video/x-raw(memory:CUDAMemory)";
+      // Carry an NV12 DMABuf over the interpipe and import it into CUDA in the
+      // consumer (dmabuftocuda, see nvcodec video_params_zero_copy). A CUDAMemory
+      // buffer can't cross the interpipe -- it's tied to a CUDA context/stream the
+      // per-client encoder pipeline doesn't share -- so the producer must hand off
+      // the context-free dmabuf, exactly like the VAAPI path below.
+      default_base_video.producer_buffer_caps = "video/x-raw(memory:DMABuf), drm-format=NV12";
       break;
     }
     case VAAPI:
@@ -326,6 +334,19 @@ Config load_or_default(const std::string &source,
       }
       break;
     }
+    case VULKAN: {
+      // Native Vulkan Video zero-copy: the producer (waylanddisplaysrc vulkan=true) emits an
+      // NV12 memory:VulkanImage that crosses the interpipe on a shared GstVulkanDevice (shared
+      // via the producer's bus_sync_handler / NeedContextData). vulkanh264enc consumes it
+      // directly -- no upload/convert.
+      // [gstreamer.video] hdr = true selects the 10-bit P010 producer format, which
+      // (via the hdr=true producer prop and vulkanh265enc's Main-10 + HDR10 SEI path)
+      // yields an HDR10 stream. Default 8-bit NV12 so SDR clients aren't mis-signaled.
+      default_base_video.producer_buffer_caps = default_gst_video_settings.hdr
+                                                    ? "video/x-raw(memory:VulkanImage), format=P010_10LE"
+                                                    : "video/x-raw(memory:VulkanImage), format=NV12";
+      break;
+    }
     default: {
     }
     }
@@ -337,9 +358,40 @@ Config load_or_default(const std::string &source,
             get_vendor_name(vendor),
             default_gst_render_node);
 
+  bool using_vulkan_encoder = encoder_type(*h264_encoder) == VULKAN ||
+                              (hevc_encoder && encoder_type(*hevc_encoder) == VULKAN) ||
+                              (av1_encoder && encoder_type(*av1_encoder) == VULKAN);
+  if (vendor == GPU_VENDOR::AMD && using_vulkan_encoder) {
+    // The Vulkan Video encoder runs inside this process, so RADV's low-latency encode mode (Mesa 26.1+) has to be
+    // enabled on Wolf's own environment. Don't override a RADV_PERFTEST that the user already set.
+    if (!utils::get_env("RADV_PERFTEST")) {
+      setenv("RADV_PERFTEST", "lowlatencyenc", 0);
+      logs::log(logs::info,
+                "AMD GPU with a Vulkan Video encoder detected, enabling RADV_PERFTEST=lowlatencyenc for low-latency "
+                "encoding (requires Mesa 26.1+, silently ignored on older Mesa). Set RADV_PERFTEST yourself to "
+                "override this.");
+    } else {
+      logs::log(logs::debug, "RADV_PERFTEST already set ({}), leaving it as-is", utils::get_env("RADV_PERFTEST"));
+    }
+  }
+
+  if (default_gst_video_settings.hdr) {
+    // Plumb the SDR reference-white level to the producer's BT.2020/PQ shader (a
+    // specialization constant) so SDR content is tone-mapped to the configured nits
+    // instead of being stretched to PQ peak. Read by waylanddisplaysrc at converter build.
+    setenv("WOLF_SDR_REFERENCE_WHITE", std::to_string(default_gst_video_settings.sdr_reference_white).c_str(), 1);
+  }
+
   default_base_video.h264_encoder = h264_encoder.value().encoder_pipeline;
   if (hevc_encoder) {
-    default_base_video.hevc_encoder = hevc_encoder.value().encoder_pipeline;
+    auto hevc_pipeline = hevc_encoder.value().encoder_pipeline;
+    if (default_gst_video_settings.hdr && encoder_type(*hevc_encoder) == VULKAN) {
+      // The 10-bit P010 producer makes vulkanh265enc emit Main-10; the downstream
+      // capsfilter must allow it. An 8-bit `profile=main` constraint rejects the
+      // P010 input with "No valid profile found" -> not-negotiated -> no video.
+      hevc_pipeline = std::regex_replace(hevc_pipeline, std::regex("profile=main,"), "profile=main-10,");
+    }
+    default_base_video.hevc_encoder = hevc_pipeline;
   } else {
     logs::log(logs::warning, "Unable to find an HEVC encoder, disabling it");
   }
@@ -403,6 +455,7 @@ Config load_or_default(const std::string &source,
                 .config_source = source,
                 .support_hevc = hevc_encoder.has_value(),
                 .support_av1 = av1_encoder.has_value() && encoder_type(*av1_encoder) != SOFTWARE,
+                .support_hdr = default_gst_video_settings.hdr && hevc_encoder.has_value(),
                 .paired_clients = clients_atom,
                 .profiles = profiles_atom};
 }

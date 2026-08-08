@@ -339,8 +339,14 @@ video/x-raw(memory:CUDAMemory), width={width}, height={height}, \
 chroma-site={color_range}, format=NV12, colorimetry={color_space}, pixel-aspect-ratio=1/1\
 """
 
+# Zero-copy carries an NV12 DMABuf over the interpipe (a CUDAMemory buffer can't
+# cross the interpipe boundary -- it's bound to a CUDA context/stream the consumer
+# pipeline doesn't share). dmabuftocuda imports that DMABuf into CUDA here in the
+# consumer (via EGLImage, no system-memory copy), where the encoder's CUDA context
+# is available; cudaupload can't (it has no DMABuf sink caps).
 video_params_zero_copy = """
-cudaupload !
+queue !
+dmabuftocuda !
 cudaconvertscale add-borders=true !
 video/x-raw(memory:CUDAMemory),format=NV12, width={width}, height={height}, pixel-aspect-ratio=1/1
 """
@@ -373,6 +379,26 @@ video/x-raw(memory:VAMemory), format=NV12, width={width}, height={height}, pixel
 # HEVC encoders
 # Order here matters: Wolf will try them in order and pick the first one that's not failing
 ###
+# Native Vulkan Video zero-copy HEVC encode (waylanddisplaysrc vulkan=true emits NV12/P010
+# memory:VulkanImage). Unlike the nvcodec/va entries below there is NO `profile=main` capsfilter,
+# so the 10-bit P010 Main-10 HDR path negotiates. Tunables come from WOLF_VULKAN_QUALITY /
+# _REF_FRAMES / _B_FRAMES. Works on NVIDIA (RTX 50-series VCN/Vulkan video encode); Mesa/RADV
+# does not expose HEVC Vulkan encode yet, so check_elements gates it out and Wolf falls through
+# to nvcodec/va. Listed first so the zero-copy HDR path is preferred where available.
+[[gstreamer.video.hevc_encoders]]
+plugin_name = "vulkan"
+check_elements = ["vulkanh265enc"]
+encoder_pipeline = """
+vulkanh265enc aud=false quality={vk_quality} num-ref-frames={vk_ref_frames} b-frames={vk_b_frames} bitrate={bitrate} rate-control=cqp min-qp=20 idr-period=1024 !
+h265parse !
+video/x-h265, stream-format=byte-stream\
+"""
+# Producer already emits the VulkanImage at session resolution/framerate, so the zero-copy path
+# is just a decoupling queue (convert/scale elements can't negotiate the VulkanImage memory feature).
+video_params_zero_copy = """
+queue\
+"""
+
 [[gstreamer.video.hevc_encoders]]
 plugin_name = "nvcodec"
 check_elements = ["nvh265enc", "cudaconvertscale", "cudaupload"]
@@ -442,6 +468,26 @@ encoder_pipeline = """
 nvh264enc preset=low-latency-hq zerolatency=true gop-size=0 rc-mode=cbr-ld-hq bitrate={bitrate} vbv-buffer-size={vbv_buffer_size} aud=false !
 h264parse !
 video/x-h264, profile=main, stream-format=byte-stream\
+"""
+
+# Native Vulkan Video zero-copy encode (waylanddisplaysrc vulkan=true emits NV12 memory:VulkanImage).
+# Tunables come from WOLF_VULKAN_QUALITY / _REF_FRAMES / _B_FRAMES (defaults: low-latency streaming
+# preset = fastest quality, single reference, no B-frames -> full VCN throughput). Note: AV1
+# Vulkan encode is not yet exposed by Mesa/RADV; HEVC is provided in the hevc_encoders section above.
+[[gstreamer.video.h264_encoders]]
+plugin_name = "vulkan"
+check_elements = ["vulkanh264enc"]
+encoder_pipeline = """
+vulkanh264enc aud=false quality={vk_quality} num-ref-frames={vk_ref_frames} b-frames={vk_b_frames} bitrate={bitrate} rate-control=cbr min-qp=20 idr-period=1024 !
+h264parse !
+video/x-h264, profile=main, stream-format=byte-stream\
+"""
+# The producer (waylanddisplaysrc vulkan=true) already emits NV12 memory:VulkanImage at the
+# session resolution/framerate, so the zero-copy path needs no videoscale/videoconvert/videorate
+# -- those are CPU elements that cannot negotiate the VulkanImage memory feature (the default
+# zero-copy params would inject them and fail with not-negotiated). Just a decoupling queue.
+video_params_zero_copy = """
+queue\
 """
 
 [[gstreamer.video.h264_encoders]]

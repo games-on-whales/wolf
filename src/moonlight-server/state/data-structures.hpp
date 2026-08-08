@@ -68,6 +68,7 @@ enum Encoder {
   QUICKSYNC,
   SOFTWARE,
   APPLE,
+  VULKAN,
   UNKNOWN
 };
 
@@ -80,6 +81,10 @@ struct Config {
   std::string config_source;
   bool support_hevc;
   bool support_av1;
+  /* Advertise HEVC Main-10 (HDR10) to clients. Driven by [gstreamer.video] hdr;
+   * gates the VIDEO_FORMAT_H265_MAIN10 bit in serverinfo so Moonlight offers the
+   * HDR toggle and connects in BT2020/PQ mode. */
+  bool support_hdr;
 
   /**
    * Mutable, paired_clients will be loaded up on startup

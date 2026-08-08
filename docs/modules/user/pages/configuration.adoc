@@ -43,6 +43,18 @@ Wolf is configured via a TOML config file and some additional optional ENV varia
 |5000
 |The time in milliseconds to wait for the Wayland socket to appear before starting the stream runner
 
+|WOLF_VULKAN_QUALITY
+|0
+|`vulkanh264enc` quality/speed preset (0 = fastest) used by the Vulkan H.264 encoder. Only applies when the `vulkan` H.264 encoder is selected.
+
+|WOLF_VULKAN_REF_FRAMES
+|1
+|Number of reference frames for the Vulkan H.264 encoder. 1 is recommended for low-latency streaming.
+
+|WOLF_VULKAN_B_FRAMES
+|0
+|Number of B-frames for the Vulkan H.264 encoder. 0 avoids reorder latency for live streaming.
+
 |WOLF_DOCKER_SOCKET
 |/var/run/docker.sock
 |The full path to the docker socket, doesn't support tcp (yet)

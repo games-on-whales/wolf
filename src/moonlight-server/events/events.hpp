@@ -300,6 +300,16 @@ struct StopStreamEvent {
   std::size_t session_id;
 };
 
+/**
+ * Fired when the content's HDR/SDR state changes (signalled by the producer
+ * pipeline via a "wolf-hdr-state" bus message). The control thread reacts by
+ * sending the Moonlight HDR_MODE control packet to the matching client.
+ */
+struct HDRModeEvent {
+  std::size_t session_id;
+  bool enable_hdr;
+};
+
 struct ClientWolfUIComboEvent {
   std::size_t session_id;
 };
@@ -344,6 +354,7 @@ using EventBusHandlers = dp::handler_registration<immer::box<PlugDeviceEvent>,
                                                   immer::box<PauseStreamEvent>,
                                                   immer::box<ResumeStreamEvent>,
                                                   immer::box<StopStreamEvent>,
+                                                  immer::box<HDRModeEvent>,
                                                   immer::box<ClientWolfUIComboEvent>,
                                                   immer::box<RTPVideoPingEvent>,
                                                   immer::box<RTPAudioPingEvent>,
@@ -365,6 +376,7 @@ using EventBusType = dp::event_bus<immer::box<PlugDeviceEvent>,
                                    immer::box<PauseStreamEvent>,
                                    immer::box<ResumeStreamEvent>,
                                    immer::box<StopStreamEvent>,
+                                   immer::box<HDRModeEvent>,
                                    immer::box<ClientWolfUIComboEvent>,
                                    immer::box<RTPVideoPingEvent>,
                                    immer::box<RTPAudioPingEvent>,
@@ -386,6 +398,7 @@ using EventsVariant = std::variant<immer::box<PlugDeviceEvent>,
                                    immer::box<PauseStreamEvent>,
                                    immer::box<ResumeStreamEvent>,
                                    immer::box<StopStreamEvent>,
+                                   immer::box<HDRModeEvent>,
                                    immer::box<ClientWolfUIComboEvent>,
                                    immer::box<RTPVideoPingEvent>,
                                    immer::box<RTPAudioPingEvent>,

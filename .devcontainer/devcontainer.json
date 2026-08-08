@@ -7,13 +7,15 @@
   },
   "postStartCommand": "bash $(pwd)/.devcontainer/dev-setup.sh",
   "features": {
-    "ghcr.io/nils-geistmann/devcontainers-features/zsh:0": {
-      "plugins": [
-        "git",
-        "zsh-autosuggestions",
-        "history",
-        "docker"
-      ]
+    // common-utils is distro-aware (apt/dnf/microdnf/yum/apk), so it installs
+    // zsh + oh-my-zsh on the Fedora wolf-builder base. The previous
+    // nils-geistmann/zsh feature was apt-only and broke when the image moved
+    // off Ubuntu.
+    "ghcr.io/devcontainers/features/common-utils:2": {
+      "installZsh": true,
+      "installOhMyZsh": true,
+      "configureZshAsDefaultShell": true,
+      "username": "root"
     },
     // Doesn't work on ubuntu oracular
     //    "ghcr.io/devcontainers/features/docker-outside-of-docker:1": {

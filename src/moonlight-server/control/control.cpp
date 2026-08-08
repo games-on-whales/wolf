@@ -156,6 +156,24 @@ void run_control(int port,
         logs::log(logs::debug, "[ENET] Client not found for session: {}", ev->session_id);
       });
 
+  auto hdr_mode_ev =
+      event_bus->register_handler<immer::box<HDRModeEvent>>([&connected_clients](const immer::box<HDRModeEvent> &ev) {
+        // Build the HDR_MODE control packet; metadata defaults to the BT.2020/Rec.2100
+        // values (ignored by the client when enableHdr == 0).
+        auto hdr_pkt = ControlHdrModePacket{};
+        hdr_pkt.enableHdr = ev->enable_hdr ? 1 : 0;
+        std::string plaintext = {(char *)&hdr_pkt, sizeof(hdr_pkt)};
+        for (auto &[peer, session] : *connected_clients.load()) {
+          if (session->session_id == ev->session_id) {
+            immer::box<std::shared_ptr<ENetPeer>> enet_client = {to_shared_ptr(peer)};
+            encrypt_and_send(plaintext, session->aes_key, enet_client);
+            logs::log(logs::info, "[ENET] Sent HDR_MODE ({}) for session: {}", hdr_pkt.enableHdr, ev->session_id);
+            return;
+          }
+        }
+        logs::log(logs::debug, "[ENET] Client not found for HDR mode session: {}", ev->session_id);
+      });
+
   while (true) {
     if (enet_host_service(host.get(), &event, timeout.count()) > 0) {
       auto [client_ip, client_port] = get_ip((sockaddr *)&event.peer->address.address);
@@ -231,6 +249,7 @@ void run_control(int port,
   }
 
   stop_ev.unregister();
+  hdr_mode_ev.unregister();
 }
 
 } // namespace control

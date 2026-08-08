@@ -22,7 +22,8 @@ XML serverinfo(bool isServerBusy,
                const immer::array<DisplayMode> &display_modes,
                int pair_status,
                bool support_hevc,
-               bool support_av1) {
+               bool support_av1,
+               bool support_hdr) {
   XML resp;
 
   resp.put("root.<xmlattr>.status_code", 200);
@@ -37,6 +38,12 @@ XML serverinfo(bool isServerBusy,
   if (support_hevc) {
     max_luma_pixels = 1869449984;
     codec_support |= VIDEO_FORMAT_H265;
+    // Advertise HEVC Main-10 so Moonlight offers the HDR toggle and, when enabled,
+    // connects in BT2020/PQ mode (sending encoderCscMode -> BT2020). Without this bit
+    // the client never requests HDR and would mis-decode the host's PQ Main-10 stream.
+    if (support_hdr) {
+      codec_support |= VIDEO_FORMAT_H265_MAIN10;
+    }
   }
   if (support_av1) {
     codec_support |= VIDEO_FORMAT_AV1_MAIN8;

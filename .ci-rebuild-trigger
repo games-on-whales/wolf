@@ -1,0 +1,1 @@
+rebuild wolf:vulkan on gst-wayland-display:vulkan base with LINEAR encode-src workaround (1118de2)

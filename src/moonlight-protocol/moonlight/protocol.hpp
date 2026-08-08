@@ -41,7 +41,8 @@ XML serverinfo(bool isServerBusy,
                const immer::array<DisplayMode> &display_modes,
                int pair_status,
                bool support_hevc,
-               bool support_av1);
+               bool support_av1,
+               bool support_hdr = false);
 
 /**
  * @brief Step 2: PAIR a new client

@@ -77,7 +77,8 @@ void serverinfo(const std::shared_ptr<typename SimpleWeb::Server<T>::Response> &
                                    host->display_modes,
                                    is_https,
                                    cfg->support_hevc,
-                                   cfg->support_av1);
+                                   cfg->support_av1,
+                                   cfg->support_hdr);
 
   send_xml<T>(response, SimpleWeb::StatusCode::success_ok, xml);
 }
@@ -379,6 +380,19 @@ auto create_run_session(const SimpleWeb::CaseInsensitiveMultimap &headers,
                                          std::stoi(display_mode_str[2].data()),
                                          state->config->support_hevc,
                                          state->config->support_av1};
+
+  // The Vulkan zero-copy producer renders the virtual compositor at this resolution,
+  // and the Vulkan encoder requires 64px CTB alignment (see rtsp/commands.hpp, which
+  // rounds the *encoder* dimension up). The compositor is created HERE, at /launch,
+  // before RTSP, so it must be rounded too -- otherwise the producer fills only the
+  // requested rows while the encoder reads full 64px CTBs, leaving the extra rows
+  // uninitialised (a green bar along the bottom edge). Scoped to the Vulkan producer;
+  // the client scales the slightly-larger frame back into its viewport.
+  if (run_app.video_producer_buffer_caps.find("VulkanImage") != std::string::npos) {
+    auto round_up_64 = [](int v) { return (v + 63) & ~63; };
+    display_mode.width = round_up_64(display_mode.width);
+    display_mode.height = round_up_64(display_mode.height);
+  }
 
   auto surround_info = std::stoi(get_header(headers, "surroundAudioInfo").value_or("196610"));
   int channelCount = surround_info & (0xffff /* last 16 bits */);

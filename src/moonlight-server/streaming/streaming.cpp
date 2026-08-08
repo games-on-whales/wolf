@@ -10,6 +10,7 @@
 #include <immer/array.hpp>
 #include <immer/box.hpp>
 #include <memory>
+#include <optional>
 #include <streaming/streaming.hpp>
 #include <thread>
 
@@ -21,6 +22,11 @@ using namespace wolf::core;
 struct GstBusData {
   std::shared_ptr<boost::promise<WaylandDisplayReady>> on_ready;
   gst_element_ptr wayland_plugin;
+  // Used to forward the producer's HDR<->SDR content-state changes to the control thread.
+  std::string session_id;
+  std::shared_ptr<events::EventBusType> event_bus;
+  // Last HDR state we forwarded; guards against re-sending HDR_MODE on no-op messages.
+  std::optional<bool> last_hdr_state;
 };
 
 gboolean structure_each(GQuark field_id, const GValue *value, gpointer user_data) {
@@ -46,6 +52,29 @@ static void application_message_handler(GstBus *bus, GstMessage *msg, gpointer d
   auto structure = gst_message_get_structure(msg);
   if (gst_structure_has_name(structure, "wayland.src")) {
     gst_structure_foreach(structure, structure_each, data);
+  } else if (gst_structure_has_name(structure, "wolf-hdr-state")) {
+    // The producer pipeline signals an HDR<->SDR content change by posting a
+    // "wolf-hdr-state" application message carrying a single "hdr" gboolean.
+    // Forward it to the control thread so it can send the Moonlight HDR_MODE packet.
+    auto bus_data = static_cast<GstBusData *>(data);
+    gboolean hdr = FALSE;
+    if (!gst_structure_get_boolean(structure, "hdr", &hdr)) {
+      logs::log(logs::warning, "[HDR] Received wolf-hdr-state message without a valid 'hdr' boolean");
+      return;
+    }
+    bool enable = hdr == TRUE;
+    if (bus_data->last_hdr_state && *bus_data->last_hdr_state == enable) {
+      return; // Only react to actual changes.
+    }
+    bus_data->last_hdr_state = enable;
+    logs::log(logs::info, "[HDR] Content switched to {} for session {}", enable ? "HDR" : "SDR", bus_data->session_id);
+    try {
+      auto session_id = std::stoull(bus_data->session_id);
+      bus_data->event_bus->fire_event(
+          immer::box<events::HDRModeEvent>(events::HDRModeEvent{.session_id = session_id, .enable_hdr = enable}));
+    } catch (const std::exception &e) {
+      logs::log(logs::warning, "[HDR] Failed to parse session id '{}': {}", bus_data->session_id, e.what());
+    }
   }
 }
 
@@ -95,18 +124,30 @@ void start_video_producer(const std::string &session_id,
                           std::shared_ptr<immer::atom<gst_video_context::gst_context_ptr>> video_context,
                           std::shared_ptr<boost::promise<WaylandDisplayReady>> on_ready,
                           std::shared_ptr<events::EventBusType> event_bus) {
-  auto pipeline = fmt::format("waylanddisplaysrc name=wolf_wayland_source render_node={render_node} ! "
-                              "{buffer_format}, width={width}, height={height}, framerate={fps}/1 ! \n"    //
-                              "interpipesink sync=true async=false name={session_id}_video max-buffers=1", //
-                              fmt::arg("buffer_format", buffer_format),
-                              fmt::arg("render_node", render_node),
-                              fmt::arg("session_id", session_id),
-                              fmt::arg("width", display_mode.width),
-                              fmt::arg("height", display_mode.height),
-                              fmt::arg("fps", display_mode.refreshRate));
+  // The native Vulkan zero-copy path needs the source in Vulkan mode so it emits NV12
+  // memory:VulkanImage (selected when the negotiated producer caps are VulkanImage).
+  std::string vulkan_prop = buffer_format.find("VulkanImage") != std::string::npos ? " vulkan=true" : "";
+  // A P010 producer format selects the 10-bit / HDR path: tell the source to emit
+  // BT.2020 PQ-tagged frames (mastering-display + content-light metadata) so the
+  // downstream vulkanh265enc produces an HDR10 Main-10 stream.
+  std::string hdr_prop = buffer_format.find("P010") != std::string::npos ? " hdr=true" : "";
+  auto pipeline = fmt::format(
+      "waylanddisplaysrc name=wolf_wayland_source render_node={render_node}{vulkan_prop}{hdr_prop} ! "
+      "{buffer_format}, width={width}, height={height}, framerate={fps}/1 ! \n"    //
+      "interpipesink sync=true async=false name={session_id}_video max-buffers=1", //
+      fmt::arg("vulkan_prop", vulkan_prop),
+      fmt::arg("hdr_prop", hdr_prop),
+      fmt::arg("buffer_format", buffer_format),
+      fmt::arg("render_node", render_node),
+      fmt::arg("session_id", session_id),
+      fmt::arg("width", display_mode.width),
+      fmt::arg("height", display_mode.height),
+      fmt::arg("fps", display_mode.refreshRate));
   logs::log(logs::debug, "[GSTREAMER] Starting video producer: {}", pipeline);
-  auto bus_data_ptr =
-      std::make_shared<GstBusData>(GstBusData{.on_ready = std::move(on_ready), .wayland_plugin = nullptr});
+  auto bus_data_ptr = std::make_shared<GstBusData>(GstBusData{.on_ready = std::move(on_ready),
+                                                              .wayland_plugin = nullptr,
+                                                              .session_id = session_id,
+                                                              .event_bus = event_bus});
   std::shared_ptr<NeedContextData> ctx_data_ptr =
       std::make_shared<NeedContextData>(NeedContextData{.device_path = render_node, .gst_context = video_context});
   run_pipeline(pipeline, [=](auto pipeline) {
@@ -392,6 +433,11 @@ void start_streaming_video(immer::box<events::VideoSession> video_session,
       fmt::arg("min_required_fec_packets", video_session->min_required_fec_packets),
       fmt::arg("slices_per_frame", video_session->slices_per_frame),
       fmt::arg("vbv_buffer_size", video_session->bitrate_kbps / video_session->display_mode.refreshRate),
+      // Vulkan encoder tunables (defaults = low-latency streaming preset: fastest quality,
+      // single reference, no B-frames -> full VCN throughput). Override per-deployment via env.
+      fmt::arg("vk_quality", utils::get_env("WOLF_VULKAN_QUALITY", "0")),
+      fmt::arg("vk_ref_frames", utils::get_env("WOLF_VULKAN_REF_FRAMES", "1")),
+      fmt::arg("vk_b_frames", utils::get_env("WOLF_VULKAN_B_FRAMES", "0")),
       fmt::arg("color_space", color_space),
       fmt::arg("color_range", color_range),
       fmt::arg("host_port", video_session->port));
