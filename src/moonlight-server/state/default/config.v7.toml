@@ -137,6 +137,10 @@ env = [
     "PROTON_LOG=1",
     "RUN_SWAY=true",
     "GOW_REQUIRED_DEVICES=/dev/input/* /dev/dri/* /dev/nvidia*",
+    # Uncomment to let Steam Input create its own controllers. This gives the container
+    # /dev/uinput, so read https://games-on-whales.github.io/wolf/stable/dev/fake-uinput.html
+    # first and make sure 85-wolf.rules on the host is current.
+    # "WOLF_FAKE_UINPUT=1",
 ]
 devices = []
 ports = []

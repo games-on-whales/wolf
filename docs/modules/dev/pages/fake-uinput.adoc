@@ -1,0 +1,87 @@
+= Faking uinput in Docker
+
+xref:fake-udev.adoc[fake-udev] lets Wolf hot-plug the virtual devices _it_ creates into a running
+container. Here we want the opposite: to let an application _inside_ a container create its own
+`uinput` devices. The usual case is
+https://partner.steamgames.com/doc/features/steam_controller/steam_input_gamepad_emulation_bestpractices[Steam Input],
+which grabs a controller and re-exposes a remapped virtual pad through `/dev/uinput`.
+
+== The problem
+
+Our session containers are unprivileged: `/dev` is a fresh `tmpfs`, the container lives in its own
+network namespace, and it isn't granted the capabilities to create device nodes. So when an app opens
+`/dev/uinput` and issues `UI_DEV_CREATE`:
+
+* there is no `/dev/uinput` in the container to begin with; and
+* even if there were, the node the kernel creates would never show up in the container's `tmpfs`
+  `/dev`, and no udev event would reach the container's network namespace footnote:[The very same
+  reasons xref:fake-udev.adoc[fake-udev] has to exist.].
+
+== Let Wolf do the privileged part
+
+The idea is to keep the container unprivileged and let Wolf, on the host, do the bits that actually
+need privilege, reusing the machinery it already has for its own virtual pads.
+
+An app opts in by setting `WOLF_FAKE_UINPUT=1` in its runner `env` footnote:[An env var rather than a
+dedicated field on purpose: it is one of the few runner fields that round-trips faithfully through
+every client (including wolf-ui, which rebuilds the runner from a typed model and would drop an
+unknown field), and it matches how `GOW_REQUIRED_DEVICES` and `RUN_SWAY` are already configured.].
+For those apps Wolf injects a small `LD_PRELOAD` shim (`src/fake-uinput`) that intercepts only
+`ioctl(fd, UI_DEV_CREATE)` and `UI_DEV_DESTROY`; everything else is passed straight through. On
+create the shim resolves the new device's sysfs name (`UI_GET_SYSNAME`) and tells Wolf about it over
+the control socket.
+
+.The endpoints the shim calls
+[source]
+....
+POST /api/v1/runtime/plug-udev-device     {"session_id": ..., "sysfs_name": "input42"}
+POST /api/v1/runtime/unplug-udev-device   {"session_id": ..., "sysfs_name": "input42"}
+....
+
+Wolf reads the device from sysfs and hands it to the same code path it uses for its own pads: `mknod`
+the node into the right container and broadcast the udev event through fake-udev. The container is
+given the real `/dev/uinput` so the app can create the device, but Wolf does everything else, so no
+`CAP_MKNOD` and no `/dev/input` bind-mount.
+
+[plantuml,format=svg]
+....
+title: Steam Input creating a pad inside a container
+autonumber
+
+participant App as "App (Steam)"
+participant Shim as "fake-uinput shim"
+participant uinput as "/dev/uinput (host kernel)"
+participant Wolf as Wolf
+participant Runner as "docker runner"
+
+App->uinput: open + UI_DEV_CREATE
+Shim->uinput: (passthrough) real device created on host
+Shim->Wolf: POST plug-udev-device {session_id, sysfs_name}
+Wolf->Runner: PlugDeviceEvent
+Runner->App: mknod node in container + fake-udev "add"
+App->App: game opens /dev/input/eventX
+....
+
+The relevant code is `src/fake-uinput` (the shim), `api/fake_uinput.hpp` (sysfs -> `PlugDeviceEvent`),
+and the injection in `sessions/common.cpp`.
+
+== Security
+
+Handing a container the host's real `/dev/uinput` is a deliberate trade-off: a process in the
+container creates devices in the *host* kernel, so a virtual keyboard or pointer created this way
+appears on the host and could inject input into the host session footnote:[The escape vector raised
+upstream in https://github.com/games-on-whales/wolf/issues/81[#81].]. It is opt-in per app
+(`WOLF_FAKE_UINPUT=1`) and off by default, which bounds the exposure to apps the operator has
+explicitly enabled.
+
+Those devices are kept off the host's `seat0` the same way Wolf's own virtual devices are. The name
+rules in `85-wolf.rules` cannot match them: the app picks the device name, and Steam Input calls its
+pad `Microsoft X-Box 360 pad`. Renaming it would break SDL, which looks controllers up by name to
+choose a button mapping. Instead the shim sets `phys` to `wolf-fake-uinput/0` (a `UI_SET_PHYS` before
+the `UI_DEV_CREATE` it is already intercepting), and `85-wolf.rules` matches on that, parking the
+device on the dead `seat9` and stripping its `uaccess` ACL.
+
+That covers devices the shim knows about. A process in the container still holds the real `/dev/uinput`
+and could create a device by some other route, so this is a narrowing rather than a boundary. The fully
+isolated alternative, never exposing the real device and emulating `uinput` end to end (e.g. over CUSE),
+is heavier; this change trades that for a small, dependency-free implementation.

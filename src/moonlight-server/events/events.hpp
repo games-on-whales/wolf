@@ -58,6 +58,12 @@ struct Runner {
                    std::string_view render_node) = 0;
 
   virtual RunnerTypes serialize() const = 0;
+
+  // Whether Wolf should inject the fake-uinput shim (+ /dev/uinput + control socket) into this
+  // runner's container. Opt-in per app; only the docker runner overrides it.
+  virtual bool needs_fake_uinput() const {
+    return false;
+  }
 };
 
 struct App {

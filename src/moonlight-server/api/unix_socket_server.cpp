@@ -321,6 +321,33 @@ UnixSocketServer::UnixSocketServer(boost::asio::io_context &io_context,
        .handler = [this](auto req, auto socket) { endpoint_DockerPullImage(req, socket); }});
 
   /**
+   * Runtime device injection (fake-uinput shim)
+   */
+  state_->http.add(
+      HTTPMethod::POST,
+      "/api/v1/runtime/plug-udev-device",
+      {.summary = "Plug a uinput device created inside a session container",
+       .description = "Called by the in-container fake-uinput LD_PRELOAD shim when an app (e.g. Steam Input) "
+                      "creates a uinput device. Wolf reads the device from sysfs, then mknod's the node into the "
+                      "right session container and broadcasts the udev event using the same privileged host-side "
+                      "path as its own virtual pads. This lets the container stay fully unprivileged.",
+       .request_description = APIDescription{.json_schema = rfl::json::to_schema<UdevDeviceRequest>()},
+       .response_description = {{200, {.json_schema = rfl::json::to_schema<GenericSuccessResponse>()}},
+                                {500, {.json_schema = rfl::json::to_schema<GenericErrorResponse>()}}},
+       .handler = [this](auto req, auto socket) { endpoint_PlugUdevDevice(req, socket); }});
+
+  state_->http.add(
+      HTTPMethod::POST,
+      "/api/v1/runtime/unplug-udev-device",
+      {.summary = "Unplug a previously plugged uinput device",
+       .description = "Called by the fake-uinput shim on UI_DEV_DESTROY; replays the recorded udev nodes as a "
+                      "removal.",
+       .request_description = APIDescription{.json_schema = rfl::json::to_schema<UdevDeviceRequest>()},
+       .response_description = {{200, {.json_schema = rfl::json::to_schema<GenericSuccessResponse>()}},
+                                {500, {.json_schema = rfl::json::to_schema<GenericErrorResponse>()}}},
+       .handler = [this](auto req, auto socket) { endpoint_UnplugUdevDevice(req, socket); }});
+
+  /**
    * OpenAPI schema
    */
 
