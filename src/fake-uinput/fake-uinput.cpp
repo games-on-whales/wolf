@@ -2,12 +2,12 @@
 // unprivileged session containers -- the typical case being Steam Input. It hooks only
 // ioctl(UI_DEV_CREATE / UI_DEV_DESTROY); everything else passes straight through, so Wolf's own
 // virtual controllers are untouched. It does no privileged work itself: on create/destroy it
-// notifies Wolf over the control socket (HTTP over the AF_UNIX socket at $WOLF_SOCKET_PATH), and
+// notifies Wolf over the AF_UNIX socket at $WOLF_FAKE_UINPUT_SOCKET, and
 // Wolf does the mknod + fake-udev on the host via the same path it uses for its own virtual pads.
 // So the container needs no privilege, not even CAP_MKNOD.
 //
 // Wolf sets these in the container's env:
-//   WOLF_SOCKET_PATH  - the wolf.sock control API
+//   WOLF_FAKE_UINPUT_SOCKET - Wolf's restricted device plug/unplug socket
 //   WOLF_SESSION_ID   - identifies the session so Wolf injects into the right container
 //
 // Built 64- and 32-bit (Steam's client is 32-bit); both are LD_PRELOAD'd and the loader skips the
@@ -89,9 +89,9 @@ static std::string json_escape(const std::string &s) {
 // Minimal HTTP/1.1 POST over the AF_UNIX control socket. Returns the numeric status
 // (e.g. 200) or -1 on transport failure. Short timeouts so a wedged Wolf never blocks Steam.
 static int wolf_post(const std::string &path, const std::string &body) {
-  const char *sock = getenv("WOLF_SOCKET_PATH");
+  const char *sock = getenv("WOLF_FAKE_UINPUT_SOCKET");
   if (!sock || !*sock) {
-    logline("WARN WOLF_SOCKET_PATH unset; cannot notify Wolf");
+    logline("WARN WOLF_FAKE_UINPUT_SOCKET unset; cannot notify Wolf");
     return -1;
   }
   int fd = socket(AF_UNIX, SOCK_STREAM, 0);

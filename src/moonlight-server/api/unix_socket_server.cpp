@@ -16,9 +16,16 @@ std::string to_str(boost::asio::streambuf &streambuf, std::size_t end) {
 
 UnixSocketServer::UnixSocketServer(boost::asio::io_context &io_context,
                                    const std::string &socket_path,
-                                   immer::box<state::AppState> app_state) {
+                                   immer::box<state::AppState> app_state,
+                                   ApiSurface surface) {
 
   state_ = std::make_shared<UnixSocketState>(io_context, app_state, socket_path);
+
+  if (surface == ApiSurface::SessionRuntime) {
+    register_fake_uinput_endpoints();
+    start_accept();
+    return;
+  }
 
   state_->http.add(HTTPMethod::GET,
                    "/api/v1/events",
@@ -321,8 +328,20 @@ UnixSocketServer::UnixSocketServer(boost::asio::io_context &io_context,
        .handler = [this](auto req, auto socket) { endpoint_DockerPullImage(req, socket); }});
 
   /**
-   * Runtime device injection (fake-uinput shim)
+   * OpenAPI schema
    */
+
+  state_->http.add(HTTPMethod::GET,
+                   "/api/v1/openapi-schema",
+                   {.summary = "Return this OpenAPI schema as JSON", .handler = [this](auto req, auto socket) {
+                      send_http(socket, 200, state_->http.openapi_schema());
+                    }});
+
+  state_->sse_keepalive_timer.async_wait([this](auto e) { sse_keepalive(e); });
+  start_accept();
+}
+
+void UnixSocketServer::register_fake_uinput_endpoints() {
   state_->http.add(
       HTTPMethod::POST,
       "/api/v1/runtime/plug-udev-device",
@@ -346,19 +365,6 @@ UnixSocketServer::UnixSocketServer(boost::asio::io_context &io_context,
        .response_description = {{200, {.json_schema = rfl::json::to_schema<GenericSuccessResponse>()}},
                                 {500, {.json_schema = rfl::json::to_schema<GenericErrorResponse>()}}},
        .handler = [this](auto req, auto socket) { endpoint_UnplugUdevDevice(req, socket); }});
-
-  /**
-   * OpenAPI schema
-   */
-
-  state_->http.add(HTTPMethod::GET,
-                   "/api/v1/openapi-schema",
-                   {.summary = "Return this OpenAPI schema as JSON", .handler = [this](auto req, auto socket) {
-                      send_http(socket, 200, state_->http.openapi_schema());
-                    }});
-
-  state_->sse_keepalive_timer.async_wait([this](auto e) { sse_keepalive(e); });
-  start_accept();
 }
 
 void UnixSocketServer::sse_keepalive(const boost::system::error_code &e) {

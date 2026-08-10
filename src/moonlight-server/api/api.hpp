@@ -189,11 +189,22 @@ struct UnixSocket {
   bool is_alive = true;
 };
 
+/**
+ * Which endpoints a server instance serves. Full is the control API on wolf.sock; SessionRuntime
+ * only serves what a session container needs, so an app that is given that socket can't reach the
+ * rest of the API.
+ */
+enum class ApiSurface {
+  Full,
+  SessionRuntime
+};
+
 class UnixSocketServer {
 public:
   UnixSocketServer(boost::asio::io_context &io_context,
                    const std::string &socket_path,
-                   immer::box<state::AppState> app_state);
+                   immer::box<state::AppState> app_state,
+                   ApiSurface surface = ApiSurface::Full);
 
   UnixSocketServer(const UnixSocketServer &) = default;
 
@@ -241,6 +252,7 @@ private:
 
   void endpoint_PlugUdevDevice(const HTTPRequest &req, std::shared_ptr<UnixSocket> socket);
   void endpoint_UnplugUdevDevice(const HTTPRequest &req, std::shared_ptr<UnixSocket> socket);
+  void register_fake_uinput_endpoints();
 
   void sse_broadcast(const std::string &payload);
   void sse_keepalive(const boost::system::error_code &e);
