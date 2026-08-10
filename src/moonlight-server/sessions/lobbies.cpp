@@ -38,12 +38,8 @@ void leave_lobby(const std::shared_ptr<events::EventBusType> &ev_bus,
   for (auto [_joypad_nr, joypad] : joypads) {
     // Plug them into original session
     events::PlugDeviceEvent plug_ev{.session_id = std::to_string(session.session_id)};
-    std::visit(
-        [&plug_ev](auto &pad) {
-          plug_ev.udev_events = pad.get_udev_events();
-          plug_ev.udev_hw_db_entries = pad.get_udev_hw_db_entries();
-        },
-        *joypad);
+    plug_ev.udev_events = joypad->get_udev_events();
+    plug_ev.udev_hw_db_entries = joypad->get_udev_hw_db_entries();
     ev_bus->fire_event(immer::box<events::PlugDeviceEvent>(plug_ev));
     // Unplug them from the current lobby
     ev_bus->fire_event(immer::box<events::UnplugDeviceEvent>{
@@ -220,12 +216,8 @@ setup_lobbies_handlers(const immer::box<state::AppState> &app_state,
         events::JoypadList joypads = session->joypads->load();
         for (auto [_joypad_nr, joypad] : joypads) {
           events::PlugDeviceEvent plug_ev{.session_id = std::to_string(session->session_id)};
-          std::visit(
-              [&plug_ev](auto &pad) {
-                plug_ev.udev_events = pad.get_udev_events();
-                plug_ev.udev_hw_db_entries = pad.get_udev_hw_db_entries();
-              },
-              *joypad);
+          plug_ev.udev_events = joypad->get_udev_events();
+          plug_ev.udev_hw_db_entries = joypad->get_udev_hw_db_entries();
           app_state->event_bus->fire_event(immer::box<events::PlugDeviceEvent>(plug_ev));
           // Unplug it from the current session
           app_state->event_bus->fire_event(immer::box<events::UnplugDeviceEvent>{

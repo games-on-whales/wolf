@@ -10,6 +10,8 @@ enum class ControllerType {
   XBOX,
   PS,
   NINTENDO,
+  JOYCON_LEFT,
+  JOYCON_RIGHT,
   AUTO
 };
 
@@ -124,6 +126,9 @@ struct BaseApp {
   std::optional<BaseAppAudioOverride> audio;
   std::optional<bool> start_virtual_compositor;
   std::optional<bool> start_audio_server;
+  /* Prefer the rich uhid joypad backend for this app's controllers (default true).
+   * Set false to force the universally-available uinput backend even on uhid hosts. */
+  std::optional<bool> use_uhid;
   rfl::TaggedUnion<"type", AppCMD, AppDocker> runner =
       AppCMD{}; // We have to provide a default or rfl::DefaultIfMissing will fail
 };
