@@ -20,6 +20,7 @@
 ** xref:dev:gstreamer.adoc[]
 ** xref:dev:wayland.adoc[]
 ** xref:dev:fake-udev.adoc[]
+** xref:dev:fake-uinput.adoc[]
 
 ** xref:protocols:index.adoc[]
 *** xref:protocols:http-pairing.adoc[]

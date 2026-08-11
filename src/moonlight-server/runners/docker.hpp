@@ -106,6 +106,15 @@ public:
         .base_create_json = base_create_json};
   }
 
+  bool needs_fake_uinput() const override {
+    // Opt-in marker in the runner env. env (not a new field) so it round-trips through every client,
+    // including wolf-ui, which rebuilds the runner from a typed model and would drop an unknown field.
+    for (const auto &e : container.env)
+      if (e == "WOLF_FAKE_UINPUT=1")
+        return true;
+    return false;
+  }
+
 protected:
   RunDocker(std::shared_ptr<events::EventBusType> ev_bus,
             std::string base_create_json,

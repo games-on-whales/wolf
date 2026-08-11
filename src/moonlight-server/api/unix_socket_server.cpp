@@ -16,9 +16,16 @@ std::string to_str(boost::asio::streambuf &streambuf, std::size_t end) {
 
 UnixSocketServer::UnixSocketServer(boost::asio::io_context &io_context,
                                    const std::string &socket_path,
-                                   immer::box<state::AppState> app_state) {
+                                   immer::box<state::AppState> app_state,
+                                   ApiSurface surface) {
 
   state_ = std::make_shared<UnixSocketState>(io_context, app_state, socket_path);
+
+  if (surface == ApiSurface::SessionRuntime) {
+    register_fake_uinput_endpoints();
+    start_accept();
+    return;
+  }
 
   state_->http.add(HTTPMethod::GET,
                    "/api/v1/events",
@@ -332,6 +339,32 @@ UnixSocketServer::UnixSocketServer(boost::asio::io_context &io_context,
 
   state_->sse_keepalive_timer.async_wait([this](auto e) { sse_keepalive(e); });
   start_accept();
+}
+
+void UnixSocketServer::register_fake_uinput_endpoints() {
+  state_->http.add(
+      HTTPMethod::POST,
+      "/api/v1/runtime/plug-udev-device",
+      {.summary = "Plug a uinput device created inside a session container",
+       .description = "Called by the in-container fake-uinput LD_PRELOAD shim when an app (e.g. Steam Input) "
+                      "creates a uinput device. Wolf reads the device from sysfs, then mknod's the node into the "
+                      "right session container and broadcasts the udev event using the same privileged host-side "
+                      "path as its own virtual pads. This lets the container stay fully unprivileged.",
+       .request_description = APIDescription{.json_schema = rfl::json::to_schema<UdevDeviceRequest>()},
+       .response_description = {{200, {.json_schema = rfl::json::to_schema<GenericSuccessResponse>()}},
+                                {500, {.json_schema = rfl::json::to_schema<GenericErrorResponse>()}}},
+       .handler = [this](auto req, auto socket) { endpoint_PlugUdevDevice(req, socket); }});
+
+  state_->http.add(
+      HTTPMethod::POST,
+      "/api/v1/runtime/unplug-udev-device",
+      {.summary = "Unplug a previously plugged uinput device",
+       .description = "Called by the fake-uinput shim on UI_DEV_DESTROY; replays the recorded udev nodes as a "
+                      "removal.",
+       .request_description = APIDescription{.json_schema = rfl::json::to_schema<UdevDeviceRequest>()},
+       .response_description = {{200, {.json_schema = rfl::json::to_schema<GenericSuccessResponse>()}},
+                                {500, {.json_schema = rfl::json::to_schema<GenericErrorResponse>()}}},
+       .handler = [this](auto req, auto socket) { endpoint_UnplugUdevDevice(req, socket); }});
 }
 
 void UnixSocketServer::sse_keepalive(const boost::system::error_code &e) {

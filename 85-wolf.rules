@@ -22,3 +22,13 @@ KERNEL=="uhid", MODE="0660", GROUP="input", TAG+="uaccess"
 SUBSYSTEM=="input",  ATTR{name}=="Wolf *virtual*",  MODE="0660", GROUP="input", ENV{ID_SEAT}="seat9", TAG-="uaccess"
 SUBSYSTEMS=="input", ATTRS{name}=="Wolf *virtual*", MODE="0660", GROUP="input", ENV{ID_SEAT}="seat9", TAG-="uaccess"
 KERNEL=="hidraw*",   ATTRS{name}=="Wolf *virtual*", MODE="0660", GROUP="input", ENV{ID_SEAT}="seat9", TAG-="uaccess"
+
+# Devices an app creates for itself inside a session container through the
+# fake-uinput shim (Steam Input makes its own pad that way). They reach the host
+# kernel and leak to the host seat like those above, but the name rules cannot
+# catch them: the app picks the name, and Steam's is "Microsoft X-Box 360 pad".
+# Renaming would break SDL's button mapping, which is looked up by name, so the
+# shim stamps phys instead and we match on that.
+# See https://games-on-whales.github.io/wolf/stable/dev/fake-uinput.html
+SUBSYSTEM=="input",  ATTR{phys}=="wolf-fake-uinput/*",  MODE="0660", GROUP="input", ENV{ID_SEAT}="seat9", TAG-="uaccess"
+SUBSYSTEMS=="input", ATTRS{phys}=="wolf-fake-uinput/*", MODE="0660", GROUP="input", ENV{ID_SEAT}="seat9", TAG-="uaccess"

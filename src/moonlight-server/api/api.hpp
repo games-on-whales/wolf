@@ -175,20 +175,44 @@ struct DockerPullImageResponse {
   bool success = true;
 };
 
+/**
+ * Request sent by the in-container fake-uinput shim when an app (e.g. Steam Input)
+ * creates or destroys a uinput device inside a session container.
+ */
+struct UdevDeviceRequest {
+  rfl::Description<"The Wolf session id this device belongs to (from $WOLF_SESSION_ID)", std::string> session_id;
+  rfl::Description<"The sysfs name of the created uinput device, e.g. 'input82'", std::string> sysfs_name;
+};
+
 struct UnixSocket {
   boost::asio::local::stream_protocol::socket socket;
   bool is_alive = true;
+};
+
+/**
+ * Which endpoints a server instance serves. Full is the control API on wolf.sock; SessionRuntime
+ * only serves what a session container needs, so an app that is given that socket can't reach the
+ * rest of the API.
+ */
+enum class ApiSurface {
+  Full,
+  SessionRuntime
 };
 
 class UnixSocketServer {
 public:
   UnixSocketServer(boost::asio::io_context &io_context,
                    const std::string &socket_path,
-                   immer::box<state::AppState> app_state);
+                   immer::box<state::AppState> app_state,
+                   ApiSurface surface = ApiSurface::Full);
 
   UnixSocketServer(const UnixSocketServer &) = default;
 
   void broadcast_event(const std::string &event_type, const std::string &event_json);
+
+  /// Drop any fake-uinput devices still recorded for a session/lobby that has torn down, so the
+  /// plugged_devices map can't grow unbounded when an unplug is never received (e.g. app killed).
+  void purge_fake_uinput_devices(const std::string &session_id);
 
 private:
   void endpoint_Events(const HTTPRequest &req, std::shared_ptr<UnixSocket> socket);
@@ -226,6 +250,10 @@ private:
   void endpoint_DockerInspectImage(const HTTPRequest &req, std::shared_ptr<UnixSocket> socket);
   void endpoint_DockerPullImage(const HTTPRequest &req, std::shared_ptr<UnixSocket> socket);
 
+  void endpoint_PlugUdevDevice(const HTTPRequest &req, std::shared_ptr<UnixSocket> socket);
+  void endpoint_UnplugUdevDevice(const HTTPRequest &req, std::shared_ptr<UnixSocket> socket);
+  void register_fake_uinput_endpoints();
+
   void sse_broadcast(const std::string &payload);
   void sse_keepalive(const boost::system::error_code &e);
 
@@ -255,6 +283,11 @@ private:
     std::vector<std::shared_ptr<UnixSocket>> sockets;
     HTTPServer<std::shared_ptr<UnixSocket>> http;
     boost::asio::steady_timer sse_keepalive_timer;
+
+    // Remembers uinput devices plugged on behalf of the in-container fake-uinput shim, so an
+    // unplug (when the device is already gone from sysfs) can replay the exact same udev nodes.
+    // Keyed by session id, then by sysfs name.
+    immer::atom<immer::map<std::string, immer::map<std::string, events::PlugDeviceEvent>>> plugged_devices;
   };
 
   std::shared_ptr<UnixSocketState> state_;

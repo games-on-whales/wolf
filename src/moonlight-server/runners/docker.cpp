@@ -43,6 +43,17 @@ void RunDocker::run(std::string_view session_id,
   std::vector<std::string> full_env;
   full_env.insert(full_env.end(), this->container.env.begin(), this->container.env.end());
   for (const auto &env_var : env_variables) {
+    // LD_PRELOAD is additive: if the app image/config already sets one, append ours (colon
+    // separated) instead of clobbering it (Wolf auto-injects the fake-uinput shim via LD_PRELOAD).
+    if (env_var.first == "LD_PRELOAD") {
+      auto existing = std::find_if(full_env.begin(), full_env.end(), [](const std::string &e) {
+        return e.rfind("LD_PRELOAD=", 0) == 0;
+      });
+      if (existing != full_env.end()) {
+        *existing += ":" + env_var.second;
+        continue;
+      }
+    }
     full_env.push_back(fmt::format("{}={}", env_var.first, env_var.second));
   }
 
@@ -192,6 +203,15 @@ void RunDocker::run(std::string_view session_id,
   if (auto docker_container = docker_api.create(new_container, final_json_opts)) {
     auto container_id = docker_container->id;
     docker_api.start_by_id(container_id);
+
+    // Let the unprivileged run user open an injected /dev/uinput: chown it to PUID:PGID, mode 0660
+    // (not world-writable). No-op when uinput wasn't injected.
+    docker_api.exec(
+        container_id,
+        {"/bin/sh",
+         "-c",
+         "[ -e /dev/uinput ] && chown \"${PUID:-0}:${PGID:-0}\" /dev/uinput && chmod 0660 /dev/uinput || true"},
+        "root");
 
     logs::log(logs::info, "[DOCKER] Starting container: {}", docker_container->name);
     logs::log(logs::debug, "[DOCKER] Starting container: {}", *docker_container);

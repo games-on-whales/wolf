@@ -1,12 +1,92 @@
 #include <api/api.hpp>
+#include <api/fake_uinput.hpp>
 #include <control/input_handler.hpp>
 #include <core/docker.hpp>
+#include <optional>
 #include <rtp/udp-ping.hpp>
 #include <state/config.hpp>
 #include <state/sessions.hpp>
 #include <state/utils.hpp>
 
 namespace wolf::api {
+
+// The pure sysfs-parsing / device-classification / PlugDeviceEvent-building helpers live in
+// api/fake_uinput.hpp so they can be unit-tested (tests/testFakeUinput.cpp).
+
+void UnixSocketServer::endpoint_PlugUdevDevice(const HTTPRequest &req, std::shared_ptr<UnixSocket> socket) {
+  auto parsed = rfl::json::read<UdevDeviceRequest>(req.body);
+  if (!parsed) {
+    send_http(socket, 400, rfl::json::write(GenericErrorResponse{.error = parsed.error().what()}));
+    return;
+  }
+  const auto &r = parsed.value();
+  auto ev = fake_uinput::build_plug_event(r.session_id.value(), r.sysfs_name.value());
+  if (!ev) {
+    logs::log(logs::warning, "[API] plug-udev-device: no input nodes under sysfs {}", r.sysfs_name.value());
+    send_http(socket, 500, rfl::json::write(GenericErrorResponse{.error = "device not found in sysfs"}));
+    return;
+  }
+  state_->plugged_devices.update([&](const auto &devices) {
+    const auto *session = devices.find(r.session_id.value());
+    auto updated = (session ? *session : immer::map<std::string, events::PlugDeviceEvent>{});
+    return devices.set(r.session_id.value(), updated.set(r.sysfs_name.value(), *ev));
+  });
+  logs::log(logs::info,
+            "[API] fake-uinput: plugging {} node(s) from {} into session {}",
+            ev->udev_events.size(),
+            r.sysfs_name.value(),
+            r.session_id.value());
+  // Route to the correct runner. wolf-ui launches apps as lobbies, whose runner reads
+  // lobby->plugged_devices_queue directly (keyed by lobby id == WOLF_SESSION_ID) -- the event-bus
+  // PlugDeviceEvent handlers only route by *connected Moonlight session*, not lobby id, so we push
+  // straight to the queue. A direct (non-lobby) Moonlight session instead routes through the bus,
+  // keyed by its numeric session id (which is also its WOLF_SESSION_ID).
+  if (auto lobby = state::get_lobby_by_id(state_->app_state->lobbies->load(), r.session_id.value())) {
+    lobby->plugged_devices_queue->push(immer::box<events::PlugDeviceEvent>(*ev));
+  } else {
+    state_->app_state->event_bus->fire_event(immer::box<events::PlugDeviceEvent>(*ev));
+  }
+  send_http(socket, 200, rfl::json::write(GenericSuccessResponse{.success = true}));
+}
+
+void UnixSocketServer::endpoint_UnplugUdevDevice(const HTTPRequest &req, std::shared_ptr<UnixSocket> socket) {
+  auto parsed = rfl::json::read<UdevDeviceRequest>(req.body);
+  if (!parsed) {
+    send_http(socket, 400, rfl::json::write(GenericErrorResponse{.error = parsed.error().what()}));
+    return;
+  }
+  const auto &r = parsed.value();
+  const auto devices = state_->plugged_devices.load();
+  const auto *session = devices->find(r.session_id.value());
+  const auto *stored = session ? session->find(r.sysfs_name.value()) : nullptr;
+  if (!stored) { // nothing recorded (already gone / never plugged) -> idempotent success
+    send_http(socket, 200, rfl::json::write(GenericSuccessResponse{.success = true}));
+    return;
+  }
+  state_->plugged_devices.update([&](const auto &all) {
+    const auto *current = all.find(r.session_id.value());
+    if (!current) {
+      return all;
+    }
+    auto remaining = current->erase(r.sysfs_name.value());
+    return remaining.empty() ? all.erase(r.session_id.value()) : all.set(r.session_id.value(), remaining);
+  });
+  // docker.cpp's UnplugDeviceEvent handler flips ACTION to "remove" itself, so replay verbatim.
+  events::UnplugDeviceEvent un{.session_id = stored->session_id,
+                               .udev_events = stored->udev_events,
+                               .udev_hw_db_entries = stored->udev_hw_db_entries};
+  logs::log(logs::info,
+            "[API] fake-uinput: unplugging {} node(s) ({}) from session {}",
+            un.udev_events.size(),
+            r.sysfs_name.value(),
+            r.session_id.value());
+  state_->app_state->event_bus->fire_event(immer::box<events::UnplugDeviceEvent>(un));
+  send_http(socket, 200, rfl::json::write(GenericSuccessResponse{.success = true}));
+}
+
+void UnixSocketServer::purge_fake_uinput_devices(const std::string &session_id) {
+  state_->plugged_devices.update([&](const auto &all) { return all.erase(session_id); });
+}
 
 void UnixSocketServer::endpoint_Events(const HTTPRequest &req, std::shared_ptr<UnixSocket> socket) {
   // curl -N --unix-socket /tmp/wolf.sock http://localhost/api/v1/events

@@ -72,6 +72,7 @@ add_subdirectory(src/gst-video-context)
 
 if (UNIX AND NOT APPLE)
     add_subdirectory(src/fake-udev)
+    add_subdirectory(src/fake-uinput)
 endif ()
 
 option(BUILD_MOONLIGHT "Build Moonlight server" ON)

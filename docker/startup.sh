@@ -21,6 +21,12 @@ export GST_GL_DRM_DEVICE=${GST_GL_DRM_DEVICE:-$WOLF_ENCODER_NODE}
 export WOLF_DOCKER_FAKE_UDEV_PATH=${WOLF_DOCKER_FAKE_UDEV_PATH:-$HOST_APPS_STATE_FOLDER/fake-udev}
 cp /wolf/fake-udev $WOLF_DOCKER_FAKE_UDEV_PATH
 
+# Publish the fake-uinput shim libs (64- and 32-bit) to the state folder so Wolf can auto-mount
+# them into session containers (see sessions/common.cpp). Mirrors the fake-udev copy above.
+mkdir -p "$HOST_APPS_STATE_FOLDER/fake-uinput/lib64" "$HOST_APPS_STATE_FOLDER/fake-uinput/lib32"
+cp /wolf/libfake-uinput.so    "$HOST_APPS_STATE_FOLDER/fake-uinput/lib64/libfake-uinput.so"
+cp /wolf/libfake-uinput-32.so "$HOST_APPS_STATE_FOLDER/fake-uinput/lib32/libfake-uinput.so"
+
 # Run PulseAudio and Wolf side by side under supervisord. PulseAudio lives
 # inside the Wolf container instead of the legacy "WolfPulseAudio" sidecar:
 # supervisord starts PA first, restarts it if it dies, and stops both cleanly

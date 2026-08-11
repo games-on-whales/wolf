@@ -67,9 +67,16 @@ RUN --mount=type=cache,target=/cache/ccache \
     -G Ninja && \
     ninja -C $CMAKE_BUILD_DIR wolf && \
     ninja -C $CMAKE_BUILD_DIR fake-udev && \
+    ninja -C $CMAKE_BUILD_DIR fake_uinput && \
     # We have to copy out the built executables because this will only be available inside the buildkit cache
     cp $CMAKE_BUILD_DIR/src/moonlight-server/wolf /wolf/wolf && \
-    cp $CMAKE_BUILD_DIR/src/fake-udev/fake-udev /wolf/fake-udev
+    cp $CMAKE_BUILD_DIR/src/fake-udev/fake-udev /wolf/fake-udev && \
+    cp $CMAKE_BUILD_DIR/src/fake-uinput/libfake-uinput.so /wolf/libfake-uinput.so
+
+# Build the 32-bit fake-uinput shim too: Steam's client is 32-bit and LD_PRELOADs into that process.
+# The shim has no dependencies beyond libc/libdl/libstdc++, so a direct multilib compile is enough.
+RUN apt-get update && apt-get install -y --no-install-recommends g++-multilib && \
+    g++ -m32 -shared -fPIC -O2 -std=c++17 -o /wolf/libfake-uinput-32.so /wolf/src/fake-uinput/fake-uinput.cpp
 
 ########################################################
 FROM $BASE_IMAGE AS runner
@@ -120,6 +127,8 @@ ENV WOLF_CFG_FOLDER=/etc/wolf/cfg
 
 COPY --from=wolf-builder /wolf/wolf /wolf/wolf
 COPY --from=wolf-builder /wolf/fake-udev /wolf/fake-udev
+COPY --from=wolf-builder /wolf/libfake-uinput.so /wolf/libfake-uinput.so
+COPY --from=wolf-builder /wolf/libfake-uinput-32.so /wolf/libfake-uinput-32.so
 
 ENV GST_GL_API=gles2 \
     GST_GL_PLATFORM=egl \

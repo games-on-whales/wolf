@@ -22,6 +22,7 @@ set(SRC_LIST
         testMoonlight.cpp
         testRTSP.cpp
         testWolfAPI.cpp
+        testFakeUinput.cpp
         testBatchedSend.cpp)
 
 option(TEST_RUST_WAYLAND "Test our custom Rust wayland compositor" ON)
