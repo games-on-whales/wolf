@@ -730,22 +730,21 @@ ls -la /dev/uinput
 crw------- 1 root root 10, 223 Jan 17 09:08 /dev/uinput
 ....
 
-.Create `udev` rules under `/etc/udev/rules.d/85-wolf-virtual-inputs.rules`
+The `udev` rules live in
+https://github.com/games-on-whales/wolf/blob/stable/85-wolf.rules[`85-wolf.rules`]
+in the Wolf repository; that file is the single source of truth, so install it
+directly rather than copying the rules by hand:
+
 [source,bash]
 ....
-# Allows Wolf to acces /dev/uinput (only needed for joypad support)
-KERNEL=="uinput", SUBSYSTEM=="misc", MODE="0660", GROUP="input", OPTIONS+="static_node=uinput", TAG+="uaccess"
-
-# Allows Wolf to access /dev/uhid (only needed for DualSense emulation)
-KERNEL=="uhid", GROUP="input", MODE="0660", TAG+="uaccess"
-
-# Joypads
-KERNEL=="hidraw*",   ATTRS{name}=="Wolf PS5 (virtual) pad", GROUP="root", MODE="0660", ENV{ID_SEAT}="seat9"
-SUBSYSTEMS=="input", ATTRS{name}=="Wolf X-Box One (virtual) pad", GROUP="root", MODE="0660", ENV{ID_SEAT}="seat9"
-SUBSYSTEMS=="input", ATTRS{name}=="Wolf PS5 (virtual) pad", GROUP="root", MODE="0660", ENV{ID_SEAT}="seat9"
-SUBSYSTEMS=="input", ATTRS{name}=="Wolf gamepad (virtual) motion sensors", GROUP="root", MODE="0660", ENV{ID_SEAT}="seat9"
-SUBSYSTEMS=="input", ATTRS{name}=="Wolf Nintendo (virtual) pad", GROUP="root", MODE="0660", ENV{ID_SEAT}="seat9"
+curl -fsSL https://raw.githubusercontent.com/games-on-whales/wolf/stable/85-wolf.rules \
+  -o /etc/udev/rules.d/85-wolf.rules
 ....
+
+They grant Wolf access to `/dev/uinput` and `/dev/uhid` (needed to create the
+virtual gamepads and to emulate the DualSense), and they keep the virtual
+controllers off the host's active seat so a streamed controller can't also drive
+the host desktop -- see https://github.com/games-on-whales/wolf/issues/451.
 
 Reload the udev rules either by rebooting or run:
 

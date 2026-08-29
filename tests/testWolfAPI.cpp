@@ -495,6 +495,48 @@ TEST_CASE("Session APIs without app_id or client_id", "[API]") {
   REQUIRE(sessions2.sessions.size() == 1);
 }
 
+// A device unplugged while its session is inside a lobby must be relayed to the lobby's runner.
+TEST_CASE("Lobby relays a device unplug to its runner", "[API]") {
+  auto event_bus = std::make_shared<events::EventBusType>();
+  auto running_sessions = std::make_shared<immer::atom<immer::vector<events::StreamSession>>>();
+  auto config = immer::box<state::Config>(state::load_or_default("config.test.toml", event_bus, running_sessions));
+  auto app_state = immer::box<state::AppState>(state::AppState{
+      .config = config,
+      .pairing_cache = std::make_shared<immer::atom<immer::map<std::string, state::PairCache>>>(),
+      .pairing_atom = std::make_shared<immer::atom<immer::map<std::string, immer::box<events::PairSignal>>>>(),
+      .event_bus = event_bus,
+      .lobbies = std::make_shared<immer::atom<immer::vector<events::Lobby>>>(),
+      .running_sessions = running_sessions});
+
+  // A lobby with one connected Moonlight session, added straight to state (no compositor).
+  const std::string lobby_id = "lobby-under-test";
+  const std::string moonlight_session_id = "1234";
+  events::Lobby lobby{.id = lobby_id,
+                      .name = "test_lobby",
+                      .started_by_profile_id = "test_profile",
+                      .multi_user = false,
+                      .stop_when_everyone_leaves = false};
+  lobby.connected_sessions->update([&](const immer::vector<immer::box<std::string>> &connected) {
+    return connected.push_back(immer::box<std::string>{moonlight_session_id});
+  });
+  app_state->lobbies->update([&](const immer::vector<events::Lobby> &lobbies) { return lobbies.push_back(lobby); });
+
+  auto lobbies_handlers = sessions::setup_lobbies_handlers(app_state, api_runtime_dir(), {});
+
+  int relayed_to_lobby = 0;
+  auto observer = event_bus->register_handler<immer::box<events::UnplugDeviceEvent>>(
+      [&](const immer::box<events::UnplugDeviceEvent> &ev) {
+        if (ev->session_id == lobby_id) {
+          relayed_to_lobby++;
+        }
+      });
+
+  event_bus->fire_event(
+      immer::box<events::UnplugDeviceEvent>{events::UnplugDeviceEvent{.session_id = moonlight_session_id}});
+
+  REQUIRE(relayed_to_lobby == 1);
+}
+
 TEST_CASE("Lobbies APIs", "[API]") {
   auto event_bus = std::make_shared<events::EventBusType>();
   auto running_sessions = std::make_shared<immer::atom<immer::vector<events::StreamSession>>>();
