@@ -1,6 +1,8 @@
 #include <events/events.hpp>
 #include <events/reflectors.hpp>
+#include <filesystem>
 #include <fstream>
+#include <mutex>
 #include <gst/gstelementfactory.h>
 #include <gst/gstregistry.h>
 #include <platforms/hw.hpp>
@@ -20,6 +22,131 @@ constexpr char const *default_toml =
 
 using namespace std::literals;
 using namespace wolf::config;
+
+void create_default(const std::string &source);
+
+namespace {
+
+std::mutex config_file_mutex;
+
+std::filesystem::path unique_sibling(const std::string &source, std::string_view suffix) {
+  return std::filesystem::path(source + "." + std::string(suffix) + "-" + gen_uuid());
+}
+
+bool is_valid_config(const std::filesystem::path &source) {
+  try {
+    rfl::toml::load<WolfConfig, rfl::DefaultIfMissing>(source.string()).value();
+    return true;
+  } catch (const std::exception &) {
+    return false;
+  }
+}
+
+bool looks_like_stale_tail_corruption(const std::string &source) {
+  std::ifstream input(source);
+  if (!input.is_open()) {
+    return false;
+  }
+
+  const std::string contents{std::istreambuf_iterator<char>(input), std::istreambuf_iterator<char>()};
+  for (const auto codec : {"av1", "hevc", "h264"}) {
+    const auto empty_array = std::string(codec) + "_encoders = []";
+    const auto array_table = "[[gstreamer.video." + std::string(codec) + "_encoders]]";
+    if (contents.find(empty_array) != std::string::npos && contents.find(array_table) != std::string::npos) {
+      return true;
+    }
+  }
+  return false;
+}
+
+void atomic_copy(const std::filesystem::path &source, const std::filesystem::path &destination) {
+  const auto temporary = unique_sibling(destination.string(), "tmp");
+  try {
+    std::filesystem::copy_file(source, temporary, std::filesystem::copy_options::overwrite_existing);
+    std::filesystem::rename(temporary, destination);
+  } catch (...) {
+    std::error_code ignored;
+    std::filesystem::remove(temporary, ignored);
+    throw;
+  }
+}
+
+void save_config_locked(const std::string &source, const WolfConfig &config) {
+  const auto temporary = unique_sibling(source, "tmp");
+  const auto backup = std::filesystem::path(source + ".last-good");
+
+  try {
+    // reflection-cpp opens an existing destination without truncating it. Always
+    // serialise to a new inode, validate it, and publish it with one rename.
+    rfl::toml::save(temporary.string(), config);
+    rfl::toml::load<WolfConfig, rfl::DefaultIfMissing>(temporary.string()).value();
+
+    if (std::filesystem::exists(source)) {
+      std::error_code ignored;
+      const auto permissions = std::filesystem::status(source, ignored).permissions();
+      if (!ignored) {
+        std::filesystem::permissions(temporary, permissions, ignored);
+      }
+
+      // Never replace a usable backup with a corrupt current file.
+      if (is_valid_config(source)) {
+        atomic_copy(source, backup);
+      }
+    }
+
+    std::filesystem::rename(temporary, source);
+  } catch (...) {
+    std::error_code ignored;
+    std::filesystem::remove(temporary, ignored);
+    throw;
+  }
+}
+
+template <typename Mutation>
+void update_config_file(const std::string &source, Mutation mutation) {
+  std::scoped_lock lock(config_file_mutex);
+  auto config = rfl::toml::load<WolfConfig, rfl::DefaultIfMissing>(source).value();
+  mutation(config);
+  save_config_locked(source, config);
+}
+
+void recover_stale_tail_if_needed(const std::string &source) {
+  try {
+    rfl::toml::load<BaseConfig, rfl::DefaultIfMissing>(source).value();
+    return;
+  } catch (const std::exception &) {
+    if (!looks_like_stale_tail_corruption(source)) {
+      throw;
+    }
+  }
+
+  const auto corrupt = unique_sibling(source, "corrupt");
+  const auto backup = std::filesystem::path(source + ".last-good");
+  std::filesystem::rename(source, corrupt);
+
+  try {
+    if (std::filesystem::exists(backup) && is_valid_config(backup)) {
+      atomic_copy(backup, source);
+      logs::log(logs::warning,
+                "Recovered config file {} from last-known-good backup; preserved damaged file at {}",
+                source,
+                corrupt.string());
+    } else {
+      create_default(source);
+      logs::log(logs::warning,
+                "Recovered stale-tail corruption in {} with defaults; preserved damaged file at {}",
+                source,
+                corrupt.string());
+    }
+  } catch (...) {
+    std::error_code ignored;
+    std::filesystem::remove(source, ignored);
+    std::filesystem::rename(corrupt, source, ignored);
+    throw;
+  }
+}
+
+} // namespace
 
 void create_default(const std::string &source) {
   std::ofstream out_file;
@@ -212,6 +339,11 @@ Config load_or_default(const std::string &source,
   if (!file_exist(source)) {
     logs::log(logs::warning, "Unable to open config file: {}, creating one using defaults", source);
     create_default(source);
+  }
+
+  {
+    std::scoped_lock lock(config_file_mutex);
+    recover_stale_tail_if_needed(source);
   }
 
   // First check the version of the config file
@@ -420,9 +552,7 @@ void pair(const Config &cfg, const PairedClient &client) {
   });
 
   // Update TOML
-  auto tml = rfl::toml::load<WolfConfig, rfl::DefaultIfMissing>(cfg.config_source).value();
-  tml.paired_clients.push_back(client);
-  rfl::toml::save(cfg.config_source, tml);
+  update_config_file(cfg.config_source, [&client](WolfConfig &tml) { tml.paired_clients.push_back(client); });
 }
 
 void unpair(const Config &cfg, const PairedClient &client) {
@@ -436,12 +566,12 @@ void unpair(const Config &cfg, const PairedClient &client) {
   });
 
   // Update TOML
-  auto tml = rfl::toml::load<WolfConfig, rfl::DefaultIfMissing>(cfg.config_source).value();
-  tml.paired_clients.erase(std::remove_if(tml.paired_clients.begin(),
-                                          tml.paired_clients.end(),
-                                          [&client](const auto &v) { return v.client_cert == client.client_cert; }),
-                           tml.paired_clients.end());
-  rfl::toml::save(cfg.config_source, tml);
+  update_config_file(cfg.config_source, [&client](WolfConfig &tml) {
+    tml.paired_clients.erase(std::remove_if(tml.paired_clients.begin(),
+                                            tml.paired_clients.end(),
+                                            [&client](const auto &v) { return v.client_cert == client.client_cert; }),
+                             tml.paired_clients.end());
+  });
 }
 
 void update_client_settings(const Config &cfg, std::size_t client_id, const PairedClient &updated_client) {
@@ -460,41 +590,38 @@ void update_client_settings(const Config &cfg, std::size_t client_id, const Pair
   });
 
   // Update the TOML file
-  auto tml = rfl::toml::load<WolfConfig, rfl::DefaultIfMissing>(cfg.config_source).value();
-
-  tml.paired_clients = tml.paired_clients |                         //
-                       ranges::views::transform(update_client_fn) | //
-                       ranges::to<std::vector<PairedClient>>();
-
-  // Save back to file
-  rfl::toml::save(cfg.config_source, tml);
+  update_config_file(cfg.config_source, [&](WolfConfig &tml) {
+    tml.paired_clients = tml.paired_clients |                         //
+                         ranges::views::transform(update_client_fn) | //
+                         ranges::to<std::vector<PairedClient>>();
+  });
 }
 
 void update_profiles(const Config &cfg, const ProfilesList &profiles) {
   cfg.profiles->store(profiles);
 
-  auto tml = rfl::toml::load<WolfConfig, rfl::DefaultIfMissing>(cfg.config_source).value();
-  tml.profiles = profiles | //
-                 ranges::views::transform([](const immer::box<events::Profile> &p) {
-                   return Profile{
-                       .id = p->id,
-                       .name = p->name,
-                       .icon_png_path = p->icon_png_path,
-                       .pin = p->pin,
-                       .apps = p->apps->load().get() | //
-                               ranges::views::transform([](const immer::box<events::App> &app) {
-                                 return BaseApp{.title = app->base.title,
-                                                .icon_png_path = app->base.icon_png_path,
-                                                .render_node = app->render_node,
-                                                .start_virtual_compositor = app->start_virtual_compositor,
-                                                .start_audio_server = app->start_audio_server,
-                                                .runner = app->runner->serialize()};
-                               }) | //
-                               ranges::to_vector,
-                   };
-                 }) | //
-                 ranges::to_vector;
-  rfl::toml::save(cfg.config_source, tml);
+  update_config_file(cfg.config_source, [&profiles](WolfConfig &tml) {
+    tml.profiles = profiles | //
+                   ranges::views::transform([](const immer::box<events::Profile> &p) {
+                     return Profile{
+                         .id = p->id,
+                         .name = p->name,
+                         .icon_png_path = p->icon_png_path,
+                         .pin = p->pin,
+                         .apps = p->apps->load().get() | //
+                                 ranges::views::transform([](const immer::box<events::App> &app) {
+                                   return BaseApp{.title = app->base.title,
+                                                  .icon_png_path = app->base.icon_png_path,
+                                                  .render_node = app->render_node,
+                                                  .start_virtual_compositor = app->start_virtual_compositor,
+                                                  .start_audio_server = app->start_audio_server,
+                                                  .runner = app->runner->serialize()};
+                                 }) | //
+                                 ranges::to_vector,
+                     };
+                   }) | //
+                   ranges::to_vector;
+  });
 }
 
 } // namespace state
