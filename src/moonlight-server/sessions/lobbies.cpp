@@ -313,10 +313,10 @@ setup_lobbies_handlers(const immer::box<state::AppState> &app_state,
         immer::vector<events::Lobby> lobbies = app_state->lobbies->load();
         if (auto lobby = state::get_lobby_by_connected_session(lobbies, unplug_device_event->session_id)) {
           logs::log(logs::debug, "[LOBBY] Unplug device for session {}", unplug_device_event->session_id);
-          app_state->event_bus->fire_event(
+          app_state->event_bus->fire_event(immer::box<events::UnplugDeviceEvent>{
               events::UnplugDeviceEvent{.session_id = lobby->id,
                                         .udev_events = unplug_device_event->udev_events,
-                                        .udev_hw_db_entries = unplug_device_event->udev_hw_db_entries});
+                                        .udev_hw_db_entries = unplug_device_event->udev_hw_db_entries}});
         }
       }));
 

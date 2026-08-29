@@ -85,6 +85,7 @@ template <> struct Reflector<events::App> {
         .render_node = app.render_node,
         .opus_gst_pipeline = app.opus_gst_pipeline,
         .start_virtual_compositor = app.start_virtual_compositor,
+        .start_audio_server = app.start_audio_server,
         .runner = runner,
     };
   }

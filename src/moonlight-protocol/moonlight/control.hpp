@@ -266,7 +266,9 @@ enum MOTION_TYPE : uint8_t {
 
 constexpr uint8_t BATTERY_PERCENTAGE_UNKNOWN = 0xFF;
 
-enum BATTERY_STATE : unsigned short {
+// One byte on the wire -- must stay uint8_t, otherwise it eats the following battery_percentage
+// byte in CONTROLLER_BATTERY_PACKET and the percentage is always read as the trailing zero (0%).
+enum BATTERY_STATE : uint8_t {
   BATTERY_STATE_UNKNOWN = 0x0,
   BATTERY_NOT_PRESENT = 0x1,
   BATTERY_DISCHARGHING = 0x2,

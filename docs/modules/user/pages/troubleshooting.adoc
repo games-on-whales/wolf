@@ -128,6 +128,49 @@ This can be easily fixed by adding `uhid` to `/etc/module` to load the module du
 echo 'uhid' | sudo tee /etc/modules-load.d/uhid.conf
 ....
 
+== Controller input also controls the host desktop
+
+If your controller works inside the streamed game *but also* moves the host's
+mouse pointer / presses buttons on the host desktop (for example a DualSense
+touchpad moving the host cursor), the virtual devices Wolf created are not
+isolated from your logged-in host session.
+
+This is almost always because the udev rules from the
+xref:user:quickstart.adoc#_virtual_devices_support[Virtual devices support]
+section are missing, out of date, or don't match your controller. Wolf's
+virtual pads appear as real devices in the *host* kernel, and without the rules
+`systemd-logind` grants your desktop user access to them (`uaccess`).
+
+To confirm which devices are leaking, run the input diagnostic on the host while
+a client + controller are connected:
+
+[source,bash]
+....
+sudo ./scripts/wolf-input-diag.sh host
+....
+
+It lists every `Wolf …` virtual device on the host and flags any that a non-root
+user can read, plus any device name not covered by your rules file. Any line
+marked `LEAK` is reachable by the host desktop.
+
+To fix it, (re)install the rules from the
+xref:user:quickstart.adoc#_virtual_devices_support[Virtual devices support]
+section, then reload them and re-plug the controller:
+
+[source,bash]
+....
+sudo udevadm control --reload-rules && sudo udevadm trigger
+....
+
+[TIP]
+====
+The bundled rules match every Wolf device by the `Wolf *virtual*` name glob, so
+they keep working even if a controller's exact product name changes. If you
+maintain your own rules, prefer the glob over hard-coded names — an out-of-date
+name (e.g. `Wolf PS5 (virtual) pad` after it was renamed to
+`Wolf DualSense (virtual) pad`) silently stops isolating that device.
+====
+
 == Recreating the Nvidia Driver Volume
 
 Anytime you update the Nvidia drivers on your host you'll have to re-created the driver volume as described in xref:user:quickstart.adoc[the quickstart guide]. +
