@@ -22,8 +22,12 @@ public:
     std::filesystem::remove_all(directory_, ignored);
   }
 
-  const std::filesystem::path &path() const { return path_; }
-  const std::filesystem::path &directory() const { return directory_; }
+  const std::filesystem::path &path() const {
+    return path_;
+  }
+  const std::filesystem::path &directory() const {
+    return directory_;
+  }
 
 private:
   std::filesystem::path directory_;
@@ -46,8 +50,7 @@ state::Config load_config(const std::filesystem::path &path) {
   return state::load_or_default(path.string(), event_bus, running_sessions);
 }
 
-std::vector<std::filesystem::path> matching_files(const std::filesystem::path &directory,
-                                                  const std::string &needle) {
+std::vector<std::filesystem::path> matching_files(const std::filesystem::path &directory, const std::string &needle) {
   std::vector<std::filesystem::path> matches;
   for (const auto &entry : std::filesystem::directory_iterator(directory)) {
     if (entry.path().filename().string().find(needle) != std::string::npos) {
@@ -79,17 +82,16 @@ TEST_CASE("shorter config updates truncate the previous document", "[CONFIG][PER
   state::update_profiles(config, {});
 
   REQUIRE(std::filesystem::file_size(temporary.path()) < original_size);
-  REQUIRE_NOTHROW(
-      rfl::toml::load<wolf::config::WolfConfig, rfl::DefaultIfMissing>(temporary.path().string()).value());
+  REQUIRE_NOTHROW(rfl::toml::load<wolf::config::WolfConfig, rfl::DefaultIfMissing>(temporary.path().string()).value());
   REQUIRE(read_file(temporary.path().string() + ".last-good") == original);
   REQUIRE(matching_files(temporary.directory(), ".tmp-").empty());
 }
 
 TEST_CASE("config updates preserve source permissions", "[CONFIG][PERSISTENCE]") {
   TemporaryConfig temporary;
-  std::filesystem::permissions(temporary.path(),
-                               std::filesystem::perms::owner_read | std::filesystem::perms::owner_write |
-                                   std::filesystem::perms::group_read);
+  std::filesystem::permissions(
+      temporary.path(),
+      std::filesystem::perms::owner_read | std::filesystem::perms::owner_write | std::filesystem::perms::group_read);
   const auto expected = std::filesystem::status(temporary.path()).permissions();
   auto config = load_config(temporary.path());
 
@@ -101,14 +103,14 @@ TEST_CASE("config updates preserve source permissions", "[CONFIG][PERSISTENCE]")
 TEST_CASE("pairing mutations remain valid when the serialized document shrinks", "[CONFIG][PERSISTENCE]") {
   TemporaryConfig temporary;
   auto config = load_config(temporary.path());
-  const state::PairedClient client{
-      .client_cert = "persistence-test-client", .app_state_folder = "a-long-folder-name", .settings = {}};
+  const state::PairedClient client{.client_cert = "persistence-test-client",
+                                   .app_state_folder = "a-long-folder-name",
+                                   .settings = {}};
 
   state::pair(config, client);
   state::unpair(config, client);
 
-  auto persisted =
-      rfl::toml::load<wolf::config::WolfConfig, rfl::DefaultIfMissing>(temporary.path().string()).value();
+  auto persisted = rfl::toml::load<wolf::config::WolfConfig, rfl::DefaultIfMissing>(temporary.path().string()).value();
   REQUIRE(std::none_of(persisted.paired_clients.begin(), persisted.paired_clients.end(), [](const auto &candidate) {
     return candidate.client_cert == "persistence-test-client";
   }));
@@ -136,8 +138,7 @@ TEST_CASE("concurrent config mutations do not lose persisted clients", "[CONFIG]
     mutation.get();
   }
 
-  auto persisted =
-      rfl::toml::load<wolf::config::WolfConfig, rfl::DefaultIfMissing>(temporary.path().string()).value();
+  auto persisted = rfl::toml::load<wolf::config::WolfConfig, rfl::DefaultIfMissing>(temporary.path().string()).value();
   REQUIRE(persisted.paired_clients.size() == original_count + mutations.size());
   REQUIRE(matching_files(temporary.directory(), ".tmp-").empty());
 }
@@ -164,8 +165,7 @@ TEST_CASE("known stale-tail corruption self-heals without a backup", "[CONFIG][R
     load_config(temporary.path());
   } catch (const std::runtime_error &) {
   }
-  REQUIRE_NOTHROW(
-      rfl::toml::load<wolf::config::WolfConfig, rfl::DefaultIfMissing>(temporary.path().string()).value());
+  REQUIRE_NOTHROW(rfl::toml::load<wolf::config::WolfConfig, rfl::DefaultIfMissing>(temporary.path().string()).value());
   REQUIRE(matching_files(temporary.directory(), ".corrupt-").size() == 1);
 }
 

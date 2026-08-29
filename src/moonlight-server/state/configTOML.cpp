@@ -2,9 +2,9 @@
 #include <events/reflectors.hpp>
 #include <filesystem>
 #include <fstream>
-#include <mutex>
 #include <gst/gstelementfactory.h>
 #include <gst/gstregistry.h>
+#include <mutex>
 #include <platforms/hw.hpp>
 #include <range/v3/view.hpp>
 #include <rfl/toml.hpp>
@@ -102,8 +102,7 @@ void save_config_locked(const std::string &source, const WolfConfig &config) {
   }
 }
 
-template <typename Mutation>
-void update_config_file(const std::string &source, Mutation mutation) {
+template <typename Mutation> void update_config_file(const std::string &source, Mutation mutation) {
   std::scoped_lock lock(config_file_mutex);
   auto config = rfl::toml::load<WolfConfig, rfl::DefaultIfMissing>(source).value();
   mutation(config);
