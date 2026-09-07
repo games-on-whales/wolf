@@ -104,6 +104,12 @@ struct StreamSessionStartRequest {
   events::AudioSession audio_session;
 };
 
+struct StreamSessionResumeRequest {
+  std::string session_id;
+  rfl::Description<"The AES key (Moonlight's rikey) that the client will use for THIS stream", std::string> aes_key;
+  rfl::Description<"The AES IV (Moonlight's rikeyid) that the client will use for THIS stream", std::string> aes_iv;
+};
+
 struct StreamSessionPauseRequest {
   std::string session_id;
 };
@@ -209,6 +215,8 @@ private:
   void endpoint_StreamSessions(const HTTPRequest &req, std::shared_ptr<UnixSocket> socket);
   void endpoint_StreamSessionAdd(const HTTPRequest &req, std::shared_ptr<UnixSocket> socket);
   void endpoint_StreamSessionStart(const HTTPRequest &req, std::shared_ptr<UnixSocket> socket);
+  void endpoint_StreamSessionResume(const HTTPRequest &req, std::shared_ptr<UnixSocket> socket);
+
   void endpoint_StreamSessionPause(const HTTPRequest &req, std::shared_ptr<UnixSocket> socket);
   void endpoint_StreamSessionStop(const HTTPRequest &req, std::shared_ptr<UnixSocket> socket);
   void endpoint_StreamSessionHandleInput(const HTTPRequest &req, std::shared_ptr<UnixSocket> socket);
