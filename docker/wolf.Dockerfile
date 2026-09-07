@@ -1,4 +1,4 @@
-ARG BASE_IMAGE=ghcr.io/games-on-whales/gstreamer:1.26.7
+ARG BASE_IMAGE=ghcr.io/games-on-whales/gstreamer:1.28.6
 ########################################################
 FROM $BASE_IMAGE AS wolf-builder
 

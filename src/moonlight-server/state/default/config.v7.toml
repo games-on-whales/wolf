@@ -377,7 +377,7 @@ video/x-raw(memory:VAMemory), format=NV12, width={width}, height={height}, pixel
 plugin_name = "nvcodec"
 check_elements = ["nvh265enc", "cudaconvertscale", "cudaupload"]
 encoder_pipeline = """
-nvh265enc gop-size=-1 bitrate={bitrate} vbv-buffer-size={vbv_buffer_size} aud=false rc-mode=cbr zerolatency=true preset=p1 tune=ultra-low-latency multi-pass=two-pass-quarter !
+nvh265enc gop-size={gop_size} bitrate={bitrate} vbv-buffer-size={vbv_buffer_size} aud=false rc-mode=cbr zerolatency=true preset=p1 tune=ultra-low-latency multi-pass=two-pass-quarter intra-refresh={intra_refresh} single-slice-intra-refresh={intra_refresh} !
 h265parse !
 video/x-h265, profile=main, stream-format=byte-stream\
 """
