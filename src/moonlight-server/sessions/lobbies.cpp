@@ -205,6 +205,28 @@ setup_lobbies_handlers(const immer::box<state::AppState> &app_state,
           return;
         }
 
+        // Migrate joypads BEFORE adding the session to connected_sessions, or the relayed unplug races the queued plug
+        events::JoypadList joypads = session->joypads->load();
+        for (auto [_joypad_nr, joypad] : joypads) {
+          events::PlugDeviceEvent plug_ev{.session_id = lobby->id};
+          std::visit(
+              [&plug_ev](auto &pad) {
+                plug_ev.udev_events = pad.get_udev_events();
+                plug_ev.udev_hw_db_entries = pad.get_udev_hw_db_entries();
+              },
+              *joypad);
+          // Unplug it from the current session's runner
+          app_state->event_bus->fire_event(immer::box<events::UnplugDeviceEvent>{
+              events::UnplugDeviceEvent{.session_id = std::to_string(session->session_id),
+                                        .udev_events = plug_ev.udev_events,
+                                        .udev_hw_db_entries = plug_ev.udev_hw_db_entries}});
+
+          // Add it to the lobby runner's devices queue, addressed to the lobby id
+          // (same routing the PlugDeviceEvent relay performs for connected sessions)
+          lobby->plugged_devices_queue->push(immer::box<events::PlugDeviceEvent>{plug_ev});
+        }
+        // TODO: hotplug pen_tablet
+
         // Update the lobby with the new session
         lobby->connected_sessions->update([session](const immer::vector<immer::box<std::string>> &connected_sessions) {
           return connected_sessions.push_back({std::to_string(session->session_id)});
@@ -215,28 +237,6 @@ setup_lobbies_handlers(const immer::box<state::AppState> &app_state,
         session->mouse->emplace(virtual_display::WaylandMouse(wl_state));
         session->keyboard->emplace(virtual_display::WaylandKeyboard(wl_state));
         session->touch_screen->emplace(virtual_display::WaylandTouchScreen(wl_state));
-
-        // Switch over all joypads present in the session into the lobby
-        events::JoypadList joypads = session->joypads->load();
-        for (auto [_joypad_nr, joypad] : joypads) {
-          events::PlugDeviceEvent plug_ev{.session_id = std::to_string(session->session_id)};
-          std::visit(
-              [&plug_ev](auto &pad) {
-                plug_ev.udev_events = pad.get_udev_events();
-                plug_ev.udev_hw_db_entries = pad.get_udev_hw_db_entries();
-              },
-              *joypad);
-          app_state->event_bus->fire_event(immer::box<events::PlugDeviceEvent>(plug_ev));
-          // Unplug it from the current session
-          app_state->event_bus->fire_event(immer::box<events::UnplugDeviceEvent>{
-              events::UnplugDeviceEvent{.session_id = std::to_string(session->session_id),
-                                        .udev_events = plug_ev.udev_events,
-                                        .udev_hw_db_entries = plug_ev.udev_hw_db_entries}});
-
-          // Add it to the current lobby devices queue
-          lobby->plugged_devices_queue->push(immer::box<events::PlugDeviceEvent>{plug_ev});
-        }
-        // TODO: hotplug pen_tablet
 
         // Switch audio/video gstreamer stream producers
         app_state->event_bus->fire_event(immer::box<events::SwitchStreamProducerEvents>{

@@ -112,7 +112,6 @@ COPY docker/supervisord.conf /etc/supervisord.conf
 ENV GST_PLUGIN_PATH=/usr/local/lib/x86_64-linux-gnu/gstreamer-1.0/
 # Copying out our custom compositor from the build stage
 COPY --from=wolf-builder /usr/local/lib/x86_64-linux-gnu/gstreamer-1.0/* $GST_PLUGIN_PATH
-COPY --from=wolf-builder /usr/local/lib/liblibgstwaylanddisplay* /usr/local/lib/
 
 WORKDIR /wolf
 
