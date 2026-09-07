@@ -11,6 +11,19 @@ FetchContent_MakeAvailable(Catch2)
 
 project(wolftests CXX C)
 
+# Keep the fake libdrm boundary out of the hardware-capable wolftests process.
+if (UNIX AND NOT APPLE AND LIBDRM_FOUND AND LIBPCI_FOUND)
+    add_executable(wolf_drm_tests
+            testDrmDevice.cpp
+            ../src/moonlight-server/platforms/hw_linux.cpp)
+    target_link_libraries(wolf_drm_tests PRIVATE wolf::runner)
+    target_compile_options(wolf_drm_tests PRIVATE -fsanitize=address -fno-omit-frame-pointer)
+    target_link_options(wolf_drm_tests PRIVATE -fsanitize=address)
+    add_test(NAME "DRM descriptor ownership" COMMAND wolf_drm_tests)
+    set_tests_properties("DRM descriptor ownership" PROPERTIES
+            ENVIRONMENT "ASAN_OPTIONS=detect_stack_use_after_return=1")
+endif ()
+
 # Tests need to be added as executables first
 add_executable(wolftests main.cpp)
 
