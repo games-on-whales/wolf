@@ -366,6 +366,28 @@ void mouse_h_scroll(const MOUSE_HSCROLL_PACKET &pkt, events::StreamSession &sess
   }
 }
 
+static char modifier_bit(short moonlight_key) {
+  switch (moonlight_key) {
+  case M_SHIFT:
+  case M_LSHIFT:
+  case M_RSHIFT:
+    return KEYBOARD_MODIFIERS::SHIFT;
+  case M_CTRL:
+  case M_LCTRL:
+  case M_RCTRL:
+    return KEYBOARD_MODIFIERS::CTRL;
+  case M_MENU:
+  case M_ALT:
+  case M_RALT:
+    return KEYBOARD_MODIFIERS::ALT;
+  case M_META:
+  case M_RMETA:
+    return KEYBOARD_MODIFIERS::META;
+  default:
+    return KEYBOARD_MODIFIERS::NONE;
+  }
+}
+
 void keyboard_key(const KEYBOARD_PACKET &pkt, events::StreamSession &session) {
   // moonlight always sets the high bit; not sure why but mask it off here
   short moonlight_key = (short)boost::endian::little_to_native(pkt.key_code) & (short)0x7fff;
@@ -375,13 +397,22 @@ void keyboard_key(const KEYBOARD_PACKET &pkt, events::StreamSession &session) {
     return;
   }
 
+  const char key_mod = modifier_bit(moonlight_key);
+  char held = 0;
+  if (key_mod != KEYBOARD_MODIFIERS::NONE) {
+    held = session.held_modifiers->update(
+        [&](char h) -> char { return pkt.type == KEY_PRESS ? (h | key_mod) : (h & ~key_mod); });
+  } else {
+    held = session.held_modifiers->load();
+  }
+
   if (pkt.type == KEY_PRESS) {
     int wolf_ui_combo_pressed = 0;
-    if (pkt.modifiers & KEYBOARD_MODIFIERS::SHIFT && moonlight_key != M_SHIFT)
+    if (pkt.modifiers & KEYBOARD_MODIFIERS::SHIFT && !(key_mod & KEYBOARD_MODIFIERS::SHIFT))
       wolf_ui_combo_pressed++;
-    if (pkt.modifiers & KEYBOARD_MODIFIERS::CTRL && moonlight_key != M_CTRL)
+    if (pkt.modifiers & KEYBOARD_MODIFIERS::CTRL && !(key_mod & KEYBOARD_MODIFIERS::CTRL))
       wolf_ui_combo_pressed++;
-    if (pkt.modifiers & KEYBOARD_MODIFIERS::ALT && moonlight_key != M_ALT)
+    if (pkt.modifiers & KEYBOARD_MODIFIERS::ALT && !(key_mod & KEYBOARD_MODIFIERS::ALT))
       wolf_ui_combo_pressed++;
 
     // CTRL + ALT + SHIFT + W
@@ -395,32 +426,34 @@ void keyboard_key(const KEYBOARD_PACKET &pkt, events::StreamSession &session) {
             keyboard.release(M_ALT);
           },
           session.keyboard->value());
+      session.held_modifiers->store(0);
       session.event_bus->fire_event(
           immer::box<events::ClientWolfUIComboEvent>{events::ClientWolfUIComboEvent{.session_id = session.session_id}});
       return;
     }
 
     // Press the virtual modifiers
-    if (pkt.modifiers & KEYBOARD_MODIFIERS::SHIFT && moonlight_key != M_SHIFT)
+    const char virtual_mods = pkt.modifiers & ~held & ~key_mod;
+    if (virtual_mods & KEYBOARD_MODIFIERS::SHIFT)
       std::visit([](auto &keyboard) { keyboard.press(M_SHIFT); }, session.keyboard->value());
-    if (pkt.modifiers & KEYBOARD_MODIFIERS::CTRL && moonlight_key != M_CTRL)
+    if (virtual_mods & KEYBOARD_MODIFIERS::CTRL)
       std::visit([](auto &keyboard) { keyboard.press(M_CTRL); }, session.keyboard->value());
-    if (pkt.modifiers & KEYBOARD_MODIFIERS::ALT && moonlight_key != M_ALT)
+    if (virtual_mods & KEYBOARD_MODIFIERS::ALT)
       std::visit([](auto &keyboard) { keyboard.press(M_ALT); }, session.keyboard->value());
-    if (pkt.modifiers & KEYBOARD_MODIFIERS::META && moonlight_key != M_META)
+    if (virtual_mods & KEYBOARD_MODIFIERS::META)
       std::visit([](auto &keyboard) { keyboard.press(M_META); }, session.keyboard->value());
 
     // Press the actual key
     std::visit([moonlight_key](auto &keyboard) { keyboard.press(moonlight_key); }, session.keyboard->value());
 
     // Release the virtual modifiers
-    if (pkt.modifiers & KEYBOARD_MODIFIERS::SHIFT && moonlight_key != M_SHIFT)
+    if (virtual_mods & KEYBOARD_MODIFIERS::SHIFT)
       std::visit([](auto &keyboard) { keyboard.release(M_SHIFT); }, session.keyboard->value());
-    if (pkt.modifiers & KEYBOARD_MODIFIERS::CTRL && moonlight_key != M_CTRL)
+    if (virtual_mods & KEYBOARD_MODIFIERS::CTRL)
       std::visit([](auto &keyboard) { keyboard.release(M_CTRL); }, session.keyboard->value());
-    if (pkt.modifiers & KEYBOARD_MODIFIERS::ALT && moonlight_key != M_ALT)
+    if (virtual_mods & KEYBOARD_MODIFIERS::ALT)
       std::visit([](auto &keyboard) { keyboard.release(M_ALT); }, session.keyboard->value());
-    if (pkt.modifiers & KEYBOARD_MODIFIERS::META && moonlight_key != M_META)
+    if (virtual_mods & KEYBOARD_MODIFIERS::META)
       std::visit([](auto &keyboard) { keyboard.release(M_META); }, session.keyboard->value());
 
   } else {

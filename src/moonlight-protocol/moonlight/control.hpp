@@ -110,8 +110,15 @@ enum KEYBOARD_MODIFIERS : char {
 enum MOONLIGHT_MODIFIERS : short {
   M_SHIFT = 0x10,
   M_CTRL = 0x11,
+  M_MENU = 0x12,
   M_ALT = 0xA4,
-  M_META = 0x5B
+  M_META = 0x5B,
+  M_LSHIFT = 0xA0,
+  M_RSHIFT = 0xA1,
+  M_LCTRL = 0xA2,
+  M_RCTRL = 0xA3,
+  M_RALT = 0xA5,
+  M_RMETA = 0x5C
 };
 
 // make sure these structs are allocated in 1-byte blocks so the data aligns

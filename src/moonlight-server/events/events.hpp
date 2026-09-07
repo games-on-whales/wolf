@@ -455,6 +455,12 @@ struct StreamSession {
 
   std::shared_ptr<immer::atom<JoypadList>> joypads = std::make_shared<immer::atom<JoypadList>>();
 
+  /**
+   * Bitmask (KEYBOARD_MODIFIERS) of the modifier keys the client is currently physically holding.
+   * Used to avoid synthesizing a virtual press/release around keys the client already holds down.
+   */
+  std::shared_ptr<immer::atom<char>> held_modifiers = std::make_shared<immer::atom<char>>();
+
   std::shared_ptr<std::optional<input::PenTablet>> pen_tablet =
       std::make_shared<std::optional<input::PenTablet>>(); /* Optional, will be set on first use */
 };
