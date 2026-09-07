@@ -51,6 +51,14 @@ TEST_CASE("Wayland virtual inputs", "[WAYLAND]") {
 
     auto m_ev = mouse_events_q->pop();
     REQUIRE(m_ev.has_value());
+    REQUIRE(m_ev.value().type == MouseEventType::LEAVE);
+
+    m_ev = mouse_events_q->pop();
+    REQUIRE(m_ev.has_value());
+    REQUIRE(m_ev.value().type == MouseEventType::FRAME);
+
+    m_ev = mouse_events_q->pop();
+    REQUIRE(m_ev.has_value());
     REQUIRE(m_ev.value().type == MouseEventType::ENTER);
 
     m_ev = mouse_events_q->pop();
