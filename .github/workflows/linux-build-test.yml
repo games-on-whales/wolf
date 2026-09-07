@@ -11,7 +11,7 @@ on:
       - "docker/**"
 
 env:
-  GST_WAYLAND_COMMIT: b15285a
+  GST_WAYLAND_COMMIT: 016b4fc
 
 jobs:
   # Build the Rust-based libgstwaylanddisplay for both architectures
