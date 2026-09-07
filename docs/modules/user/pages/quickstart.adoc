@@ -151,6 +151,182 @@ Then `sudo update-grub` and *reboot*.
 ====
 
 --
+Nvidia (CDI, modern drivers)::
++
+--
+
+[NOTE]
+====
+**Required versions.** This section has been verified against the following
+component versions; older combinations may need the *Nvidia (Container
+Toolkit)* or *Nvidia (Manual)* tabs instead.
+
+[cols="1,1",options="header"]
+|===
+| Component | Verified version
+
+| NVIDIA driver (`cat /sys/module/nvidia/version`)
+| `>= 570.00` (tested with `595.45.04`)
+
+| NVIDIA Container Toolkit (`nvidia-ctk --version`)
+| `>= 1.17.0` (tested with `1.19.1`)
+
+| Docker / moby (`docker --version`)
+| `>= 25.0` with CDI support (tested with `29.6.1`)
+
+| Linux kernel
+| `>= 6.1` (tested with `6.18`)
+
+| Wolf image
+| `ghcr.io/games-on-whales/wolf:stable`
+|===
+
+Check with:
+
+[source,bash]
+....
+cat /sys/module/nvidia/version
+nvidia-ctk --version
+docker --version
+docker info 2>/dev/null | grep -iE 'cdi|runtime'
+....
+
+`docker info` should list `nvidia.com/gpu=all` under *CDI spec directories*'
+discovered devices (or at least an entry pointing at
+`/etc/cdi/nvidia.yaml` / `/var/run/cdi/nvidia-container-toolkit.json`), and
+show `cdi: true` under *Features*.
+====
+
+[NOTE]
+====
+This is the recommended path on **recent NVIDIA drivers** together with a
+recent NVIDIA Container Toolkit and a recent Docker/moby.
+
+It uses the https://github.com/cncf-tags/container-device-interface[Container
+Device Interface (CDI)] instead of the legacy `--gpus all` / `driver: nvidia`
+Docker resource reservation. Compared to the *Nvidia (Container Toolkit)* tab
+above, the important differences are:
+
+* We pass the GPU via CDI (`--device nvidia.com/gpu=all`) instead of the
+  legacy `--gpus=all` (Docker CLI) or the `deploy.resources.reservations.devices`
+  block (compose). Modern moby resolves `--gpus` through in-process GPU drivers
+  which may no longer be registered when only CDI is enabled, and can then fail
+  child containers started by Wolf with the misleading error
+  `AMD CDI spec not found`.
+* We do **not** need `nvidia-drm.modeset=1` for this path (CDI does not depend
+  on DRM modeset), but leaving it enabled does no harm.
+* We additionally set `__EGL_VENDOR_LIBRARY_FILENAMES` so that libglvnd inside
+  the Wolf container picks up the NVIDIA EGL ICD next to the image-baked Mesa
+  one. Without this, EGL enumeration inside the container can end up empty on
+  some hosts (notably NixOS, where the ICD JSON lives under
+  `/run/opengl-driver/share/glvnd/egl_vendor.d/`).
+====
+
+Docker CLI:
+
+[source,bash]
+....
+docker run \
+    --name wolf \
+    --network=host \
+    -v /etc/wolf:/etc/wolf:rw \
+    -v /var/run/docker.sock:/var/run/docker.sock:rw \
+    -e NVIDIA_DRIVER_CAPABILITIES=all \
+    -e NVIDIA_VISIBLE_DEVICES=all \
+    -e __EGL_VENDOR_LIBRARY_FILENAMES=/run/opengl-driver/share/glvnd/egl_vendor.d/10_nvidia.json:/usr/share/glvnd/egl_vendor.d/50_mesa.json \
+    --device nvidia.com/gpu=all \
+    --device /dev/dri/ \
+    --device /dev/uinput \
+    --device /dev/uhid \
+    -v /dev/:/dev/:rw \
+    -v /run/udev:/run/udev:rw \
+    --device-cgroup-rule "c 13:* rmw" \
+    ghcr.io/games-on-whales/wolf:stable
+....
+
+Docker compose:
+
+[source,yaml]
+....
+services:
+  wolf:
+    image: ghcr.io/games-on-whales/wolf:stable
+    environment:
+      - NVIDIA_DRIVER_CAPABILITIES=all
+      - NVIDIA_VISIBLE_DEVICES=all
+      # Two-JSON EGL vendor list: NVIDIA first, image-baked Mesa second.
+      # Path differs by distro; the value below is correct for NixOS hosts.
+      # On Debian/Ubuntu hosts the NVIDIA JSON is typically at
+      # /usr/share/glvnd/egl_vendor.d/10_nvidia.json (both host and image),
+      # in which case this variable can usually be omitted.
+      - __EGL_VENDOR_LIBRARY_FILENAMES=/run/opengl-driver/share/glvnd/egl_vendor.d/10_nvidia.json:/usr/share/glvnd/egl_vendor.d/50_mesa.json
+    volumes:
+      - /etc/wolf/:/etc/wolf
+      - /var/run/docker.sock:/var/run/docker.sock:rw
+      - /dev/:/dev/:rw
+      - /run/udev:/run/udev:rw
+    device_cgroup_rules:
+      - 'c 13:* rmw'
+    devices:
+      # CDI reference to the NVIDIA GPU; replaces the legacy
+      # `deploy.resources.reservations.devices: [{ driver: nvidia, ... }]`
+      # block used in the *Nvidia (Container Toolkit)* tab above.
+      - nvidia.com/gpu=all
+      - /dev/dri
+      - /dev/uinput
+      - /dev/uhid
+    network_mode: host
+    restart: unless-stopped
+....
+
+[TIP]
+====
+Make sure CDI is enabled in Docker (`features.cdi = true` in
+`/etc/docker/daemon.json`) and that the NVIDIA CDI spec has been generated:
+
+[source,bash]
+....
+sudo nvidia-ctk cdi generate --output=/etc/cdi/nvidia.yaml
+docker info 2>/dev/null | grep -i cdi
+....
+
+On distributions where the toolkit ships a systemd generator (e.g. NixOS with
+`hardware.nvidia-container-toolkit.enable = true`) the spec is refreshed
+automatically at `/var/run/cdi/nvidia-container-toolkit.json` on boot.
+====
+
+[TIP]
+====
+Wolf spawns *child* containers (Wolf UI, Steam, Firefox, ...) via the mounted
+`docker.sock`. On modern moby the default profiles baked into `config.toml`
+rely on the legacy `--gpus all` auto-injection
+(`DeviceRequests: [{ DeviceIDs: ["all"], Capabilities: [["gpu"]] }]`) which is
+what produces `AMD CDI spec not found` at child start.
+
+Editing each `[profiles.apps.runner]` in `/etc/wolf/cfg/config.toml` to set
+`DeviceRequests` explicitly in `base_create_json` causes Wolf to log
+`"DeviceRequests manually set in base_create_json, skipping.."` and skip the
+legacy injection:
+
+[source,json]
+....
+"HostConfig": {
+  "IpcMode": "host",
+  "CapAdd": ["NET_RAW", "MKNOD", "NET_ADMIN", "SYS_ADMIN", "SYS_NICE"],
+  "Privileged": false,
+  "DeviceCgroupRules": ["c 13:* rmw", "c 244:* rmw"],
+  "DeviceRequests": [
+    { "Driver": "cdi", "DeviceIDs": ["nvidia.com/gpu=all"] }
+  ]
+}
+....
+
+Mirror the three EGL/NVIDIA env vars from the outer container into each
+`[profiles.apps.runner].env` array as well, otherwise inner containers can
+land on an empty EGL vendor list and fall back to software rendering.
+====
+
+--
 Nvidia (Manual)::
 +
 --
