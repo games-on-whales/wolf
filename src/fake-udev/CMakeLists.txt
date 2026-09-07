@@ -1,3 +1,11 @@
+cmake_minimum_required(VERSION 3.13...3.24)
+
+# Project name and a few useful settings. Other commands can pick up the results
+project(fake-udev
+        VERSION 0.1
+        DESCRIPTION "Howling under the Moonlight"
+        LANGUAGES CXX)
+
 option(BUILD_FAKE_UDEV_CLI "Build fake-udev CLI executable" ON)
 if (BUILD_FAKE_UDEV_CLI)
     message(STATUS "Building fake-udev CLI tool")
