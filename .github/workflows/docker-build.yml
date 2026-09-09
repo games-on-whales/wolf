@@ -5,9 +5,18 @@ on:
     paths-ignore:
       - "docs/**"
       - ".github/**"
+  pull_request:
+    paths-ignore:
+      - "docs/**"
+      - ".github/**"
 
 jobs:
   buildx:
+    # Avoid running twice for same-repo PRs (push + pull_request). Same-repo
+    # branches run on push; fork PRs (which can't trigger push here) run on
+    # pull_request, where secrets are unavailable so the build loads the image
+    # locally and smoke-tests it instead of pushing. See linux-build-test.yml.
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name != github.event.pull_request.base.repo.full_name
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -123,6 +132,11 @@ jobs:
           context: .
           file: docker/wolf.Dockerfile
           push: ${{ steps.prep.outputs.push }}
+          # Load into the local docker daemon when we aren't pushing to a
+          # registry (fork PRs, missing secrets) so the smoke-test step
+          # below can run `docker image inspect` and `docker run` against
+          # the image we just built.
+          load: ${{ steps.prep.outputs.push != 'true' }}
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
           build-args: |
@@ -131,7 +145,26 @@ jobs:
           cache-from: ${{ steps.prep.outputs.cache_from }}
           cache-to: ${{ steps.prep.outputs.cache_to }}
 
+      # Smoke-test the image we just built. Two ingest paths because the
+      # build step's output differs by context:
+      #   * push=true  -> registry got the image; `docker pull` fetches it.
+      #   * push=false -> `load: true` put it in the local daemon; no fetch.
+      # Either way we then invoke bin/test-image.sh, which runs the 3-layer
+      # harness (structural + cont-init smoke + docker/tests/smoke.sh).
+      - name: Smoke test wolf image
+        run: |
+          set -euo pipefail
+          tag='${{ fromJSON(steps.meta.outputs.json).tags[0] }}'
+          if [[ "${{ steps.prep.outputs.push }}" == "true" ]]; then
+            echo "==> pulling ${tag} from registry"
+            docker pull "${tag}"
+          else
+            echo "==> using locally-loaded image (no registry push)"
+          fi
+          ./bin/test-image.sh "${tag}"
+
   test_devcontainer:
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name != github.event.pull_request.base.repo.full_name
     runs-on: ubuntu-latest
     needs: buildx
     steps:
