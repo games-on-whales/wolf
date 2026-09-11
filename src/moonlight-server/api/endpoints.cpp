@@ -263,7 +263,7 @@ void UnixSocketServer::endpoint_StreamSessionAdd(const HTTPRequest &req, std::sh
       choosen_client = *client;
     } else {
       // Create a dummy client
-      choosen_client = {.client_cert = "", .app_state_folder = state::gen_uuid(), .settings = {}};
+      choosen_client = {.client_cert = state::gen_uuid(), .app_state_folder = "", .settings = {}};
     }
 
     choosen_client.settings = ss.client_settings.value_or(config::ClientSettings{});
