@@ -194,6 +194,22 @@ UnixSocketServer::UnixSocketServer(boost::asio::io_context &io_context,
 
   state_->http.add(
       HTTPMethod::POST,
+      "/api/v1/sessions/resume",
+      {
+          .summary = "Re-key a paused stream session so the client can reconnect",
+          .description = "Moonlight generates a NEW rikey every time it reconnects, but a StreamSession keeps the key "
+                         "it was created with, so the control stream fails to decrypt and the client reports a dead "
+                         "connection. This replaces the session's AES key and IV in place and keeps everything else -- "
+                         "the Wayland display, the virtual input devices, the ports and the session id -- so the "
+                         "desktop and the running app survive the reconnect. Call it before /sessions/start.",
+          .request_description = APIDescription{.json_schema = rfl::json::to_schema<StreamSessionResumeRequest>()},
+          .response_description = {{200, {.json_schema = rfl::json::to_schema<GenericSuccessResponse>()}},
+                                   {500, {.json_schema = rfl::json::to_schema<GenericErrorResponse>()}}},
+          .handler = [this](auto req, auto socket) { endpoint_StreamSessionResume(req, socket); },
+      });
+
+  state_->http.add(
+      HTTPMethod::POST,
       "/api/v1/sessions/pause",
       {
           .summary = "Pause a stream session",
