@@ -12,6 +12,10 @@ gst_context_ptr need_context_for_device(const std::string &device_path, GstMessa
   return nullptr;
 }
 
+bool is_context_valid(const gst_context_ptr &context) {
+  return false;
+}
+
 bool set_context(gst_context_ptr context, GstMessage *msg) {
   return false;
 }
