@@ -5,6 +5,26 @@
 When something doesn't work it'll be helpful to be able to see the logs from Wolf, please change the env variable `WOLF_LOG_LEVEL` to `DEBUG` and try to replicate the issue.
 ====
 
+== RTSP handshake failure with clients sharing an IP
+
+Wolf matches RTSP session identifiers and control connection secrets before falling back to the client's IP address.
+When multiple sessions share an IP and a request has no usable session identifier, Wolf rejects ambiguous IP matching to avoid selecting another client's session.
+This can affect both launching and resuming a stream, including when another session is disconnected but still registered.
+
+The log message is:
+
+....
+[RTSP] Ambiguous legacy session for IP: ...
+....
+
+Moonlight's https://github.com/moonlight-stream/moonlight-common-c/blob/master/src/RtspConnection.c[RTSP handshake implementation] replaces the server-provided address with `0.0.0.0` when requesting lower-quality audio, which also removes Wolf's session identifier.
+Video bitrates below 15 Mbps trigger this behavior; audio decoder capabilities and remote surround-sound settings can also trigger it.
+
+As a workaround, try a Moonlight video bitrate of 20 Mbps with stereo audio, provided the connection supports it.
+With debug logging enabled, verify that the handshake reports `[RTSP] found session by matching payload` and completes through `PLAY`.
+Changing frame rate can change the client's default bitrate, but frame rate itself is not the identification mechanism.
+This workaround is not guaranteed for every client: shared-IP connections without a usable identifier remain unsupported when IP matching is ambiguous.
+
 == Black screen in Moonlight
 
 If it's the very first time that you are running an app, and you can only see a black screen with a cursor in Moonlight, it's probably because Wolf is downloading the corresponding docker image and installing first time updates (when necessary).
