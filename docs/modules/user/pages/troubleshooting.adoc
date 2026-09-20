@@ -25,6 +25,22 @@ With debug logging enabled, verify that the handshake reports `[RTSP] found sess
 Changing frame rate can change the client's default bitrate, but frame rate itself is not the identification mechanism.
 This workaround is not guaranteed for every client: shared-IP connections without a usable identifier remain unsupported when IP matching is ambiguous.
 
+=== What a complete fix requires
+
+HTTPS launch and resume requests already identify the paired client through its certificate.
+The subsequent plain TCP RTSP connection does not present that certificate, so Wolf needs a reliable way to associate it with the authenticated launch or resume.
+A complete solution must preserve that association even at low bitrates and when multiple clients behind the same IP start or reconnect simultaneously.
+
+One approach is a unique, unpredictable, short-lived token issued during authenticated launch or resume and returned by Moonlight during RTSP setup.
+This requires a protocol field that supported clients consistently preserve, or coordinated Moonlight and Wolf changes to transmit and validate it.
+Any token used to authorize a connection must be bound to the intended session and connection attempt, expire, and reject stale or replayed attempts.
+The existing fake-address identifier must not be treated as a replacement for certificate authentication.
+
+A smaller Wolf-only improvement could track pending handshakes and allow IP matching when exactly one eligible attempt exists.
+That would need timeout and cancellation cleanup and would still have to reject simultaneous indistinguishable attempts; choosing the newest request or the first session is not a complete fix.
+Validation of a complete solution must cover concurrent low-bitrate launches, overlapping reconnects, abandoned handshakes, stale identifiers, and isolation of another client's running stream and input.
+These are proposed follow-up changes, not functionality included in this patch.
+
 == Black screen in Moonlight
 
 If it's the very first time that you are running an app, and you can only see a black screen with a cursor in Moonlight, it's probably because Wolf is downloading the corresponding docker image and installing first time updates (when necessary).
