@@ -7,6 +7,7 @@
 #include <string_view>
 #include <sys/socket.h>
 #include <sys/stat.h>
+#include <system_error>
 #include <thread>
 
 #include <helpers/logger.hpp>
@@ -55,6 +56,19 @@ inline bool wait_for_wayland_socket(std::string_view runtime_dir,
 
   while (std::chrono::steady_clock::now() < deadline) {
     if (stat(socket_path.c_str(), &st) == 0 && S_ISSOCK(st.st_mode)) {
+      // The compositor creates the socket 0755 root:root, and connect(2) wants
+      // write permission: an app container running as anything but root — every
+      // container that sets `User` — cannot reach the display it was started
+      // for. The audio socket next to it is already world-writable for the same
+      // reason.
+      std::error_code perms_err;
+      std::filesystem::permissions(socket_path, std::filesystem::perms::all, perms_err);
+      if (perms_err) {
+        logs::log(logs::warning,
+                  "Unable to make Wayland socket {} world-writable ({}); non-root apps will not connect",
+                  socket_path.string(),
+                  perms_err.message());
+      }
       return true;
     }
     std::this_thread::sleep_for(std::chrono::milliseconds(50));
