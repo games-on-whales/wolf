@@ -73,12 +73,23 @@ public:
       if (session.rtsp_fake_ip == packet.request.uri.ip || host_option == session.rtsp_fake_ip) {
         logs::log(logs::debug, "[RTSP] found session by matching payload: {}", session.rtsp_fake_ip);
         return session;
-      } else if ((host_option == "0.0.0.0" || host_option.empty()) && session.ip == user_ip) {
-        logs::log(logs::debug, "[RTSP] found session by matching IP: {}", session.ip);
-        return session;
       }
     }
-    return std::nullopt;
+    // Search every session's identifier before considering legacy IP matching.
+    // Clients behind the same NAT share an IP, so an IP alone must be unambiguous.
+    std::optional<events::StreamSession> ip_match;
+    if (host_option == "0.0.0.0" || host_option.empty()) {
+      for (const events::StreamSession &session : sessions) {
+        if (session.ip == user_ip) {
+          if (ip_match) {
+            logs::log(logs::warning, "[RTSP] Ambiguous legacy session for IP: {}", user_ip);
+            return std::nullopt;
+          }
+          ip_match = session;
+        }
+      }
+    }
+    return ip_match;
   }
 
   /**
@@ -193,17 +204,18 @@ public:
    */
   void send_message(const rtsp::RTSP_PACKET &response,
                     const std::function<void(int /* bytes_transferred */)> &on_sent) {
-    auto raw_response = rtsp::to_string(response);
-    logs::log(logs::trace, "[RTSP] sending reply: \n{}", raw_response);
-    boost::asio::async_write(socket(),
-                             boost::asio::buffer(raw_response),
-                             [on_sent](auto error_code, auto bytes_transferred) {
-                               if (error_code) {
-                                 logs::log(logs::error, "[RTSP] error during transmission: {}", error_code.message());
-                               }
-                               logs::log(logs::trace, "[RTSP] sent reply of size: {}", bytes_transferred);
-                               on_sent(bytes_transferred);
-                             });
+    auto raw_response = std::make_shared<std::string>(rtsp::to_string(response));
+    logs::log(logs::trace, "[RTSP] sending reply: \n{}", *raw_response);
+    boost::asio::async_write(
+        socket(),
+        boost::asio::buffer(*raw_response),
+        [self = shared_from_this(), raw_response, on_sent](auto error_code, auto bytes_transferred) {
+          if (error_code) {
+            logs::log(logs::error, "[RTSP] error during transmission: {}", error_code.message());
+          }
+          logs::log(logs::trace, "[RTSP] sent reply of size: {}", bytes_transferred);
+          on_sent(bytes_transferred);
+        });
   }
 
 protected:
