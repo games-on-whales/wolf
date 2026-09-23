@@ -149,7 +149,10 @@ bool is_context_valid(const gst_context_ptr &context) {
     logs::log(logs::warning, "Cached CUDA context appears to be invalid (push failed)");
     return false;
   }
-  gst_cuda_context_pop(nullptr);
+  if (!gst_cuda_context_pop(nullptr)) {
+    logs::log(logs::warning, "Failed to pop the CUDA context after validation");
+    return false;
+  }
   return true;
 }
 

@@ -58,16 +58,13 @@ static void need_context_handler(GstBus *bus, GstMessage *msg, gpointer data) {
   auto ctx_data = static_cast<NeedContextData *>(data);
   auto cached_context = ctx_data->gst_context->load();
 
-  if (cached_context.get() && gst_video_context::is_context_valid(cached_context.get())) {
+  if (cached_context.get() && gst_video_context::set_context(cached_context.get(), msg)) {
     logs::log(logs::debug, "Context already set, passing it to the pipeline.");
-    gst_video_context::set_context(cached_context.get(), msg);
-  } else {
-    if (cached_context.get()) {
-      logs::log(logs::warning, "Cached GStreamer CUDA context is stale, recreating it.");
-    }
-    if (auto video_context = gst_video_context::need_context_for_device(ctx_data->device_path, msg)) {
-      ctx_data->gst_context->store(video_context);
-    }
+    return;
+  }
+
+  if (auto video_context = gst_video_context::need_context_for_device(ctx_data->device_path, msg)) {
+    ctx_data->gst_context->store(video_context);
   }
 }
 
