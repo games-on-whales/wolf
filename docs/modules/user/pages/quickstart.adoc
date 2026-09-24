@@ -398,6 +398,21 @@ At the moment it is only possible to run Wolf inside a privileged LXC.
 
 First you need to make sure your GPU drivers are installed and loaded on your PVE host.
 
+[NOTE]
+====
+On some systems the `/dev/nvidia*` devices are only created after the driver is first used.  
+If they are missing, the LXC may fail to start because Proxmox cannot mount the GPU devices.
+
+If this happens, run:
+
+[source,bash]
+....
+nvidia-smi
+....
+
+You may also configure this command to run once at boot on the Proxmox host so the devices are always available.
+====
+
 Also make sure to add the virtual devices udev rules to the PVE host as explained in the xref:quickstart.adoc#_virtual_devices_support[Virtual devices support] section.
 
 Enter the LXC config file: `nano /etc/pve/lxc/1XX.conf`
@@ -423,6 +438,7 @@ lxc.mount.entry: /dev/dri dev/dri none bind,optional,create=dir
 lxc.mount.entry: /run/udev mnt/udev none bind,optional,create=dir
 lxc.mount.entry: /dev mnt/dev none bind,optional,create=dir
 ----
+
 
 For Intel/AMD
 
