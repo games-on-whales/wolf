@@ -587,3 +587,23 @@ Rename the game to "Switch Layout".
 Close the properties window.
 
 You now have a clickable link in Steam to switch layouts.
+
+== Enable NTSYNC
+
+Ntsync is a Linux kernel module designed to significantly improve the performance of Windows applications and games running on Linux via Wine or Proton. By providing native, kernel‑level emulation of Windows synchronization primitives (events, semaphores, mutexes), it reduces CPU overhead and addresses bottlenecks found in earlier solutions such as esync or fsync. A feature request for Proton has been filed some time ago to add ntsync support.
+Proton-GE has ntsync support since release 10-9. 
+
+Only follow these instructions if you know what you are doing. 
+
+    1. Verify the module:
+    Check whether the device exists: `ls -l /dev/ntsync`
+    If you don't see the device, load the module: 'sudo modprobe ntsync'. To unload the Module use `sudo rmmod ntsync` For persistance after reboot add `ntsync` to `/etc/modules-load.d/ntsync.conf` 
+    2. Add the device to the GOW Docker Compose:
+    Add `/dev/ntsync`  to the container’s devices device mount.
+
+    3. Edit config.toml:
+    Replace or set ` devices = ['/dev/ntsync:/dev/ntsync']`  in the ` [profiles.apps.runner]`  section of Steam's config.toml.
+
+    4. Restart:
+    Restart GOW-Container and verify functionality.Proton
+
