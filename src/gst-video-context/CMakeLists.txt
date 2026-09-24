@@ -20,7 +20,8 @@ target_sources(gst-video-context PUBLIC gst-video-context/gst-video-context.hpp 
 
 target_link_libraries(gst-video-context PUBLIC
         PkgConfig::GSTREAMER
-        wolf::core)
+        wolf::core
+        ${CMAKE_DL_LIBS})
 
 target_compile_features(gst-video-context PUBLIC cxx_std_17)
 set_target_properties(gst-video-context PROPERTIES LINKER_LANGUAGE CXX)

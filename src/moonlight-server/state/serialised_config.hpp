@@ -82,6 +82,12 @@ struct GstreamerSettings {
   GstAudioCfg audio;
 };
 
+/** A GPU that may receive independently-created Moonlight sessions. */
+struct GPUConfig {
+  std::string render_node;
+  int weight = 1;
+};
+
 struct AppCMD {
   using Tag = rfl::Literal<"process", "Process">;
   std::string run_cmd;
@@ -144,6 +150,10 @@ struct WolfConfig {
   std::vector<PairedClient> paired_clients;
   std::vector<Profile> profiles;
   GstreamerSettings gstreamer;
+  /* Empty means discover the available DRM render nodes automatically. */
+  std::vector<GPUConfig> gpus;
+  /* Render nodes to omit from automatic discovery or the configured GPU list. */
+  std::vector<std::string> excluded_gpus;
 };
 
 struct BaseConfig {

@@ -191,6 +191,29 @@ GPU_VENDOR get_vendor(std::string_view gpu) {
   return UNKNOWN;
 }
 
+bool same_gpu(std::string_view first, std::string_view second) {
+  if (first == second) {
+    return true;
+  }
+  const auto first_name = get_render_node_name(first);
+  const auto second_name = get_render_node_name(second);
+  if (first_name.empty() || second_name.empty()) {
+    return false;
+  }
+
+  // libdrm exposes only PCI vendor/device IDs in drmPciDeviceInfo, which are
+  // not unique when multiple GPUs use the same model. The DRM sysfs device
+  // symlink identifies the physical PCI device, including its BDF address.
+  std::error_code ec;
+  const auto first_device = std::filesystem::canonical("/sys/class/drm/" + first_name + "/device", ec);
+  if (ec) {
+    return false;
+  }
+  ec.clear();
+  const auto second_device = std::filesystem::canonical("/sys/class/drm/" + second_name + "/device", ec);
+  return !ec && first_device == second_device;
+}
+
 std::string get_vendor_name(GPU_VENDOR vendor) {
   switch (vendor) {
   case NVIDIA:

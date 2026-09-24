@@ -10,6 +10,7 @@
 #include <immer/array.hpp>
 #include <immer/box.hpp>
 #include <memory>
+#include <regex>
 #include <streaming/streaming.hpp>
 #include <thread>
 
@@ -17,6 +18,39 @@ namespace streaming {
 
 using namespace wolf::core::gstreamer;
 using namespace wolf::core;
+
+static std::string bind_encoder_to_render_node(std::string pipeline, std::string_view render_node) {
+  const auto node_name = get_render_node_name(render_node);
+  if (node_name.empty() || node_name == "renderD128") {
+    return pipeline;
+  }
+  // VAAPI exposes per-render-node element names (for example
+  // varenderD129h264enc). The config is generated once at startup, so bind
+  // the selected session's encoder here before parsing the pipeline.
+  for (const auto &technology : {"h264", "h265", "av1"}) {
+    pipeline = std::regex_replace(pipeline,
+                                  std::regex(fmt::format("va{}enc", technology)),
+                                  fmt::format("va{}{}enc", node_name, technology));
+  }
+  return pipeline;
+}
+
+std::string bind_nvidia_encoder(std::string pipeline, int device_index) {
+  // GstNvEnc selects its device when the factory constructs the encoder;
+  // the generic factory represents CUDA device 0. GStreamer registers
+  // deviceN factories only for additional devices, not device0.
+  if (device_index == 0) {
+    return pipeline;
+  }
+  // cuda-device-id is read-only on these instances. Match whole factory names
+  // so already-scoped elements and unrelated properties remain untouched.
+  for (const auto *codec : {"nvh264", "nvh265", "nvav1"}) {
+    pipeline = std::regex_replace(pipeline,
+                                  std::regex(fmt::format(R"(\b{}enc\b)", codec)),
+                                  fmt::format("{}device{}enc", codec, device_index));
+  }
+  return pipeline;
+}
 
 struct GstBusData {
   std::shared_ptr<boost::promise<WaylandDisplayReady>> on_ready;
@@ -51,16 +85,13 @@ static void application_message_handler(GstBus *bus, GstMessage *msg, gpointer d
 
 struct NeedContextData {
   const std::string device_path;
-  std::shared_ptr<immer::atom<gst_video_context::gst_context_ptr>> gst_context;
+  std::shared_ptr<gst_video_context::GstVideoContextProvider> context_provider;
 };
 
 static void need_context_handler(GstBus *bus, GstMessage *msg, gpointer data) {
   auto ctx_data = static_cast<NeedContextData *>(data);
-  if (auto gst_context = ctx_data->gst_context->load().get()) {
-    logs::log(logs::debug, "Context already set, passing it to the pipeline.");
-    gst_video_context::set_context(gst_context, msg);
-  } else if (auto video_context = gst_video_context::need_context_for_device(ctx_data->device_path, msg)) {
-    ctx_data->gst_context->store(video_context);
+  if (auto context = ctx_data->context_provider->get_or_create(ctx_data->device_path)) {
+    gst_video_context::set_context(context, msg);
   }
 }
 
@@ -92,7 +123,7 @@ void start_video_producer(const std::string &session_id,
                           const std::string &buffer_format,
                           const std::string &render_node,
                           const wolf::core::virtual_display::DisplayMode &display_mode,
-                          std::shared_ptr<immer::atom<gst_video_context::gst_context_ptr>> video_context,
+                          std::shared_ptr<gst_video_context::GstVideoContextProvider> context_provider,
                           std::shared_ptr<boost::promise<WaylandDisplayReady>> on_ready,
                           std::shared_ptr<events::EventBusType> event_bus) {
   auto pipeline = fmt::format("waylanddisplaysrc name=wolf_wayland_source render_node={render_node} ! "
@@ -108,9 +139,16 @@ void start_video_producer(const std::string &session_id,
   auto bus_data_ptr =
       std::make_shared<GstBusData>(GstBusData{.on_ready = std::move(on_ready), .wayland_plugin = nullptr});
   std::shared_ptr<NeedContextData> ctx_data_ptr =
-      std::make_shared<NeedContextData>(NeedContextData{.device_path = render_node, .gst_context = video_context});
+      std::make_shared<NeedContextData>(NeedContextData{.device_path = render_node, .context_provider = context_provider});
   run_pipeline(pipeline, [=](auto pipeline) {
     logs::log(logs::debug, "Setting up waylanddisplaysrc");
+
+    // Install the context before the NULL -> READY transition. GstBin
+    // propagates it to the source and CUDA elements, avoiding an implicit
+    // context on CUDA device 0 before NEED_CONTEXT can be handled.
+    if (auto context = context_provider->get_or_create(render_node)) {
+      gst_video_context::set_context(context, pipeline.get());
+    }
 
     auto wayland_plugin_el = gst_bin_get_by_name(GST_BIN(pipeline.get()), "wolf_wayland_source");
     auto wayland_plugin_ptr = gst_element_ptr(wayland_plugin_el, ::gst_object_unref);
@@ -374,12 +412,44 @@ void start_streaming_video(immer::box<events::VideoSession> video_session,
                            const std::shared_ptr<events::EventBusType> &event_bus,
                            std::string client_ip,
                            unsigned short client_port,
-                           std::shared_ptr<immer::atom<gst_video_context::gst_context_ptr>> video_context,
+                           std::shared_ptr<gst_video_context::GstVideoContextProvider> context_provider,
                            std::shared_ptr<udp::socket> video_socket) {
   auto [color_range, color_space] = get_color_params(video_session);
 
+  auto pipeline_template = bind_encoder_to_render_node(video_session->gst_pipeline, video_session->render_node);
+  if (get_vendor(video_session->render_node) == NVIDIA) {
+    const auto device_index = gst_video_context::getCudaDeviceFromDri(video_session->render_node);
+    if (!device_index) {
+      logs::log(logs::error,
+                "Cannot identify CUDA device for {}, refusing to encode on the wrong GPU",
+                video_session->render_node);
+      return;
+    }
+    const auto scoped = bind_nvidia_encoder(pipeline_template, *device_index);
+    if (scoped != pipeline_template) {
+      // GStreamer registers device-specific factories at plugin discovery time.
+      // Never silently fall back to the generic (default-GPU) encoder.
+      for (const auto *codec : {"nvh264", "nvh265", "nvav1"}) {
+        const auto factory_name = fmt::format("{}device{}enc", codec, *device_index);
+        if (scoped.find(factory_name) != std::string::npos) {
+          auto *factory = gst_element_factory_find(factory_name.c_str());
+          if (!factory) {
+            logs::log(logs::error,
+                      "Selected GPU {} has no encoder factory {}",
+                      video_session->render_node,
+                      factory_name);
+            return;
+          }
+          gst_object_unref(factory);
+        }
+      }
+      pipeline_template = scoped;
+    }
+    logs::log(logs::info, "Using NVIDIA encoder on {} (CUDA device {})", video_session->render_node, *device_index);
+  }
+
   auto pipeline = fmt::format(
-      fmt::runtime(video_session->gst_pipeline),
+      fmt::runtime(pipeline_template),
       fmt::arg("session_id", video_session->session_id),
       fmt::arg("width", video_session->display_mode.width),
       fmt::arg("height", video_session->display_mode.height),
@@ -408,8 +478,14 @@ void start_streaming_video(immer::box<events::VideoSession> video_session,
           .max_batch_size = std::min<std::size_t>(16, 65536 / video_session->packet_size),
       }});
   std::shared_ptr<NeedContextData> ctx_data_ptr = std::make_shared<NeedContextData>(
-      NeedContextData{.device_path = video_session->render_node, .gst_context = video_context});
+      NeedContextData{.device_path = video_session->render_node, .context_provider = context_provider});
   run_pipeline(pipeline, [video_session, event_bus, udp_sink, ctx_data_ptr](auto pipeline) {
+    // cuda-device-id on current nvh*enc elements is read-only. GPU selection
+    // must be made with a CUDA GstContext before any element changes state.
+    if (auto context = ctx_data_ptr->context_provider->get_or_create(ctx_data_ptr->device_path)) {
+      gst_video_context::set_context(context, pipeline.get());
+    }
+
     if (auto app_sink_el = gst_bin_get_by_name(GST_BIN(pipeline.get()), "wolf_udp_sink")) {
       logs::log(logs::debug, "Setting up wolf_udp_sink");
       g_assert(GST_IS_APP_SINK(app_sink_el));

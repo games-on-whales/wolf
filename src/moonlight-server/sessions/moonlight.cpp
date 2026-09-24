@@ -61,6 +61,13 @@ setup_moonlight_handlers(const immer::box<state::AppState> &app_state,
       [&app_state, plugged_devices_queue](const immer::box<events::StopStreamEvent> &ev) {
         // Remove session from app state so that HTTP/S applist gets updated
         // This should effectively destroy the virtual Wayland session since it holds the last reference
+        auto sessions = app_state->running_sessions->load();
+        auto it = std::find_if(sessions->begin(), sessions->end(), [&](const auto &session) {
+          return session.session_id == ev->session_id;
+        });
+        if (it != sessions->end() && it->gpu_render_node && it->gpu_slot && it->gpu_token) {
+          app_state->gpu_scheduler->release({*it->gpu_render_node, *it->gpu_slot, *it->gpu_token});
+        }
         app_state->running_sessions->update([&ev](const immer::vector<events::StreamSession> &ses_v) {
           return state::remove_session(ses_v, {.session_id = ev->session_id});
         });
@@ -100,7 +107,7 @@ setup_moonlight_handlers(const immer::box<state::AppState> &app_state,
           logs::log(logs::debug, "[STREAM_SESSION] Create wayland compositor");
 
           // Start Gstreamer producer pipeline
-          std::thread([session, on_ready, gst_context = app_state->gst_context]() {
+          std::thread([session, on_ready, gst_context = app_state->gst_context_provider]() {
             streaming::start_video_producer(std::to_string(session->session_id),
                                             session->app->video_producer_buffer_caps,
                                             session->app->render_node,
@@ -236,7 +243,7 @@ setup_moonlight_handlers(const immer::box<state::AppState> &app_state,
 
   handlers.push_back(app_state->event_bus->register_handler<immer::box<events::VideoSession>>(
       [ev_bus = app_state->event_bus,
-       gst_context = app_state->gst_context](const immer::box<events::VideoSession> &sess) {
+       gst_context = app_state->gst_context_provider](const immer::box<events::VideoSession> &sess) {
         // Start a thread that will wait for the RTP ping event
         std::thread([sess, ev_bus, gst_context]() {
           auto ping_ev = wait_for_ping<events::RTPVideoPingEvent>(ev_bus, sess);

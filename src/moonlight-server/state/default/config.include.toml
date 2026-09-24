@@ -6,6 +6,13 @@ config_version = 7
 # A list of paired clients that will be allowed to stream
 paired_clients = []
 
+# Optional per-session GPU scheduling. An empty list discovers /dev/dri/renderD*.
+# excluded_gpus = ["/dev/dri/renderD128"]
+# Specifying [[gpus]] restricts scheduling to the listed render nodes.
+# [[gpus]]
+# render_node = "/dev/dri/renderD128"
+# weight = 10
+
 ######################
 # Profiles: a list of different profiles, each with a list of apps
 ######################

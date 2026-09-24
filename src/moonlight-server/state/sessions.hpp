@@ -117,6 +117,13 @@ inline std::shared_ptr<events::StreamSession> create_stream_session(immer::box<s
       .audio_stream_port = static_cast<unsigned short>(get_port(AUDIO_PING_PORT)),
       .control_stream_port = static_cast<unsigned short>(get_port(CONTROL_PORT))};
 
+  if (auto assignment = state->gpu_scheduler->acquire()) {
+    session.gpu_render_node = assignment->render_node;
+    session.gpu_slot = assignment->slot;
+    session.gpu_token = assignment->token;
+    session.app->render_node = assignment->render_node;
+  }
+
   return std::make_shared<events::StreamSession>(session);
 }
 

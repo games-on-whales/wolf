@@ -1,3 +1,4 @@
+#include <algorithm>
 #include <immer/array_transient.hpp>
 #include <immer/map_transient.hpp>
 #include <platforms/hw.hpp>
@@ -52,6 +53,30 @@ void start_runner(std::shared_ptr<events::Runner> runner,
   auto render_node = args->video_settings.runner_render_node;
   auto additional_devices = linked_devices(render_node);
   std::copy(additional_devices.begin(), additional_devices.end(), std::back_inserter(all_devices));
+
+  // The guest compositor and Mesa choose their own GPU unless explicitly directed.
+  // Passing through the selected nodes alone does not change their default device.
+  auto primary_node = std::find_if(additional_devices.begin(), additional_devices.end(), [](const auto &device) {
+    return std::filesystem::path(device).filename().string().rfind("card", 0) == 0;
+  });
+  if (primary_node != additional_devices.end()) {
+    full_env.set("WLR_DRM_DEVICES", *primary_node);
+  }
+
+  const auto render_name = get_render_node_name(render_node);
+  if (!render_name.empty()) {
+    std::error_code ec;
+    const auto pci_device = std::filesystem::canonical("/sys/class/drm/" + render_name + "/device", ec);
+    if (!ec) {
+      auto pci_address = pci_device.filename().string();
+      // Mesa accepts PCI IDs in the form pci-0000_01_00_0 for DRI_PRIME.
+      if (pci_address.size() == 12 && pci_address[4] == ':' && pci_address[7] == ':' && pci_address[10] == '.') {
+        std::replace(pci_address.begin(), pci_address.end(), ':', '_');
+        std::replace(pci_address.begin(), pci_address.end(), '.', '_');
+        full_env.set("DRI_PRIME", "pci-" + pci_address);
+      }
+    }
+  }
 
   auto gpu_vendor = get_vendor(render_node);
   if (gpu_vendor == NVIDIA) {

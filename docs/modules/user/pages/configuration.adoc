@@ -505,7 +505,35 @@ There are two main separated parts that make use of HW acceleration in Wolf:
 * *Gstreamer video encoding*: this will use HW acceleration in order to efficiently encode the video stream with H.264 or HEVC.
 
 Since Wolf supports HW accelerated zero-copy pipelines it's best to keep both the Wayland rendering and the Gstreamer encoding on the same GPU.
-Support for multi-GPU load balancing is planned for future releases.
+Wolf can assign independent Moonlight sessions across GPUs using weighted least-loaded scheduling. Leave the `gpus` list empty (the default) to discover `/dev/dri/renderD*` nodes and assign them equally:
+
+[source,toml]
+----
+gpus = []
+----
+
+To omit render nodes from scheduling, set `excluded_gpus` at the top level of the TOML configuration:
+
+----
+excluded_gpus = ["/dev/dri/renderD128"]
+----
+
+Or configure explicit render nodes and relative capacities. A GPU with weight `10` receives work preferentially over one with weight `7` while it has fewer active sessions relative to its weight:
+
+[source,toml]
+----
+[[gpus]]
+render_node = "/dev/dri/renderD128"
+weight = 10
+
+[[gpus]]
+render_node = "/dev/dri/renderD129"
+weight = 7
+----
+
+When `gpus` is nonempty, only its listed render nodes are eligible; unlisted GPUs are automatically excluded. `excluded_gpus` also takes precedence over entries in `gpus`. Scheduling compares the projected load after assigning a session, so the highest-weight GPU is selected first when all are idle.
+
+Each session's selected render node is used for the virtual display and runner. `WOLF_RENDER_NODE` remains the fallback for deployments without discoverable/configured GPUs.
 
 [#_keyboard_layout]
 == Changing and Switching Keyboard Layouts in wolf Apps Containers

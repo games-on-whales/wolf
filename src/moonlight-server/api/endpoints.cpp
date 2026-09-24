@@ -304,9 +304,9 @@ void UnixSocketServer::endpoint_StreamSessionStart(const HTTPRequest &req, std::
     if (auto session = state::get_session_by_id(sessions.get(), session_id)) {
       auto video_session = start_req.value().video_session;
       video_session.session_id = session_id; // Can't be JSON encoded
-      if (video_session.render_node.empty()) {
-        video_session.render_node = session->app->render_node;
-      }
+      // The scheduler assigns the compositor node; an API-supplied encoder
+      // node must not silently move the encoder to another GPU.
+      video_session.render_node = session->app->render_node;
       state_->app_state->event_bus->fire_event(immer::box<events::VideoSession>(video_session));
 
       auto audio_session = start_req.value().audio_session;

@@ -87,12 +87,22 @@ void RunDocker::run(std::string_view session_id,
   auto final_json_opts = this->base_create_json;
   if (get_vendor(render_node) == NVIDIA && !utils::get_env("NVIDIA_DRIVER_VOLUME_NAME")) {
     logs::log(logs::info, "NVIDIA_DRIVER_VOLUME_NAME not set, assuming nvidia driver toolkit is installed..");
+    std::string selected_device = "all";
+    for (const auto &device : linked_devices(render_node)) {
+      constexpr std::string_view prefix = "/dev/nvidia";
+      if (device.rfind(prefix, 0) == 0 && device.size() > prefix.size() &&
+          std::all_of(device.begin() + static_cast<std::ptrdiff_t>(prefix.size()), device.end(),
+                      [](unsigned char ch) { return ch >= '0' && ch <= '9'; })) {
+        selected_device = device.substr(prefix.size());
+        break;
+      }
+    }
     {
       auto parsed_json = utils::parse_json(final_json_opts).as_object();
-      auto default_gpu_config = boost::json::array{                    // [
-                                                   boost::json::object{// {
-                                                                       {"DeviceIDs", {"all"}},
-                                                                       {"Capabilities", boost::json::array{{"gpu"}}}}};
+      logs::log(logs::debug, "[DOCKER] Selected NVIDIA device {} for render node {}", selected_device, render_node);
+      auto default_gpu_config = boost::json::array{
+          boost::json::object{{"DeviceIDs", boost::json::array{selected_device}},
+                              {"Capabilities", boost::json::array{{"gpu"}}}}};
       if (auto host_config_ptr = parsed_json.if_contains("HostConfig")) {
         auto host_config = host_config_ptr->as_object();
         if (host_config.find("DeviceRequests") == host_config.end()) {
@@ -110,13 +120,13 @@ void RunDocker::run(std::string_view session_id,
       }
     }
 
-    // Setup -e NVIDIA_VISIBLE_DEVICES=all  -e NVIDIA_DRIVER_CAPABILITIES=all if not present
+      // Restrict the NVIDIA runtime to the same device as the selected DRM node.
     {
       auto nvd_env = std::find_if(full_env.begin(), full_env.end(), [](const std::string &env) {
         return env.find("NVIDIA_VISIBLE_DEVICES") != std::string::npos;
       });
       if (nvd_env == full_env.end()) {
-        full_env.push_back("NVIDIA_VISIBLE_DEVICES=all");
+        full_env.push_back(fmt::format("NVIDIA_VISIBLE_DEVICES={}", selected_device));
       }
 
       auto nvd_caps_env = std::find_if(full_env.begin(), full_env.end(), [](const std::string &env) {

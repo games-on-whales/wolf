@@ -8,6 +8,7 @@
 #include <core/input.hpp>
 #include <core/virtual-display.hpp>
 #include <cstddef>
+#include <cstdint>
 #include <eventbus/event_bus.hpp>
 #include <helpers/tsqueue.hpp>
 #include <immer/array.hpp>
@@ -411,6 +412,9 @@ struct StreamSession {
   std::shared_ptr<EventBusType> event_bus;
   immer::box<wolf::config::ClientSettings> client_settings;
   std::shared_ptr<App> app;
+  std::optional<std::string> gpu_render_node;
+  std::optional<std::size_t> gpu_slot;
+  std::optional<std::uint64_t> gpu_token;
   std::string app_local_state_folder;
   std::string app_host_state_folder;
 

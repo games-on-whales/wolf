@@ -249,6 +249,14 @@ Config load_or_default(const std::string &source,
   // Will throw if the config is invalid
   auto cfg = rfl::toml::load<WolfConfig, rfl::DefaultIfMissing>(source).value();
 
+  for (const auto &gpu : cfg.gpus) {
+    if (gpu.render_node.empty() || gpu.weight <= 0) {
+      throw std::runtime_error(fmt::format("Invalid GPU configuration: render_node='{}', weight={}",
+                                           gpu.render_node,
+                                           gpu.weight));
+    }
+  }
+
   auto default_gst_video_settings = cfg.gstreamer.video;
   auto default_gst_audio_settings = cfg.gstreamer.audio;
   if (default_gst_video_settings.default_source.find("name=interpipesrc") == std::string::npos) {
@@ -267,6 +275,11 @@ Config load_or_default(const std::string &source,
 
   auto default_app_render_node = utils::get_env("WOLF_RENDER_NODE", "/dev/dri/renderD128");
   auto default_gst_render_node = utils::get_env("WOLF_ENCODER_NODE", default_app_render_node);
+  if (!same_gpu(default_app_render_node, default_gst_render_node)) {
+    throw std::runtime_error(fmt::format("WOLF_RENDER_NODE ({}) and WOLF_ENCODER_NODE ({}) must refer to the same GPU",
+                                         default_app_render_node,
+                                         default_gst_render_node));
+  }
   auto vendor = get_vendor(default_gst_render_node);
   if (vendor == GPU_VENDOR::UNKNOWN) {
     logs::log(logs::warning, "Unable to detect GPU vendor, disabling zero copy pipeline.");
@@ -279,6 +292,22 @@ Config load_or_default(const std::string &source,
     throw std::runtime_error(
         "Unable to find a compatible H.264 encoder, please check [[gstreamer.video.h264_encoders]] "
         "in your config.toml or your Gstreamer installation");
+  }
+  for (const auto &gpu : cfg.gpus) {
+    if (std::find(cfg.excluded_gpus.begin(), cfg.excluded_gpus.end(), gpu.render_node) != cfg.excluded_gpus.end()) {
+      continue;
+    }
+    const auto gpu_vendor = get_vendor(gpu.render_node);
+    if (gpu_vendor == GPU_VENDOR::UNKNOWN) {
+      throw std::runtime_error(fmt::format("Unable to identify configured GPU render node {}", gpu.render_node));
+    }
+    if (!get_encoder("h264", gpu.render_node, default_gst_video_settings.h264_encoders, gpu_vendor)) {
+      throw std::runtime_error(fmt::format("No compatible H.264 encoder found for configured GPU {}", gpu.render_node));
+    }
+    logs::log(logs::info,
+              "Validated configured GPU {} ({}) for session scheduling",
+              gpu.render_node,
+              get_vendor_name(gpu_vendor));
   }
   auto hevc_encoder = get_encoder("h265", default_gst_render_node, default_gst_video_settings.hevc_encoders, vendor);
   auto av1_encoder = get_encoder("av1", default_gst_render_node, default_gst_video_settings.av1_encoders, vendor);
@@ -403,6 +432,8 @@ Config load_or_default(const std::string &source,
                 .config_source = source,
                 .support_hevc = hevc_encoder.has_value(),
                 .support_av1 = av1_encoder.has_value() && encoder_type(*av1_encoder) != SOFTWARE,
+                .gpus = cfg.gpus,
+                .excluded_gpus = cfg.excluded_gpus,
                 .paired_clients = clients_atom,
                 .profiles = profiles_atom};
 }

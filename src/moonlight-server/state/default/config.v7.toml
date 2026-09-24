@@ -5,6 +5,17 @@ config_version = 7
 # A list of paired clients that will be allowed to stream
 paired_clients = []
 
+# Optional GPU scheduling. Leave empty to automatically use every /dev/dri/renderD* node
+# with equal weight. Each new Moonlight session is assigned independently.
+# excluded_gpus = ["/dev/dri/renderD128"]
+# When [[gpus]] entries are provided, only those render nodes are used.
+# [[gpus]]
+# render_node = "/dev/dri/renderD128"
+# weight = 10
+# [[gpus]]
+# render_node = "/dev/dri/renderD129"
+# weight = 7
+
 ######################
 # Profiles: a list of different profiles, each with a list of apps
 ######################

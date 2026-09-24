@@ -21,6 +21,7 @@
 #include <openssl/x509.h>
 #include <optional>
 #include <state/serialised_config.hpp>
+#include <state/gpu_scheduler.hpp>
 #include <utility>
 #include <vector>
 
@@ -80,6 +81,10 @@ struct Config {
   std::string config_source;
   bool support_hevc;
   bool support_av1;
+  /** GPUs configured for per-session scheduling. Empty means auto-discover. */
+  std::vector<wolf::config::GPUConfig> gpus;
+  /** Render nodes excluded from session scheduling. */
+  std::vector<std::string> excluded_gpus;
 
   /**
    * Mutable, paired_clients will be loaded up on startup
@@ -188,13 +193,15 @@ struct AppState {
   /**
    * A single global Gstreamer video context shared with all the pipelines
    */
-  std::shared_ptr<immer::atom<gst_video_context::gst_context_ptr>> gst_context =
-      std::make_shared<immer::atom<gst_video_context::gst_context_ptr>>();
+  std::shared_ptr<gst_video_context::GstVideoContextProvider> gst_context_provider =
+      std::make_shared<gst_video_context::GstVideoContextProvider>();
 
   /**
    * A list of all currently running (and paused) streaming sessions
    */
   SessionsAtoms running_sessions;
+
+  std::shared_ptr<GPUScheduler> gpu_scheduler;
 };
 
 const static immer::array<audio::AudioMode> AUDIO_CONFIGURATIONS = {
