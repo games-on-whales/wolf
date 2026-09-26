@@ -251,11 +251,13 @@ struct VideoSession {
   bool wait_for_ping = true;
 
   int packet_size;
+  int gop_size;
   int frames_with_invalid_ref_threshold;
   int fec_percentage;
   int min_required_fec_packets;
   long bitrate_kbps;
   int slices_per_frame;
+  bool intra_refresh;
 
   ColorRange color_range;
   ColorSpace color_space;

@@ -74,7 +74,7 @@ Please refer to `docker/gstreamer.Dockerfile` for an up-to-date list of paramete
 .Build gstreamer
 [source,bash]
 ....
-git clone -b 1.24.6 --depth=1 https://gitlab.freedesktop.org/gstreamer/gstreamer.git
+git clone -b 1.28.6 --depth=1 https://gitlab.freedesktop.org/gstreamer/gstreamer.git
 cd gstreamer
 # Setup a place where we'll put the libraries
 mkdir -p $HOME/gstreamer/include -p $HOME/gstreamer/usr/local/include
@@ -105,8 +105,6 @@ meson setup --prefix=$HOME/gstreamer \
 	-Dgst-plugins-bad:qsv=enabled \
 	-Dgst-plugins-bad:aom=enabled \
 	-Dgst-plugin-bad:nvcodec=enabled  \
-	-Dvaapi=enabled \
-	-Dgstreamer-vaapi:x11=disabled \
 	build
 meson compile -C build
 meson install -C build

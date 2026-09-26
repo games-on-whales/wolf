@@ -2001,6 +2001,9 @@
           "packet_size": {
             "type": "integer"
           },
+          "gop_size": {
+            "type": "integer"
+          },
           "frames_with_invalid_ref_threshold": {
             "type": "integer"
           },
@@ -2015,6 +2018,9 @@
           },
           "slices_per_frame": {
             "type": "integer"
+          },
+          "intra_refresh": {
+            "type": "boolean"
           },
           "color_range": {
             "type": "string",
@@ -2052,11 +2058,13 @@
           "timeout_ms",
           "wait_for_ping",
           "packet_size",
+          "gop_size",
           "frames_with_invalid_ref_threshold",
           "fec_percentage",
           "min_required_fec_packets",
           "bitrate_kbps",
           "slices_per_frame",
+          "intra_refresh",
           "color_range",
           "color_space",
           "client_ip",
