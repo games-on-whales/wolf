@@ -1,5 +1,6 @@
 #include <catch2/catch_test_macros.hpp>
 #include <catch2/matchers/catch_matchers_string.hpp>
+#include <control/control.hpp>
 
 using Catch::Matchers::Equals;
 
@@ -88,4 +89,47 @@ TEST_CASE("control joypad input packets") {
   REQUIRE(input_data->type == pkts::CONTROLLER_MULTI);
   REQUIRE(input_data->active_gamepad_mask == 1);
   REQUIRE(pressed_btns & pkts::CONTROLLER_BTN::A);
+}
+TEST_CASE("Control sessions sharing an IP", "[CONTROL][shared-ip]") {
+  using wolf::core::events::StreamSession;
+  StreamSession first{};
+  first.session_id = 1;
+  first.ip = "192.0.2.1";
+  first.enet_secret_payload = 123;
+  auto second = first;
+  second.session_id = 2;
+  second.enet_secret_payload = 456;
+  auto sessions =
+      std::make_shared<immer::atom<immer::vector<StreamSession>>>(immer::vector<StreamSession>{first, second});
+  control::enet_clients_map clients;
+  ENetPeer peer{};
+  ENetEvent event{};
+  event.type = ENET_EVENT_TYPE_CONNECT;
+  event.peer = &peer;
+
+  SECTION("Secret identifies either client behind the same IP") {
+    for (const auto &session : {first, second}) {
+      event.data = session.enet_secret_payload;
+      auto match = control::get_current_session(clients, sessions, first.ip, event);
+      REQUIRE(match.has_value());
+      REQUIRE(match->session_id == session.session_id);
+    }
+  }
+  SECTION("Ambiguous legacy IP is rejected, then recovers when one session leaves") {
+    REQUIRE_FALSE(control::get_current_session(clients, sessions, first.ip, event).has_value());
+    sessions->update([second](const auto &) { return immer::vector<StreamSession>{second}; });
+    auto match = control::get_current_session(clients, sessions, first.ip, event);
+    REQUIRE(match.has_value());
+    REQUIRE(match->session_id == second.session_id);
+    REQUIRE_FALSE(control::get_current_session(clients, sessions, "192.0.2.2", event).has_value());
+  }
+  SECTION("Established peers stay associated on receive and disconnect") {
+    clients = clients.set(&peer, second);
+    for (const auto type : {ENET_EVENT_TYPE_RECEIVE, ENET_EVENT_TYPE_DISCONNECT}) {
+      event.type = type;
+      auto match = control::get_current_session(clients, sessions, first.ip, event);
+      REQUIRE(match.has_value());
+      REQUIRE(match->session_id == second.session_id);
+    }
+  }
 }

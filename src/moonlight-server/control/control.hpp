@@ -23,6 +23,11 @@ void run_control(int port,
 
 using enet_clients_map = immer::map<ENetPeer *, immer::box<events::StreamSession>>;
 
+std::optional<events::StreamSession> get_current_session(const enet_clients_map &connected_clients,
+                                                         const state::SessionsAtoms &running_sessions,
+                                                         std::string_view client_ip,
+                                                         const ENetEvent &enet_event);
+
 std::shared_ptr<ENetPeer> to_shared_ptr(ENetPeer *peer);
 
 bool encrypt_and_send(std::string_view payload,
