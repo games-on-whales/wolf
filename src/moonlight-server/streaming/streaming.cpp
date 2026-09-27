@@ -1,5 +1,6 @@
 #include "platforms/hw.hpp"
 
+#include <algorithm>
 #include <chrono>
 #include <control/control.hpp>
 #include <core/batched_send.hpp>
@@ -191,6 +192,26 @@ void start_audio_producer(const std::string &session_id,
 
     return immer::array<immer::box<events::EventBusHandlers>>{std::move(stop_handler), std::move(stop_lobby_handler)};
   });
+}
+
+/**
+ * Compute the video send pacing rate, in RTP packets per millisecond. See the declaration in
+ * streaming.hpp for the rationale behind the two terms.
+ */
+std::size_t video_pacing_packets_per_ms(long bitrate_kbps, int fec_percentage, int packet_size) {
+  // Floor: 80% of a 1 Gbit/s link, in bit/ms. Keeps the historical pacing rate for ordinary
+  // bitrates, where a 1 Gbit/s burst is already far above the stream's wire rate.
+  constexpr long LINK_FLOOR_BITS_PER_MS = 1000000000L * 80 / 100 / 1000;
+  // How much faster than the stream's average wire rate the burst must be, so that one frame
+  // drains in roughly a third of its frame interval and pacing stops being the frame rate limit.
+  constexpr long HEADROOM = 3;
+
+  const long bits_per_packet = static_cast<long>(packet_size) * 8;
+  const long floor_packets = LINK_FLOOR_BITS_PER_MS / bits_per_packet;
+  // A kbit/s is a bit/ms; FEC packets travel on top of the encoder bitrate.
+  const long wire_bits_per_ms = bitrate_kbps * (100 + fec_percentage) / 100;
+  const long scaled_packets = (HEADROOM * wire_bits_per_ms + bits_per_packet - 1) / bits_per_packet;
+  return static_cast<std::size_t>(std::max({1L, floor_packets, scaled_packets}));
 }
 
 namespace custom_sink {
@@ -403,10 +424,12 @@ void start_streaming_video(immer::box<events::VideoSession> video_session,
       .client_endpoint = std::make_shared<udp::endpoint>(boost::asio::ip::make_address(client_ip), client_port),
       .pacing = {
           .enabled = enable_pacing,
-          .max_packets_per_ms = static_cast<std::size_t>(
-              std::max(1L, static_cast<long>(1000000000L * 80 / 100 / 1000 / (video_session->packet_size * 8)))),
+          .max_packets_per_ms = video_pacing_packets_per_ms(video_session->bitrate_kbps,
+                                                            video_session->fec_percentage,
+                                                            video_session->packet_size),
           .max_batch_size = std::min<std::size_t>(16, 65536 / video_session->packet_size),
       }});
+  logs::log(logs::debug, "[GSTREAMER] Video pacing: {} packets/ms", udp_sink->pacing.max_packets_per_ms);
   std::shared_ptr<NeedContextData> ctx_data_ptr = std::make_shared<NeedContextData>(
       NeedContextData{.device_path = video_session->render_node, .gst_context = video_context});
   run_pipeline(pipeline, [video_session, event_bus, udp_sink, ctx_data_ptr](auto pipeline) {

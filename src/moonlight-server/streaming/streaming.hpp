@@ -62,6 +62,30 @@ void start_streaming_audio(immer::box<events::AudioSession> audio_session,
                            const std::string &sink_name,
                            const std::string &server_name);
 
+/**
+ * Compute the video send pacing rate, in RTP packets per millisecond.
+ *
+ * Pacing spreads each frame's packets over the frame interval instead of dumping them at line
+ * rate. The burst rate must still be well above the stream's average wire rate, otherwise the
+ * paced send itself becomes the frame rate limit: high bitrate streams would need more than one
+ * frame interval just to drain a frame. The rate is therefore the larger of:
+ *
+ * - 80% of a 1 Gbit/s link at the given packet size (the link-rate floor this code has always
+ *   used, so ordinary bitrates keep their existing behaviour), and
+ * - 3x the negotiated wire rate, i.e. encoder bitrate plus FEC overhead, so a frame drains in
+ *   about a third of its frame interval.
+ *
+ * @param bitrate_kbps negotiated encoder bitrate, in kbit/s (as in VideoSession::bitrate_kbps).
+ *                     A kbit/s is also a bit/ms, so this is the average bits per millisecond.
+ * @param fec_percentage percentage of FEC packets sent on top of the encoder bitrate.
+ * @param packet_size RTP payload size in bytes; MUST be > 0 (the caller also divides by it).
+ * @return packets per millisecond, at least 1.
+ *
+ * Example: 1392 byte packets and 20% FEC gives 71 packets/ms for a 20 Mbit/s stream (floor) and
+ * 198 packets/ms for a 610 Mbit/s stream (scaled).
+ */
+std::size_t video_pacing_packets_per_ms(long bitrate_kbps, int fec_percentage, int packet_size);
+
 static bool run_pipeline(
     const std::string &pipeline_desc,
     const std::function<immer::array<immer::box<events::EventBusHandlers>>(gstreamer::gst_element_ptr /* pipeline */)>
