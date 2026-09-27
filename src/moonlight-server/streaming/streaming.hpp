@@ -7,6 +7,9 @@
 #include <gst-plugin/gstrtpmoonlightpay_audio.hpp>
 #include <gst-plugin/gstrtpmoonlightpay_video.hpp>
 #include <gst-plugin/video.hpp>
+#ifdef WOLF_PYROWAVE
+#include <gst-plugin/pyrowave/pyrowave_device.hpp>
+#endif
 #include <gst/gst.h>
 #include <gstreamer-1.0/gst/app/gstappsrc.h>
 #include <immer/box.hpp>
@@ -136,6 +139,12 @@ inline void init() {
 
   gst_element_register(nullptr, "rtpmoonlightpay_video", GST_RANK_PRIMARY, gst_TYPE_rtp_moonlight_pay_video);
   gst_element_register(nullptr, "rtpmoonlightpay_audio", GST_RANK_PRIMARY, gst_TYPE_rtp_moonlight_pay_audio);
+
+#ifdef WOLF_PYROWAVE
+  /* PyroWave is registered through a plugin (rather than as a bare element) so that the config loader
+   * can discover it by name; it stays unavailable when there is no usable Vulkan device. */
+  wolf::pyrowave::register_gst_plugin();
+#endif
 
   moonlight::fec::init();
 }

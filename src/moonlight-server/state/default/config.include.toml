@@ -542,6 +542,27 @@ av1parse !
 video/x-av1, stream-format=obu-stream, alignment=frame, profile=main\
 """
 
+######################
+# PyroWave encoders (GPU wavelet codec, needs a Vulkan 1.3 device and libpyrowave-shared).
+# Only offered to clients that negotiate it explicitly (Aurora and friends).
+###
+[[gstreamer.video.pyrowave_encoders]]
+plugin_name = "pyrowave"
+check_elements = ["pyrowaveenc"]
+video_params = """
+videoconvertscale !
+videorate !
+video/x-raw, width={width}, height={height}, framerate={fps}/1, format=NV12\
+"""
+video_params_zero_copy = """
+videorate !
+video/x-raw(memory:DMABuf), framerate={fps}/1\
+"""
+encoder_pipeline = """
+pyrowaveenc width={width} height={height} bitrate={bitrate} payload_size={payload_size} !
+video/x-pyrowave\
+"""
+
 ###########
 # Audio
 ###

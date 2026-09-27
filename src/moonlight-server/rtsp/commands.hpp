@@ -49,6 +49,10 @@ describe(const RTSP_PACKET &req, const events::StreamSession &session) {
   if (session.display_mode.av1_supported) {
     payloads.push_back({"a", "a=rtpmap:98 AV1/90000"});
   }
+  if (session.display_mode.pyrowave_supported) {
+    // The client only checks for this substring to know that the host can send PyroWave.
+    payloads.push_back({"a", "rtpmap:99 PYROWAVE/90000"});
+  }
 
   // Advertise all audio configurations
   for (const auto audio_mode : state::AUDIO_CONFIGURATIONS) {
@@ -167,8 +171,11 @@ announce(const RTSP_PACKET &req, const events::StreamSession &session) {
               | views::transform(parse_arg_line)               // turns an arg line into a pair
               | to<std::map<std::string, std::optional<int>>>; // to map
 
-  bool video_format_hevc = args["x-nv-vqos[0].bitStreamFormat"].value_or(0) == 1;
-  bool video_format_av1 = args["x-nv-vqos[0].bitStreamFormat"].value_or(0) == 2;
+  // Codec selection, with the same precedence the clients use when they are left on "auto".
+  auto bit_stream_format = args["x-nv-vqos[0].bitStreamFormat"].value_or(0);
+  bool video_format_pyrowave = bit_stream_format == 3;
+  bool video_format_av1 = bit_stream_format == 2;
+  bool video_format_hevc = bit_stream_format == 1;
   auto csc = args["x-nv-video[0].encoderCscMode"].value_or(0);
 
   // Video session
@@ -176,10 +183,14 @@ announce(const RTSP_PACKET &req, const events::StreamSession &session) {
                                     .height = args["x-nv-video[0].clientViewportHt"].value(),
                                     .refreshRate = args["x-nv-video[0].maxFPS"].value(),
                                     .hevc_supported = video_format_hevc,
-                                    .av1_supported = video_format_av1};
+                                    .av1_supported = video_format_av1,
+                                    .pyrowave_supported = video_format_pyrowave};
 
   std::string gst_pipeline;
-  if (video_format_av1) {
+  if (video_format_pyrowave) {
+    logs::log(logs::debug, "[RTSP] Moonlight requested video format PyroWave");
+    gst_pipeline = session.app->pyrowave_gst_pipeline;
+  } else if (video_format_av1) {
     logs::log(logs::debug, "[RTSP] Moonlight requested video format AV1");
     gst_pipeline = session.app->av1_gst_pipeline;
   } else if (video_format_hevc) {
@@ -188,6 +199,13 @@ announce(const RTSP_PACKET &req, const events::StreamSession &session) {
   } else {
     logs::log(logs::debug, "[RTSP] Moonlight requested video format H264");
     gst_pipeline = session.app->h264_gst_pipeline;
+  }
+
+  if (video_format_pyrowave && gst_pipeline.empty()) {
+    // Answering with an H264 stream would leave the client feeding wavelet-coded bytes to a
+    // PyroWave decoder, so fail the handshake instead.
+    logs::log(logs::error, "[RTSP] Client requested PyroWave but no PyroWave encoder is available");
+    return error_msg(400, "BAD REQUEST", req.seq_number);
   }
 
   auto audio_channels = args["x-nv-audio.surround.numChannels"].value_or(session.audio_channel_count);
