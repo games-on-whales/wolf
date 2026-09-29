@@ -58,7 +58,7 @@ Nvidia (Container Toolkit)::
 
 [WARNING]
 ====
-This **isn't recommended at the moment** as it's not as stable as the manual method. +
+This **isn't recommended at the moment** as it's not as stable as the auto or manual method. +
 You can follow https://github.com/games-on-whales/wolf/issues/152[issue #152] for updates.
 ====
 
@@ -149,6 +149,69 @@ GRUB_CMDLINE_LINUX_DEFAULT="quiet nvidia-drm.modeset=1"
 
 Then `sudo update-grub` and *reboot*.
 ====
+
+--
+Nvidia (Auto)::
++
+--
+
+Make sure that your driver version is `>= 530.30.02` then simply run `docker compose up --detach` using the following `docker-compose.yml` configuration:
+
+[source,yaml]
+....
+
+services:
+  init-nvidia-driver:
+    image: gow/nvidia-driver:latest
+    build:
+      context: https://github.com/games-on-whales/gow.git#master:/images/nvidia-driver/
+      secrets:
+        - nvidia-version
+    pull_policy: build
+    volumes:
+      - nvidia-driver-vol:/usr/nvidia.init/:rw
+
+  wolf:
+    image: ghcr.io/games-on-whales/wolf:stable
+    depends_on:
+      init-nvidia-driver:
+        condition: service_completed_successfully
+        restart: true
+    environment:
+      - "NVIDIA_DRIVER_VOLUME_NAME=${COMPOSE_PROJECT_NAME}_nvidia-driver-vol"
+    volumes:
+      - /etc/wolf/:/etc/wolf:rw
+      - /var/run/docker.sock:/var/run/docker.sock:rw
+      - /dev/:/dev/:rw
+      - /run/udev:/run/udev:rw
+      - nvidia-driver-vol:/usr/nvidia:rw
+    devices:
+      - /dev/dri
+      - /dev/uinput
+      - /dev/uhid
+      - /dev/nvidia-uvm
+      - /dev/nvidia-uvm-tools
+      - /dev/nvidia-caps/nvidia-cap1
+      - /dev/nvidia-caps/nvidia-cap2
+      - /dev/nvidiactl
+      - /dev/nvidia0
+      - /dev/nvidia-modeset
+    device_cgroup_rules:
+      - 'c 13:* rmw'
+    network_mode: host
+    restart: unless-stopped
+
+volumes:
+  nvidia-driver-vol:
+
+secrets:
+  nvidia-version:
+    file: /sys/module/nvidia/version
+....
+
+If any environment dependencies have not been met or the driver initialization process failed, you should see messages in the `init-nvidia-driver` service logs; to do this, run the command `docker compose logs init-nvidia-driver`.
+
+You can find troubleshooting information on the Nvidia (Manual) tab.
 
 --
 Nvidia (Manual)::
