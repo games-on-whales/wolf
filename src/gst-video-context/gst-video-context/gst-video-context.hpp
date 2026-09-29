@@ -23,6 +23,7 @@ using gst_context_ptr = std::shared_ptr<GstVideoContext>;
  */
 gst_context_ptr need_context_for_device(const std::string &device_path, GstMessage *msg);
 
+bool is_context_valid(const gst_context_ptr &context);
 bool set_context(gst_context_ptr context, GstMessage *msg);
 
 } // namespace gst_video_context
