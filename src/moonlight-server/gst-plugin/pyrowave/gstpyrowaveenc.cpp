@@ -13,12 +13,14 @@
 #include <gst-plugin/utils.hpp>
 
 #include <algorithm>
+#include <drm_fourcc.h>
 #include <gst/allocators/gstdmabuf.h>
 #include <gst/gst.h>
 #include <gst/video/video.h>
 #include <helpers/logger.hpp>
 #include <limits>
 #include <moonlight/data-structures.hpp>
+#include <optional>
 #include <vector>
 
 GST_DEBUG_CATEGORY_STATIC(gst_pyrowave_enc_debug_category);
@@ -54,13 +56,15 @@ struct PyroWaveEncoderState {
   /** Shared PyroWave device; declared first so it outlives `encoder`. */
   std::shared_ptr<wolf::pyrowave::Device> device;
 
-  /** dma-buf import cache, only present when the negotiated caps are DRM dma-bufs. */
+  /** dma-buf import cache, only present when the input is imported as a DRM dma-buf (DRM caps, or
+   * legacy RGB dma-buf caps promoted to linear DRM). */
   std::optional<wolf::pyrowave::DmaBufImporter> importer;
 
   /** Encoder handle; must be destroyed before `device`. */
   pyrowave_encoder encoder = nullptr;
 
-  /** Input description: DRM dma-buf caps, or the raw video info for everything else. */
+  /** Input description: DRM dma-buf caps (including legacy RGB dma-buf caps promoted to a linear DRM
+   * description), or the raw video info for NV12/I420 input. */
   bool dma_drm = false;
   GstVideoInfoDmaDrm drm_info{};
   GstVideoInfo video_info{};
@@ -90,7 +94,8 @@ struct PyroWaveEncoderState {
    *
    * False when the input is an RGB dma-buf (only the GPU path can colour convert it) or when the
    * dma-buf is not linear (mapping it on the CPU would read a tiled layout as if it were packed), or
-   * when the input has to be rescaled, which only the GPU path implements.
+   * when the input has to be rescaled, which only the GPU path implements. The CPU entry point only
+   * reads 4:2:0 YUV, so NV12 and I420 are the only formats it can take.
    */
   bool cpu_fallback_possible = false;
 
@@ -351,6 +356,24 @@ void fill_cpu_buffer(const PyroWaveEncoderState &state, const GstVideoFrame &fra
   buffer->format = state.cpu_format;
 }
 
+/**
+ * Maps a raw video format to the plane layout the CPU entry point reads.
+ *
+ * @param format Negotiated raw video format.
+ * @return The CPU buffer format, or std::nullopt when the CPU entry point cannot read the format
+ * (anything but 4:2:0 YUV, e.g. the RGB dma-buf formats of the sink template).
+ */
+std::optional<pyrowave_cpu_buffer_format> cpu_buffer_format(GstVideoFormat format) {
+  switch (format) {
+  case GST_VIDEO_FORMAT_NV12:
+    return PYROWAVE_CPU_BUFFER_FORMAT_NV12;
+  case GST_VIDEO_FORMAT_I420:
+    return PYROWAVE_CPU_BUFFER_FORMAT_YUV420P;
+  default:
+    return std::nullopt;
+  }
+}
+
 } // namespace
 
 /* class initialization */
@@ -577,6 +600,32 @@ static gboolean gst_pyrowave_enc_set_caps(GstBaseTransform *trans, GstCaps *inca
                         (nullptr));
       return FALSE;
     }
+
+    const GstVideoFormat format = GST_VIDEO_INFO_FORMAT(&state->video_info);
+    if (!cpu_buffer_format(format)) {
+      if (!dmabuf) {
+        // The sink template only accepts NV12/I420 in system memory, so this is unreachable today;
+        // it guards the case of the template being widened without the CPU path following.
+        GST_ELEMENT_ERROR(pyrowave_enc,
+                          STREAM,
+                          FORMAT,
+                          ("PyroWave cannot encode %s from system memory", gst_video_format_to_string(format)),
+                          ("Convert the input to NV12 or I420"));
+        return FALSE;
+      }
+      // Dma-buf caps without a drm-format field describe a linear buffer. The CPU entry point only
+      // reads 4:2:0 YUV, so describe the RGB frame as a linear DRM buffer and let the GPU importer
+      // colour convert it.
+      if (!gst_video_info_dma_drm_from_video_info(&state->drm_info, &state->video_info, DRM_FORMAT_MOD_LINEAR)) {
+        GST_ELEMENT_ERROR(pyrowave_enc,
+                          STREAM,
+                          FORMAT,
+                          ("PyroWave: no DRM fourcc for dma-buf format %s", gst_video_format_to_string(format)),
+                          ("Set WOLF_USE_ZERO_COPY=FALSE to use the CPU pipeline"));
+        return FALSE;
+      }
+      state->dma_drm = TRUE;
+    }
   }
 
   state->input_width = GST_VIDEO_INFO_WIDTH(&state->video_info);
@@ -609,20 +658,17 @@ static gboolean gst_pyrowave_enc_set_caps(GstBaseTransform *trans, GstCaps *inca
   if (state->dma_drm) {
     state->cpu_fallback_possible = wolf::pyrowave::drm_modifier_is_linear(state->drm_info.drm_modifier) && even_size &&
                                    same_size && wolf::pyrowave::drm_format_is_nv12(state->drm_info.drm_fourcc);
-  } else {
-    state->cpu_fallback_possible = even_size && same_size;
-  }
-
-  if (state->cpu_fallback_possible) {
-    if (state->dma_drm) {
+    if (state->cpu_fallback_possible) {
       // A linear NV12 dma-buf is readable from the CPU, so describe it as an ordinary NV12 frame.
       gst_video_info_set_format(&state->cpu_video_info, GST_VIDEO_FORMAT_NV12, state->width, state->height);
       state->cpu_format = PYROWAVE_CPU_BUFFER_FORMAT_NV12;
-    } else {
+    }
+  } else {
+    const auto cpu_format = cpu_buffer_format(GST_VIDEO_INFO_FORMAT(&state->video_info));
+    state->cpu_fallback_possible = even_size && same_size && cpu_format.has_value();
+    if (state->cpu_fallback_possible) {
       state->cpu_video_info = state->video_info;
-      state->cpu_format = GST_VIDEO_INFO_FORMAT(&state->video_info) == GST_VIDEO_FORMAT_NV12
-                              ? PYROWAVE_CPU_BUFFER_FORMAT_NV12
-                              : PYROWAVE_CPU_BUFFER_FORMAT_YUV420P;
+      state->cpu_format = *cpu_format;
     }
   }
 

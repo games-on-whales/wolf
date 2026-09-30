@@ -16,6 +16,13 @@
 
 #ifdef WOLF_PYROWAVE
 #include <gst-plugin/pyrowave/gstpyrowaveenc.hpp>
+#include <gst/allocators/gstdmabuf.h>
+#include <gst/app/gstappsink.h>
+#include <gst/app/gstappsrc.h>
+#include <gst/video/video.h>
+#include <string>
+#include <sys/mman.h>
+#include <unistd.h>
 #endif
 
 using namespace wolf::gst_pyrowave;
@@ -246,6 +253,92 @@ TEST_CASE("PyroWave encoder accepts high-FPS bitrates", "[PyroWave]") {
   REQUIRE(bitrate == 863308);
 
   gst_object_unref(element);
+}
+
+/**
+ * A dma-buf negotiated without a drm-format field must reach the GPU importer, never the CPU entry
+ * point.
+ *
+ * The sink template accepts `video/x-raw(memory:DMABuf)` in BGRx/BGRA/RGBx/RGBA as well as NV12 and
+ * I420. Such caps carry no drm-format, and the CPU entry point only reads 4:2:0 YUV: feeding it an
+ * RGB frame as three-plane YUV420P hands it null chroma pointers. The element must therefore
+ * describe the buffer as a linear DRM buffer and import it.
+ *
+ * The buffer is a memfd, which real Vulkan drivers reject as a dma-buf, so the expected outcome is
+ * the element's "cannot import the dma-buf nor encode it on the CPU" error; the test also accepts a
+ * successful sample, since a driver may accept the fd. Both prove the GPU path ran, and the bug
+ * (a segfault, or a "CPU encode failed" error) fails the test either way.
+ */
+TEST_CASE("PyroWave encoder sends legacy RGB dma-bufs to the GPU importer", "[PyroWave]") {
+  GstElementFactory *factory = gst_element_factory_find("pyrowaveenc");
+  if (factory == nullptr) {
+    SKIP("pyrowaveenc is not registered: no usable Vulkan device");
+  }
+  gst_object_unref(factory);
+
+  GError *error = nullptr;
+  GstElement *pipeline = gst_parse_launch(
+      "appsrc name=src format=time "
+      "caps=\"video/x-raw(memory:DMABuf),format=BGRx,width=64,height=64,framerate=60/1\" "
+      "! pyrowaveenc ! appsink name=sink sync=false",
+      &error);
+  REQUIRE(error == nullptr);
+  REQUIRE(pipeline != nullptr);
+
+  GstElement *src = gst_bin_get_by_name(GST_BIN(pipeline), "src");
+  GstElement *sink = gst_bin_get_by_name(GST_BIN(pipeline), "sink");
+  REQUIRE(src != nullptr);
+  REQUIRE(sink != nullptr);
+
+  REQUIRE(gst_element_set_state(pipeline, GST_STATE_PLAYING) != GST_STATE_CHANGE_FAILURE);
+
+  constexpr gsize frame_size = 64 * 64 * 4;
+  const int fd = memfd_create("pyrowave-legacy-rgb", MFD_CLOEXEC);
+  REQUIRE(fd >= 0);
+  REQUIRE(ftruncate(fd, static_cast<off_t>(frame_size)) == 0);
+
+  // The allocator takes ownership of the file descriptor.
+  GstAllocator *allocator = gst_dmabuf_allocator_new();
+  REQUIRE(allocator != nullptr);
+  GstBuffer *buffer = gst_buffer_new();
+  gst_buffer_append_memory(buffer, gst_dmabuf_allocator_alloc(allocator, fd, frame_size));
+  gst_object_unref(allocator);
+
+  gst_buffer_add_video_meta(buffer, GST_VIDEO_FRAME_FLAG_NONE, GST_VIDEO_FORMAT_BGRx, 64, 64);
+  GST_BUFFER_PTS(buffer) = 0;
+  GST_BUFFER_DURATION(buffer) = GST_SECOND / 60;
+
+  REQUIRE(gst_app_src_push_buffer(GST_APP_SRC(src), buffer) == GST_FLOW_OK);
+
+  std::string error_text;
+  GstSample *sample = gst_app_sink_try_pull_sample(GST_APP_SINK(sink), 5 * GST_SECOND);
+  if (sample == nullptr) {
+    GstBus *bus = gst_element_get_bus(pipeline);
+    GstMessage *message = gst_bus_timed_pop_filtered(bus, 5 * GST_SECOND, GST_MESSAGE_ERROR);
+    REQUIRE(message != nullptr);
+
+    GError *err = nullptr;
+    gchar *debug = nullptr;
+    gst_message_parse_error(message, &err, &debug);
+    if (err != nullptr) {
+      error_text = err->message;
+      g_error_free(err);
+    }
+    g_free(debug);
+    gst_message_unref(message);
+    gst_object_unref(bus);
+  }
+
+  REQUIRE((sample != nullptr ||
+           error_text.find("cannot import the dma-buf nor encode it on the CPU") != std::string::npos));
+
+  if (sample != nullptr) {
+    gst_sample_unref(sample);
+  }
+  gst_element_set_state(pipeline, GST_STATE_NULL);
+  gst_object_unref(src);
+  gst_object_unref(sink);
+  gst_object_unref(pipeline);
 }
 
 #endif
