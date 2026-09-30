@@ -25,6 +25,7 @@ RUN apt-get update -y && \
     libudev-dev \
     libdrm-dev \
     libpci-dev \
+    libvulkan-dev \
     libglib2.0-dev libegl-dev libgles-dev libopengl-dev \
     && rm -rf /var/lib/apt/lists/*
 
@@ -48,6 +49,20 @@ RUN <<_GST_WAYLAND_DISPLAY
     cargo install cargo-c@0.10.23 --locked
     cargo cinstall --features="cuda" --prefix=/usr/local/lib/x86_64-linux-gnu/ --libdir=/usr/local/lib/x86_64-linux-gnu/gstreamer-1.0
 _GST_WAYLAND_DISPLAY
+
+RUN <<_PYROWAVE
+    #!/bin/bash
+    set -e
+
+    git clone https://github.com/Themaister/pyrowave
+    cd pyrowave
+    # Pinned so a future upstream change cannot break the build (the C API is pre-1.0)
+    git checkout 89f7e47d4abbf650c91fae766728af866c5e32a0
+    # Fetches Granite plus the volk and vulkan-headers submodules; the SPIR-V is pre-generated
+    bash checkout_granite.sh
+    cmake -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX=/usr/local
+    ninja -C build install
+_PYROWAVE
 
 COPY . /wolf/
 WORKDIR /wolf
@@ -94,6 +109,7 @@ RUN apt-get update -y && \
     apt-get install -y --no-install-recommends \
     libwayland-server0 libinput10 libxkbcommon0 libgbm1 \
     libglvnd0 libgl1 libglx0 libegl1 libgles2 xwayland hwdata \
+    libvulkan1 mesa-vulkan-drivers \
     && rm -rf /var/lib/apt/lists/*
 
 # Embedded PulseAudio: Wolf runs its own PulseAudio server inside this container
@@ -112,6 +128,10 @@ COPY docker/supervisord.conf /etc/supervisord.conf
 ENV GST_PLUGIN_PATH=/usr/local/lib/x86_64-linux-gnu/gstreamer-1.0/
 # Copying out our custom compositor from the build stage
 COPY --from=wolf-builder /usr/local/lib/x86_64-linux-gnu/gstreamer-1.0/* $GST_PLUGIN_PATH
+
+# PyroWave is built out-of-band in the builder stage and consumed as an installed shared library
+COPY --from=wolf-builder /usr/local/lib/libpyrowave-shared.so* /usr/local/lib/
+RUN ldconfig
 
 WORKDIR /wolf
 

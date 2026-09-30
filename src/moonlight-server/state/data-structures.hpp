@@ -68,6 +68,7 @@ enum Encoder {
   QUICKSYNC,
   SOFTWARE,
   APPLE,
+  PYROWAVE,
   UNKNOWN
 };
 
@@ -80,6 +81,7 @@ struct Config {
   std::string config_source;
   bool support_hevc;
   bool support_av1;
+  bool support_pyrowave;
 
   /**
    * Mutable, paired_clients will be loaded up on startup

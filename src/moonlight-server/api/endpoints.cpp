@@ -241,6 +241,7 @@ void UnixSocketServer::endpoint_StreamSessionAdd(const HTTPRequest &req, std::sh
           .h264_gst_pipeline = sample_app->h264_gst_pipeline,
           .hevc_gst_pipeline = sample_app->hevc_gst_pipeline,
           .av1_gst_pipeline = sample_app->av1_gst_pipeline,
+          .pyrowave_gst_pipeline = sample_app->pyrowave_gst_pipeline,
 
           .render_node = sample_app->render_node,
           .opus_gst_pipeline = sample_app->opus_gst_pipeline,
@@ -276,7 +277,8 @@ void UnixSocketServer::endpoint_StreamSessionAdd(const HTTPRequest &req, std::sh
                                .height = ss.video_height,
                                .refreshRate = ss.video_refresh_rate,
                                .hevc_supported = state_->app_state->config->support_hevc,
-                               .av1_supported = state_->app_state->config->support_av1},
+                               .av1_supported = state_->app_state->config->support_av1,
+                               .pyrowave_supported = state_->app_state->config->support_pyrowave},
         ss.audio_channel_count,
         ss.aes_key,
         ss.aes_iv);

@@ -1,7 +1,10 @@
 #pragma once
 
+#include <cstdint>
+#include <optional>
 #include <string>
 #include <string_view>
+#include <utility>
 #include <vector>
 
 /**
@@ -27,6 +30,19 @@ enum GPU_VENDOR {
 };
 
 GPU_VENDOR get_vendor(std::string_view gpu);
+
+/**
+ * Resolves the PCI vendor and device ids of the GPU behind a /dev/dri node.
+ *
+ * Vulkan reports these same ids as VkPhysicalDeviceProperties::vendorID/deviceID, which makes them
+ * the portable way to ask a Vulkan library for the exact GPU a DRM node refers to (PyroWave device
+ * selection uses them).
+ *
+ * @param gpu A /dev/dri/ node or a symlink pointing at one.
+ * @return First: PCI vendor id, second: PCI device id; std::nullopt when the node is missing, cannot
+ * be opened, or does not expose PCI information (for example a platform device).
+ */
+std::optional<std::pair<std::uint32_t, std::uint32_t>> get_pci_ids(std::string_view gpu);
 
 std::string get_vendor_name(GPU_VENDOR vendor);
 
