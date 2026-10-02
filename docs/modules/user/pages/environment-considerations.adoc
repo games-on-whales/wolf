@@ -4,8 +4,6 @@ While none of these problems are directly related to wolf/gow, it is possible yo
 
 == Proton
 
-[tabs]
-======
 Proton has a max amount of cores it will use, and some games will fail with too many cores present. See https://github.com/ValveSoftware/Proton/issues/5927 for details.
 As a fix, adjust launch options for your given game to specify an amount of cores. Note that limiting cpu availability with docker will not work, as the issue is related to given core count, not actual amount of in use cores, and docker does not obfuscate this. 
 
@@ -13,8 +11,6 @@ If you are having issues with a specific game, review https://www.protondb.com/ 
 
 == Moonlight
 
-[tabs]
-======
 Not all Moonlight clients are created equal. For example, the official android app hasn't been updated in years, and it may be a good idea to use a fork like https://github.com/ClassicOldSong/moonlight-android. It's been noted this fixes various controller features. 
 When in doubt, it may make sense to review https://github.com/moonlight-stream for any known issues as a starting point. 
 
