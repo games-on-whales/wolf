@@ -66,6 +66,23 @@ jobs:
             type=sha
           flavor: latest=false # let's not produce a :latest tag
 
+      # Same tags as above with a "-minimal" suffix, for the runner-minimal target
+      - name: Docker meta (minimal)
+        id: meta_minimal
+        uses: docker/metadata-action@v4
+        with:
+          images: ${{ steps.prep.outputs.images }}
+          tags: |
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}
+            type=edge,branch=master
+            type=ref,event=branch
+            type=raw,value=alpha
+            type=sha
+          flavor: |
+            latest=false
+            suffix=-minimal
+
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v2
         with:
@@ -130,6 +147,23 @@ jobs:
             IMAGE_SOURCE=${{ steps.prep.outputs.github_server_url }}/${{ github.repository }}
           cache-from: ${{ steps.prep.outputs.cache_from }}
           cache-to: ${{ steps.prep.outputs.cache_to }}
+
+      # Wolf only, without the embedded PulseAudio + supervisord (see docker/wolf.Dockerfile).
+      # Shares every layer up to runner-minimal with the build above.
+      - name: Build Wolf (minimal)
+        uses: docker/build-push-action@v3
+        with:
+          builder: ${{ steps.buildx.outputs.name }}
+          context: .
+          file: docker/wolf.Dockerfile
+          target: runner-minimal
+          push: ${{ steps.prep.outputs.push }}
+          tags: ${{ steps.meta_minimal.outputs.tags }}
+          labels: ${{ steps.meta_minimal.outputs.labels }}
+          build-args: |
+            BASE_IMAGE=ghcr.io/${{ github.repository_owner }}/gstreamer:1.26.7
+            IMAGE_SOURCE=${{ steps.prep.outputs.github_server_url }}/${{ github.repository }}
+          cache-from: ${{ steps.prep.outputs.cache_from }}
 
   test_devcontainer:
     runs-on: ubuntu-latest

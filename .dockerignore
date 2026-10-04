@@ -8,4 +8,7 @@
 !.clang-format
 !docker/gstreamer.control
 !docker/startup.sh
+!docker/startup-common.sh
+!docker/startup-minimal.sh
+!docker/entrypoint.sh
 !docker/supervisord.conf

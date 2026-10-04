@@ -88,6 +88,12 @@ See `docs/modules/dev/pages/how-it-works.adoc` for the full picture.
   (`docker/startup.sh` sets `WOLF_EMBED_PULSE=true`; Wolf waits for the PA socket before starting). With
   an external `PULSE_SERVER`, or if `pulseaudio` isn't installed, Wolf falls back to the legacy
   standalone `WolfPulseAudio` sidecar. Either way it uses `libpulse` for per-session virtual sinks.
+  The `runner-minimal` Dockerfile stage (published as `*-minimal` tags) drops PA + supervisord entirely
+  and execs Wolf directly via `docker/startup-minimal.sh`; the default `runner` stage layers them on top.
+  Startup logic shared by both lives in `docker/startup-common.sh`. The entrypoint
+  (`docker/entrypoint.sh`) wraps the GOW `/entrypoint.sh`; with `--rootless` (minimal only, must be
+  started non-root, e.g. `--user wolf`) it skips the GOW init + gosu. The image's `wolf` user (UID 990,
+  home `/nonexistent` so GOW's `userdel -r` can't wipe `/etc/wolf`) is removed if `UNAME`/`PUID`/`PGID` clash.
 - **Virtual input** — mouse/keyboard events go **directly to the Wayland compositor** (no host device);
   gamepads and pen/touch are real `uinput`/`uhid` devices created by `inputtino`. Those are visible on
   the host, so `85-wolf.rules` restricts them to a group/seat for isolation. The virtual DualSense uses

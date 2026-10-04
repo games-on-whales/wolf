@@ -72,7 +72,10 @@ RUN --mount=type=cache,target=/cache/ccache \
     cp $CMAKE_BUILD_DIR/src/fake-udev/fake-udev /wolf/fake-udev
 
 ########################################################
-FROM $BASE_IMAGE AS runner
+# Minimal image: Wolf as a single-process container, no embedded PulseAudio and
+# no supervisord. Meant for setups that orchestrate their own services (e.g.
+# systemd quadlets) and run PulseAudio separately; point PULSE_SERVER at it.
+FROM $BASE_IMAGE AS runner-minimal
 ENV DEBIAN_FRONTEND=noninteractive
 
 # Wolf runtime dependencies
@@ -95,19 +98,6 @@ RUN apt-get update -y && \
     libwayland-server0 libinput10 libxkbcommon0 libgbm1 \
     libglvnd0 libgl1 libglx0 libegl1 libgles2 xwayland hwdata \
     && rm -rf /var/lib/apt/lists/*
-
-# Embedded PulseAudio: Wolf runs its own PulseAudio server inside this container
-# (supervised by supervisord, see startup.sh + supervisord.conf) so audio is
-# available as soon as Wolf boots, without the legacy external "WolfPulseAudio"
-# sidecar container and its startup race. supervisord starts PA before Wolf,
-# restarts it if it dies, and stops both cleanly on container shutdown.
-# pulseaudio-utils ships pactl, handy for debugging audio from inside the container.
-RUN apt-get update -y && \
-    apt-get install -y --no-install-recommends \
-    pulseaudio pulseaudio-utils supervisor \
-    && rm -rf /var/lib/apt/lists/*
-
-COPY docker/supervisord.conf /etc/supervisord.conf
 
 ENV GST_PLUGIN_PATH=/usr/local/lib/x86_64-linux-gnu/gstreamer-1.0/
 # Copying out our custom compositor from the build stage
@@ -143,6 +133,16 @@ ENV GST_GL_API=gles2 \
     PGID=0 \
     UNAME="root"
 
+# Unprivileged system user for `--rootless` (see docker/entrypoint.sh). Fixed IDs
+# so host-side ownership of mounted folders stays stable across image builds.
+ARG WOLF_UID=990
+ARG WOLF_GID=990
+RUN groupadd --system --gid $WOLF_GID wolf && \
+    useradd --system --uid $WOLF_UID --gid $WOLF_GID --no-create-home \
+    --home-dir /nonexistent --shell /usr/sbin/nologin wolf && \
+    mkdir -p $HOST_APPS_STATE_FOLDER /run/user/wolf && \
+    chown wolf:wolf $HOST_APPS_STATE_FOLDER /run/user/wolf
+
 # Setting up XDG_RUNTIME_DIR this will automatically create a volume when starting the container
 VOLUME /run/user/wolf/
 ENV XDG_RUNTIME_DIR=/run/user/wolf
@@ -164,5 +164,28 @@ LABEL org.opencontainers.image.source="https://github.com/games-on-whales/wolf/"
 LABEL org.opencontainers.image.description="Wolf: stream virtual desktops and games in Docker"
 
 # See GOW/base-app
+COPY --chmod=755 docker/startup-common.sh /opt/gow/startup-common.sh
+COPY --chmod=777 docker/startup-minimal.sh /opt/gow/startup-app.sh
+COPY --chmod=755 docker/entrypoint.sh /opt/gow/wolf-entrypoint.sh
+ENTRYPOINT ["/opt/gow/wolf-entrypoint.sh"]
+
+########################################################
+# Default image: the minimal image plus an embedded PulseAudio, supervised
+# together with Wolf by supervisord. Keep this as the last stage so a plain
+# `docker build` without --target still produces it.
+FROM runner-minimal AS runner
+
+# Embedded PulseAudio: Wolf runs its own PulseAudio server inside this container
+# (supervised by supervisord, see startup.sh + supervisord.conf) so audio is
+# available as soon as Wolf boots, without the legacy external "WolfPulseAudio"
+# sidecar container and its startup race. supervisord starts PA before Wolf,
+# restarts it if it dies, and stops both cleanly on container shutdown.
+# pulseaudio-utils ships pactl, handy for debugging audio from inside the container.
+RUN apt-get update -y && \
+    apt-get install -y --no-install-recommends \
+    pulseaudio pulseaudio-utils supervisor \
+    && rm -rf /var/lib/apt/lists/*
+
+COPY docker/supervisord.conf /etc/supervisord.conf
+
 COPY --chmod=777 docker/startup.sh /opt/gow/startup-app.sh
-ENTRYPOINT ["/entrypoint.sh"]

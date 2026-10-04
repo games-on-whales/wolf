@@ -86,6 +86,40 @@ Additional env variables useful when debugging:
 |Gstreamer debug print, see https://gstreamer.freedesktop.org/documentation/tutorials/basic/debugging-tools.html?gi-language=c[debugging-tools]
 |===
 
+[#minimal_image]
+== Minimal image (external PulseAudio)
+
+Every Wolf image tag also comes in a `-minimal` variant (e.g. `ghcr.io/games-on-whales/wolf:stable-minimal`).
+It is the same image without the embedded PulseAudio server and without `supervisord`: Wolf is the only process in the container.
+This suits setups that already orchestrate their services (e.g. systemd quadlets) and want to run PulseAudio as its own, separately sandboxed, container.
+
+With the minimal image, run PulseAudio yourself (for example `ghcr.io/games-on-whales/pulseaudio:master`) and set `PULSE_SERVER` in the Wolf container to its socket, mounted into both containers.
+If `PULSE_SERVER` is left unset, Wolf falls back to spinning up the `WOLF_PULSE_IMAGE` sidecar container itself.
+
+To build it locally, use the `runner-minimal` target of `docker/wolf.Dockerfile`:
+
+[source,bash]
+....
+docker build -f docker/wolf.Dockerfile --target runner-minimal -t wolf:minimal .
+....
+
+=== Running rootless
+
+The minimal image ships an unprivileged `wolf` system user (UID/GID `990`, overridable at build time with the `WOLF_UID`/`WOLF_GID` build args).
+Start the container as that user and pass `--rootless` as the container command: the root-only init scripts and `gosu` are skipped and Wolf runs as `wolf`.
+
+[source,bash]
+....
+docker run --user wolf --group-add keep-groups ... ghcr.io/games-on-whales/wolf:stable-minimal --rootless
+....
+
+With a quadlet, set `User=wolf` and `Exec=--rootless`.
+
+* Device and Docker/Podman socket access come from the groups the runtime grants (e.g. `--group-add keep-groups`); Wolf can't add itself to device groups without root.
+* On NVIDIA, use the NVIDIA Container Toolkit (CDI); the driver-volume setup needs root and is skipped.
+* Folders you mount (e.g. `/etc/wolf`) must be writable by UID `990`.
+* `--rootless` refuses to run as root. To start as root and drop privileges instead, leave out `--rootless` and set `UNAME`/`PUID`/`PGID` as usual; if those clash with the built-in `wolf` user (name, UID or GID), it is removed and recreated with the IDs you asked for.
+
 [#data_setup]
 == Where apps will store permanent data?
 
