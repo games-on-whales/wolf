@@ -1,4 +1,5 @@
 #include <catch2/catch_test_macros.hpp>
+#include <catch2/generators/catch_generators.hpp>
 #include <catch2/matchers/catch_matchers_container_properties.hpp>
 #include <catch2/matchers/catch_matchers_contains.hpp>
 #include <catch2/matchers/catch_matchers_string.hpp>
@@ -133,10 +134,11 @@ TEST_CASE_METHOD(GStreamerTestsFixture, "RTP VIDEO Splits", "[GSTPlugin]") {
   SECTION("Multi block FEC") {
     auto payload_buf_blocks = gst_buffer_new_and_fill(payload_str.size(), payload_str.c_str());
     auto rtp_packets_blocks = gst_moonlight_video::generate_rtp_packets(*rtpmoonlightpay, payload_buf_blocks);
-    auto final_packets = gst_moonlight_video::generate_fec_multi_blocks(rtpmoonlightpay,
-                                                                        rtp_packets_blocks,
-                                                                        (int)payload_expected_packets,
-                                                                        payload_buf_blocks);
+    auto final_packets = gst_moonlight_video::generate_fec_multi_blocks(
+        rtpmoonlightpay,
+        rtp_packets_blocks,
+        gst_moonlight_video::FEC_LAYOUT{.nr_blocks = 3, .with_fec = true},
+        payload_buf_blocks);
 
     REQUIRE(gst_buffer_list_length(final_packets) ==
             payload_expected_packets + fec_expected_packets - 1); // TODO: why one less?
@@ -149,6 +151,97 @@ TEST_CASE_METHOD(GStreamerTestsFixture, "RTP VIDEO Splits", "[GSTPlugin]") {
   }
 
   /* Cleanup */
+  REQUIRE(GST_OBJECT_REFCOUNT(rtpmoonlightpay) == 1);
+  g_object_unref(rtpmoonlightpay);
+  REQUIRE(get_buf_refcount(payload_buf) == 1);
+  gst_buffer_unref(payload_buf);
+}
+
+/**
+ * Large frames must be split in FEC blocks that all agree on the block layout: the client drops any block
+ * whose headers disagree with the rest of the frame (see moonlight-common-c RtpVideoQueue.c).
+ */
+TEST_CASE_METHOD(GStreamerTestsFixture, "RTP VIDEO large frames use consistent FEC blocks", "[GSTPlugin]") {
+  auto rtpmoonlightpay = (gst_rtp_moonlight_pay_video *)g_object_new(gst_TYPE_rtp_moonlight_pay_video, nullptr);
+
+  constexpr int payload_per_packet = 10;
+  constexpr int short_header_size = (int)sizeof(gst_moonlight_video::VideoShortHeader);
+  constexpr int rtp_header_size = (int)sizeof(gst_moonlight_video::VideoRTPHeaders);
+  rtpmoonlightpay->payload_size = payload_per_packet + MAX_RTP_HEADER_SIZE;
+  rtpmoonlightpay->fec_percentage = 20;
+  rtpmoonlightpay->min_required_fec_packets = 2;
+  rtpmoonlightpay->add_padding = true;
+
+  struct Case {
+    int data_packets;
+    int expected_blocks;
+    bool with_fec;
+  };
+  auto test_case = GENERATE(Case{90, 1, true},
+                            Case{91, 3, true},
+                            Case{636, 3, true},
+                            Case{637, 4, true},
+                            Case{638, 4, true},
+                            Case{640, 4, true},
+                            Case{848, 4, true},
+                            Case{849, 4, false});
+  CAPTURE(test_case.data_packets);
+
+  std::vector<unsigned char> payload(test_case.data_packets * payload_per_packet - short_header_size);
+  for (size_t i = 0; i < payload.size(); i++) {
+    payload[i] = (unsigned char)(i % 251);
+  }
+  auto payload_buf = gst_buffer_new_and_fill(payload.size(), (const char *)payload.data());
+  auto rtp_packets = gst_moonlight_video::split_into_rtp(rtpmoonlightpay, payload_buf);
+  auto nr_packets = (int)gst_buffer_list_length(rtp_packets);
+
+  std::vector<unsigned char> returned_payload;
+  int total_data_shards = 0;
+  int expected_block = 0;
+  int packet_idx = 0;
+  while (packet_idx < nr_packets) {
+    auto first = gst_buffer_copy_content(gst_buffer_list_get(rtp_packets, packet_idx));
+    auto first_hdr = (gst_moonlight_video::VideoRTPHeaders *)first.data();
+    int block_data_shards = (int)(first_hdr->packet.fecInfo >> 22);
+    int block_fec_percentage = (int)((first_hdr->packet.fecInfo >> 4) & 0xFF);
+    int block_parity_shards = (block_data_shards * block_fec_percentage + 99) / 100;
+    int block_size = block_data_shards + block_parity_shards;
+    CAPTURE(expected_block, block_data_shards, block_fec_percentage);
+
+    REQUIRE(block_size <= DATA_SHARDS_MAX);
+    REQUIRE(packet_idx + block_size <= nr_packets);
+    if (test_case.with_fec) {
+      REQUIRE(block_fec_percentage > 0);
+    } else {
+      REQUIRE(block_fec_percentage == 0);
+    }
+
+    for (int shard_idx = 0; shard_idx < block_size; shard_idx++) {
+      auto content = gst_buffer_copy_content(gst_buffer_list_get(rtp_packets, packet_idx + shard_idx));
+      auto hdr = (gst_moonlight_video::VideoRTPHeaders *)content.data();
+      REQUIRE(((hdr->packet.multiFecBlocks >> 6) & 0x3) == test_case.expected_blocks - 1);
+      REQUIRE(((hdr->packet.multiFecBlocks >> 4) & 0x3) == expected_block);
+      REQUIRE((int)(hdr->packet.fecInfo >> 22) == block_data_shards);
+      REQUIRE((int)((hdr->packet.fecInfo >> 4) & 0xFF) == block_fec_percentage);
+      REQUIRE((int)((hdr->packet.fecInfo >> 12) & 0x3FF) == shard_idx);
+
+      if (shard_idx < block_data_shards) {
+        auto skip = rtp_header_size + (total_data_shards + shard_idx == 0 ? short_header_size : 0);
+        returned_payload.insert(returned_payload.end(), content.begin() + skip, content.end());
+      }
+    }
+
+    total_data_shards += block_data_shards;
+    packet_idx += block_size;
+    expected_block++;
+  }
+
+  REQUIRE(expected_block == test_case.expected_blocks);
+  REQUIRE(total_data_shards == test_case.data_packets);
+  REQUIRE(returned_payload == payload);
+
+  /* Cleanup */
+  gst_buffer_list_unref(rtp_packets);
   REQUIRE(GST_OBJECT_REFCOUNT(rtpmoonlightpay) == 1);
   g_object_unref(rtpmoonlightpay);
   REQUIRE(get_buf_refcount(payload_buf) == 1);

@@ -1,4 +1,5 @@
 #pragma once
+#include <algorithm>
 #include <boost/endian.hpp>
 #include <cmath>
 #include <gst-plugin/gstrtpmoonlightpay_video.hpp>
@@ -183,6 +184,79 @@ static BLOCKS determine_split(const gst_rtp_moonlight_pay_video &rtpmoonlightpay
 }
 
 /**
+ * Maximum number of FEC blocks a single video frame can be split into.
+ *
+ * `multiFecBlocks` stores both the current block index and the last block index in 2 bits each
+ * (moonlight-common-c `RtpVideoQueue.c` reads `(multiFecBlocks >> 4) & 0x3` and `(multiFecBlocks >> 6) & 0x3`),
+ * so a frame can carry at most 4 FEC blocks.
+ */
+constexpr int MAX_FEC_BLOCKS = 4;
+
+/**
+ * Computes how many data shards a single FEC block can hold so that data + parity shards
+ * stay within the Reed-Solomon limit (DATA_SHARDS_MAX).
+ *
+ * Starts from the upper bound `DATA_SHARDS_MAX * 100 / (100 + fec_percentage)` and walks down,
+ * reusing determine_split() so that the `min_required_fec_packets` bump is honoured.
+ *
+ * @param rtpmoonlightpay the payloader holding `fec_percentage` and `min_required_fec_packets`
+ * @return the largest number of data shards per block that fits, or 0 if not even a single data shard fits
+ *
+ * Example: with fec_percentage = 20 and min_required_fec_packets = 2 this returns 212 (212 + 43 = 255).
+ */
+static int max_data_shards_per_fec_block(const gst_rtp_moonlight_pay_video &rtpmoonlightpay) {
+  int data_shards = DATA_SHARDS_MAX * 100 / (100 + rtpmoonlightpay.fec_percentage);
+  while (data_shards > 0) {
+    auto split = determine_split(rtpmoonlightpay, data_shards);
+    if (split.data_shards + split.parity_shards <= DATA_SHARDS_MAX) {
+      break;
+    }
+    data_shards--;
+  }
+  return data_shards;
+}
+
+/**
+ * How a frame is split into FEC blocks.
+ *
+ * `nr_blocks` is between 1 and MAX_FEC_BLOCKS; every packet of the frame advertises the same block count.
+ * When `with_fec` is false the blocks carry no parity packets (0% FEC) but still use consistent headers.
+ */
+struct FEC_LAYOUT {
+  int nr_blocks;
+  bool with_fec;
+};
+
+/**
+ * Decides how many FEC blocks a frame of `data_shards` packets needs and whether they can carry parity.
+ *
+ *  - up to 90 data shards: a single block, with FEC only if the block fits in DATA_SHARDS_MAX
+ *  - otherwise: at least 3 blocks (the historical split), up to MAX_FEC_BLOCKS when bigger frames need it
+ *  - frames that don't fit even in MAX_FEC_BLOCKS blocks are sent as MAX_FEC_BLOCKS blocks without FEC
+ *
+ * Frames above MAX_FEC_BLOCKS * 1023 data packets would overflow the 10-bit `fecInfo` fields; that is
+ * several MB per frame and is not handled here.
+ *
+ * @param rtpmoonlightpay the payloader holding the FEC settings
+ * @param data_shards the number of data packets in the frame
+ * @return the block layout to use for this frame
+ *
+ * Example: with fec_percentage = 20, 636 data shards -> {3, true}, 640 -> {4, true}, 849 -> {4, false}
+ */
+static FEC_LAYOUT determine_fec_layout(const gst_rtp_moonlight_pay_video &rtpmoonlightpay, int data_shards) {
+  auto max_data_shards = max_data_shards_per_fec_block(rtpmoonlightpay);
+  if (data_shards <= 90) {
+    return {.nr_blocks = 1, .with_fec = max_data_shards >= data_shards};
+  }
+
+  auto needed_blocks = max_data_shards > 0 ? (data_shards + max_data_shards - 1) / max_data_shards : MAX_FEC_BLOCKS + 1;
+  if (needed_blocks <= MAX_FEC_BLOCKS) {
+    return {.nr_blocks = std::max(3, needed_blocks), .with_fec = true};
+  }
+  return {.nr_blocks = MAX_FEC_BLOCKS, .with_fec = false};
+}
+
+/**
  * Given the RTP packets that contains payload,
  * will generate extra RTP packets with the FEC information.
  *
@@ -200,15 +274,6 @@ static void generate_fec_packets(const gst_rtp_moonlight_pay_video &rtpmoonlight
   auto payload_size = (int)gst_buffer_get_size(rtp_payload);
   auto blocks = determine_split(rtpmoonlightpay, gst_buffer_list_length(rtp_packets));
   const auto nr_shards = blocks.data_shards + blocks.parity_shards;
-
-  if (nr_shards > DATA_SHARDS_MAX) {
-    logs::log(logs::warning,
-              "[GSTREAMER] Size of frame too large, {} packets is bigger than the max ({}); skipping FEC",
-              nr_shards,
-              DATA_SHARDS_MAX);
-    gst_buffer_unref(rtp_payload);
-    return;
-  }
 
   // pads rtp_payload to blocksize
   if (payload_size % blocks.block_size != 0) {
@@ -272,24 +337,61 @@ static void generate_fec_packets(const gst_rtp_moonlight_pay_video &rtpmoonlight
 }
 
 /**
- * Given a list of RTP packets will split them in 3 macro blocks of:
- * [Payloads + FEC], [Payloads + FEC], [Payloads + FEC]
+ * Labels the RTP packets of a block as "N data shards, 0% FEC" without appending any parity packet.
+ *
+ * Used when a frame is too big to carry FEC even when split in MAX_FEC_BLOCKS blocks: every packet still
+ * gets a consistent multi-FEC description, and the client completes the block once all of its data packets
+ * arrive (`reconstructFrame` returns early when `receivedDataPackets == bufferDataPackets`).
+ *
+ * @param rtpmoonlightpay the payloader, used for the frame number and the current sequence number
+ * @param rtp_packets the data packets of this block; modified in place
+ * @param inbuf the source buffer, used to copy timestamps
+ * @param block_index the 0-based index of this block (update_fec_info shifts it into place)
+ * @param last_block_index the last block index, already shifted (`<< 6`)
+ */
+static void set_fec_info_without_parity(const gst_rtp_moonlight_pay_video &rtpmoonlightpay,
+                                        GstBufferList *rtp_packets,
+                                        GstBuffer *inbuf,
+                                        int block_index,
+                                        int last_block_index) {
+  auto data_shards = (int)gst_buffer_list_length(rtp_packets);
+  for (int shard_idx = 0; shard_idx < data_shards; shard_idx++) {
+    GstMapInfo data_info;
+    auto data_pkt = gst_buffer_list_get(rtp_packets, shard_idx);
+    gst_buffer_map(data_pkt, &data_info, GST_MAP_WRITE);
+
+    update_fec_info(rtpmoonlightpay,
+                    (VideoRTPHeaders *)(data_info.data),
+                    shard_idx,
+                    data_shards,
+                    0,
+                    block_index,
+                    last_block_index);
+    gst_copy_timestamps(inbuf, data_pkt);
+    gst_buffer_unmap(data_pkt, &data_info);
+  }
+}
+
+/**
+ * Given a list of RTP packets will split them in `layout.nr_blocks` blocks (1-4) of:
+ * [Payloads + FEC], [Payloads + FEC], ...
+ * When `layout.with_fec` is false the blocks only contain the payloads, labelled with 0% FEC.
  *
  * Returns a new linear list of all the blocks
  * Will modify the input rtp_packets with the correct FEC info
  */
 static GstBufferList *generate_fec_multi_blocks(gst_rtp_moonlight_pay_video *rtpmoonlightpay,
                                                 GstBufferList *rtp_packets,
-                                                int data_shards,
+                                                const FEC_LAYOUT &layout,
                                                 GstBuffer *inbuf) {
   auto rtp_packets_size = gst_buffer_list_length(rtp_packets);
 
-  constexpr auto nr_blocks = 3;
-  constexpr auto last_block_index = 2 << 6;
+  const auto nr_blocks = layout.nr_blocks;
+  const auto last_block_index = (nr_blocks - 1) << 6;
 
   GstBufferList *final_packets = gst_buffer_list_new(); // we'll increase the size on each block iteration
 
-  auto packets_per_block = (int)std::ceil((float)data_shards / nr_blocks);
+  auto packets_per_block = (int)std::ceil((float)rtp_packets_size / nr_blocks);
   for (int block_idx = 0; block_idx < nr_blocks; block_idx++) {
     auto list_start = block_idx * packets_per_block;
     auto list_end = MIN((block_idx + 1) * packets_per_block, rtp_packets_size);
@@ -297,7 +399,11 @@ static GstBufferList *generate_fec_multi_blocks(gst_rtp_moonlight_pay_video *rtp
 
     // bear in mind that since no actual data copy is done,
     // this will also modify the FEC information in the original rtp_packets list
-    generate_fec_packets(*rtpmoonlightpay, block_packets, inbuf, block_idx, last_block_index);
+    if (layout.with_fec) {
+      generate_fec_packets(*rtpmoonlightpay, block_packets, inbuf, block_idx, last_block_index);
+    } else {
+      set_fec_info_without_parity(*rtpmoonlightpay, block_packets, inbuf, block_idx, last_block_index);
+    }
 
     // We have to copy out the additional FEC packets; we just put them all back into a new linear list
     auto total_block_packets = gst_buffer_list_length(block_packets);
@@ -329,15 +435,22 @@ static GstBufferList *split_into_rtp(gst_rtp_moonlight_pay_video *rtpmoonlightpa
   GstBufferList *rtp_packets = generate_rtp_packets(*rtpmoonlightpay, full_payload_buf);
 
   if (rtpmoonlightpay->fec_percentage > 0) {
-    auto rtp_packets_size = gst_buffer_list_length(rtp_packets);
-    auto blocks = determine_split(*rtpmoonlightpay, rtp_packets_size);
+    auto rtp_packets_size = (int)gst_buffer_list_length(rtp_packets);
+    auto layout = determine_fec_layout(*rtpmoonlightpay, rtp_packets_size);
+    if (!layout.with_fec) {
+      logs::log(logs::warning,
+                "[GSTREAMER] Frame of {} packets does not fit in {} FEC blocks; sending it without FEC",
+                rtp_packets_size,
+                MAX_FEC_BLOCKS);
+    }
 
-    // With a fec_percentage of 255, if payload is broken up into more than a 100 data_shards
-    // it will generate greater than DATA_SHARDS_MAX shards and FEC will fail to encode.
-    if (blocks.data_shards > 90) {
-      rtp_packets = generate_fec_multi_blocks(rtpmoonlightpay, rtp_packets, blocks.data_shards, inbuf);
+    // Every packet of the frame must share the same block layout, see determine_fec_layout()
+    if (layout.nr_blocks > 1) {
+      rtp_packets = generate_fec_multi_blocks(rtpmoonlightpay, rtp_packets, layout, inbuf);
     } else {
-      generate_fec_packets(*rtpmoonlightpay, rtp_packets, inbuf, 0, 0);
+      if (layout.with_fec) {
+        generate_fec_packets(*rtpmoonlightpay, rtp_packets, inbuf, 0, 0);
+      }
       rtpmoonlightpay->cur_seq_number += gst_buffer_list_length(rtp_packets);
     }
   }

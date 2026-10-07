@@ -131,6 +131,23 @@ check_elements = ["identity"]
 encoder_pipeline = "h264_pipeline"
 
 
+######################
+# PyroWave encoders
+###
+[[gstreamer.video.pyrowave_encoders]]
+plugin_name = "a-non-existing-plugin"
+check_elements = []
+video_params = ""
+encoder_pipeline = ""
+
+[[gstreamer.video.pyrowave_encoders]]
+plugin_name = "coreelements"
+check_elements = ["identity"]
+video_params = "pw_params"
+video_params_zero_copy = "pw_params_zero"
+encoder_pipeline = "pyrowave_pipeline"
+
+
 ###########
 # Audio
 ###

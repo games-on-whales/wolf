@@ -167,6 +167,24 @@ if (UNIX AND NOT APPLE)
         message(WARNING "Missing libdrm or libpci, automatic GPU recognition will not work with this build.")
         list(APPEND SRC_LIST platforms/hw_unknown.cpp)
     endif ()
+
+    # PyroWave is an optional GPU video encoder. It is built out-of-band as a shared library
+    # (the upstream CMake project only exposes its C API when it is the top level project), so it is
+    # consumed as an installed artifact through pkg-config, exactly like gst-wayland-display.
+    # Only the Vulkan headers are needed: Wolf fills in Vulkan structs but calls no Vulkan entry
+    # point itself, so libvulkan is not linked.
+    pkg_check_modules(PYROWAVE IMPORTED_TARGET pyrowave-shared)
+    pkg_check_modules(VULKAN_HEADERS vulkan)
+    if (PYROWAVE_FOUND AND VULKAN_HEADERS_FOUND)
+        list(APPEND SRC_LIST
+                gst-plugin/pyrowave/pyrowave_device.cpp
+                gst-plugin/pyrowave/gstpyrowaveenc.cpp)
+        target_link_libraries(wolf_runner PUBLIC PkgConfig::PYROWAVE)
+        target_include_directories(wolf_runner SYSTEM PUBLIC ${VULKAN_HEADERS_INCLUDE_DIRS})
+        target_compile_definitions(wolf_runner PUBLIC WOLF_PYROWAVE=1)
+    else ()
+        message(WARNING "Missing pyrowave-shared or vulkan headers, PyroWave encoding will not be available.")
+    endif ()
 else ()
     list(APPEND SRC_LIST platforms/hw_unknown.cpp)
 endif ()

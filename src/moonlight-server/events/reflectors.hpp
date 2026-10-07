@@ -51,6 +51,7 @@ template <> struct Reflector<events::App> {
     std::string h264_gst_pipeline;
     std::string hevc_gst_pipeline;
     std::string av1_gst_pipeline;
+    std::string pyrowave_gst_pipeline;
 
     std::string render_node;
 
@@ -68,6 +69,7 @@ template <> struct Reflector<events::App> {
             .h264_gst_pipeline = v.h264_gst_pipeline,
             .hevc_gst_pipeline = v.hevc_gst_pipeline,
             .av1_gst_pipeline = v.av1_gst_pipeline,
+            .pyrowave_gst_pipeline = v.pyrowave_gst_pipeline,
             .render_node = v.render_node,
             .opus_gst_pipeline = v.opus_gst_pipeline,
             .start_virtual_compositor = v.start_virtual_compositor,
@@ -82,6 +84,7 @@ template <> struct Reflector<events::App> {
         .h264_gst_pipeline = app.h264_gst_pipeline,
         .hevc_gst_pipeline = app.hevc_gst_pipeline,
         .av1_gst_pipeline = app.av1_gst_pipeline,
+        .pyrowave_gst_pipeline = app.pyrowave_gst_pipeline,
         .render_node = app.render_node,
         .opus_gst_pipeline = app.opus_gst_pipeline,
         .start_virtual_compositor = app.start_virtual_compositor,

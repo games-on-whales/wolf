@@ -157,23 +157,36 @@ std::vector<std::string> linked_devices(std::string_view gpu) {
   return found_devices;
 }
 
+std::optional<std::pair<std::uint32_t, std::uint32_t>> get_pci_ids(std::string_view gpu) {
+  if (!std::filesystem::exists(gpu)) {
+    logs::log(logs::warning, "{} doesn't exists, automatic PCI id recognition failed", gpu);
+    return std::nullopt;
+  }
+  auto device = drm_open_device(gpu);
+  if (device == nullptr || device->deviceinfo.pci == nullptr) {
+    logs::log(logs::warning, "{} doesn't expose PCI information", gpu);
+    return std::nullopt;
+  }
+
+  return std::make_pair(device->deviceinfo.pci->vendor_id, device->deviceinfo.pci->device_id);
+}
+
 GPU_VENDOR get_vendor(std::string_view gpu) {
   if (!std::filesystem::exists(gpu)) {
     logs::log(logs::warning, "{} doesn't exists, automatic vendor recognition failed", gpu);
     return UNKNOWN;
   }
-  auto device = drm_open_device(gpu);
+
+  auto ids = get_pci_ids(gpu);
+  if (!ids) {
+    return UNKNOWN;
+  }
 
   pci_access *pacc = pci_alloc();
   pci_init(pacc);
   pci_scan_bus(pacc);
   char devbuf[256];
-  std::string vendor_name = pci_lookup_name(pacc,
-                                            devbuf,
-                                            sizeof(devbuf),
-                                            PCI_LOOKUP_VENDOR,
-                                            device->deviceinfo.pci->vendor_id,
-                                            device->deviceinfo.pci->device_id);
+  std::string vendor_name = pci_lookup_name(pacc, devbuf, sizeof(devbuf), PCI_LOOKUP_VENDOR, ids->first, ids->second);
   pci_cleanup(pacc);
 
   logs::log(logs::debug, "{} vendor: {}", gpu, vendor_name);
