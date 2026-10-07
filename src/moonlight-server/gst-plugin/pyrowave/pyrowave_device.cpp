@@ -104,13 +104,13 @@ std::shared_ptr<Device> acquire_device() {
   pyrowave_device raw_device = nullptr;
   auto pci_ids = get_pci_ids(encoder_node);
   if (pci_ids) {
-    auto result = pyrowave_create_device_by_compat2(pci_ids->first,
-                                                    pci_ids->second,
-                                                    nullptr,
-                                                    nullptr,
-                                                    nullptr,
-                                                    VK_QUEUE_GLOBAL_PRIORITY_MEDIUM,
-                                                    &raw_device);
+    auto result = pyrowave_create_device_by_compat(pci_ids->first,
+                                                   pci_ids->second,
+                                                   nullptr,
+                                                   nullptr,
+                                                   nullptr,
+                                                   VK_QUEUE_GLOBAL_PRIORITY_MEDIUM,
+                                                   &raw_device);
     if (result == PYROWAVE_SUCCESS) {
       logs::log(logs::debug,
                 "PyroWave: using the device at {} (PCI {:04x}:{:04x})",

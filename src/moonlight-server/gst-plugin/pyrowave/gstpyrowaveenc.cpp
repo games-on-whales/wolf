@@ -802,7 +802,7 @@ static GstFlowReturn gst_pyrowave_enc_generate_output(GstBaseTransform *trans, G
         scaling.skip_dither = false;
         scaling.crop_rect = nullptr;
 
-        result = pyrowave_encoder_encode_gpu_scaled_synchronous(state->encoder, &sync, &sync, &scaling, &rate_control);
+        result = pyrowave_encoder_encode_gpu_scaled(state->encoder, &sync, &sync, &scaling, &rate_control);
         encoded = TRUE;
 
         if (result != PYROWAVE_SUCCESS) {
@@ -844,7 +844,7 @@ static GstFlowReturn gst_pyrowave_enc_generate_output(GstBaseTransform *trans, G
 
     pyrowave_cpu_buffer cpu_buffer{};
     fill_cpu_buffer(*state, frame, &cpu_buffer);
-    result = pyrowave_encoder_encode_cpu_synchronous(state->encoder, &cpu_buffer, &rate_control);
+    result = pyrowave_encoder_encode_cpu(state->encoder, &cpu_buffer, &rate_control);
     gst_video_frame_unmap(&frame);
 
     if (result != PYROWAVE_SUCCESS) {

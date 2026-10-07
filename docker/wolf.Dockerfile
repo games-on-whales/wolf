@@ -56,8 +56,8 @@ RUN <<_PYROWAVE
 
     git clone https://github.com/Themaister/pyrowave
     cd pyrowave
-    # Pinned so a future upstream change cannot break the build (the C API is pre-1.0)
-    git checkout 89f7e47d4abbf650c91fae766728af866c5e32a0
+    # Pinned so a future upstream change cannot break the build
+    git checkout 449864e4a2e286368521029c5680446ba856da50
     # Fetches Granite plus the volk and vulkan-headers submodules; the SPIR-V is pre-generated
     bash checkout_granite.sh
     cmake -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX=/usr/local
