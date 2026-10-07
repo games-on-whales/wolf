@@ -13,14 +13,22 @@ jobs:
   release-pr:
     runs-on: ubuntu-latest
     steps:
-      - name: Open PR from main into stable
+      - name: Open or update PR from beta into stable
         env:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
         run: |
           version="v$(date -u +%Y.%m)"
-          gh pr create \
-            --base stable \
-            --head main \
-            --title "Release ${version}" \
-            --body "Monthly release ${version}. Merging this PR tags \`stable\` as \`${version}\` and publishes a GitHub release."
+          title="Release ${version}"
+          body="Monthly release ${version}. Merging this PR tags \`stable\` as \`${version}\` and publishes a GitHub release."
+          existing_pr="$(gh pr list --state open --base stable --head beta --json number --jq '.[0].number // ""')"
+
+          if [[ -n "${existing_pr}" ]]; then
+            gh pr edit "${existing_pr}" --title "${title}" --body "${body}"
+          else
+            gh pr create \
+              --base stable \
+              --head beta \
+              --title "${title}" \
+              --body "${body}"
+          fi
