@@ -797,7 +797,11 @@ static GstFlowReturn gst_pyrowave_enc_generate_output(GstBaseTransform *trans, G
         scaling.input_color_space = VK_COLOR_SPACE_SRGB_NONLINEAR_KHR;
         scaling.output_color_space = VK_COLOR_SPACE_SRGB_NONLINEAR_KHR;
         scaling.intermediate_plane_format = VK_FORMAT_R8_UNORM;
-        scaling.ycbcr_chroma_midpoint = 0.5f;
+        // Limited range, BT.709 at 8 bits: what Aurora requests and decodes, and what Wolf's other
+        // codecs produce. The chroma midpoint matches the H.273 8-bit value of 128.
+        scaling.ycbcr_range = VK_SAMPLER_YCBCR_RANGE_ITU_NARROW;
+        scaling.ycbcr_range_bit_depth = 8;
+        scaling.ycbcr_chroma_midpoint = 128.0f / 255.0f;
         scaling.force_linear_filtering = false;
         scaling.skip_dither = false;
         scaling.crop_rect = nullptr;
