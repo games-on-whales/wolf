@@ -20,7 +20,7 @@ jobs:
         run: |
           version="v$(date -u +%Y.%m)"
           title="Release ${version}"
-          body="Monthly release ${version}. Merging this PR tags \`stable\` as \`${version}\` and publishes a GitHub release."
+          body="Monthly release ${version}. Merging this PR tags \`stable\` as \`${version}\`, publishes a GitHub release, and builds the versioned container image."
           existing_pr="$(gh pr list --state open --base stable --head beta --json number --jq '.[0].number // ""')"
 
           if [[ -n "${existing_pr}" ]]; then
