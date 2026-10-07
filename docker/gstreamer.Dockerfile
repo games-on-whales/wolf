@@ -4,11 +4,14 @@ ENV DEBIAN_FRONTEND=noninteractive
 ENV BUILD_ARCHITECTURE=amd64
 ENV DEB_BUILD_OPTIONS=noddebs
 
-ARG GSTREAMER_VERSION=1.26.7
+ARG GSTREAMER_VERSION=1.28.6
 ENV GSTREAMER_VERSION=$GSTREAMER_VERSION
 
 ENV SOURCE_PATH=/sources/
 WORKDIR $SOURCE_PATH
+
+# Local patches to apply on top of the gstreamer checkout, applied in filename order
+COPY patches/gstreamer/ $SOURCE_PATH/patches/gstreamer/
 
 COPY <<-EOT $SOURCE_PATH/gstreamer.control
 Section: misc
@@ -48,6 +51,14 @@ RUN <<_GSTREAMER_INSTALL
     cd ${SOURCE_PATH}/gstreamer
     git checkout $GSTREAMER_VERSION
     git submodule update --recursive --remote
+
+    # Apply any local patches, in filename order
+    for patch in ${SOURCE_PATH}/patches/gstreamer/*.patch; do
+        [ -e "$patch" ] || continue # no patches: the glob stays unexpanded
+        echo "Applying patch: $(basename $patch)"
+        git apply --verbose "$patch"
+    done
+
     # see the list of possible options here: https://gitlab.freedesktop.org/gstreamer/gstreamer/-/blob/main/meson_options.txt \
     meson setup \
         --buildtype=release \
@@ -77,9 +88,7 @@ RUN <<_GSTREAMER_INSTALL
         -Dgst-plugins-bad:aom=enabled \
         -Dgst-plugins-bad:nvcodec=enabled  \
         -Dgst-plugins-base:gl=enabled  \
-        -Dgstreamer-vaapi:x11=disabled \
         -Dgst-plugins-base:gl_winsys=wayland,egl,gbm,surfaceless  \
-        -Dvaapi=enabled \
         build
     meson compile -C build
     meson install -C build

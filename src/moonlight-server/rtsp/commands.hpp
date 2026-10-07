@@ -215,6 +215,8 @@ announce(const RTSP_PACKET &req, const events::StreamSession &session) {
     logs::log(logs::debug, "[RTSP] Adjusted video bitrate to {} Kbps", bitrate);
   }
 
+  auto intra_refresh = args["x-ss-video[0].intraRefresh"].value_or(false);
+
   // Video session
   events::VideoSession video = {
       .display_mode = {.width = display.width, .height = display.height, .refreshRate = display.refreshRate},
@@ -226,6 +228,7 @@ announce(const RTSP_PACKET &req, const events::StreamSession &session) {
       .port = session.video_stream_port,
       .timeout_ms = args["x-nv-video[0].timeoutLengthMs"].value_or(7000),
       .packet_size = args["x-nv-video[0].packetSize"].value_or(1392),
+      .gop_size = intra_refresh ? 300 : -1,
       .frames_with_invalid_ref_threshold = args["x-nv-video[0].framesWithInvalidRefThreshold"].value_or(0),
       .fec_percentage = fec_percentage,
       // Moonlight clients always send minRequiredFecPackets=2 (moonlight-common-c/SdpGenerator.c)
@@ -233,6 +236,7 @@ announce(const RTSP_PACKET &req, const events::StreamSession &session) {
       .min_required_fec_packets = args["x-nv-vqos[0].fec.minRequiredFecPackets"].value_or(2),
       .bitrate_kbps = bitrate,
       .slices_per_frame = args["x-nv-video[0].videoEncoderSlicesPerFrame"].value_or(1),
+      .intra_refresh = intra_refresh,
 
       .color_range = (csc & 0x1) ? events::ColorRange::JPEG : events::ColorRange::MPEG,
       .color_space = events::ColorSpace(csc >> 1),
