@@ -5,6 +5,7 @@ on:
     paths-ignore:
       - "docs/**"
       - ".github/**"
+  workflow_dispatch:
 
 jobs:
   buildx:
@@ -26,17 +27,17 @@ jobs:
         run: |
           IMAGES=""
           PUSH=false
+          REGISTRY_IMAGE="ghcr.io/${{ github.repository_owner }}/wolf"
           if [ -n "${{ secrets.DOCKERHUB_TOKEN }}" ]; then
             IMAGES="gameonwhales/wolf"
             PUSH=true
             echo "has_docker_token=true" >> $GITHUB_OUTPUT
           fi
           if [ -n "${{ secrets.GHCR_TOKEN }}" ]; then
-            REGISTRY_IMAGE="ghcr.io/${{ github.repository_owner }}/wolf"
             if [ "$IMAGES" = "" ]; then
-              IMAGES="ghcr.io/${REGISTRY_IMAGE}"
+              IMAGES="${REGISTRY_IMAGE}"
             else
-              IMAGES="$IMAGES,ghcr.io/${REGISTRY_IMAGE}"
+              IMAGES="$IMAGES,${REGISTRY_IMAGE}"
             fi
             PUSH=true
             echo "has_github_token=true" >> $GITHUB_OUTPUT
@@ -58,6 +59,7 @@ jobs:
           images: ${{ steps.prep.outputs.images }}
           # generate Docker tags based on the following events/attributes
           tags: |
+            type=semver,pattern={{raw}}
             type=semver,pattern={{version}}
             type=semver,pattern={{major}}
             type=edge,branch=master

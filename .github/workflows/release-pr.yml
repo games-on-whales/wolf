@@ -1,0 +1,34 @@
+name: Open monthly release PR
+
+on:
+  schedule:
+    - cron: "0 9 1 * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  release-pr:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Open or update PR from beta into stable
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          version="v$(date -u +%Y.%m)"
+          title="Release ${version}"
+          body="Monthly release ${version}. Merging this PR tags \`stable\` as \`${version}\`, publishes a GitHub release, and builds the versioned container image."
+          existing_pr="$(gh pr list --state open --base stable --head beta --json number --jq '.[0].number // ""')"
+
+          if [[ -n "${existing_pr}" ]]; then
+            gh pr edit "${existing_pr}" --title "${title}" --body "${body}"
+          else
+            gh pr create \
+              --base stable \
+              --head beta \
+              --title "${title}" \
+              --body "${body}"
+          fi

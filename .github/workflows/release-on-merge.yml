@@ -1,0 +1,26 @@
+name: Tag and release on merge
+
+on:
+  pull_request:
+    types: [closed]
+    branches: [stable]
+
+permissions:
+  actions: write
+  contents: write
+
+jobs:
+  release:
+    if: github.event.pull_request.merged && github.event.pull_request.head.ref == 'beta' && startsWith(github.event.pull_request.title, 'Release v')
+    runs-on: ubuntu-latest
+    steps:
+      - name: Tag release and start image build
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          TITLE: ${{ github.event.pull_request.title }}
+          SHA: ${{ github.event.pull_request.merge_commit_sha }}
+        run: |
+          version="${TITLE#Release }"
+          gh release create "${version}" --target "${SHA}" --title "${version}" --generate-notes
+          gh workflow run docker-build.yml --ref "${version}"
