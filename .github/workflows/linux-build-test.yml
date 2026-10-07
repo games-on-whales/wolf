@@ -202,7 +202,13 @@ jobs:
 
       - name: Build tests + lib
         working-directory: ${{runner.workspace}}/build
-        run: ninja -j $(nproc) wolftests
+        run: ninja -j $(nproc) wolftests wolf_drm_tests
+
+      - name: Run DRM descriptor ownership tests
+        working-directory: ${{runner.workspace}}/build/tests
+        env:
+          ASAN_OPTIONS: detect_stack_use_after_return=1
+        run: ./wolf_drm_tests
 
       - name: Run tests
         working-directory: ${{runner.workspace}}/build/tests
