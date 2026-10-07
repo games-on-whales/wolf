@@ -1,0 +1,26 @@
+name: Open monthly release PR
+
+on:
+  schedule:
+    - cron: "0 9 1 * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  release-pr:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Open PR from main into stable
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          version="v$(date -u +%Y.%m)"
+          gh pr create \
+            --base stable \
+            --head main \
+            --title "Release ${version}" \
+            --body "Monthly release ${version}. Merging this PR tags \`stable\` as \`${version}\` and publishes a GitHub release."
