@@ -488,7 +488,7 @@ void cancel(const std::shared_ptr<typename SimpleWeb::Server<SimpleWeb::HTTPS>::
     });
   } else {
     auto client_ip = get_client_ip<SimpleWeb::HTTPS>(request);
-    logs::log(logs::warning, "[HTTPS] Received resume event from an unregistered session, ip: {}", client_ip);
+    logs::log(logs::warning, "[HTTPS] Received cancel event from an unregistered session, ip: {}", client_ip);
   }
 
   XML xml;
