@@ -4,6 +4,12 @@ Wolf runs as a single container, it'll spin up and down additional containers on
 
 == Docker
 
+Choose an image tag based on your use case:
+
+* `stable`: Use the latest monthly release.
+* `vYYYY.MM`: Use a specific monthly release, such as `v2026.10`.
+* `beta`: Use the latest development build for testing.
+
 [tabs]
 ======
 Intel/AMD::

@@ -15,6 +15,7 @@
 ** xref:dev:how-it-works.adoc[]
 ** xref:dev:lobbies.adoc[]
 ** xref:dev:manual_build.adoc[]
+** xref:dev:release-process.adoc[]
 ** xref:dev:api.adoc[]
 ** xref:dev:code-structure.adoc[]
 ** xref:dev:gstreamer.adoc[]
