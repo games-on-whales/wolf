@@ -1,5 +1,7 @@
 #include <crypto/src/sign.hpp>
 
+#include <cstdlib>
+
 #include <catch2/catch_test_macros.hpp>
 #include <catch2/matchers/catch_matchers_container_properties.hpp>
 #include <catch2/matchers/catch_matchers_contains.hpp>
@@ -21,12 +23,18 @@ using namespace state;
 using namespace ranges;
 
 TEST_CASE("LocalState load TOML", "[LocalState]") {
+  // Which video_params a codec ends up with depends on whether the host does zero copy, and that in
+  // turn depends on the GPU of the machine running the tests. Pin the configuration the fake
+  // encoders in the test config describe.
+  setenv("WOLF_USE_ZERO_COPY", "FALSE", 1);
+
   auto event_bus = std::make_shared<events::EventBusType>();
   auto running_sessions = std::make_shared<immer::atom<immer::vector<events::StreamSession>>>();
   auto state = state::load_or_default("config.test.toml", event_bus, running_sessions);
   REQUIRE(state.hostname == "Wolf");
   REQUIRE(state.uuid == "0000-1111-2222-3333");
   REQUIRE(state.support_hevc);
+  REQUIRE(state.support_pyrowave);
 
   SECTION("Apps") {
     auto moonlight_profile = state::get_moonlight_profile(state);
@@ -45,6 +53,9 @@ TEST_CASE("LocalState load TOML", "[LocalState]") {
                  Equals(fmt::format("{} !\ndefault !\nhevc_pipeline !\nvideo_sink", default_video_source)));
     REQUIRE_THAT(first_app->av1_gst_pipeline,
                  Equals(fmt::format("{} !\nparams !\nav1_pipeline !\nvideo_sink", default_video_source)));
+    // The test config has no GPU, so the producer emits system memory and the plain params apply.
+    REQUIRE_THAT(first_app->pyrowave_gst_pipeline,
+                 Equals(fmt::format("{} !\npw_params !\npyrowave_pipeline !\nvideo_sink", default_video_source)));
     REQUIRE(first_app->start_virtual_compositor);
     REQUIRE(first_app->render_node == "/dev/dri/renderD128");
     auto first_app_runner = rfl::get<AppDocker>(first_app->runner->serialize().variant());
@@ -60,6 +71,8 @@ TEST_CASE("LocalState load TOML", "[LocalState]") {
                  Equals("override DEFAULT SOURCE !\ndefault !\nhevc_pipeline !\nvideo_sink"));
     REQUIRE_THAT(second_app->av1_gst_pipeline,
                  Equals("override DEFAULT SOURCE !\nparams !\nav1_pipeline !\nvideo_sink"));
+    REQUIRE_THAT(second_app->pyrowave_gst_pipeline,
+                 Equals("override DEFAULT SOURCE !\npw_params !\npyrowave_pipeline !\nvideo_sink"));
     REQUIRE(!second_app->start_virtual_compositor);
     REQUIRE(second_app->render_node == "/tmp/dead_beef");
     auto second_app_runner = rfl::get<AppCMD>(second_app->runner->serialize().variant());
@@ -159,6 +172,7 @@ TEST_CASE("Mocked serverinfo", "[MoonlightProtocol]") {
                              displayModes,
                              false,
                              true,
+                             false,
                              false);
 
     REQUIRE(xml_to_str(result) ==
@@ -196,7 +210,8 @@ TEST_CASE("Mocked serverinfo", "[MoonlightProtocol]") {
                              displayModes,
                              true,
                              false,
-                             true);
+                             true,
+                             false);
 
     REQUIRE(xml_to_str(result) ==
             "<?xml version=\"1.0\" encoding=\"utf-8\"?>\n"
@@ -220,6 +235,43 @@ TEST_CASE("Mocked serverinfo", "[MoonlightProtocol]") {
             "<state>SUNSHINE_SERVER_BUSY</state>"
             "</root>");
     REQUIRE(result.get<bool>("root.PairStatus") == true);
+  }
+
+  SECTION("server_info conforms with the expected PyroWave response") {
+    auto result = serverinfo(false,
+                             0,
+                             0,
+                             1,
+                             cfg.uuid,
+                             cfg.hostname,
+                             "AA:BB:CC:DD",
+                             "192.168.99.1",
+                             displayModes,
+                             false,
+                             false,
+                             false,
+                             true);
+
+    REQUIRE(xml_to_str(result) ==
+            "<?xml version=\"1.0\" encoding=\"utf-8\"?>\n"
+            "<root status_code=\"200\">"
+            "<hostname>Wolf</hostname>"
+            "<appversion>7.1.431.-1</appversion>"
+            "<GfeVersion>3.23.0.74</GfeVersion>"
+            "<uniqueid>0000-1111-2222-3333</uniqueid>"
+            "<MaxLumaPixelsHEVC>0</MaxLumaPixelsHEVC>"
+            "<ServerCodecModeSupport>8388609</ServerCodecModeSupport>"
+            "<HttpsPort>0</HttpsPort>"
+            "<ExternalPort>1</ExternalPort>"
+            "<mac>AA:BB:CC:DD</mac>"
+            "<LocalIP>192.168.99.1</LocalIP>"
+            "<SupportedDisplayMode>"
+            "<DisplayMode><Width>1920</Width><Height>1080</Height><RefreshRate>60</RefreshRate></DisplayMode>"
+            "<DisplayMode><Width>1024</Width><Height>768</Height><RefreshRate>30</RefreshRate></DisplayMode>"
+            "</SupportedDisplayMode><PairStatus>0</PairStatus>"
+            "<currentgame>0</currentgame>"
+            "<state>SUNSHINE_SERVER_FREE</state>"
+            "</root>");
   }
 }
 

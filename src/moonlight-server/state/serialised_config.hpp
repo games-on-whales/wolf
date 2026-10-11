@@ -68,6 +68,7 @@ struct GstVideoCfg {
   std::vector<GstEncoder> av1_encoders;
   std::vector<GstEncoder> hevc_encoders;
   std::vector<GstEncoder> h264_encoders;
+  std::vector<GstEncoder> pyrowave_encoders;
 };
 
 struct GstAudioCfg {
@@ -107,6 +108,7 @@ struct BaseAppVideoOverride {
   std::optional<std::string> h264_encoder;
   std::optional<std::string> hevc_encoder;
   std::optional<std::string> av1_encoder;
+  std::optional<std::string> pyrowave_encoder;
 };
 
 struct BaseAppAudioOverride {

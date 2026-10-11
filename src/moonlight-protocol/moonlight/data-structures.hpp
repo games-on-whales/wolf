@@ -12,6 +12,7 @@ struct DisplayMode {
   int refreshRate;
   bool hevc_supported = true;
   bool av1_supported = false;
+  bool pyrowave_supported = false;
 };
 
 struct App {

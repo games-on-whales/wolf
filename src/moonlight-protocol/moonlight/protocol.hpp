@@ -28,6 +28,9 @@ constexpr auto M_GFE_VERSION = "3.23.0.74";
  * @param local_ip
  * @param display_modes
  * @param pair_status: true if the client is already paired
+ * @param support_hevc: true if the host can encode HEVC
+ * @param support_av1: true if the host can encode AV1
+ * @param support_pyrowave: true if the host can encode PyroWave
  * @return ptree the XML response to be sent
  */
 XML serverinfo(bool isServerBusy,
@@ -41,7 +44,8 @@ XML serverinfo(bool isServerBusy,
                const immer::array<DisplayMode> &display_modes,
                int pair_status,
                bool support_hevc,
-               bool support_av1);
+               bool support_av1,
+               bool support_pyrowave);
 
 /**
  * @brief Step 2: PAIR a new client

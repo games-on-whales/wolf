@@ -68,6 +68,7 @@ struct App {
   std::string h264_gst_pipeline;
   std::string hevc_gst_pipeline;
   std::string av1_gst_pipeline;
+  std::string pyrowave_gst_pipeline;
 
   std::string render_node;
 

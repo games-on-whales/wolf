@@ -77,7 +77,8 @@ void serverinfo(const std::shared_ptr<typename SimpleWeb::Server<T>::Response> &
                                    host->display_modes,
                                    is_https,
                                    cfg->support_hevc,
-                                   cfg->support_av1);
+                                   cfg->support_av1,
+                                   cfg->support_pyrowave);
 
   send_xml<T>(response, SimpleWeb::StatusCode::success_ok, xml);
 }
@@ -378,7 +379,8 @@ auto create_run_session(const SimpleWeb::CaseInsensitiveMultimap &headers,
                                          std::stoi(display_mode_str[1].data()),
                                          std::stoi(display_mode_str[2].data()),
                                          state->config->support_hevc,
-                                         state->config->support_av1};
+                                         state->config->support_av1,
+                                         state->config->support_pyrowave};
 
   auto surround_info = std::stoi(get_header(headers, "surroundAudioInfo").value_or("196610"));
   int channelCount = surround_info & (0xffff /* last 16 bits */);

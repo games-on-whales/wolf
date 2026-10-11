@@ -45,6 +45,8 @@ static Encoder encoder_type(const GstEncoder &settings) {
   case (utils::hash("x265")):
   case (utils::hash("aom")):
     return SOFTWARE;
+  case (utils::hash("pyrowave")):
+    return PYROWAVE;
   }
   logs::log(logs::warning, "Unrecognised Gstreamer plugin name: {}", settings.plugin_name);
   return UNKNOWN;
@@ -134,6 +136,7 @@ parse_apps(const std::vector<BaseApp> &apps,
            const std::string &h264_video_params,
            const std::string &hevc_video_params,
            const std::string &av1_video_params,
+           const std::string &pyrowave_video_params,
            const BaseAppAudioOverride &default_audio_settings,
            SessionsAtoms running_sessions,
            const std::shared_ptr<events::EventBusType> &ev_bus) {
@@ -178,6 +181,16 @@ parse_apps(const std::vector<BaseApp> &apps,
                               app_video_settings.sink.value_or(default_video_settings.sink.value()))
                 : "";
 
+        auto pyrowave_gst_pipeline =
+            default_video_settings.pyrowave_encoder.has_value()
+                ? fmt::format(
+                      "{} !\n{} !\n{} !\n{}", //
+                      app_video_settings.source.value_or(default_video_settings.source.value()),
+                      app_video_settings.video_params.value_or(pyrowave_video_params),
+                      app_video_settings.pyrowave_encoder.value_or(default_video_settings.pyrowave_encoder.value()),
+                      app_video_settings.sink.value_or(default_video_settings.sink.value()))
+                : "";
+
         auto opus_gst_pipeline = fmt::format(
             "{} !\n{} !\n{} !\n{}", //
             app_audio_settings.source.value_or(default_audio_settings.source.value()),
@@ -194,6 +207,7 @@ parse_apps(const std::vector<BaseApp> &apps,
                         .h264_gst_pipeline = h264_gst_pipeline,
                         .hevc_gst_pipeline = hevc_gst_pipeline,
                         .av1_gst_pipeline = av1_gst_pipeline,
+                        .pyrowave_gst_pipeline = pyrowave_gst_pipeline,
                         .render_node = app_render_node,
 
                         .opus_gst_pipeline = opus_gst_pipeline,
@@ -282,6 +296,8 @@ Config load_or_default(const std::string &source,
   }
   auto hevc_encoder = get_encoder("h265", default_gst_render_node, default_gst_video_settings.hevc_encoders, vendor);
   auto av1_encoder = get_encoder("av1", default_gst_render_node, default_gst_video_settings.av1_encoders, vendor);
+  auto pyrowave_encoder =
+      get_encoder("pyrowave", default_gst_render_node, default_gst_video_settings.pyrowave_encoders, vendor);
 
   /* Get paired clients */
   auto paired_clients =
@@ -350,6 +366,12 @@ Config load_or_default(const std::string &source,
     logs::log(logs::warning, "Unable to find an AV1 encoder, disabling it");
   }
 
+  if (pyrowave_encoder) {
+    default_base_video.pyrowave_encoder = pyrowave_encoder.value().encoder_pipeline;
+  } else {
+    logs::log(logs::info, "PyroWave encoder not available");
+  }
+
   auto empty_enc = GstEncoderDefault{};
   auto default_h264 = utils::get_optional(default_gst_encoder_settings, h264_encoder.value_or(GstEncoder{}).plugin_name)
                           .value_or(empty_enc);
@@ -357,6 +379,9 @@ Config load_or_default(const std::string &source,
                           .value_or(empty_enc);
   auto default_av1 = utils::get_optional(default_gst_encoder_settings, av1_encoder.value_or(GstEncoder{}).plugin_name)
                          .value_or(empty_enc);
+  auto default_pyrowave =
+      utils::get_optional(default_gst_encoder_settings, pyrowave_encoder.value_or(GstEncoder{}).plugin_name)
+          .value_or(empty_enc);
 
   auto h264_video_params = use_zero_copy
                                ? h264_encoder->video_params_zero_copy.value_or(default_h264.video_params_zero_copy)
@@ -375,6 +400,23 @@ Config load_or_default(const std::string &source,
                                      : av1_encoder->video_params.value_or(default_av1.video_params);
   }
 
+  // PyroWave consumes either a dma-buf (imported straight into Vulkan) or system-memory video.
+  // The producer caps are fixed for the whole session before any codec is negotiated, so pick the
+  // conversion that matches what the producer will actually emit.
+  std::string pyrowave_video_params;
+  if (pyrowave_encoder) {
+    const auto &caps = default_base_video.producer_buffer_caps.value();
+    if (caps.find("memory:DMABuf") != std::string::npos) {
+      pyrowave_video_params =
+          pyrowave_encoder->video_params_zero_copy.value_or(default_pyrowave.video_params_zero_copy);
+    } else if (caps.find("memory:CUDAMemory") != std::string::npos) {
+      pyrowave_video_params = "cudadownload !\n" +
+                              pyrowave_encoder->video_params.value_or(default_pyrowave.video_params);
+    } else {
+      pyrowave_video_params = pyrowave_encoder->video_params.value_or(default_pyrowave.video_params);
+    }
+  }
+
   auto clients_atom = std::make_shared<immer::atom<PairedClientList>>(paired_clients);
 
   /* Get profiles, for each app defined will merge with default settings */
@@ -391,6 +433,7 @@ Config load_or_default(const std::string &source,
                                                               h264_video_params,
                                                               hevc_video_params,
                                                               av1_video_params,
+                                                              pyrowave_video_params,
                                                               default_base_audio,
                                                               running_sessions,
                                                               ev_bus)};
@@ -403,6 +446,7 @@ Config load_or_default(const std::string &source,
                 .config_source = source,
                 .support_hevc = hevc_encoder.has_value(),
                 .support_av1 = av1_encoder.has_value() && encoder_type(*av1_encoder) != SOFTWARE,
+                .support_pyrowave = pyrowave_encoder.has_value(),
                 .paired_clients = clients_atom,
                 .profiles = profiles_atom};
 }

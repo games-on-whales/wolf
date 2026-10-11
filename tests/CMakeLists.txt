@@ -20,6 +20,7 @@ set(SRC_LIST
         testCrypto.cpp
         testGSTPlugin.cpp
         testMoonlight.cpp
+        testPyroWave.cpp
         testRTSP.cpp
         testWolfAPI.cpp
         testBatchedSend.cpp)

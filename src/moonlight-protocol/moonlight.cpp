@@ -11,6 +11,11 @@ constexpr int VIDEO_FORMAT_H265_MAIN10 = 0x00200;
 constexpr int VIDEO_FORMAT_AV1_MAIN8 = 0x10000;
 constexpr int VIDEO_FORMAT_AV1_MAIN10 = 0x20000;
 
+// Moonlight's ServerCodecModeSupport bits. NOTE: for H264/H265/AV1 the SCM bits happen to be the
+// same values as the VIDEO_FORMAT_* bits above; for PyroWave they are not (VIDEO_FORMAT_PYROWAVE,
+// which is only used on the wire to announce the decoder, is 0x010000).
+constexpr int SCM_PYROWAVE = 0x00800000;
+
 XML serverinfo(bool isServerBusy,
                int current_appid,
                int https_port,
@@ -22,7 +27,8 @@ XML serverinfo(bool isServerBusy,
                const immer::array<DisplayMode> &display_modes,
                int pair_status,
                bool support_hevc,
-               bool support_av1) {
+               bool support_av1,
+               bool support_pyrowave) {
   XML resp;
 
   resp.put("root.<xmlattr>.status_code", 200);
@@ -40,6 +46,9 @@ XML serverinfo(bool isServerBusy,
   }
   if (support_av1) {
     codec_support |= VIDEO_FORMAT_AV1_MAIN8;
+  }
+  if (support_pyrowave) {
+    codec_support |= SCM_PYROWAVE;
   }
 
   resp.put("root.MaxLumaPixelsHEVC", std::to_string(max_luma_pixels));

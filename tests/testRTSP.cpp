@@ -247,22 +247,24 @@ TEST_CASE("Custom Parser", "[RTSP]") {
 }
 
 state::SessionsAtoms test_init_state() {
-  events::StreamSession session = {.display_mode = {1920, 1080, 60},
-                                   .audio_channel_count = 2,
-                                   .event_bus = std::make_shared<events::EventBusType>(),
-                                   .app = std::make_shared<events::App>(events::App{.base = {},
-                                                                                    .h264_gst_pipeline = "",
-                                                                                    .hevc_gst_pipeline = "",
-                                                                                    .opus_gst_pipeline = "",
-                                                                                    .runner = nullptr}),
-                                   .aes_key = crypto::hex_to_str("9d804e47a6aa6624b7d4b502b32cc522", true),
-                                   .aes_iv = crypto::hex_to_str("01234567890", true),
-                                   .rtsp_fake_ip = "00.11.22.33.44",
-                                   .session_id = 1234,
-                                   .ip = "127.0.0.1",
-                                   .video_stream_port = 1234,
-                                   .audio_stream_port = 1235,
-                                   .control_stream_port = 1236};
+  events::StreamSession session = {
+      .display_mode = {1920, 1080, 60, true, false, true},
+      .audio_channel_count = 2,
+      .event_bus = std::make_shared<events::EventBusType>(),
+      .app = std::make_shared<events::App>(events::App{.base = {},
+                                                       .h264_gst_pipeline = "",
+                                                       .hevc_gst_pipeline = "",
+                                                       .pyrowave_gst_pipeline = "pyrowave_pipeline",
+                                                       .opus_gst_pipeline = "",
+                                                       .runner = nullptr}),
+      .aes_key = crypto::hex_to_str("9d804e47a6aa6624b7d4b502b32cc522", true),
+      .aes_iv = crypto::hex_to_str("01234567890", true),
+      .rtsp_fake_ip = "00.11.22.33.44",
+      .session_id = 1234,
+      .ip = "127.0.0.1",
+      .video_stream_port = 1234,
+      .audio_stream_port = 1235,
+      .control_stream_port = 1236};
   return std::make_shared<immer::atom<immer::vector<events::StreamSession>>>(
       immer::vector<events::StreamSession>{session});
 }
@@ -308,13 +310,15 @@ TEST_CASE("Commands (Payload matching)", "[RTSP]") {
                        REQUIRE(response);
                        REQUIRE(response.value().response.status_code == 200);
                        REQUIRE(response.value().seq_number == 2);
-                       REQUIRE(response.value().payloads.size() == 5);
+                       REQUIRE(response.value().payloads.size() == 6);
                        REQUIRE_THAT(response.value().payloads[0].first, Equals("sprop-parameter-sets"));
                        REQUIRE_THAT(response.value().payloads[0].second, Equals("AAAAAU"));
-                       REQUIRE_THAT(response.value().payloads[1].second, Equals("fmtp:97 surround-params=21101"));
-                       REQUIRE_THAT(response.value().payloads[2].second, Equals("fmtp:97 surround-params=642014235"));
-                       REQUIRE_THAT(response.value().payloads[3].second, Equals("fmtp:97 surround-params=85301423675"));
-                       REQUIRE_THAT(response.value().payloads[4].second, Equals("x-ss-general.featureFlags: 3"));
+                       REQUIRE_THAT(response.value().payloads[1].first, Equals("a"));
+                       REQUIRE_THAT(response.value().payloads[1].second, Equals("rtpmap:99 PYROWAVE/90000"));
+                       REQUIRE_THAT(response.value().payloads[2].second, Equals("fmtp:97 surround-params=21101"));
+                       REQUIRE_THAT(response.value().payloads[3].second, Equals("fmtp:97 surround-params=642014235"));
+                       REQUIRE_THAT(response.value().payloads[4].second, Equals("fmtp:97 surround-params=85301423675"));
+                       REQUIRE_THAT(response.value().payloads[5].second, Equals("x-ss-general.featureFlags: 3"));
                      });
   }
 
@@ -451,6 +455,125 @@ TEST_CASE("Commands (Payload matching)", "[RTSP]") {
                        REQUIRE(response.value().seq_number == 7);
                      });
   }
+
+  SECTION("ANNOUNCE PyroWave") {
+    std::string video_pipeline;
+    int video_packet_size = 0;
+    auto video_handler = state->load().get()[0].event_bus->register_handler<immer::box<events::VideoSession>>(
+        [&video_pipeline, &video_packet_size](const immer::box<events::VideoSession> &session) {
+          video_pipeline = session->gst_pipeline;
+          video_packet_size = session->packet_size;
+        });
+
+    wolf_client->run("ANNOUNCE streamid=control/13/0 RTSP/1.0\n"
+                     "CSeq: 6\n"
+                     "X-GS-ClientVersion: 14\n"
+                     "Host: 00.11.22.33.44\n"
+                     "Session:  DEADBEEFCAFE\n"
+                     "Content-type: application/sdp\n"
+                     "Content-length: 1308"
+                     "\r\n\r\n" // start of payload
+                     "v=0\n"
+                     "o=android 0 14 IN IPv4 0.0.0.0\n"
+                     "s=NVIDIA Streaming Client\n"
+                     "a=x-nv-video[0].clientViewportWd:1920 \n"
+                     "a=x-nv-video[0].clientViewportHt:1080 \n"
+                     "a=x-nv-video[0].maxFPS:60 \n"
+                     "a=x-nv-video[0].packetSize:1024 \n"
+                     "a=x-nv-video[0].rateControlMode:4 \n"
+                     "a=x-nv-video[0].timeoutLengthMs:7000 \n"
+                     "a=x-nv-video[0].framesWithInvalidRefThreshold:0 \n"
+                     "a=x-nv-video[0].initialBitrateKbps:15500 \n"
+                     "a=x-nv-video[0].initialPeakBitrateKbps:15500 \n"
+                     "a=x-nv-vqos[0].bw.minimumBitrateKbps:15500 \n"
+                     "a=x-nv-vqos[0].bw.maximumBitrateKbps:15500 \n"
+                     "a=x-nv-vqos[0].fec.enable:1 \n"
+                     "a=x-nv-vqos[0].videoQualityScoreUpdateTime:5000 \n"
+                     "a=x-nv-vqos[0].qosTrafficType:0 \n"
+                     "a=x-nv-aqos.qosTrafficType:0 \n"
+                     "a=x-nv-general.featureFlags:167 \n"
+                     "a=x-nv-general.useReliableUdp:13 \n"
+                     "a=x-nv-vqos[0].fec.minRequiredFecPackets:2 \n"
+                     "a=x-nv-vqos[0].drc.enable:0 \n"
+                     "a=x-nv-general.enableRecoveryMode:0 \n"
+                     "a=x-nv-video[0].videoEncoderSlicesPerFrame:1 \n"
+                     "a=x-nv-clientSupportHevc:0 \n"
+                     // 3 is PyroWave, see moonlight-common-c SdpGenerator.c
+                     "a=x-nv-vqos[0].bitStreamFormat:3 \n"
+                     "a=x-nv-video[0].dynamicRangeMode:0 \n"
+                     "a=x-nv-video[0].maxNumReferenceFrames:1 \n"
+                     "a=x-nv-video[0].clientRefreshRateX100:0 \n"
+                     "a=x-nv-audio.surround.numChannels:2 \n"
+                     "a=x-nv-audio.surround.channelMask:3 \n"
+                     "a=x-nv-audio.surround.enable:0 \n"
+                     "a=x-nv-audio.surround.AudioQuality:0 \n"
+                     "a=x-nv-aqos.packetDuration:5 \n"
+                     "a=x-nv-video[0].encoderCscMode:0 \n"
+                     "t=0 0\n"
+                     "m=video 47998 \n"sv,
+                     [](std::optional<RTSP_PACKET> response) {
+                       REQUIRE(response.has_value());
+                       REQUIRE(response.value().response.status_code == 200);
+                       REQUIRE(response.value().seq_number == 6);
+                     });
+
+    REQUIRE_THAT(video_pipeline, Equals("pyrowave_pipeline"));
+    REQUIRE(video_packet_size == 1024);
+  }
+
+  SECTION("ANNOUNCE PyroWave without a PyroWave encoder fails the handshake") {
+    state->load().get()[0].app->pyrowave_gst_pipeline.clear();
+
+    wolf_client->run("ANNOUNCE streamid=control/13/0 RTSP/1.0\n"
+                     "CSeq: 6\n"
+                     "X-GS-ClientVersion: 14\n"
+                     "Host: 00.11.22.33.44\n"
+                     "Session:  DEADBEEFCAFE\n"
+                     "Content-type: application/sdp\n"
+                     "Content-length: 1308"
+                     "\r\n\r\n" // start of payload
+                     "v=0\n"
+                     "o=android 0 14 IN IPv4 0.0.0.0\n"
+                     "s=NVIDIA Streaming Client\n"
+                     "a=x-nv-video[0].clientViewportWd:1920 \n"
+                     "a=x-nv-video[0].clientViewportHt:1080 \n"
+                     "a=x-nv-video[0].maxFPS:60 \n"
+                     "a=x-nv-video[0].packetSize:1024 \n"
+                     "a=x-nv-video[0].rateControlMode:4 \n"
+                     "a=x-nv-video[0].timeoutLengthMs:7000 \n"
+                     "a=x-nv-video[0].framesWithInvalidRefThreshold:0 \n"
+                     "a=x-nv-video[0].initialBitrateKbps:15500 \n"
+                     "a=x-nv-video[0].initialPeakBitrateKbps:15500 \n"
+                     "a=x-nv-vqos[0].bw.minimumBitrateKbps:15500 \n"
+                     "a=x-nv-vqos[0].bw.maximumBitrateKbps:15500 \n"
+                     "a=x-nv-vqos[0].fec.enable:1 \n"
+                     "a=x-nv-vqos[0].videoQualityScoreUpdateTime:5000 \n"
+                     "a=x-nv-vqos[0].qosTrafficType:0 \n"
+                     "a=x-nv-aqos.qosTrafficType:0 \n"
+                     "a=x-nv-general.featureFlags:167 \n"
+                     "a=x-nv-general.useReliableUdp:13 \n"
+                     "a=x-nv-vqos[0].fec.minRequiredFecPackets:2 \n"
+                     "a=x-nv-vqos[0].drc.enable:0 \n"
+                     "a=x-nv-general.enableRecoveryMode:0 \n"
+                     "a=x-nv-video[0].videoEncoderSlicesPerFrame:1 \n"
+                     "a=x-nv-clientSupportHevc:0 \n"
+                     "a=x-nv-vqos[0].bitStreamFormat:3 \n"
+                     "a=x-nv-video[0].dynamicRangeMode:0 \n"
+                     "a=x-nv-video[0].maxNumReferenceFrames:1 \n"
+                     "a=x-nv-video[0].clientRefreshRateX100:0 \n"
+                     "a=x-nv-audio.surround.numChannels:2 \n"
+                     "a=x-nv-audio.surround.channelMask:3 \n"
+                     "a=x-nv-audio.surround.enable:0 \n"
+                     "a=x-nv-audio.surround.AudioQuality:0 \n"
+                     "a=x-nv-aqos.packetDuration:5 \n"
+                     "a=x-nv-video[0].encoderCscMode:0 \n"
+                     "t=0 0\n"
+                     "m=video 47998 \n"sv,
+                     [](std::optional<RTSP_PACKET> response) {
+                       REQUIRE(response.has_value());
+                       REQUIRE(response.value().response.status_code == 400);
+                     });
+  }
 }
 
 TEST_CASE("Commands (IP Matching)", "[RTSP]") {
@@ -494,13 +617,15 @@ TEST_CASE("Commands (IP Matching)", "[RTSP]") {
                        REQUIRE(response);
                        REQUIRE(response.value().response.status_code == 200);
                        REQUIRE(response.value().seq_number == 2);
-                       REQUIRE(response.value().payloads.size() == 5);
+                       REQUIRE(response.value().payloads.size() == 6);
                        REQUIRE_THAT(response.value().payloads[0].first, Equals("sprop-parameter-sets"));
                        REQUIRE_THAT(response.value().payloads[0].second, Equals("AAAAAU"));
-                       REQUIRE_THAT(response.value().payloads[1].second, Equals("fmtp:97 surround-params=21101"));
-                       REQUIRE_THAT(response.value().payloads[2].second, Equals("fmtp:97 surround-params=642014235"));
-                       REQUIRE_THAT(response.value().payloads[3].second, Equals("fmtp:97 surround-params=85301423675"));
-                       REQUIRE_THAT(response.value().payloads[4].second, Equals("x-ss-general.featureFlags: 3"));
+                       REQUIRE_THAT(response.value().payloads[1].first, Equals("a"));
+                       REQUIRE_THAT(response.value().payloads[1].second, Equals("rtpmap:99 PYROWAVE/90000"));
+                       REQUIRE_THAT(response.value().payloads[2].second, Equals("fmtp:97 surround-params=21101"));
+                       REQUIRE_THAT(response.value().payloads[3].second, Equals("fmtp:97 surround-params=642014235"));
+                       REQUIRE_THAT(response.value().payloads[4].second, Equals("fmtp:97 surround-params=85301423675"));
+                       REQUIRE_THAT(response.value().payloads[5].second, Equals("x-ss-general.featureFlags: 3"));
                      });
   }
 
