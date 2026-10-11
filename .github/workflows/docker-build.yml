@@ -66,7 +66,6 @@ jobs:
             type=raw,value=stable,enable=${{ github.event_name == 'release' }}
             type=semver,pattern={{version}}
             type=semver,pattern={{major}}
-            type=edge,branch=master
             type=ref,event=branch
             type=raw,value=alpha
             type=sha
