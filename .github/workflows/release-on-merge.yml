@@ -1,0 +1,23 @@
+name: Tag and release on merge
+
+on:
+  pull_request:
+    types: [closed]
+    branches: [stable]
+
+permissions: {}
+
+jobs:
+  release:
+    if: github.event.pull_request.merged && github.event.pull_request.head.ref == 'beta' && github.event.pull_request.head.repo.full_name == github.repository && startsWith(github.event.pull_request.title, 'Release v')
+    runs-on: ubuntu-latest
+    steps:
+      - name: Create GitHub release
+        env:
+          GH_TOKEN: ${{ secrets.GH_RELEASE_PAT }}
+          GH_REPO: ${{ github.repository }}
+          TITLE: ${{ github.event.pull_request.title }}
+          SHA: ${{ github.event.pull_request.merge_commit_sha }}
+        run: |
+          version="${TITLE#Release }"
+          gh release create "${version}" --target "${SHA}" --title "${version}" --generate-notes
