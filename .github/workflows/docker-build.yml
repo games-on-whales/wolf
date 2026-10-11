@@ -2,10 +2,13 @@ name: Docker build
 
 on:
   push:
+    branches:
+      - "**"
     paths-ignore:
       - "docs/**"
       - ".github/**"
-  workflow_dispatch:
+  release:
+    types: [published]
 
 jobs:
   buildx:
