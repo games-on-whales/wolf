@@ -100,7 +100,8 @@ std::optional<events::StreamSession> get_current_session(const enet_clients_map 
                                                          const ENetEvent &enet_event) {
   if (enet_event.type == ENET_EVENT_TYPE_CONNECT) {
     // A new connection, we should check if there's a session that matches the current client
-    for (const StreamSession &session : *running_sessions->load()) {
+    const auto sessions = running_sessions->load();
+    for (const StreamSession &session : *sessions) {
       if (session.enet_secret_payload == enet_event.data) {
         return session;
       }
@@ -108,11 +109,17 @@ std::optional<events::StreamSession> get_current_session(const enet_clients_map 
     logs::log(logs::warning,
               "[ENET] Unable to find a session that matches the client secret {}, matching by IP",
               enet_event.data);
-    for (const StreamSession &session : *running_sessions->load()) {
+    std::optional<events::StreamSession> ip_match;
+    for (const StreamSession &session : *sessions) {
       if (session.ip == client_ip) {
-        return session;
+        if (ip_match) {
+          logs::log(logs::warning, "[ENET] Ambiguous legacy session for IP: {}", client_ip);
+          return std::nullopt;
+        }
+        ip_match = session;
       }
     }
+    return ip_match;
   } else {
     // The connection has already been established, we'll check for a match in our connected client map
     if (auto client = connected_clients.find(enet_event.peer)) {
@@ -225,6 +232,9 @@ void run_control(int port,
         }
       } else {
         logs::log(logs::warning, "[ENET] Received packet from unrecognised client {}:{}", client_ip, client_port);
+        if (event.type == ENET_EVENT_TYPE_RECEIVE) {
+          enet_packet_destroy(event.packet);
+        }
         enet_peer_disconnect_now(event.peer, 0);
       }
     }
