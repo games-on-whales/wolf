@@ -55,7 +55,7 @@ You can also press `Right Shift` + `F11` to change the position of the overlay o
 
 == Using alternative Proton ==
 
-From where your `/etc/wolf` is mounted in your host, add the desired proton files to `/etc/wolf/profile_data/${profile_id}/WolfSteam/.steam/debian-installation/compatibilitytools.d/`
+From where your `/etc/wolf` is mounted in your host, add the desired proton files to `/etc/wolf/profile_data/${profile_id}/WolfSteam/.steam/steam/compatibilitytools.d/`
 
 [NOTE]
 ====
@@ -65,7 +65,7 @@ In order to add this, you must have already started the user once for said profi
 === Example for ProtonGE ===
 
 * Download the latest ProtonGE release from https://github.com/GloriousEggroll/proton-ge-custom/releases
-* Extract the release tarball into `/etc/wolf/profile_data/${profile_id}/WolfSteam/.steam/debian-installation/compatibilitytools.d/`
+* Extract the release tarball into `/etc/wolf/profile_data/${profile_id}/WolfSteam/.steam/steam/compatibilitytools.d/`
 * Restart Steam
 * Select the desired ProtonGE version in the Steam game's properties under "Compatibility"'
 
@@ -74,7 +74,7 @@ In order to add this, you must have already started the user once for said profi
 === Setting the mount point ===
 The host's library will need to mounted to the container.
 This is easily accomplished by using the `mounts` option in the `config.toml` file.
-Set `mounts = [ '/path/to/steamapps:/home/retro/.steam/debian-installation/steamapps:rw' ]` in the Steam block and restart Wolf.
+Set `mounts = [ '/path/to/steamapps:/home/retro/.steam/steam/steamapps:rw' ]` in the Steam block and restart Wolf.
 
 === Permissions ===
 The library needs to be owned by user:group 1000:1000 for the container to access it.
