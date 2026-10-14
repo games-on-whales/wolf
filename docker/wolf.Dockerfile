@@ -96,7 +96,10 @@ RUN dnf install -y \
 # (supervised by supervisord, see startup.sh + supervisord.conf) so audio is
 # available as soon as Wolf boots, without the legacy external "WolfPulseAudio"
 # sidecar container and its startup race. pulseaudio-utils ships pactl, handy for debugging audio from inside the container.
-RUN dnf install -y \
+# --allowerasing: Fedora ships PipeWire by default and base-app:fedora has
+# pipewire-pulseaudio installed, which conflicts with the real pulseaudio
+# server package; erase it in favor of PulseAudio proper.
+RUN dnf install -y --allowerasing \
     pulseaudio pulseaudio-utils supervisor \
     && dnf clean all
 
