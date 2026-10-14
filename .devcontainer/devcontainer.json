@@ -2,10 +2,10 @@
   "name": "wolf-dev",
   "build": {
     "context": "..",
-    "dockerfile": "../docker/wolf-fedora.Dockerfile",
+    "dockerfile": "../docker/wolf.Dockerfile",
     "target": "wolf-builder",
     "args": {
-      "BASE_IMAGE": "ghcr.io/games-on-whales/gstreamer:1.26.7-fedora"
+      "BASE_IMAGE": "ghcr.io/games-on-whales/gstreamer:1.26.7"
     }
   },
   "postStartCommand": "bash $(pwd)/.devcontainer/dev-setup.sh",

@@ -27,7 +27,7 @@ Prebuilt guest-app containers live in [games-on-whales/gow](https://github.com/g
 
 Two supported paths, both documented in `docs/modules/dev/pages/manual_build.adoc`:
 
-- **Devcontainer (recommended)** — `docker/wolf-fedora.Dockerfile` target `wolf-builder` via `.devcontainer/`,
+- **Devcontainer (recommended)** — `docker/wolf.Dockerfile` target `wolf-builder` via `.devcontainer/`,
   so you build in the exact environment of the official image with all deps preinstalled (VS Code:
   *Dev Containers: Clone Repository in Container Volume*, pick the Clang kit).
 - **Manual host build** — build Wolf outside Docker (Docker must still be installed for Wolf to do

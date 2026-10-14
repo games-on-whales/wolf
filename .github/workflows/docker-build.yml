@@ -17,25 +17,6 @@ env:
 jobs:
   buildx:
     runs-on: ubuntu-latest
-    strategy:
-      fail-fast: false
-      # Fedora is the default variant: it gets the plain tags (wolf:beta,
-      # wolf:stable, semver...). Ubuntu keeps building under a `-ubuntu`
-      # suffix so users can pin the legacy base while migrating.
-      matrix:
-        include:
-          - os: fedora
-            tag_suffix: ""
-            cache_suffix: ""
-            gpu_drivers_file: docker/gpu-drivers-fedora.Dockerfile
-            gstreamer_file: docker/gstreamer-fedora.Dockerfile
-            wolf_file: docker/wolf-fedora.Dockerfile
-          - os: ubuntu
-            tag_suffix: "-ubuntu"
-            cache_suffix: "-ubuntu"
-            gpu_drivers_file: docker/gpu-drivers.Dockerfile
-            gstreamer_file: docker/gstreamer.Dockerfile
-            wolf_file: docker/wolf.Dockerfile
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -67,10 +48,10 @@ jobs:
             fi
             PUSH=true
             echo "has_github_token=true" >> $GITHUB_OUTPUT
-            echo "cache_from=type=registry,ref=${REGISTRY_IMAGE}:buildcache${{ matrix.cache_suffix }}" >> $GITHUB_OUTPUT
-            echo "cache_to=type=registry,ref=${REGISTRY_IMAGE}:buildcache${{ matrix.cache_suffix }},mode=max" >> $GITHUB_OUTPUT
+            echo "cache_from=type=registry,ref=${REGISTRY_IMAGE}:buildcache" >> $GITHUB_OUTPUT
+            echo "cache_to=type=registry,ref=${REGISTRY_IMAGE}:buildcache,mode=max" >> $GITHUB_OUTPUT
           else
-            echo "cache_from=type=registry,ref=${REGISTRY_IMAGE}:buildcache${{ matrix.cache_suffix }}" >> $GITHUB_OUTPUT
+            echo "cache_from=type=registry,ref=${REGISTRY_IMAGE}:buildcache" >> $GITHUB_OUTPUT
             echo "cache_to=" >> $GITHUB_OUTPUT
           fi
           echo "images=${IMAGES}" >> $GITHUB_OUTPUT
@@ -92,9 +73,7 @@ jobs:
             type=ref,event=branch
             type=raw,value=alpha
             type=sha
-          flavor: |
-            latest=false # let's not produce a :latest tag
-            suffix=${{ matrix.tag_suffix }}
+          flavor: latest=false # let's not produce a :latest tag
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v2
@@ -124,39 +103,39 @@ jobs:
         with:
           builder: ${{ steps.buildx.outputs.name }}
           context: docker/
-          file: ${{ matrix.gpu_drivers_file }}
+          file: docker/gpu-drivers.Dockerfile
           push: true
-          tags: ghcr.io/${{ github.repository_owner }}/gpu-drivers:${{ env.GPU_DRIVERS_VERSION }}${{ matrix.tag_suffix }},gameonwhales/gpu-drivers:${{ env.GPU_DRIVERS_VERSION }}${{ matrix.tag_suffix }} # TODO: set build version as param
+          tags: ghcr.io/${{ github.repository_owner }}/gpu-drivers:${{ env.GPU_DRIVERS_VERSION }},gameonwhales/gpu-drivers:${{ env.GPU_DRIVERS_VERSION }}
           labels: ${{ steps.meta.outputs.labels }}
-          cache-from: type=registry,ref=ghcr.io/${{ github.repository_owner }}/gpu-drivers:buildcache${{ matrix.cache_suffix }}
-          cache-to: type=registry,ref=ghcr.io/${{ github.repository_owner }}/gpu-drivers:buildcache${{ matrix.cache_suffix }},mode=max
+          cache-from: type=registry,ref=ghcr.io/${{ github.repository_owner }}/gpu-drivers:buildcache
+          cache-to: type=registry,ref=ghcr.io/${{ github.repository_owner }}/gpu-drivers:buildcache,mode=max
 
       - name: Build Gstreamer
         uses: docker/build-push-action@v3
         with:
           builder: ${{ steps.buildx.outputs.name }}
           context: docker/
-          file: ${{ matrix.gstreamer_file }}
+          file: docker/gstreamer.Dockerfile
           push: true
           build-args: |
             GSTREAMER_VERSION=${{ env.GSTREAMER_VERSION }}
-            BASE_IMAGE=ghcr.io/${{ github.repository_owner }}/gpu-drivers:${{ env.GPU_DRIVERS_VERSION }}${{ matrix.tag_suffix }}
-          tags: ghcr.io/${{ github.repository_owner }}/gstreamer:${{ env.GSTREAMER_VERSION }}${{ matrix.tag_suffix }},gameonwhales/gstreamer:${{ env.GSTREAMER_VERSION }}${{ matrix.tag_suffix }} # TODO: set gstreamer version as param
+            BASE_IMAGE=ghcr.io/${{ github.repository_owner }}/gpu-drivers:${{ env.GPU_DRIVERS_VERSION }}
+          tags: ghcr.io/${{ github.repository_owner }}/gstreamer:${{ env.GSTREAMER_VERSION }},gameonwhales/gstreamer:${{ env.GSTREAMER_VERSION }}
           labels: ${{ steps.meta.outputs.labels }}
-          cache-from: type=registry,ref=ghcr.io/${{ github.repository_owner }}/gstreamer:buildcache${{ matrix.cache_suffix }}
-          cache-to: type=registry,ref=ghcr.io/${{ github.repository_owner }}/gstreamer:buildcache${{ matrix.cache_suffix }},mode=max
+          cache-from: type=registry,ref=ghcr.io/${{ github.repository_owner }}/gstreamer:buildcache
+          cache-to: type=registry,ref=ghcr.io/${{ github.repository_owner }}/gstreamer:buildcache,mode=max
 
       - name: Build Wolf
         uses: docker/build-push-action@v3
         with:
           builder: ${{ steps.buildx.outputs.name }}
           context: .
-          file: ${{ matrix.wolf_file }}
+          file: docker/wolf.Dockerfile
           push: ${{ steps.prep.outputs.push }}
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
           build-args: |
-            BASE_IMAGE=ghcr.io/${{ github.repository_owner }}/gstreamer:${{ env.GSTREAMER_VERSION }}${{ matrix.tag_suffix }}
+            BASE_IMAGE=ghcr.io/${{ github.repository_owner }}/gstreamer:${{ env.GSTREAMER_VERSION }}
             IMAGE_SOURCE=${{ steps.prep.outputs.github_server_url }}/${{ github.repository }}
           cache-from: ${{ steps.prep.outputs.cache_from }}
           cache-to: ${{ steps.prep.outputs.cache_to }}
