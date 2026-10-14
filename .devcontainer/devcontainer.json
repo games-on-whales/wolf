@@ -2,8 +2,11 @@
   "name": "wolf-dev",
   "build": {
     "context": "..",
-    "dockerfile": "../docker/wolf.Dockerfile",
-    "target": "wolf-builder"
+    "dockerfile": "../docker/wolf-fedora.Dockerfile",
+    "target": "wolf-builder",
+    "args": {
+      "BASE_IMAGE": "ghcr.io/games-on-whales/gstreamer:1.26.7-fedora"
+    }
   },
   "postStartCommand": "bash $(pwd)/.devcontainer/dev-setup.sh",
   "features": {
@@ -51,7 +54,7 @@
     "WOLF_CFG_FILE": "/etc/wolf/cfg/config.toml",
     "WOLF_PRIVATE_KEY_FILE": "/etc/wolf/cfg/key.pem",
     "WOLF_PRIVATE_CERT_FILE": "/etc/wolf/cfg/cert.pem",
-    "WOLF_PULSE_IMAGE": "ghcr.io/games-on-whales/pulseaudio:master",
+    "WOLF_PULSE_IMAGE": "ghcr.io/games-on-whales/pulseaudio:fedora",
     "WOLF_RENDER_NODE": "/dev/dri/renderD128",
     "WOLF_STOP_CONTAINER_ON_EXIT": "TRUE",
     "WOLF_DOCKER_SOCKET": "/var/run/docker.sock",
