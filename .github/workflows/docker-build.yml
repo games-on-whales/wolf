@@ -114,6 +114,11 @@ jobs:
           file: docker/gpu-drivers.Dockerfile
           push: true
           tags: ghcr.io/${{ github.repository_owner }}/gpu-drivers:${{ env.GPU_DRIVERS_VERSION }},gameonwhales/gpu-drivers:${{ env.GPU_DRIVERS_VERSION }}
+          # No provenance/SBOM attestations on base images: they embed a
+          # per-run invocation ID, which changes the manifest list digest on
+          # every run and invalidates the downstream FROM cache chain.
+          provenance: false
+          sbom: false
           cache-from: type=registry,ref=ghcr.io/${{ github.repository_owner }}/gpu-drivers:buildcache
           cache-to: type=registry,ref=ghcr.io/${{ github.repository_owner }}/gpu-drivers:buildcache,mode=max
 
@@ -128,6 +133,8 @@ jobs:
             GSTREAMER_VERSION=${{ env.GSTREAMER_VERSION }}
             BASE_IMAGE=ghcr.io/${{ github.repository_owner }}/gpu-drivers:${{ env.GPU_DRIVERS_VERSION }}
           tags: ghcr.io/${{ github.repository_owner }}/gstreamer:${{ env.GSTREAMER_VERSION }},gameonwhales/gstreamer:${{ env.GSTREAMER_VERSION }}
+          provenance: false
+          sbom: false
           cache-from: type=registry,ref=ghcr.io/${{ github.repository_owner }}/gstreamer:buildcache
           cache-to: type=registry,ref=ghcr.io/${{ github.repository_owner }}/gstreamer:buildcache,mode=max
 
