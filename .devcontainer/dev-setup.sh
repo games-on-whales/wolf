@@ -1,17 +1,11 @@
 #!/bin/bash
 set -e
-export DEBIAN_FRONTEND=noninteractive
 
-apt-get update
-
-# Install debugger
-apt-get install -y gdb
-
-# Install wayland-protocols
-apt-get install -y wayland-protocols
+# Dev tools (Fedora base image: use dnf, not apt)
+dnf install -y gdb wayland-protocols zsh zsh-autosuggestions
 
 # Build and install nvtop
-apt-get install -y libdrm-dev libsystemd-dev libncurses5-dev libncursesw5-dev
+dnf install -y libdrm-devel systemd-devel ncurses-devel
 cd /tmp/
 git clone https://github.com/Syllo/nvtop.git
 mkdir -p nvtop/build && cd nvtop/build

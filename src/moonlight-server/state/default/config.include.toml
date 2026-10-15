@@ -75,7 +75,7 @@ start_virtual_compositor = true
 [profiles.apps.runner]
 type = "docker"
 name = "WolfFirefox"
-image = "ghcr.io/games-on-whales/firefox:edge"
+image = "ghcr.io/games-on-whales/firefox:fedora"
 mounts = []
 env = [
     "RUN_SWAY=1",
@@ -104,7 +104,7 @@ start_virtual_compositor = true
 [profiles.apps.runner]
 type = "docker"
 name = "WolfRetroarch"
-image = "ghcr.io/games-on-whales/retroarch:edge"
+image = "ghcr.io/games-on-whales/retroarch:fedora"
 mounts = []
 env = [
     "RUN_SWAY=true",
@@ -132,7 +132,7 @@ start_virtual_compositor = true
 [profiles.apps.runner]
 type = "docker"
 name = "WolfSteam"
-image = "ghcr.io/games-on-whales/steam:edge"
+image = "ghcr.io/games-on-whales/steam:fedora"
 mounts = []
 env = [
     "PROTON_LOG=1",
@@ -163,7 +163,7 @@ start_virtual_compositor = true
 [profiles.apps.runner]
 type = "docker"
 name = "WolfPegasus"
-image = "ghcr.io/games-on-whales/pegasus:edge"
+image = "ghcr.io/games-on-whales/pegasus:fedora"
 mounts = []
 env = [
     "RUN_SWAY=1",
@@ -191,7 +191,7 @@ start_virtual_compositor = true
 [profiles.apps.runner]
 type = "docker"
 name = "WolfLutris"
-image = "ghcr.io/games-on-whales/lutris:edge"
+image = "ghcr.io/games-on-whales/lutris:fedora"
 mounts = ["lutris:/var/lutris/:rw"]
 env = [
     "RUN_SWAY=1",
@@ -221,7 +221,7 @@ start_virtual_compositor = true
 [profiles.apps.runner]
 type = "docker"
 name = "Prismlauncher"
-image = "ghcr.io/games-on-whales/prismlauncher:edge"
+image = "ghcr.io/games-on-whales/prismlauncher:fedora"
 mounts = []
 env = [
     "RUN_SWAY=1",
@@ -248,7 +248,7 @@ icon_png_path = "https://games-on-whales.github.io/wildlife/apps/xfce/assets/ico
 [profiles.apps.runner]
 type = 'docker'
 name = 'WolfXFCE'
-image = 'ghcr.io/games-on-whales/xfce:edge'
+image = 'ghcr.io/games-on-whales/xfce:fedora'
 env = ['GOW_REQUIRED_DEVICES=/dev/input/* /dev/dri/* /dev/nvidia*']
 devices = []
 mounts = []
@@ -273,7 +273,7 @@ icon_png_path = "https://games-on-whales.github.io/wildlife/apps/es-de/assets/ic
 [profiles.apps.runner]
 type = "docker"
 name = "WolfES-DE"
-image = "ghcr.io/games-on-whales/es-de:edge"
+image = "ghcr.io/games-on-whales/es-de:fedora"
 mounts = []
 env = ["RUN_SWAY=1", "MOZ_ENABLE_WAYLAND=1", "GOW_REQUIRED_DEVICES=/dev/input/* /dev/dri/* /dev/nvidia*", ]
 devices = []
@@ -297,7 +297,7 @@ icon_png_path = "https://games-on-whales.github.io/wildlife/apps/kodi/assets/ico
 [profiles.apps.runner]
 type = 'docker'
 name = 'WolfKodi'
-image = 'ghcr.io/games-on-whales/kodi:edge'
+image = 'ghcr.io/games-on-whales/kodi:fedora'
 env = ['RUN_SWAY=true', 'GOW_REQUIRED_DEVICES=/dev/input/* /dev/dri/* /dev/nvidia*']
 devices = []
 mounts = []

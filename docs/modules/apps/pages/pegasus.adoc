@@ -92,7 +92,7 @@ start_virtual_compositor = true
 [apps.runner]
 type = "docker"
 name = "WolfEmulators"
-image = "ghcr.io/games-on-whales/pegasus:edge"
+image = "ghcr.io/games-on-whales/pegasus:fedora"
 mounts = [
     "/mnt/PATH_TO_ROMS_IN_YOUR_HOST/:/ROMs/:rw" # <-- EDIT HERE
 ]
