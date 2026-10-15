@@ -3,6 +3,8 @@
 #include "state/config.hpp"
 #include "state/data-structures.hpp"
 
+#include <algorithm>
+#include <cctype>
 #include <events/events.hpp>
 #include <rfl.hpp>
 #include <rfl/parsing/Parser.hpp>
@@ -48,6 +50,10 @@ template <> struct Reflector<events::App> {
     const bool support_hdr;
     std::optional<std::string> icon_png_path;
 
+    // GStreamer caps of the Wayland producer (e.g. CUDAMemory, a DMABuf drm-format list, or plain video/x-raw).
+    // Optional on input so older API clients keep working; missing or blank defaults to video/x-raw (no zero-copy).
+    std::optional<std::string> video_producer_buffer_caps;
+
     std::string h264_gst_pipeline;
     std::string hevc_gst_pipeline;
     std::string av1_gst_pipeline;
@@ -65,6 +71,7 @@ template <> struct Reflector<events::App> {
             .id = v.base.id,
             .support_hdr = v.base.support_hdr,
             .icon_png_path = v.base.icon_png_path,
+            .video_producer_buffer_caps = v.video_producer_buffer_caps,
             .h264_gst_pipeline = v.h264_gst_pipeline,
             .hevc_gst_pipeline = v.hevc_gst_pipeline,
             .av1_gst_pipeline = v.av1_gst_pipeline,
@@ -79,6 +86,11 @@ template <> struct Reflector<events::App> {
     auto runner = Reflector<events::Runner>::to(app.runner, ev_bus);
     return events::App{
         .base = {.title = app.title, .id = app.id, .support_hdr = app.support_hdr, .icon_png_path = app.icon_png_path},
+        // A blank caps string would produce an invalid producer pipeline, treat it like a missing one
+        .video_producer_buffer_caps = std::ranges::all_of(app.video_producer_buffer_caps.value_or(""),
+                                                          [](unsigned char c) { return std::isspace(c); })
+                                          ? "video/x-raw"
+                                          : *app.video_producer_buffer_caps,
         .h264_gst_pipeline = app.h264_gst_pipeline,
         .hevc_gst_pipeline = app.hevc_gst_pipeline,
         .av1_gst_pipeline = app.av1_gst_pipeline,

@@ -244,12 +244,15 @@ TEST_CASE("APPs APIs", "[API]") {
   REQUIRE(apps.apps.size() == 2);
   REQUIRE(apps.apps[0].title == "Firefox");
   REQUIRE(apps.apps[1].title == "Test ball");
+  REQUIRE(apps.apps[0].video_producer_buffer_caps.has_value());
+  REQUIRE_FALSE(apps.apps[0].video_producer_buffer_caps->empty());
 
   // Test that we can add an app
   auto app = rfl::Reflector<wolf::core::events::App>::ReflType{
       .title = "Test app",
       .id = "test",
       .support_hdr = false,
+      .video_producer_buffer_caps = "video/x-raw(memory:DMABuf)",
       .h264_gst_pipeline = "h264",
       .hevc_gst_pipeline = "hevc",
       .av1_gst_pipeline = "av1",
@@ -273,10 +276,12 @@ TEST_CASE("APPs APIs", "[API]") {
   REQUIRE(apps2.success);
   REQUIRE(apps2.apps.size() == 3);
   REQUIRE(apps2.apps[2].title == "Test app");
+  REQUIRE(apps2.apps[2].video_producer_buffer_caps == "video/x-raw(memory:DMABuf)");
   auto moonlight_profile = state::get_moonlight_profile(config);
   REQUIRE(moonlight_profile);
   immer::vector<immer::box<events::App>> wolf_apps = moonlight_profile.value()->apps->load();
   REQUIRE(wolf_apps.at(2)->base.title == "Test app");
+  REQUIRE(wolf_apps.at(2)->video_producer_buffer_caps == "video/x-raw(memory:DMABuf)");
 
   // Test that we can remove an app
   auto app_delete = AppDeleteRequest{.id = "test"};
@@ -289,6 +294,23 @@ TEST_CASE("APPs APIs", "[API]") {
   auto apps3 = rfl::json::read<AppListResponse>(response->second).value();
   REQUIRE(apps3.success);
   REQUIRE(apps3.apps.size() == 2);
+
+  // Apps added without (or with blank) producer caps fall back to video/x-raw
+  for (const auto &caps : {std::optional<std::string>{},
+                           std::optional<std::string>{""},
+                           std::optional<std::string>{" "},
+                           std::optional<std::string>{"\t\n"},
+                           std::optional<std::string>{"\v\f"}}) {
+    auto default_app = app;
+    default_app.video_producer_buffer_caps = caps;
+    response = req(curl.get(), HTTPMethod::POST, "http://localhost/api/v1/apps/add", rfl::json::write(default_app));
+    REQUIRE(response);
+    REQUIRE_THAT(response->second, Equals("{\"success\":true}"));
+    wolf_apps = moonlight_profile.value()->apps->load();
+    REQUIRE(wolf_apps.at(2)->video_producer_buffer_caps == "video/x-raw");
+    response = req(curl.get(), HTTPMethod::POST, "http://localhost/api/v1/apps/delete", rfl::json::write(app_delete));
+    REQUIRE(response);
+  }
 }
 
 TEST_CASE("Profile APIs", "[API]") {

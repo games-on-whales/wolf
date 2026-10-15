@@ -915,6 +915,16 @@
               }
             ]
           },
+          "video_producer_buffer_caps": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "h264_gst_pipeline": {
             "type": "string"
           },
