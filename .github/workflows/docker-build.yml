@@ -146,6 +146,20 @@ jobs:
           cache-from: ${{ steps.prep.outputs.cache_from }}
           cache-to: ${{ steps.prep.outputs.cache_to }}
 
+      # Smoke-test the image we just pushed: binaries, dynamic linking,
+      # compositor plugin + software encoder, embedded PulseAudio, and a full
+      # entrypoint boot under supervisord. GPU-dependent elements are not
+      # checked (no GPU on CI runners).
+      - name: Smoke test image
+        if: steps.prep.outputs.push == 'true'
+        run: |
+          TAG='${{ fromJSON(steps.meta.outputs.json).tags[0] }}'
+          echo "==> Smoke testing $TAG"
+          docker pull "$TAG"
+          docker run --rm --entrypoint "" \
+            -v "$(pwd)/docker/smoke-test.sh:/smoke.sh:ro" \
+            "$TAG" bash /smoke.sh
+
   test_devcontainer:
     runs-on: ubuntu-latest
     needs: buildx

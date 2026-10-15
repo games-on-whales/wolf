@@ -105,9 +105,15 @@ RUN dnf install -y --allowerasing \
 
 COPY docker/supervisord.conf /etc/supervisord.conf
 
-ENV GST_PLUGIN_PATH=/usr/local/lib/x86_64-linux-gnu/gstreamer-1.0/
+# The custom gstreamer plugins (meson) install to /usr/local/lib64, while
+# gst-wayland-display (cargo cinstall) lands in the Debian-style multiarch
+# libdir; both are on GST_PLUGIN_PATH. The ld.so.conf entry for
+# /usr/local/lib64 comes from the gstreamer base image.
+ENV GST_PLUGIN_PATH=/usr/local/lib64/gstreamer-1.0:/usr/local/lib/x86_64-linux-gnu/gstreamer-1.0
 # Copying out our custom compositor from the build stage
-COPY --from=wolf-builder /usr/local/lib/x86_64-linux-gnu/gstreamer-1.0/* $GST_PLUGIN_PATH
+COPY --from=wolf-builder /usr/local/lib/x86_64-linux-gnu/gstreamer-1.0/* /usr/local/lib/x86_64-linux-gnu/gstreamer-1.0/
+# Rebuild the loader cache now that the compositor libs are in place
+RUN ldconfig
 
 # Bundle the exact libicu the builder linked wolf against, so a builder/runner
 # layer-cache skew can't produce a wolf binary that can't resolve its own
@@ -117,6 +123,9 @@ COPY --from=wolf-builder /usr/lib64/libicu*.so.* /usr/lib64/
 WORKDIR /wolf
 
 ENV WOLF_CFG_FOLDER=/etc/wolf/cfg
+# Pre-create it so Wolf can write its default config on first boot, before
+# any volume is mounted over /etc/wolf
+RUN mkdir -p $WOLF_CFG_FOLDER
 
 COPY --from=wolf-builder /wolf/wolf /wolf/wolf
 COPY --from=wolf-builder /wolf/fake-udev /wolf/fake-udev

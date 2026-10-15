@@ -75,6 +75,13 @@ RUN <<_GSTREAMER_INSTALL
     # Final cleanup stage
     dnf clean all
     rm -rf $SOURCE_PATH
+
+    # Our custom GStreamer lives in /usr/local/lib64 (Fedora libdir), which is
+    # not on the runtime loader path by default. Register it so gst-inspect
+    # and everything built on top of this image resolves OUR gstreamer
+    # instead of the distro one in /lib64.
+    echo "/usr/local/lib64" > /etc/ld.so.conf.d/00-gst-local.conf
+    ldconfig
 _GSTREAMER_INSTALL
 
 LABEL org.opencontainers.image.source="https://github.com/games-on-whales/wolf/"
