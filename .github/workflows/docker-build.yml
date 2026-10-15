@@ -9,6 +9,7 @@ on:
       - ".github/**"
   release:
     types: [published]
+  workflow_dispatch:
 
 # Serialize runs that share a ref so concurrent builds cannot race when
 # pushing mutable tags (image tags and buildcache refs) to the registry.
