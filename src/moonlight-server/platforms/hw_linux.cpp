@@ -97,10 +97,13 @@ std::shared_ptr<drmDevice> drm_open_device(std::string_view device) {
   drmDevice *dev = nullptr;
   auto ret = drmGetDevice2(render_node_fd, 0, &dev);
   if (ret < 0) {
+    close(render_node_fd);
     throw std::runtime_error(fmt::format("Error during drmGetDevice for {}, {}", device, strerror(-ret)));
   }
 
-  return {dev, [&render_node_fd](auto dev) {
+  // Capture the fd by value: this function's local is gone by the time the deleter runs, and
+  // closing whatever that stack slot then holds closes an unrelated fd (another thread's eventfd).
+  return {dev, [render_node_fd](auto dev) {
             drmFreeDevice(&dev);
             close(render_node_fd);
           }};
