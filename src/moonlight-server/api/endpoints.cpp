@@ -204,7 +204,14 @@ void UnixSocketServer::endpoint_StreamSessions(const HTTPRequest &req, std::shar
   auto res = StreamSessionListResponse{.success = true};
   auto sessions = state_->app_state->running_sessions->load();
   for (const auto &session : sessions.get()) {
-    res.sessions.push_back(rfl::Reflector<events::StreamSession>::from(session));
+    auto stream_state = session.stream_state->load();
+    auto state = StreamStateName::make<"setup">();
+    if (stream_state->paused) {
+      state = StreamStateName::make<"paused">();
+    } else if (stream_state->video_pipelines > 0 && stream_state->audio_pipelines > 0) {
+      state = StreamStateName::make<"streaming">();
+    }
+    res.sessions.push_back({.session = rfl::Reflector<events::StreamSession>::from(session), .state = state});
   }
   send_http(socket, 200, rfl::json::write(res));
 }

@@ -92,9 +92,23 @@ struct StreamSessionCreated {
   std::string session_id;
 };
 
+using StreamStateName = rfl::Literal<"setup", "streaming", "paused">;
+
+struct StreamSessionInfo {
+  rfl::Flatten<rfl::Reflector<events::StreamSession>::ReflType> session;
+  /**
+   * What the stream is doing, so that a client that missed events can rebuild it:
+   *  - setup: waiting for the client to set up and start (ping) both the video and audio streams
+   *  - streaming: both the video and audio pipelines are running
+   *  - paused: the client paused (or dropped) the stream; it can be resumed
+   * A stopped stream is no longer listed.
+   */
+  StreamStateName state;
+};
+
 struct StreamSessionListResponse {
   bool success = true;
-  std::vector<rfl::Reflector<events::StreamSession>::ReflType> sessions;
+  std::vector<StreamSessionInfo> sessions;
 };
 
 struct StreamSessionStartRequest {

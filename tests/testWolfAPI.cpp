@@ -526,6 +526,33 @@ TEST_CASE("Sessions APIs", "[API]") {
   auto sessions2 = rfl::json::read<StreamSessionListResponse>(response->second).value();
   REQUIRE(sessions2.success);
   REQUIRE(sessions2.sessions.size() == 1);
+  // The session fields stay at the top level, next to its state
+  REQUIRE(sessions2.sessions[0].session.get().client_ip == "127.0.0.1");
+  REQUIRE_THAT(response->second, ContainsSubstring("\"client_ip\":\"127.0.0.1\""));
+  REQUIRE(sessions2.sessions[0].state.name() == "setup");
+
+  // The listed state follows the stream's: streaming once both pipelines run, paused after a pause
+  auto stream_state = running_sessions->load()->front().stream_state;
+  auto listed_state = [&]() {
+    auto response = req(curl.get(), HTTPMethod::GET, "http://localhost/api/v1/sessions");
+    REQUIRE(response);
+    return rfl::json::read<StreamSessionListResponse>(response->second).value().sessions[0].state.name();
+  };
+  stream_state->update([](auto state) {
+    state.video_pipelines++;
+    return state;
+  });
+  REQUIRE(listed_state() == "setup");
+  stream_state->update([](auto state) {
+    state.audio_pipelines++;
+    return state;
+  });
+  REQUIRE(listed_state() == "streaming");
+  stream_state->update([](auto state) {
+    state.paused = true;
+    return state;
+  });
+  REQUIRE(listed_state() == "paused");
 
   // TODO: breaks Github CI
   // // Test that we can send input to a session

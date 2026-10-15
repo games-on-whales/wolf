@@ -399,6 +399,22 @@ using EventsVariant = std::variant<immer::box<PlugDeviceEvent>,
                                    immer::box<DockerContainerStopped>>;
 
 /**
+ * What a StreamSession's stream is doing right now.
+ * Kept so that an API client that missed events (e.g. while disconnected from /api/v1/events)
+ * can rebuild the stream's state from /api/v1/sessions.
+ */
+struct StreamState {
+  /**
+   * Video/audio pipelines running for this session (they start on the client's first ping).
+   * Counts, not flags: after a pause, a restart on the same session can start a new pipeline
+   * before the old one has finished tearing down.
+   */
+  int video_pipelines = 0;
+  int audio_pipelines = 0;
+  bool paused = false; // paused, and nothing set up or started again since
+};
+
+/**
  * A StreamSession is created when a Moonlight user call `launch`
  *
  * This will then be fired up in the event_bus so that the rtsp, command, audio and video threads
@@ -446,6 +462,11 @@ struct StreamSession {
 
   std::shared_ptr<immer::atom<std::shared_ptr<audio::VSink>>> audio_sink =
       std::make_shared<immer::atom<std::shared_ptr<audio::VSink>>>();
+
+  /**
+   * Not carried over on resume: a resumed stream is a new StreamSession and starts from scratch.
+   */
+  std::shared_ptr<immer::atom<StreamState>> stream_state = std::make_shared<immer::atom<StreamState>>();
 
   // virtual devices
   std::shared_ptr<std::optional<MouseTypes>> mouse = std::make_shared<std::optional<MouseTypes>>();

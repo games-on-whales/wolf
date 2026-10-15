@@ -1580,6 +1580,84 @@
           "input_packet_hex"
         ]
       },
+      "wolf__api__StreamSessionInfo": {
+        "type": "object",
+        "properties": {
+          "client_ip": {
+            "type": "string"
+          },
+          "aes_key": {
+            "type": "string"
+          },
+          "aes_iv": {
+            "type": "string"
+          },
+          "rtsp_fake_ip": {
+            "type": "string"
+          },
+          "video_width": {
+            "type": "integer"
+          },
+          "video_height": {
+            "type": "integer"
+          },
+          "video_refresh_rate": {
+            "type": "integer"
+          },
+          "audio_channel_count": {
+            "type": "integer"
+          },
+          "app_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "client_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "client_settings": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/wolf__config__ClientSettings"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "state": {
+            "type": "string",
+            "enum": [
+              "setup",
+              "streaming",
+              "paused"
+            ]
+          }
+        },
+        "required": [
+          "client_ip",
+          "aes_key",
+          "aes_iv",
+          "rtsp_fake_ip",
+          "video_width",
+          "video_height",
+          "video_refresh_rate",
+          "audio_channel_count",
+          "state"
+        ]
+      },
       "wolf__api__StreamSessionListResponse": {
         "type": "object",
         "properties": {
@@ -1589,7 +1667,7 @@
           "sessions": {
             "type": "array",
             "items": {
-              "$ref": "#/components/schemas/rfl__Reflector_wolf__core__events__StreamSession___ReflType"
+              "$ref": "#/components/schemas/wolf__api__StreamSessionInfo"
             }
           }
         },
