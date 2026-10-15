@@ -11,6 +11,7 @@ RUN <<_GSTREAMER_INSTALL
     #!/bin/bash
     set -e
 
+    # x265-devel comes from RPM Fusion free, enabled by the gpu-drivers base image
     DEV_PACKAGES=" \
         gcc gcc-c++ ninja-build meson cmake ccache bison libatomic \
         ca-certificates git \

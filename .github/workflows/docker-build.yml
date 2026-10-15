@@ -10,6 +10,14 @@ on:
   release:
     types: [published]
 
+# Serialize runs that share a ref so concurrent builds cannot race when
+# pushing mutable tags (image tags and buildcache refs) to the registry.
+# cancel-in-progress: false ensures an in-flight branch build always completes
+# before the next one starts.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
+
 env:
   GPU_DRIVERS_VERSION: 2025.05
   GSTREAMER_VERSION: 1.26.7
@@ -80,7 +88,7 @@ jobs:
         with:
           install: true
           version: latest
-          driver-opts: image=moby/buildkit:master
+          driver-opts: image=moby/buildkit:v0.34.0
 
       - name: Login to DockerHub
         if: steps.prep.outputs.has_docker_token != '' # secrets not available in PRs
@@ -106,7 +114,6 @@ jobs:
           file: docker/gpu-drivers.Dockerfile
           push: true
           tags: ghcr.io/${{ github.repository_owner }}/gpu-drivers:${{ env.GPU_DRIVERS_VERSION }},gameonwhales/gpu-drivers:${{ env.GPU_DRIVERS_VERSION }}
-          labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=registry,ref=ghcr.io/${{ github.repository_owner }}/gpu-drivers:buildcache
           cache-to: type=registry,ref=ghcr.io/${{ github.repository_owner }}/gpu-drivers:buildcache,mode=max
 
@@ -121,7 +128,6 @@ jobs:
             GSTREAMER_VERSION=${{ env.GSTREAMER_VERSION }}
             BASE_IMAGE=ghcr.io/${{ github.repository_owner }}/gpu-drivers:${{ env.GPU_DRIVERS_VERSION }}
           tags: ghcr.io/${{ github.repository_owner }}/gstreamer:${{ env.GSTREAMER_VERSION }},gameonwhales/gstreamer:${{ env.GSTREAMER_VERSION }}
-          labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=registry,ref=ghcr.io/${{ github.repository_owner }}/gstreamer:buildcache
           cache-to: type=registry,ref=ghcr.io/${{ github.repository_owner }}/gstreamer:buildcache,mode=max
 
