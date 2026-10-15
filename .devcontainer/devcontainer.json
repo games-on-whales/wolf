@@ -9,21 +9,6 @@
     }
   },
   "postStartCommand": "bash $(pwd)/.devcontainer/dev-setup.sh",
-  "features": {
-    "ghcr.io/nils-geistmann/devcontainers-features/zsh:0": {
-      "plugins": [
-        "git",
-        "zsh-autosuggestions",
-        "history",
-        "docker"
-      ]
-    },
-    // Doesn't work on ubuntu oracular
-    //    "ghcr.io/devcontainers/features/docker-outside-of-docker:1": {
-    //      "moby": false,
-    //      "installDockerBuildx": false
-    //    }
-  },
   "runArgs": [
     "--network=host",
     "-v",
