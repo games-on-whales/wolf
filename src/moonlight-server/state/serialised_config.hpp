@@ -107,6 +107,10 @@ struct BaseAppVideoOverride {
   std::optional<std::string> h264_encoder;
   std::optional<std::string> hevc_encoder;
   std::optional<std::string> av1_encoder;
+  // Full pipelines, used as-is instead of joining source, video_params, encoder and sink
+  std::optional<std::string> h264_pipeline;
+  std::optional<std::string> hevc_pipeline;
+  std::optional<std::string> av1_pipeline;
 };
 
 struct BaseAppAudioOverride {
@@ -114,10 +118,14 @@ struct BaseAppAudioOverride {
   std::optional<std::string> audio_params;
   std::optional<std::string> opus_encoder;
   std::optional<std::string> sink;
+  // Full pipeline, used as-is instead of joining source, audio_params, opus_encoder and sink
+  std::optional<std::string> opus_pipeline;
 };
 
 struct BaseApp {
   std::string title;
+  // Defaults to a hash of the title and icon
+  std::optional<std::string> id;
   std::optional<std::string> icon_png_path;
   std::optional<std::string> render_node;
   std::optional<BaseAppVideoOverride> video;

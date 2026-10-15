@@ -37,7 +37,8 @@ mounts = [
     "/tmp/sockets:/tmp/.X11-unix/:ro",
     "/tmp/sockets:/run/user/1000/pulse/:ro",
     "/run/udev:/run/udev:ro",
-    "/var/local/retro:/home/retro:rw",
+    # No mode: Wolf defaults it to rw, the file must keep it as written
+    "/var/local/retro:/home/retro",
 ]
 devices = []
 ports = []

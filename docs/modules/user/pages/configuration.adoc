@@ -289,6 +289,11 @@ source = "audiotestsrc wave=ticks is-live=true"
 <6> *video*: here it's possible to override the default video pipeline variables defined in: xref:_gstreamer[]
 <7> *audio*: here it's possible to override the default audio pipeline variables defined in: xref:_gstreamer[]
 
+Apps added through the API are saved with a few extra keys so they come back unchanged after a restart:
+`id` (the Moonlight app id, by default a hash of the title and icon), `video.producer_buffer_caps`,
+and full pipelines in `video.h264_pipeline`, `video.hevc_pipeline`, `video.av1_pipeline` and `audio.opus_pipeline`.
+A full pipeline is used as-is, instead of being assembled from `source`, the encoder and `sink`.
+
 See more examples in the xref:gstreamer.adoc[] page.
 
 [#custom_images]

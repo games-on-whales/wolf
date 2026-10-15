@@ -23,6 +23,49 @@ using namespace wolf::core;
 class RunDocker : public events::Runner {
 public:
   static RunDocker from_cfg(std::shared_ptr<events::EventBusType> ev_bus, const wolf::config::AppDocker &runner_cfg) {
+    auto docker_socket = utils::get_env("WOLF_DOCKER_SOCKET", "/var/run/docker.sock");
+    return RunDocker(std::move(ev_bus),
+                     runner_cfg.base_create_json.value_or(default_base_create_json),
+                     container_from_cfg(runner_cfg),
+                     docker_socket);
+  }
+
+  /**
+   * The config as serialize() would return it, without building a runner (which calls out to Docker)
+   */
+  static wolf::config::AppDocker normalize_cfg(const wolf::config::AppDocker &runner_cfg) {
+    return to_cfg(container_from_cfg(runner_cfg), runner_cfg.base_create_json.value_or(default_base_create_json));
+  }
+
+  void run(std::string_view session_id,
+           std::string_view app_state_folder,
+           std::string_view host_xdg_runtime_dir,
+           std::shared_ptr<events::devices_atom_queue> plugged_devices_queue,
+           const immer::array<std::string> &virtual_inputs,
+           const immer::array<std::pair<std::string, std::string>> &paths,
+           const immer::map<std::string, std::string> &env_variables,
+           std::string_view render_node) override;
+
+  events::RunnerTypes serialize() const override {
+    return to_cfg(container, base_create_json);
+  }
+
+protected:
+  RunDocker(std::shared_ptr<events::EventBusType> ev_bus,
+            std::string base_create_json,
+            docker::Container base_container,
+            std::string docker_socket)
+      : ev_bus(std::move(ev_bus)), container(std::move(base_container)), base_create_json(std::move(base_create_json)),
+        docker_api(std::move(docker_socket)) {}
+
+private:
+  static constexpr auto default_base_create_json = R"({
+"HostConfig": {
+  "IpcMode": "host"
+}
+})";
+
+  static Container container_from_cfg(const wolf::config::AppDocker &runner_cfg) {
     std::vector<MountPoint> mounts =
         runner_cfg.mounts                           //
         | transform([](const std::string &mount) {  //
@@ -66,34 +109,17 @@ public:
           })                                                                                         //
         | ranges::to_vector;                                                                         //
 
-    auto docker_socket = utils::get_env("WOLF_DOCKER_SOCKET", "/var/run/docker.sock");
-    return RunDocker(std::move(ev_bus),
-                     runner_cfg.base_create_json.value_or(R"({
-"HostConfig": {
-  "IpcMode": "host"
-}
-})"),
-                     Container{.id = "",
-                               .name = runner_cfg.name,
-                               .image = runner_cfg.image,
-                               .status = docker::CREATED,
-                               .ports = ports,
-                               .mounts = mounts,
-                               .devices = devices,
-                               .env = runner_cfg.env},
-                     docker_socket);
+    return Container{.id = "",
+                     .name = runner_cfg.name,
+                     .image = runner_cfg.image,
+                     .status = docker::CREATED,
+                     .ports = ports,
+                     .mounts = mounts,
+                     .devices = devices,
+                     .env = runner_cfg.env};
   }
 
-  void run(std::string_view session_id,
-           std::string_view app_state_folder,
-           std::string_view host_xdg_runtime_dir,
-           std::shared_ptr<events::devices_atom_queue> plugged_devices_queue,
-           const immer::array<std::string> &virtual_inputs,
-           const immer::array<std::pair<std::string, std::string>> &paths,
-           const immer::map<std::string, std::string> &env_variables,
-           std::string_view render_node) override;
-
-  events::RunnerTypes serialize() const override {
+  static wolf::config::AppDocker to_cfg(const Container &container, const std::string &base_create_json) {
     return wolf::config::AppDocker{
         .name = container.name,
         .image = container.image,
@@ -106,15 +132,6 @@ public:
         .base_create_json = base_create_json};
   }
 
-protected:
-  RunDocker(std::shared_ptr<events::EventBusType> ev_bus,
-            std::string base_create_json,
-            docker::Container base_container,
-            std::string docker_socket)
-      : ev_bus(std::move(ev_bus)), container(std::move(base_container)), base_create_json(std::move(base_create_json)),
-        docker_api(std::move(docker_socket)) {}
-
-private:
   std::shared_ptr<events::EventBusType> ev_bus;
   docker::Container container;
   std::string base_create_json;

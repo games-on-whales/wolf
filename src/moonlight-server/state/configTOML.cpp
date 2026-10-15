@@ -1,3 +1,5 @@
+#include <algorithm>
+#include <cctype>
 #include <events/events.hpp>
 #include <events/reflectors.hpp>
 #include <fstream>
@@ -5,6 +7,7 @@
 #include <gst/gstregistry.h>
 #include <platforms/hw.hpp>
 #include <range/v3/view.hpp>
+#include <rfl/json.hpp>
 #include <rfl/toml.hpp>
 #include <state/config.hpp>
 
@@ -126,84 +129,73 @@ std::string generate_app_id(const BaseApp &app) {
   return std::to_string(abs((int32_t)hash));
 }
 
-std::shared_ptr<immer::atom<immer::vector<immer::box<events::App>>>>
-parse_apps(const std::vector<BaseApp> &apps,
-           const std::string &default_app_render_node,
-           const std::string &default_gst_render_node,
-           const BaseAppVideoOverride &default_video_settings,
-           const std::string &h264_video_params,
-           const std::string &hevc_video_params,
-           const std::string &av1_video_params,
-           const BaseAppAudioOverride &default_audio_settings,
-           SessionsAtoms running_sessions,
-           const std::shared_ptr<events::EventBusType> &ev_bus) {
+/**
+ * The app's settings merged with this host's defaults.
+ * The runner is left empty: building one can call out to Docker, which saving the config must not do.
+ */
+events::App parse_app(const BaseApp &app,
+                      const std::string &default_app_render_node,
+                      const std::string &default_gst_render_node,
+                      const BaseAppVideoOverride &default_video_settings,
+                      const std::string &h264_video_params,
+                      const std::string &hevc_video_params,
+                      const std::string &av1_video_params,
+                      const BaseAppAudioOverride &default_audio_settings) {
+  auto app_render_node = app.render_node.value_or(default_app_render_node);
+  auto app_video_settings = app.video.value_or(default_video_settings);
+  auto app_audio_settings = app.audio.value_or(default_audio_settings);
 
-  auto parsed_apps =
-      apps |                                             //
-      ranges::views::transform([&](const BaseApp &app) { //
-        auto app_render_node = app.render_node.value_or(default_app_render_node);
-        if (app_render_node != default_gst_render_node) {
-          logs::log(logs::warning,
-                    "App {} render node ({}) doesn't match the default GPU ({})",
-                    app.title,
-                    app_render_node,
-                    default_gst_render_node);
-          // TODO: allow user to override gst_render_node
-        }
-        auto app_video_settings = app.video.value_or(default_video_settings);
-        auto app_audio_settings = app.audio.value_or(default_audio_settings);
+  auto h264_gst_pipeline = app_video_settings.h264_pipeline.value_or(
+      fmt::format("{} !\n{} !\n{} !\n{}", //
+                  app_video_settings.source.value_or(default_video_settings.source.value()),
+                  app_video_settings.video_params.value_or(h264_video_params),
+                  app_video_settings.h264_encoder.value_or(default_video_settings.h264_encoder.value()),
+                  app_video_settings.sink.value_or(default_video_settings.sink.value())));
 
-        auto h264_gst_pipeline = fmt::format(
-            "{} !\n{} !\n{} !\n{}", //
-            app_video_settings.source.value_or(default_video_settings.source.value()),
-            app_video_settings.video_params.value_or(h264_video_params),
-            app_video_settings.h264_encoder.value_or(default_video_settings.h264_encoder.value()),
-            app_video_settings.sink.value_or(default_video_settings.sink.value()));
+  auto hevc_gst_pipeline =
+      default_video_settings.hevc_encoder.has_value()
+          ? app_video_settings.hevc_pipeline.value_or(
+                fmt::format("{} !\n{} !\n{} !\n{}", //
+                            app_video_settings.source.value_or(default_video_settings.source.value()),
+                            app_video_settings.video_params.value_or(hevc_video_params),
+                            app_video_settings.hevc_encoder.value_or(default_video_settings.hevc_encoder.value()),
+                            app_video_settings.sink.value_or(default_video_settings.sink.value())))
+          : "";
 
-        auto hevc_gst_pipeline =
-            default_video_settings.hevc_encoder.has_value()
-                ? fmt::format("{} !\n{} !\n{} !\n{}", //
-                              app_video_settings.source.value_or(default_video_settings.source.value()),
-                              app_video_settings.video_params.value_or(hevc_video_params),
-                              app_video_settings.hevc_encoder.value_or(default_video_settings.hevc_encoder.value()),
-                              app_video_settings.sink.value_or(default_video_settings.sink.value()))
-                : "";
+  auto av1_gst_pipeline = default_video_settings.av1_encoder.has_value()
+                              ? app_video_settings.av1_pipeline.value_or(fmt::format(
+                                    "{} !\n{} !\n{} !\n{}", //
+                                    app_video_settings.source.value_or(default_video_settings.source.value()),
+                                    app_video_settings.video_params.value_or(av1_video_params),
+                                    app_video_settings.av1_encoder.value_or(default_video_settings.av1_encoder.value()),
+                                    app_video_settings.sink.value_or(default_video_settings.sink.value())))
+                              : "";
 
-        auto av1_gst_pipeline =
-            default_video_settings.av1_encoder.has_value()
-                ? fmt::format("{} !\n{} !\n{} !\n{}", //
-                              app_video_settings.source.value_or(default_video_settings.source.value()),
-                              app_video_settings.video_params.value_or(av1_video_params),
-                              app_video_settings.av1_encoder.value_or(default_video_settings.av1_encoder.value()),
-                              app_video_settings.sink.value_or(default_video_settings.sink.value()))
-                : "";
+  auto opus_gst_pipeline = app_audio_settings.opus_pipeline.value_or(
+      fmt::format("{} !\n{} !\n{} !\n{}", //
+                  app_audio_settings.source.value_or(default_audio_settings.source.value()),
+                  app_audio_settings.audio_params.value_or(default_audio_settings.audio_params.value()),
+                  app_audio_settings.opus_encoder.value_or(default_audio_settings.opus_encoder.value()),
+                  app_audio_settings.sink.value_or(default_audio_settings.sink.value())));
 
-        auto opus_gst_pipeline = fmt::format(
-            "{} !\n{} !\n{} !\n{}", //
-            app_audio_settings.source.value_or(default_audio_settings.source.value()),
-            app_audio_settings.audio_params.value_or(default_audio_settings.audio_params.value()),
-            app_audio_settings.opus_encoder.value_or(default_audio_settings.opus_encoder.value()),
-            app_audio_settings.sink.value_or(default_audio_settings.sink.value()));
+  return events::App{
+      .base = {.title = app.title,
+               .id = app.id.value_or(generate_app_id(app)),
+               .support_hdr = false,
+               .icon_png_path = app.icon_png_path},
+      // A blank caps string would produce an invalid producer pipeline, treat it like a missing one
+      .video_producer_buffer_caps = std::ranges::all_of(app_video_settings.producer_buffer_caps.value_or(""),
+                                                        [](unsigned char c) { return std::isspace(c); })
+                                        ? default_video_settings.producer_buffer_caps.value()
+                                        : *app_video_settings.producer_buffer_caps,
+      .h264_gst_pipeline = h264_gst_pipeline,
+      .hevc_gst_pipeline = hevc_gst_pipeline,
+      .av1_gst_pipeline = av1_gst_pipeline,
+      .render_node = app_render_node,
 
-        return immer::box<events::App>{
-            events::App{.base = {.title = app.title,
-                                 .id = generate_app_id(app),
-                                 .support_hdr = false,
-                                 .icon_png_path = app.icon_png_path},
-                        .video_producer_buffer_caps = default_video_settings.producer_buffer_caps.value(),
-                        .h264_gst_pipeline = h264_gst_pipeline,
-                        .hevc_gst_pipeline = hevc_gst_pipeline,
-                        .av1_gst_pipeline = av1_gst_pipeline,
-                        .render_node = app_render_node,
-
-                        .opus_gst_pipeline = opus_gst_pipeline,
-                        .start_virtual_compositor = app.start_virtual_compositor.value_or(true),
-                        .start_audio_server = app.start_audio_server.value_or(true),
-                        .runner = get_runner(app.runner, ev_bus)}};
-      }) |                                                  //
-      ranges::to<immer::vector<immer::box<events::App>>>(); //
-
-  return std::make_shared<immer::atom<immer::vector<immer::box<events::App>>>>(parsed_apps);
+      .opus_gst_pipeline = opus_gst_pipeline,
+      .start_virtual_compositor = app.start_virtual_compositor.value_or(true),
+      .start_audio_server = app.start_audio_server.value_or(true)};
 }
 
 Config load_or_default(const std::string &source,
@@ -377,23 +369,41 @@ Config load_or_default(const std::string &source,
 
   auto clients_atom = std::make_shared<immer::atom<PairedClientList>>(paired_clients);
 
+  std::function<events::App(const BaseApp &)> parse_app_fn = [=](const BaseApp &app) {
+    return parse_app(app,
+                     default_app_render_node,
+                     default_gst_render_node,
+                     default_base_video,
+                     h264_video_params,
+                     hevc_video_params,
+                     av1_video_params,
+                     default_base_audio);
+  };
+
   /* Get profiles, for each app defined will merge with default settings */
   auto profiles = cfg.profiles | //
                   ranges::views::transform([&](const Profile &profile) {
-                    return events::Profile{.id = profile.id,
-                                           .name = profile.name.value_or(""),
-                                           .icon_png_path = profile.icon_png_path.value_or(""),
-                                           .pin = profile.pin,
-                                           .apps = parse_apps(profile.apps,
-                                                              default_app_render_node,
-                                                              default_gst_render_node,
-                                                              default_base_video,
-                                                              h264_video_params,
-                                                              hevc_video_params,
-                                                              av1_video_params,
-                                                              default_base_audio,
-                                                              running_sessions,
-                                                              ev_bus)};
+                    auto apps = profile.apps | //
+                                ranges::views::transform([&](const BaseApp &app) {
+                                  auto parsed = parse_app_fn(app);
+                                  if (parsed.render_node != default_gst_render_node) {
+                                    logs::log(logs::warning,
+                                              "App {} render node ({}) doesn't match the default GPU ({})",
+                                              app.title,
+                                              parsed.render_node,
+                                              default_gst_render_node);
+                                    // TODO: allow user to override gst_render_node
+                                  }
+                                  parsed.runner = get_runner(app.runner, ev_bus);
+                                  return immer::box<events::App>{parsed};
+                                }) |
+                                ranges::to<immer::vector<immer::box<events::App>>>();
+                    return events::Profile{
+                        .id = profile.id,
+                        .name = profile.name.value_or(""),
+                        .icon_png_path = profile.icon_png_path.value_or(""),
+                        .pin = profile.pin,
+                        .apps = std::make_shared<immer::atom<immer::vector<immer::box<events::App>>>>(apps)};
                   }) |
                   ranges::to<ProfilesList>();
   auto profiles_atom = std::make_shared<immer::atom<ProfilesList>>(profiles);
@@ -404,7 +414,8 @@ Config load_or_default(const std::string &source,
                 .support_hevc = hevc_encoder.has_value(),
                 .support_av1 = av1_encoder.has_value() && encoder_type(*av1_encoder) != SOFTWARE,
                 .paired_clients = clients_atom,
-                .profiles = profiles_atom};
+                .profiles = profiles_atom,
+                .parse_app = parse_app_fn};
 }
 
 void pair(const Config &cfg, const PairedClient &client) {
@@ -470,25 +481,92 @@ void update_client_settings(const Config &cfg, std::size_t client_id, const Pair
   rfl::toml::save(cfg.config_source, tml);
 }
 
+// Ignores the runners, see parse_app()
+static bool same_settings(const events::App &a, const events::App &b) {
+  return a.base.title == b.base.title && a.base.id == b.base.id && a.base.icon_png_path == b.base.icon_png_path &&
+         a.video_producer_buffer_caps == b.video_producer_buffer_caps && a.h264_gst_pipeline == b.h264_gst_pipeline &&
+         a.hevc_gst_pipeline == b.hevc_gst_pipeline && a.av1_gst_pipeline == b.av1_gst_pipeline &&
+         a.opus_gst_pipeline == b.opus_gst_pipeline && a.render_node == b.render_node &&
+         a.start_virtual_compositor == b.start_virtual_compositor && a.start_audio_server == b.start_audio_server;
+}
+
+// A runner as the app built from it would serialise it, see parse_app()
+static events::RunnerTypes normalize_runner(const events::RunnerTypes &runner) {
+  if (rfl::holds_alternative<AppDocker>(runner.variant())) {
+    return docker::RunDocker::normalize_cfg(rfl::get<AppDocker>(runner.variant()));
+  }
+  return runner;
+}
+
+/**
+ * The config file entry for an app.
+ * An app that still matches its existing entry keeps it verbatim, so hand-written partial overrides survive.
+ * Otherwise only what differs from this host's defaults is written: a default pipeline must keep following
+ * the encoder detected at startup instead of being frozen into the file.
+ */
+static BaseApp to_base_app(const Config &cfg, const events::App &app, const std::vector<BaseApp> &existing_apps) {
+  auto runner = app.runner->serialize();
+  for (const auto &existing : existing_apps) {
+    if (existing.title == app.base.title &&
+        rfl::json::write(normalize_runner(existing.runner)) == rfl::json::write(runner) &&
+        same_settings(cfg.parse_app(existing), app)) {
+      return existing;
+    }
+  }
+
+  auto base_app = BaseApp{.title = app.base.title,
+                          .icon_png_path = app.base.icon_png_path,
+                          .start_virtual_compositor = app.start_virtual_compositor,
+                          .start_audio_server = app.start_audio_server,
+                          .runner = runner};
+  auto defaults = cfg.parse_app(base_app);
+  if (app.base.id != defaults.base.id) {
+    base_app.id = app.base.id;
+  }
+  if (app.render_node != defaults.render_node) {
+    base_app.render_node = app.render_node;
+  }
+
+  auto video = BaseAppVideoOverride{};
+  if (app.video_producer_buffer_caps != defaults.video_producer_buffer_caps) {
+    video.producer_buffer_caps = app.video_producer_buffer_caps;
+  }
+  if (app.h264_gst_pipeline != defaults.h264_gst_pipeline) {
+    video.h264_pipeline = app.h264_gst_pipeline;
+  }
+  if (app.hevc_gst_pipeline != defaults.hevc_gst_pipeline) {
+    video.hevc_pipeline = app.hevc_gst_pipeline;
+  }
+  if (app.av1_gst_pipeline != defaults.av1_gst_pipeline) {
+    video.av1_pipeline = app.av1_gst_pipeline;
+  }
+  if (video.producer_buffer_caps || video.h264_pipeline || video.hevc_pipeline || video.av1_pipeline) {
+    base_app.video = video;
+  }
+  if (app.opus_gst_pipeline != defaults.opus_gst_pipeline) {
+    base_app.audio = BaseAppAudioOverride{.opus_pipeline = app.opus_gst_pipeline};
+  }
+  return base_app;
+}
+
 void update_profiles(const Config &cfg, const ProfilesList &profiles) {
   cfg.profiles->store(profiles);
 
   auto tml = rfl::toml::load<WolfConfig, rfl::DefaultIfMissing>(cfg.config_source).value();
   tml.profiles = profiles | //
-                 ranges::views::transform([](const immer::box<events::Profile> &p) {
+                 ranges::views::transform([&](const immer::box<events::Profile> &p) {
+                   auto existing = std::find_if(tml.profiles.begin(), tml.profiles.end(), [&](const Profile &tp) {
+                     return tp.id == p->id;
+                   });
+                   auto existing_apps = existing != tml.profiles.end() ? existing->apps : std::vector<BaseApp>{};
                    return Profile{
                        .id = p->id,
                        .name = p->name,
                        .icon_png_path = p->icon_png_path,
                        .pin = p->pin,
                        .apps = p->apps->load().get() | //
-                               ranges::views::transform([](const immer::box<events::App> &app) {
-                                 return BaseApp{.title = app->base.title,
-                                                .icon_png_path = app->base.icon_png_path,
-                                                .render_node = app->render_node,
-                                                .start_virtual_compositor = app->start_virtual_compositor,
-                                                .start_audio_server = app->start_audio_server,
-                                                .runner = app->runner->serialize()};
+                               ranges::views::transform([&](const immer::box<events::App> &app) {
+                                 return to_base_app(cfg, app, existing_apps);
                                }) | //
                                ranges::to_vector,
                    };

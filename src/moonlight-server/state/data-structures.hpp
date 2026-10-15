@@ -10,6 +10,7 @@
 #include <deque>
 #include <eventbus/event_bus.hpp>
 #include <events/events.hpp>
+#include <functional>
 #include <helpers/tsqueue.hpp>
 #include <immer/array.hpp>
 #include <immer/atom.hpp>
@@ -93,6 +94,12 @@ struct Config {
    * Profiles will be shown in WolfUI
    */
   std::shared_ptr<immer::atom<ProfilesList>> profiles;
+
+  /**
+   * Turns an app as written in the config file into a runnable app,
+   * filling whatever it doesn't override with this host's defaults
+   */
+  std::function<events::App(const wolf::config::BaseApp &)> parse_app;
 };
 
 /**
