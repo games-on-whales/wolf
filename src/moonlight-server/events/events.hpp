@@ -292,6 +292,15 @@ struct PauseStreamEvent {
   std::size_t session_id;
 };
 
+/**
+ * Ends the pipelines of one stream instance, identified by its RTP secret. The session_id is the client's identity
+ * and repeats across /resume: this is fired instead of a PauseStreamEvent when a newer stream replaced this one.
+ */
+struct EndSupersededStreamEvent {
+  std::size_t session_id;
+  std::array<char, 16> rtp_secret_payload;
+};
+
 struct ResumeStreamEvent {
   std::size_t session_id;
 };
@@ -342,6 +351,7 @@ using EventBusHandlers = dp::handler_registration<immer::box<PlugDeviceEvent>,
                                                   immer::box<AudioSession>,
                                                   immer::box<IDRRequestEvent>,
                                                   immer::box<PauseStreamEvent>,
+                                                  immer::box<EndSupersededStreamEvent>,
                                                   immer::box<ResumeStreamEvent>,
                                                   immer::box<StopStreamEvent>,
                                                   immer::box<ClientWolfUIComboEvent>,
@@ -363,6 +373,7 @@ using EventBusType = dp::event_bus<immer::box<PlugDeviceEvent>,
                                    immer::box<AudioSession>,
                                    immer::box<IDRRequestEvent>,
                                    immer::box<PauseStreamEvent>,
+                                   immer::box<EndSupersededStreamEvent>,
                                    immer::box<ResumeStreamEvent>,
                                    immer::box<StopStreamEvent>,
                                    immer::box<ClientWolfUIComboEvent>,
@@ -384,6 +395,7 @@ using EventsVariant = std::variant<immer::box<PlugDeviceEvent>,
                                    immer::box<AudioSession>,
                                    immer::box<IDRRequestEvent>,
                                    immer::box<PauseStreamEvent>,
+                                   immer::box<EndSupersededStreamEvent>,
                                    immer::box<ResumeStreamEvent>,
                                    immer::box<StopStreamEvent>,
                                    immer::box<ClientWolfUIComboEvent>,

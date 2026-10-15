@@ -492,10 +492,20 @@ void start_streaming_video(immer::box<events::VideoSession> video_session,
           }
         });
 
+    auto superseded_handler = event_bus->register_handler<immer::box<events::EndSupersededStreamEvent>>(
+        [video_session, pipeline](const immer::box<events::EndSupersededStreamEvent> &ev) {
+          if (ev->session_id == video_session->session_id &&
+              ev->rtp_secret_payload == video_session->rtp_secret_payload) {
+            logs::log(logs::debug, "[GSTREAMER] Stopping superseded video pipeline: {}", ev->session_id);
+            gst_element_send_event(pipeline.get(), gst_event_new_eos());
+          }
+        });
+
     return immer::array<immer::box<events::EventBusHandlers>>{std::move(idr_handler),
                                                               std::move(pause_handler),
                                                               std::move(switch_producer_handler),
-                                                              std::move(stop_handler)};
+                                                              std::move(stop_handler),
+                                                              std::move(superseded_handler)};
   });
 }
 
@@ -533,7 +543,7 @@ void start_streaming_audio(immer::box<events::AudioSession> audio_session,
       .socket = audio_socket,
       .client_endpoint = std::make_shared<udp::endpoint>(boost::asio::ip::make_address(client_ip), client_port)});
 
-  run_pipeline(pipeline, [session_id = audio_session->session_id, udp_sink, event_bus](auto pipeline) {
+  run_pipeline(pipeline, [audio_session, session_id = audio_session->session_id, udp_sink, event_bus](auto pipeline) {
     if (auto app_sink_el = gst_bin_get_by_name(GST_BIN(pipeline.get()), "wolf_udp_sink")) {
       logs::log(logs::debug, "Setting up wolf_udp_sink");
       g_assert(GST_IS_APP_SINK(app_sink_el));
@@ -590,9 +600,19 @@ void start_streaming_audio(immer::box<events::AudioSession> audio_session,
           }
         });
 
+    auto superseded_handler = event_bus->register_handler<immer::box<events::EndSupersededStreamEvent>>(
+        [audio_session, pipeline](const immer::box<events::EndSupersededStreamEvent> &ev) {
+          if (ev->session_id == audio_session->session_id &&
+              ev->rtp_secret_payload == audio_session->rtp_secret_payload) {
+            logs::log(logs::debug, "[GSTREAMER] Stopping superseded audio pipeline: {}", ev->session_id);
+            gst_element_send_event(pipeline.get(), gst_event_new_eos());
+          }
+        });
+
     return immer::array<immer::box<events::EventBusHandlers>>{std::move(pause_handler),
                                                               std::move(switch_producer_handler),
-                                                              std::move(stop_handler)};
+                                                              std::move(stop_handler),
+                                                              std::move(superseded_handler)};
   });
 }
 

@@ -128,6 +128,49 @@ std::shared_ptr<ENetPeer> to_shared_ptr(ENetPeer *peer) {
   });
 }
 
+immer::vector<ENetPeer *>
+superseded_peers(const enet_clients_map &connected_clients, const ENetPeer *new_peer, std::size_t session_id) {
+  immer::vector<ENetPeer *> stale;
+  for (const auto &[peer, session] : connected_clients) {
+    if (peer != new_peer && session->session_id == session_id) {
+      stale = stale.push_back(peer);
+    }
+  }
+  return stale;
+}
+
+bool is_superseded_stream(const immer::vector<events::StreamSession> &running_sessions,
+                          const events::StreamSession &peer_session) {
+  for (const auto &session : running_sessions) {
+    if (session.session_id == peer_session.session_id) {
+      return session.enet_secret_payload != peer_session.enet_secret_payload;
+    }
+  }
+  return false;
+}
+
+void end_superseded_stream(const events::StreamSession &peer_session,
+                           const std::shared_ptr<events::EventBusType> &event_bus) {
+  event_bus->fire_event(immer::box<EndSupersededStreamEvent>(
+      EndSupersededStreamEvent{.session_id = peer_session.session_id,
+                               .rtp_secret_payload = peer_session.rtp_secret_payload}));
+}
+
+/**
+ * Pause the stream that `peer_session` attached to. If a /resume has already replaced it with a newer one, only end
+ * the old stream instance's pipelines: a PauseStreamEvent is keyed by session_id and would end the new stream too.
+ */
+void pause_stream(const state::SessionsAtoms &running_sessions,
+                  const events::StreamSession &peer_session,
+                  const std::shared_ptr<events::EventBusType> &event_bus) {
+  if (is_superseded_stream(*running_sessions->load(), peer_session)) {
+    logs::log(logs::debug, "[ENET] Ending superseded stream of session: {}", peer_session.session_id);
+    end_superseded_stream(peer_session, event_bus);
+    return;
+  }
+  event_bus->fire_event(immer::box<PauseStreamEvent>(PauseStreamEvent{.session_id = peer_session.session_id}));
+}
+
 void run_control(int port,
                  const state::SessionsAtoms &running_sessions,
                  const std::shared_ptr<events::EventBusType> &event_bus,
@@ -166,17 +209,35 @@ void run_control(int port,
           break;
         case ENET_EVENT_TYPE_CONNECT:
           logs::log(logs::debug, "[ENET] connected client: {}:{}", client_ip, client_port);
-          connected_clients.update([peer = event.peer, client_session](const enet_clients_map &m) {
-            return m.set(peer, client_session.value());
-          });
+          {
+            // The newest peer owns the session: forget older peers of the same session (a dead client after a
+            // /resume) so that their late disconnect can't pause the stream this peer is now attached to.
+            auto connected = connected_clients.load();
+            auto stale = superseded_peers(*connected, event.peer, client_session->session_id);
+            connected_clients.update([peer = event.peer, client_session, stale](const enet_clients_map &m) {
+              auto updated = m;
+              for (auto stale_peer : stale) {
+                updated = updated.erase(stale_peer);
+              }
+              return updated.set(peer, client_session.value());
+            });
+            for (auto stale_peer : stale) {
+              logs::log(logs::debug, "[ENET] Dropping superseded peer for session: {}", client_session->session_id);
+              enet_peer_disconnect_now(stale_peer, 0);
+              // Same stream instance reconnecting: its pipelines are the ones this peer is attached to, keep them
+              auto stale_session = connected->at(stale_peer);
+              if (stale_session->enet_secret_payload != client_session->enet_secret_payload) {
+                end_superseded_stream(stale_session, event_bus);
+              }
+            }
+          }
           event_bus->fire_event(
               immer::box<ResumeStreamEvent>(ResumeStreamEvent{.session_id = client_session->session_id}));
           break;
         case ENET_EVENT_TYPE_DISCONNECT:
           logs::log(logs::debug, "[ENET] disconnected client: {}:{}", client_ip, client_port);
           connected_clients.update([peer = event.peer](const enet_clients_map &m) { return m.erase(peer); });
-          event_bus->fire_event(
-              immer::box<PauseStreamEvent>(PauseStreamEvent{.session_id = client_session->session_id}));
+          pause_stream(running_sessions, client_session.value(), event_bus);
           break;
         case ENET_EVENT_TYPE_RECEIVE:
           enet_packet packet = {event.packet, enet_packet_destroy};
@@ -203,8 +264,7 @@ void run_control(int port,
                         crypto::str_to_hex(decrypted));
 
               if (sub_type == TERMINATION) {
-                event_bus->fire_event(
-                    immer::box<PauseStreamEvent>(PauseStreamEvent{.session_id = client_session->session_id}));
+                pause_stream(running_sessions, client_session.value(), event_bus);
               } else if (sub_type == INPUT_DATA) {
                 immer::box<std::shared_ptr<ENetPeer>> enet_client = {to_shared_ptr(event.peer)};
                 handle_input(client_session.value(), enet_client, (INPUT_PKT *)decrypted.data());
