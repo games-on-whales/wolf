@@ -7,6 +7,7 @@
 #include <gst-plugin/gstrtpmoonlightpay_audio.hpp>
 #include <gst-plugin/gstrtpmoonlightpay_video.hpp>
 #include <gst-plugin/video.hpp>
+#include <gst-video-context.hpp>
 #include <gst/gst.h>
 #include <gstreamer-1.0/gst/app/gstappsrc.h>
 #include <immer/box.hpp>

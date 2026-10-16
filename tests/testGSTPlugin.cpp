@@ -6,10 +6,14 @@
 
 using Catch::Matchers::Equals;
 
+#include <chrono>
+#include <future>
 #include <gst-plugin/audio.hpp>
 #include <gst-plugin/video.hpp>
 #include <moonlight/fec.hpp>
+#include <streaming/streaming.hpp>
 #include <string>
+#include <thread>
 
 using namespace std::string_literals;
 
@@ -526,4 +530,72 @@ TEST_CASE_METHOD(GStreamerTestsFixture, "Audio RTP without encryption", "[GSTPlu
     auto rtp_payload = gst_buffer_copy_content(first_pkt, sizeof(audio::AudioRTPHeaders));
     REQUIRE_THAT(std::string(rtp_payload.begin(), rtp_payload.end()), Equals(payload_str));
   }
+}
+
+/*
+ * A stuck pipeline must not hold the event bus.
+ * The bus calls handlers under its lock; if a stop/pause handler blocked on the stuck streaming thread,
+ * every later register/unregister (e.g. starting a new runner) would hang the whole server.
+ */
+TEST_CASE_METHOD(GStreamerTestsFixture, "Stopping a stuck pipeline doesn't block the event bus", "[GSTPlugin]") {
+  using namespace wolf::core;
+  using namespace std::chrono_literals;
+
+  // The first buffer passes (so the pipeline is PLAYING), then each buffer parks the streaming thread for 3s
+  auto video_session = [](std::size_t id) {
+    return immer::box<events::VideoSession>(events::VideoSession{
+        .display_mode = {.width = 64, .height = 64, .refreshRate = 30},
+        .gst_pipeline = "videotestsrc is-live=true ! identity sleep-time=3000000 ! fakesink sync=false",
+        .session_id = id,
+        .timeout_ms = 1000,
+        .packet_size = 1024,
+        .fec_percentage = 20,
+        .min_required_fec_packets = 2,
+        .bitrate_kbps = 1000,
+        .slices_per_frame = 1,
+        .client_ip = "127.0.0.1"});
+  };
+  auto audio_session = [](std::size_t id) {
+    return immer::box<events::AudioSession>(events::AudioSession{
+        .gst_pipeline = "audiotestsrc is-live=true ! identity sleep-time=3000000 ! fakesink sync=false",
+        .session_id = id,
+        .client_ip = "127.0.0.1",
+        .packet_duration = 5,
+        .audio_mode = {.channels = 2, .streams = 1, .coupled_streams = 1, .bitrate = 64000}});
+  };
+
+  auto event_bus = std::make_shared<events::EventBusType>();
+  auto video_ctx = std::make_shared<immer::atom<gst_video_context::gst_context_ptr>>();
+  auto paused_video = std::async(std::launch::async, [=]() {
+    streaming::start_streaming_video(video_session(1), event_bus, "127.0.0.1", 1, video_ctx, nullptr);
+  });
+  auto stopped_video = std::async(std::launch::async, [=]() {
+    streaming::start_streaming_video(video_session(2), event_bus, "127.0.0.1", 1, video_ctx, nullptr);
+  });
+  auto stopped_audio = std::async(std::launch::async, [=]() {
+    streaming::start_streaming_audio(audio_session(3), event_bus, "127.0.0.1", 1, nullptr, "sink", "server");
+  });
+  auto paused_audio = std::async(std::launch::async, [=]() {
+    streaming::start_streaming_audio(audio_session(4), event_bus, "127.0.0.1", 1, nullptr, "sink", "server");
+  });
+  // All four are now ~1s into a 3s stuck buffer
+  std::this_thread::sleep_for(4s);
+
+  auto fire_then_register = [event_bus](auto event) {
+    auto start = std::chrono::steady_clock::now();
+    event_bus->fire_event(immer::box<decltype(event)>(event));
+    // Needs the bus write lock, like a runner (un)registering its handlers
+    auto other = event_bus->register_handler<immer::box<events::IDRRequestEvent>>([]() {});
+    return std::chrono::steady_clock::now() - start;
+  };
+  CHECK(fire_then_register(events::PauseStreamEvent{.session_id = 1}) < 1s);
+  CHECK(fire_then_register(events::StopStreamEvent{.session_id = 2}) < 1s);
+  CHECK(fire_then_register(events::StopStreamEvent{.session_id = 3}) < 1s);
+  CHECK(fire_then_register(events::PauseStreamEvent{.session_id = 4}) < 1s);
+
+  // The EOS still reaches each pipeline once its streaming thread moves on, and run_pipeline returns
+  REQUIRE(paused_video.wait_for(10s) == std::future_status::ready);
+  REQUIRE(stopped_video.wait_for(10s) == std::future_status::ready);
+  REQUIRE(stopped_audio.wait_for(10s) == std::future_status::ready);
+  REQUIRE(paused_audio.wait_for(10s) == std::future_status::ready);
 }

@@ -129,7 +129,7 @@ void start_video_producer(const std::string &session_id,
         [session_id, pipeline](const immer::box<events::StopStreamEvent> &ev) {
           if (std::to_string(ev->session_id) == session_id) {
             logs::log(logs::debug, "[GSTREAMER] Stopping video producer: {}", session_id);
-            gst_element_send_event(pipeline.get(), gst_event_new_eos());
+            gstreamer::send_eos_async(pipeline.get());
           }
         });
 
@@ -137,7 +137,7 @@ void start_video_producer(const std::string &session_id,
         [session_id, pipeline](const immer::box<events::StopLobbyEvent> &ev) {
           if (ev->lobby_id == session_id) {
             logs::log(logs::debug, "[GSTREAMER] Stopping video producer: {}", session_id);
-            gst_element_send_event(pipeline.get(), gst_event_new_eos());
+            gstreamer::send_eos_async(pipeline.get());
           }
         });
 
@@ -181,7 +181,7 @@ void start_audio_producer(const std::string &session_id,
         [session_id, pipeline](const immer::box<events::StopStreamEvent> &ev) {
           if (std::to_string(ev->session_id) == session_id) {
             logs::log(logs::debug, "[GSTREAMER] Stopping audio producer: {}", session_id);
-            gst_element_send_event(pipeline.get(), gst_event_new_eos());
+            gstreamer::send_eos_async(pipeline.get());
           }
         });
 
@@ -189,7 +189,7 @@ void start_audio_producer(const std::string &session_id,
         [session_id, pipeline](const immer::box<events::StopLobbyEvent> &ev) {
           if (ev->lobby_id == session_id) {
             logs::log(logs::debug, "[GSTREAMER] Stopping video producer: {}", session_id);
-            gst_element_send_event(pipeline.get(), gst_event_new_eos());
+            gstreamer::send_eos_async(pipeline.get());
           }
         });
 
@@ -459,7 +459,7 @@ void start_streaming_video(immer::box<events::VideoSession> video_session,
              * when a resume happens
              */
 
-            gst_element_send_event(pipeline.get(), gst_event_new_eos());
+            gstreamer::send_eos_async(pipeline.get());
           }
         });
 
@@ -488,7 +488,7 @@ void start_streaming_video(immer::box<events::VideoSession> video_session,
         [sess_id = video_session->session_id, pipeline](const immer::box<events::StopStreamEvent> &ev) {
           if (ev->session_id == sess_id) {
             logs::log(logs::debug, "[GSTREAMER] Stopping pipeline: {}", sess_id);
-            gst_element_send_event(pipeline.get(), gst_event_new_eos());
+            gstreamer::send_eos_async(pipeline.get());
           }
         });
 
@@ -497,7 +497,7 @@ void start_streaming_video(immer::box<events::VideoSession> video_session,
           if (ev->session_id == video_session->session_id &&
               ev->rtp_secret_payload == video_session->rtp_secret_payload) {
             logs::log(logs::debug, "[GSTREAMER] Stopping superseded video pipeline: {}", ev->session_id);
-            gst_element_send_event(pipeline.get(), gst_event_new_eos());
+            gstreamer::send_eos_async(pipeline.get());
           }
         });
 
@@ -568,7 +568,7 @@ void start_streaming_audio(immer::box<events::AudioSession> audio_session,
              * when a resume happens
              */
 
-            gst_element_send_event(pipeline.get(), gst_event_new_eos());
+            gstreamer::send_eos_async(pipeline.get());
           }
         });
 
@@ -596,7 +596,7 @@ void start_streaming_audio(immer::box<events::AudioSession> audio_session,
         [session_id, pipeline](const immer::box<events::StopStreamEvent> &ev) {
           if (ev->session_id == session_id) {
             logs::log(logs::debug, "[GSTREAMER] Stopping pipeline: {}", session_id);
-            gst_element_send_event(pipeline.get(), gst_event_new_eos());
+            gstreamer::send_eos_async(pipeline.get());
           }
         });
 
@@ -605,7 +605,7 @@ void start_streaming_audio(immer::box<events::AudioSession> audio_session,
           if (ev->session_id == audio_session->session_id &&
               ev->rtp_secret_payload == audio_session->rtp_secret_payload) {
             logs::log(logs::debug, "[GSTREAMER] Stopping superseded audio pipeline: {}", ev->session_id);
-            gst_element_send_event(pipeline.get(), gst_event_new_eos());
+            gstreamer::send_eos_async(pipeline.get());
           }
         });
 

@@ -42,6 +42,22 @@ static void send_message(GstElement *recipient, GstStructure *message) {
 }
 
 /**
+ * Sends EOS to the pipeline from GStreamer's own thread pool and returns immediately.
+ *
+ * A synchronous gst_element_send_event(EOS) blocks on the source's streaming lock, so a stuck
+ * streaming thread hangs the caller too. Event-bus handlers run while the bus holds its lock,
+ * which means a blocked handler stalls every register/unregister in the whole server.
+ * gst_element_call_async keeps a ref on the element until the call has run.
+ */
+static void send_eos_async(GstElement *pipeline) {
+  gst_element_call_async(
+      pipeline,
+      [](GstElement *element, gpointer) { gst_element_send_event(element, gst_event_new_eos()); },
+      nullptr,
+      nullptr);
+}
+
+/**
  * Given a Gstreamer element returns the supported DRM formats (if any).
  * Ex: "vah265enc" -> ["P010:0x0200000000042305", "NV12:0x0200000000042305"]
  */
