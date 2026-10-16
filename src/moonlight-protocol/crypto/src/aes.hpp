@@ -5,6 +5,7 @@
 #include <openssl/aes.h>
 #include <openssl/evp.h>
 #include <openssl/rand.h>
+#include <stdexcept>
 
 namespace aes {
 using CIPHER_CTX_ptr = std::unique_ptr<EVP_CIPHER_CTX, decltype(&::EVP_CIPHER_CTX_free)>;
@@ -113,6 +114,10 @@ std::pair<std::string, std::string> encrypt_authenticated(EVP_CIPHER_CTX *ctx, s
 }
 
 std::string decrypt_authenticated(EVP_CIPHER_CTX *ctx, std::string_view ciphertext, std::string_view tag) {
+  // OpenSSL reads exactly AES_GCM_TAG_SIZE bytes from the tag, whatever its length
+  if (tag.size() != AES_GCM_TAG_SIZE)
+    throw std::runtime_error("AES GCM tag must be " + std::to_string(AES_GCM_TAG_SIZE) + " bytes");
+
   int len;
   auto cipher_length = (int)ciphertext.length();
   /* plaintext will always be equal to or lesser than length of ciphertext*/

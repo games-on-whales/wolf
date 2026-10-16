@@ -3,6 +3,8 @@
 
 using Catch::Matchers::Equals;
 
+#include <control/control.hpp>
+#include <cstring>
 #include <moonlight/control.hpp>
 using namespace moonlight::control;
 
@@ -78,6 +80,40 @@ TEST_CASE("Control AES Encryption", "CONTROL") {
     auto decrypted = decrypt_packet(encrypted_packet, aes_key);
     REQUIRE_THAT(decrypted, Equals(payload));
     REQUIRE_THAT(packet_type_to_str(((ControlPacket *)decrypted.data())->type), Equals("INPUT_DATA"));
+  }
+}
+
+TEST_CASE("Control decrypt reads only the received packet", "CONTROL") {
+  std::string aes_key = "EDF04A215C4FBEA20934120C8480D855";
+  std::string payload = crypto::hex_to_str("020302000000");
+
+  SECTION("Any GCM tag, with or without NUL bytes, decrypts") {
+    bool tested_nul_tag = false;
+    for (std::uint32_t seq = 0; seq < 256; seq++) {
+      auto encrypted = encrypt_packet(aes_key, seq, payload);
+      tested_nul_tag |= std::string_view{encrypted->gcm_tag, GCM_TAG_SIZE}.find('\0') != std::string_view::npos;
+
+      // ENet hands us a heap buffer of exactly the received size: under ASan any read past it aborts
+      auto size = encrypted->full_size();
+      auto received = std::make_unique<char[]>(size);
+      std::memcpy(received.get(), encrypted.get(), size);
+      auto &packet = *(ControlEncryptedPacket *)received.get();
+
+      REQUIRE(packet.fits_in(size));
+      REQUIRE_THAT(decrypt_packet(packet, aes_key), Equals(payload));
+    }
+    REQUIRE(tested_nul_tag);
+  }
+
+  SECTION("Packets shorter than their header claims are rejected") {
+    auto encrypted = encrypt_packet(aes_key, 0, payload);
+    auto size = encrypted->full_size();
+    REQUIRE(encrypted->fits_in(size));
+    REQUIRE_FALSE(encrypted->fits_in(size - 1));
+    REQUIRE_FALSE(encrypted->fits_in(sizeof(ControlPacket)));
+
+    encrypted->header.length = boost::endian::native_to_little<std::uint16_t>(sizeof(std::uint32_t) + GCM_TAG_SIZE - 1);
+    REQUIRE_FALSE(encrypted->fits_in(size));
   }
 }
 

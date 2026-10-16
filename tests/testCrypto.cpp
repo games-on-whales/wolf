@@ -106,6 +106,11 @@ TEST_CASE("AES gcm", "[Crypto]") {
   auto [encrypted2, tag2] = crypto::aes_encrypt_gcm(msg, key, iv, (int)iv.size(), false);
   REQUIRE(crypto::aes_decrypt_gcm(encrypted2, key, tag2, iv, iv.size(), false) == msg);
 
+  // OpenSSL reads exactly 16 bytes from the tag: anything else is rejected, even a valid tag with extra bytes
+  REQUIRE_THROWS_AS(crypto::aes_decrypt_gcm(encrypted2, key, tag2.substr(0, 8), iv, iv.size(), false),
+                    std::runtime_error);
+  REQUIRE_THROWS_AS(crypto::aes_decrypt_gcm(encrypted2, key, tag2 + "x", iv, iv.size(), false), std::runtime_error);
+
   SECTION("Tampered tag is rejected") {
     tag2[0] ^= 1;
     REQUIRE_THROWS_AS(crypto::aes_decrypt_gcm(encrypted2, key, tag2, iv, iv.size(), false), std::runtime_error);
