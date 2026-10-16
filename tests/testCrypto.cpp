@@ -105,6 +105,16 @@ TEST_CASE("AES gcm", "[Crypto]") {
 
   auto [encrypted2, tag2] = crypto::aes_encrypt_gcm(msg, key, iv, (int)iv.size(), false);
   REQUIRE(crypto::aes_decrypt_gcm(encrypted2, key, tag2, iv, iv.size(), false) == msg);
+
+  SECTION("Tampered tag is rejected") {
+    tag2[0] ^= 1;
+    REQUIRE_THROWS_AS(crypto::aes_decrypt_gcm(encrypted2, key, tag2, iv, iv.size(), false), std::runtime_error);
+  }
+
+  SECTION("Tampered ciphertext is rejected") {
+    encrypted2[0] ^= 1;
+    REQUIRE_THROWS_AS(crypto::aes_decrypt_gcm(encrypted2, key, tag2, iv, iv.size(), false), std::runtime_error);
+  }
 }
 
 TEST_CASE("AES cbc", "[Crypto]") {
