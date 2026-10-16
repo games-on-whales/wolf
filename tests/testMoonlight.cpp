@@ -10,11 +10,15 @@
 using Catch::Matchers::Equals;
 
 #include <crypto/crypto.hpp>
+#include <filesystem>
+#include <fstream>
 #include <moonlight/protocol.hpp>
 #include <range/v3/view.hpp>
 #include <rest/helpers.hpp>
 #include <state/config.hpp>
 #include <streaming/streaming.hpp>
+#include <sys/stat.h>
+#include <thread>
 
 using namespace moonlight;
 using namespace state;
@@ -139,6 +143,99 @@ TEST_CASE("LocalState pairing information", "[LocalState]") {
     state::unpair(cfg, {another_cert});
     REQUIRE_THAT(cfg.paired_clients->load().get(), Catch::Matchers::SizeIs(0));
   }
+}
+
+TEST_CASE("LocalState concurrent updates", "[LocalState]") {
+  // The API applies config updates from a thread pool; none of them may be lost or tear the file
+  auto event_bus = std::make_shared<events::EventBusType>();
+  auto running_sessions = std::make_shared<immer::atom<immer::vector<events::StreamSession>>>();
+  const std::string cfg_file = "config.test.CONCURRENT.toml";
+  std::filesystem::copy_file("config.test.toml", cfg_file, std::filesystem::copy_options::overwrite_existing);
+  std::filesystem::permissions(cfg_file, std::filesystem::perms::owner_read | std::filesystem::perms::owner_write);
+  auto cfg = state::load_or_default(cfg_file, event_bus, running_sessions);
+  auto initial_profiles = cfg.profiles->load()->size();
+  auto initial_clients = cfg.paired_clients->load()->size();
+
+  constexpr int n_threads = 16;
+  std::vector<std::thread> threads;
+  for (int i = 0; i < n_threads; i++) {
+    threads.emplace_back([&cfg, i]() {
+      state::update_profiles(cfg, [i](const state::ProfilesList &profiles) {
+        return profiles.push_back(
+            events::Profile{.id = "concurrent-" + std::to_string(i),
+                            .name = "Concurrent " + std::to_string(i),
+                            .apps = std::make_shared<immer::atom<immer::vector<immer::box<events::App>>>>()});
+      });
+      state::pair(cfg, {.client_cert = "concurrent-cert-" + std::to_string(i)});
+    });
+  }
+  // Partial settings updates to the same client, each setting a different field: all of them must stick
+  auto client_id = state::get_client_id(*cfg.paired_clients->load()->front());
+  auto settings_update = [&cfg, client_id](auto &&set_field) {
+    return std::thread([&cfg, client_id, set_field]() {
+      state::update_client_settings(cfg, client_id, [&set_field](const state::PairedClient &client) {
+        auto updated = client;
+        set_field(updated.settings);
+        return updated;
+      });
+    });
+  };
+  threads.push_back(settings_update([](auto &s) { s.run_uid = 4242; }));
+  threads.push_back(settings_update([](auto &s) { s.run_gid = 4343; }));
+  threads.push_back(settings_update([](auto &s) { s.mouse_acceleration = 4.25f; }));
+  threads.push_back(settings_update([](auto &s) { s.v_scroll_acceleration = 4.5f; }));
+  for (auto &t : threads) {
+    t.join();
+  }
+
+  REQUIRE(cfg.profiles->load()->size() == initial_profiles + n_threads);
+  REQUIRE(cfg.paired_clients->load()->size() == initial_clients + n_threads);
+
+  auto reloaded = state::load_or_default(cfg_file, event_bus, running_sessions);
+  REQUIRE(reloaded.profiles->load()->size() == initial_profiles + n_threads);
+  REQUIRE(reloaded.paired_clients->load()->size() == initial_clients + n_threads);
+  auto reloaded_clients = reloaded.paired_clients->load();
+  for (int i = 0; i < n_threads; i++) {
+    auto cert = "concurrent-cert-" + std::to_string(i);
+    REQUIRE(std::any_of(reloaded_clients->begin(), reloaded_clients->end(), [&cert](const auto &client) {
+      return client->client_cert == cert;
+    }));
+  }
+
+  auto check_settings = [client_id](const state::Config &c) {
+    auto clients = c.paired_clients->load();
+    auto client = std::find_if(clients->begin(), clients->end(), [client_id](const auto &cl) {
+      return state::get_client_id(*cl) == client_id;
+    });
+    REQUIRE(client != clients->end());
+    REQUIRE((*client)->settings.run_uid == 4242);
+    REQUIRE((*client)->settings.run_gid == 4343);
+    REQUIRE((*client)->settings.mouse_acceleration == 4.25f);
+    REQUIRE((*client)->settings.v_scroll_acceleration == 4.5f);
+  };
+  check_settings(cfg);
+  check_settings(reloaded);
+
+  // Replacing the file must keep its permissions and leave no temp file behind
+  REQUIRE((std::filesystem::status(cfg_file).permissions() & std::filesystem::perms::all) ==
+          (std::filesystem::perms::owner_read | std::filesystem::perms::owner_write));
+  REQUIRE(!std::filesystem::exists(cfg_file + ".tmp"));
+
+  // A symlink or FIFO planted at the temp path must be neither followed nor blocked on
+  const std::string victim = "config.test.VICTIM";
+  { std::ofstream(victim) << "untouched"; }
+  std::filesystem::create_symlink(victim, cfg_file + ".tmp");
+  state::pair(cfg, {.client_cert = "planted-symlink"});
+  REQUIRE(std::filesystem::is_regular_file(std::filesystem::symlink_status(cfg_file)));
+  REQUIRE(std::filesystem::file_size(victim) == std::string("untouched").size());
+  std::filesystem::remove(victim);
+
+  REQUIRE(::mkfifo((cfg_file + ".tmp").c_str(), 0600) == 0);
+  state::pair(cfg, {.client_cert = "planted-fifo"});
+  REQUIRE(state::load_or_default(cfg_file, event_bus, running_sessions).paired_clients->load()->size() ==
+          initial_clients + n_threads + 2);
+  REQUIRE(!std::filesystem::exists(std::filesystem::symlink_status(cfg_file + ".tmp")));
+  std::filesystem::remove(cfg_file);
 }
 
 TEST_CASE("Mocked serverinfo", "[MoonlightProtocol]") {

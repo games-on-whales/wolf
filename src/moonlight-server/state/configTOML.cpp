@@ -1,15 +1,22 @@
 #include <algorithm>
 #include <cctype>
+#include <cerrno>
+#include <cstring>
 #include <events/events.hpp>
 #include <events/reflectors.hpp>
+#include <fcntl.h>
+#include <filesystem>
 #include <fstream>
 #include <gst/gstelementfactory.h>
 #include <gst/gstregistry.h>
+#include <mutex>
 #include <platforms/hw.hpp>
 #include <range/v3/view.hpp>
 #include <rfl/json.hpp>
 #include <rfl/toml.hpp>
 #include <state/config.hpp>
+#include <sys/stat.h>
+#include <unistd.h>
 
 namespace state {
 
@@ -418,7 +425,112 @@ Config load_or_default(const std::string &source,
                 .parse_app = parse_app_fn};
 }
 
+/**
+ * Serialises every read-modify-write of the config file.
+ * The API serves requests from a thread pool: two unsynchronised saves interleave, and a load can read a
+ * half-written file.
+ */
+static std::mutex config_file_mutex;
+
+/**
+ * Writes all of content to fd, returns false on any error
+ */
+static bool write_all(int fd, const std::string &content) {
+  std::size_t written = 0;
+  while (written < content.size()) {
+    auto n = ::write(fd, content.data() + written, content.size() - written);
+    if (n < 0) {
+      if (errno == EINTR) {
+        continue;
+      }
+      return false;
+    }
+    written += static_cast<std::size_t>(n);
+  }
+  return true;
+}
+
+/**
+ * Writes content to a temp file next to target, with target's mode and owner, and renames it over target.
+ * Returns false, leaving target untouched, when the file can't be replaced this way: the temp file can't be created,
+ * target's owner can't be kept, or the rename is refused (e.g. target is a single bind-mounted file).
+ * Throws, also leaving target untouched, when writing the content itself fails (e.g. the disk is full): rewriting
+ * target in place would then truncate it.
+ */
+static bool replace_atomically(const std::filesystem::path &target, const std::string &content) {
+  struct stat st {};
+  if (::stat(target.c_str(), &st) != 0) {
+    return false;
+  }
+  auto tmp = target;
+  tmp += ".tmp";
+  // A leftover (or planted) temp file is removed and never opened: O_EXCL | O_NOFOLLOW only create a new file
+  ::unlink(tmp.c_str());
+  int fd = ::open(tmp.c_str(), O_WRONLY | O_CREAT | O_EXCL | O_NOFOLLOW | O_CLOEXEC, st.st_mode & 07777);
+  if (fd < 0) {
+    return false;
+  }
+  // fchmod because open() applies the umask; fchown fails when we may not give the file its owner back
+  if (::fchmod(fd, st.st_mode & 07777) != 0 || ::fchown(fd, st.st_uid, st.st_gid) != 0) {
+    ::close(fd);
+    ::unlink(tmp.c_str());
+    return false;
+  }
+  bool written = write_all(fd, content) && ::fsync(fd) == 0;
+  written = (::close(fd) == 0) && written;
+  if (!written) {
+    auto error = errno;
+    ::unlink(tmp.c_str());
+    throw std::runtime_error(fmt::format("Unable to write {}: {}", tmp.string(), std::strerror(error)));
+  }
+  if (::rename(tmp.c_str(), target.c_str()) != 0) {
+    ::unlink(tmp.c_str());
+    return false;
+  }
+  return true;
+}
+
+/**
+ * Saves content to the config file without a reader ever seeing a partial file: it is written to a temp file and
+ * renamed over the original (on the resolved path, so a symlinked config keeps its link).
+ * When the file can't be replaced (the directory isn't writable, the config is a single bind-mounted file, or the
+ * file's owner couldn't be kept) it is rewritten in place instead.
+ */
+static void write_config_file(const std::string &source, const std::string &content) {
+  std::error_code ec;
+  auto target = std::filesystem::canonical(source, ec);
+  if (ec) {
+    target = source;
+  }
+  if (replace_atomically(target, content)) {
+    return;
+  }
+  logs::log(logs::debug, "Unable to replace {} atomically, rewriting it in place", target.string());
+  std::ofstream out(target, std::ios::trunc);
+  out << content;
+  out.close();
+  if (!out) {
+    throw std::runtime_error(fmt::format("Unable to write {}", target.string()));
+  }
+}
+
+/**
+ * Loads the config file, applies update_fn to it and saves it back; the caller must hold config_file_mutex.
+ * A failure is logged, never thrown: the in-memory state has already been updated and must not be torn down
+ * because the file couldn't be persisted.
+ */
+template <typename F> static void update_config_file(const Config &cfg, F &&update_fn) {
+  try {
+    auto tml = rfl::toml::load<WolfConfig, rfl::DefaultIfMissing>(cfg.config_source).value();
+    update_fn(tml);
+    write_config_file(cfg.config_source, rfl::toml::write(tml));
+  } catch (const std::exception &e) {
+    logs::log(logs::error, "Unable to save {}: {}", cfg.config_source, e.what());
+  }
+}
+
 void pair(const Config &cfg, const PairedClient &client) {
+  std::lock_guard lock(config_file_mutex);
   // Update CFG
   cfg.paired_clients->update([&client](const PairedClientList &paired_clients) {
     // Removing the client if already present (see: https://github.com/games-on-whales/wolf/issues/211)
@@ -431,12 +543,11 @@ void pair(const Config &cfg, const PairedClient &client) {
   });
 
   // Update TOML
-  auto tml = rfl::toml::load<WolfConfig, rfl::DefaultIfMissing>(cfg.config_source).value();
-  tml.paired_clients.push_back(client);
-  rfl::toml::save(cfg.config_source, tml);
+  update_config_file(cfg, [&client](WolfConfig &tml) { tml.paired_clients.push_back(client); });
 }
 
 void unpair(const Config &cfg, const PairedClient &client) {
+  std::lock_guard lock(config_file_mutex);
   // Update CFG
   cfg.paired_clients->update([&client](const PairedClientList &paired_clients) {
     return paired_clients                                               //
@@ -447,15 +558,27 @@ void unpair(const Config &cfg, const PairedClient &client) {
   });
 
   // Update TOML
-  auto tml = rfl::toml::load<WolfConfig, rfl::DefaultIfMissing>(cfg.config_source).value();
-  tml.paired_clients.erase(std::remove_if(tml.paired_clients.begin(),
-                                          tml.paired_clients.end(),
-                                          [&client](const auto &v) { return v.client_cert == client.client_cert; }),
-                           tml.paired_clients.end());
-  rfl::toml::save(cfg.config_source, tml);
+  update_config_file(cfg, [&client](WolfConfig &tml) {
+    tml.paired_clients.erase(std::remove_if(tml.paired_clients.begin(),
+                                            tml.paired_clients.end(),
+                                            [&client](const auto &v) { return v.client_cert == client.client_cert; }),
+                             tml.paired_clients.end());
+  });
 }
 
-void update_client_settings(const Config &cfg, std::size_t client_id, const PairedClient &updated_client) {
+bool update_client_settings(const Config &cfg,
+                            std::size_t client_id,
+                            const std::function<PairedClient(const PairedClient &)> &update_fn) {
+  // Held from reading the current client to saving, so concurrent updates apply in turn
+  std::lock_guard lock(config_file_mutex);
+  auto paired_clients = cfg.paired_clients->load();
+  auto current = std::find_if(paired_clients->begin(), paired_clients->end(), [&](const auto &client) {
+    return get_client_id(*client) == client_id;
+  });
+  if (current == paired_clients->end()) {
+    return false;
+  }
+  auto updated_client = update_fn(**current);
 
   auto update_client_fn = [&](immer::box<PairedClient> client) -> immer::box<PairedClient> {
     if (get_client_id(client) == client_id) {
@@ -471,14 +594,12 @@ void update_client_settings(const Config &cfg, std::size_t client_id, const Pair
   });
 
   // Update the TOML file
-  auto tml = rfl::toml::load<WolfConfig, rfl::DefaultIfMissing>(cfg.config_source).value();
-
-  tml.paired_clients = tml.paired_clients |                         //
-                       ranges::views::transform(update_client_fn) | //
-                       ranges::to<std::vector<PairedClient>>();
-
-  // Save back to file
-  rfl::toml::save(cfg.config_source, tml);
+  update_config_file(cfg, [&](WolfConfig &tml) {
+    tml.paired_clients = tml.paired_clients |                         //
+                         ranges::views::transform(update_client_fn) | //
+                         ranges::to<std::vector<PairedClient>>();
+  });
+  return true;
 }
 
 // Ignores the runners, see parse_app()
@@ -549,30 +670,33 @@ static BaseApp to_base_app(const Config &cfg, const events::App &app, const std:
   return base_app;
 }
 
-void update_profiles(const Config &cfg, const ProfilesList &profiles) {
+void update_profiles(const Config &cfg, const std::function<ProfilesList(const ProfilesList &)> &update_fn) {
+  // Held across load and store too, so that concurrent updates apply in turn instead of overwriting each other
+  std::lock_guard lock(config_file_mutex);
+  auto profiles = update_fn(cfg.profiles->load());
   cfg.profiles->store(profiles);
 
-  auto tml = rfl::toml::load<WolfConfig, rfl::DefaultIfMissing>(cfg.config_source).value();
-  tml.profiles = profiles | //
-                 ranges::views::transform([&](const immer::box<events::Profile> &p) {
-                   auto existing = std::find_if(tml.profiles.begin(), tml.profiles.end(), [&](const Profile &tp) {
-                     return tp.id == p->id;
-                   });
-                   auto existing_apps = existing != tml.profiles.end() ? existing->apps : std::vector<BaseApp>{};
-                   return Profile{
-                       .id = p->id,
-                       .name = p->name,
-                       .icon_png_path = p->icon_png_path,
-                       .pin = p->pin,
-                       .apps = p->apps->load().get() | //
-                               ranges::views::transform([&](const immer::box<events::App> &app) {
-                                 return to_base_app(cfg, app, existing_apps);
-                               }) | //
-                               ranges::to_vector,
-                   };
-                 }) | //
-                 ranges::to_vector;
-  rfl::toml::save(cfg.config_source, tml);
+  update_config_file(cfg, [&](WolfConfig &tml) {
+    tml.profiles = profiles | //
+                   ranges::views::transform([&](const immer::box<events::Profile> &p) {
+                     auto existing = std::find_if(tml.profiles.begin(), tml.profiles.end(), [&](const Profile &tp) {
+                       return tp.id == p->id;
+                     });
+                     auto existing_apps = existing != tml.profiles.end() ? existing->apps : std::vector<BaseApp>{};
+                     return Profile{
+                         .id = p->id,
+                         .name = p->name,
+                         .icon_png_path = p->icon_png_path,
+                         .pin = p->pin,
+                         .apps = p->apps->load().get() | //
+                                 ranges::views::transform([&](const immer::box<events::App> &app) {
+                                   return to_base_app(cfg, app, existing_apps);
+                                 }) | //
+                                 ranges::to_vector,
+                     };
+                   }) | //
+                   ranges::to_vector;
+  });
 }
 
 } // namespace state

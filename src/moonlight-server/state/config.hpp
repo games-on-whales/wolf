@@ -5,6 +5,7 @@
 #include <boost/uuid/uuid_io.hpp>         // streaming operators etc.
 #include <crypto/crypto.hpp>
 #include <events/events.hpp>
+#include <functional>
 #include <helpers/logger.hpp>
 #include <runners/docker.hpp>
 #include <runners/process.hpp>
@@ -168,14 +169,19 @@ static moonlight::control::pkts::CONTROLLER_TYPE get_controller_type(const Contr
 std::optional<PairedClient> get_client_by_id(const Config &cfg, const std::string &client_id);
 
 /**
- * Replaces the specified client_id with the updated_client
+ * Replaces the specified client_id with update_fn(current client)
+ * update_fn runs while no other config update can, so it must build its result from the client it is given
+ * Returns false when there is no such client
  * Side effects: will save back the configuration to disk
  */
-void update_client_settings(const Config &cfg, std::size_t client_id, const PairedClient &updated_client);
+bool update_client_settings(const Config &cfg,
+                            std::size_t client_id,
+                            const std::function<PairedClient(const PairedClient &)> &update_fn);
 
 /**
- * Replaces the currently loaded profiles
+ * Replaces the currently loaded profiles with update_fn(current profiles)
+ * update_fn runs while no other config update can, so it must build its result from the list it is given
  * Side effects: will save back the configuration to disk
  */
-void update_profiles(const Config &cfg, const ProfilesList &profiles);
+void update_profiles(const Config &cfg, const std::function<ProfilesList(const ProfilesList &)> &update_fn);
 } // namespace state
