@@ -3,6 +3,7 @@
 #include <core/audio.hpp>
 #include <core/docker.hpp>
 #include <events/events.hpp>
+#include <functional>
 #include <state/data-structures.hpp>
 
 namespace wolf::core::sessions {
@@ -15,6 +16,24 @@ struct AudioServer {
   std::shared_ptr<audio::Server> server;
   std::optional<docker::Container> container = {};
 };
+
+/**
+ * The video/audio pipelines of a stream. Each call blocks until its pipeline has ended (on pause, stop, or when a
+ * resumed stream supersedes it).
+ */
+struct StreamPipelines {
+  std::function<void(const immer::box<events::VideoSession> &, const immer::box<events::RTPVideoPingEvent> &)> video;
+  std::function<void(const immer::box<events::AudioSession> &, const immer::box<events::RTPAudioPingEvent> &)> audio;
+};
+
+/**
+ * Starts a stream's pipelines on the client's first ping and keeps its StreamSession::stream_state in step with
+ * them and with pauses. Registered by setup_moonlight_handlers; separate so tests can run it with fake pipelines.
+ */
+immer::vector<immer::box<events::EventBusHandlers>>
+setup_stream_pipeline_handlers(const std::shared_ptr<events::EventBusType> &ev_bus,
+                               const state::SessionsAtoms &running_sessions,
+                               const StreamPipelines &pipelines);
 
 immer::vector<immer::box<events::EventBusHandlers>>
 setup_moonlight_handlers(const immer::box<state::AppState> &app_state,

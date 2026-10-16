@@ -2,6 +2,7 @@
 #include <catch2/catch_test_macros.hpp>
 #include <catch2/matchers/catch_matchers_string.hpp>
 #include <curl/curl.h>
+#include <cstdlib>
 #include <filesystem>
 #include <future>
 #include <poll.h>
@@ -13,6 +14,7 @@
 #include <rfl/toml.hpp>
 #include <sessions/handlers.hpp>
 #include <state/config.hpp>
+#include <state/sessions.hpp>
 
 using Catch::Matchers::ContainsSubstring;
 using Catch::Matchers::Equals;
@@ -618,6 +620,208 @@ TEST_CASE("Sessions APIs", "[API]") {
   response = req(curl.get(), HTTPMethod::POST, "http://localhost/api/v1/sessions/stop", rfl::json::write(stop_request));
   REQUIRE(response);
   REQUIRE_THAT(response->second, Equals("{\"success\":true}"));
+}
+
+/**
+ * A stand-in for a stream's GStreamer pipeline: it runs until its session is paused or stopped, or until its stream
+ * instance is superseded, then takes `teardown` to finish, as a real pipeline does while it drains to EOS.
+ */
+struct FakePipelines {
+  std::shared_ptr<events::EventBusType> ev_bus;
+  std::chrono::milliseconds teardown;
+  std::shared_ptr<std::atomic_int> started = std::make_shared<std::atomic_int>(0);
+  std::shared_ptr<std::atomic_int> ended = std::make_shared<std::atomic_int>(0);
+
+  void run(std::size_t session_id, std::array<char, 16> rtp_secret) const {
+    auto end_signal = std::make_shared<std::promise<void>>();
+    auto end_future = end_signal->get_future();
+    auto signalled = std::make_shared<std::atomic_bool>(false);
+    auto end = [end_signal, signalled]() {
+      if (!signalled->exchange(true)) {
+        end_signal->set_value();
+      }
+    };
+    auto pause = ev_bus->register_handler<immer::box<events::PauseStreamEvent>>(
+        [=](const immer::box<events::PauseStreamEvent> &ev) {
+          if (ev->session_id == session_id)
+            end();
+        });
+    auto stop = ev_bus->register_handler<immer::box<events::StopStreamEvent>>(
+        [=](const immer::box<events::StopStreamEvent> &ev) {
+          if (ev->session_id == session_id)
+            end();
+        });
+    auto superseded = ev_bus->register_handler<immer::box<events::EndSupersededStreamEvent>>(
+        [=](const immer::box<events::EndSupersededStreamEvent> &ev) {
+          if (ev->session_id == session_id && ev->rtp_secret_payload == rtp_secret)
+            end();
+        });
+    (*started)++;
+    end_future.wait();
+    pause.unregister();
+    stop.unregister();
+    superseded.unregister();
+    std::this_thread::sleep_for(teardown);
+    (*ended)++;
+  }
+
+  sessions::StreamPipelines pipelines() const {
+    return {.video = [*this](const immer::box<events::VideoSession> &sess,
+                             const auto &) { run(sess->session_id, sess->rtp_secret_payload); },
+            .audio = [*this](const immer::box<events::AudioSession> &sess,
+                             const auto &) { run(sess->session_id, sess->rtp_secret_payload); }};
+  }
+};
+
+TEST_CASE("Sessions API: the listed state follows the stream's events", "[API]") {
+  using namespace std::chrono_literals;
+  auto event_bus = std::make_shared<events::EventBusType>();
+  auto running_sessions = std::make_shared<immer::atom<immer::vector<events::StreamSession>>>();
+  auto config = immer::box<state::Config>(state::load_or_default("config.test.toml", event_bus, running_sessions));
+  auto app_state = immer::box<state::AppState>(state::AppState{
+      .config = config,
+      .pairing_cache = std::make_shared<immer::atom<immer::map<std::string, state::PairCache>>>(),
+      .pairing_atom = std::make_shared<immer::atom<immer::map<std::string, immer::box<events::PairSignal>>>>(),
+      .event_bus = event_bus,
+      .running_sessions = running_sessions});
+
+  auto teardown = 500ms;
+  auto fake = FakePipelines{.ev_bus = event_bus, .teardown = teardown};
+  auto pipeline_handlers = sessions::setup_stream_pipeline_handlers(event_bus, running_sessions, fake.pipelines());
+
+  // Each run (one per SECTION) gets its own socket: the previous run's server is still listening on its own.
+  // Kept short under /tmp, whatever XDG_RUNTIME_DIR is, so the socket path fits in sockaddr_un.
+  char runtime_dir_template[] = "/tmp/wolf-test-XXXXXX";
+  REQUIRE(mkdtemp(runtime_dir_template));
+  auto runtime_dir = std::string(runtime_dir_template);
+  auto remove_runtime_dir = std::shared_ptr<void>(nullptr, [runtime_dir](void *) {
+    std::error_code ec;
+    std::filesystem::remove_all(runtime_dir, ec);
+  });
+  auto socket_path = (std::filesystem::path(runtime_dir) / "wolf.sock").string();
+  std::thread server_thread([app_state, runtime_dir]() { wolf::api::start_server(runtime_dir, app_state); });
+  server_thread.detach();
+
+  auto curl = curl_ptr(curl_easy_init(), ::curl_easy_cleanup);
+  curl_easy_setopt(curl.get(), CURLOPT_UNIX_SOCKET_PATH, socket_path.c_str());
+  curl_easy_setopt(curl.get(), CURLOPT_HTTP_VERSION, CURL_HTTP_VERSION_1_0);
+
+  // Wait for the server to start
+  auto response = req(curl.get(), HTTPMethod::GET, "http://localhost/api/v1/sessions");
+  for (int i = 0; i < 250 && !response; i++) {
+    std::this_thread::sleep_for(20ms);
+    response = req(curl.get(), HTTPMethod::GET, "http://localhost/api/v1/sessions");
+  }
+  REQUIRE(response);
+
+  auto session = rfl::Reflector<wolf::core::events::StreamSession>::ReflType{
+      .client_ip = "127.0.0.1",
+      .app_id = "304556286",               // test cfg file
+      .client_id = "10594003729173467913", // test cfg file
+  };
+  response = req(curl.get(), HTTPMethod::POST, "http://localhost/api/v1/sessions/add", rfl::json::write(session));
+  REQUIRE(response);
+  REQUIRE_THAT(response->second, ContainsSubstring("{\"success\":true,\"session_id\":"));
+  REQUIRE(running_sessions->load()->size() == 1);
+  auto session_id = running_sessions->load()->front().session_id;
+
+  auto listed_state = [&]() {
+    auto response = req(curl.get(), HTTPMethod::GET, "http://localhost/api/v1/sessions");
+    REQUIRE(response);
+    auto sessions = rfl::json::read<StreamSessionListResponse>(response->second).value();
+    REQUIRE(sessions.sessions.size() == 1);
+    return std::string(sessions.sessions[0].state.name());
+  };
+  auto rtp_secret = [](char id) { return std::array<char, 16>{id}; };
+  auto video_session = [&](char secret) {
+    events::VideoSession video{.session_id = session_id};
+    video.rtp_secret_payload = rtp_secret(secret);
+    return video;
+  };
+  auto audio_session = [&](char secret) {
+    events::AudioSession audio{.session_id = session_id};
+    audio.rtp_secret_payload = rtp_secret(secret);
+    return audio;
+  };
+  // A real client keeps pinging until its stream starts: the handlers start listening for pings on another thread
+  auto ping_until_started = [&](char secret, int started) {
+    for (int i = 0; i < 250 && *fake.started < started; i++) {
+      event_bus->fire_event(immer::box<events::RTPVideoPingEvent>(
+          events::RTPVideoPingEvent{.client_ip = "127.0.0.1", .client_port = 9, .payload = rtp_secret(secret)}));
+      event_bus->fire_event(immer::box<events::RTPAudioPingEvent>(
+          events::RTPAudioPingEvent{.client_ip = "127.0.0.1", .client_port = 9, .payload = rtp_secret(secret)}));
+      std::this_thread::sleep_for(20ms);
+    }
+    REQUIRE(*fake.started == started);
+  };
+  // RTSP setup of a stream instance
+  auto setup = [&](char secret) {
+    event_bus->fire_event(immer::box<events::VideoSession>(video_session(secret)));
+    event_bus->fire_event(immer::box<events::AudioSession>(audio_session(secret)));
+  };
+
+  REQUIRE(listed_state() == "setup");
+  setup(1);
+  REQUIRE(listed_state() == "setup"); // until the client's first ping
+  // A pause before the first ping, with no pipeline to end yet, doesn't hold the stream paused once it starts
+  event_bus->fire_event(immer::box<events::PauseStreamEvent>(events::PauseStreamEvent{.session_id = session_id}));
+  REQUIRE(listed_state() == "paused");
+  ping_until_started(1, 2);
+  REQUIRE(listed_state() == "streaming");
+
+  SECTION("an API start during a slow teardown after a pause stays streaming") {
+    event_bus->fire_event(immer::box<events::PauseStreamEvent>(events::PauseStreamEvent{.session_id = session_id}));
+    // The old pipelines are still tearing down, but the stream is paused
+    REQUIRE(*fake.ended == 0);
+    REQUIRE(listed_state() == "paused");
+
+    auto start_request = StreamSessionStartRequest{.session_id = std::to_string(session_id),
+                                                   .video_session = video_session(2),
+                                                   .audio_session = audio_session(2)};
+    response =
+        req(curl.get(), HTTPMethod::POST, "http://localhost/api/v1/sessions/start", rfl::json::write(start_request));
+    REQUIRE(response);
+    REQUIRE_THAT(response->second, Equals("{\"success\":true}"));
+    REQUIRE(listed_state() != "paused"); // set up again, before its first ping
+    ping_until_started(2, 4);
+    REQUIRE(*fake.ended == 0);
+    REQUIRE(listed_state() == "streaming");
+
+    // The paused pipelines finishing their teardown doesn't end the restarted stream
+    std::this_thread::sleep_for(teardown + 300ms);
+    REQUIRE(*fake.ended == 2);
+    REQUIRE(listed_state() == "streaming");
+  }
+
+  SECTION("a resume replaces the session, and ending the superseded stream drains only the old instance") {
+    // What /resume does: a new StreamSession, with its own stream state, under the same id
+    running_sessions->update([](const immer::vector<events::StreamSession> &sessions) {
+      auto resumed = sessions.front();
+      resumed.stream_state = std::make_shared<immer::atom<events::StreamState>>();
+      return state::remove_session(sessions, sessions.front()).push_back(resumed);
+    });
+    REQUIRE(listed_state() == "setup"); // even though the old instance is still streaming
+
+    setup(2);
+    ping_until_started(2, 4);
+    REQUIRE(listed_state() == "streaming");
+
+    event_bus->fire_event(immer::box<events::EndSupersededStreamEvent>(
+        events::EndSupersededStreamEvent{.session_id = session_id, .rtp_secret_payload = rtp_secret(1)}));
+    std::this_thread::sleep_for(teardown + 300ms);
+    REQUIRE(*fake.ended == 2); // only the old instance's
+    REQUIRE(listed_state() == "streaming");
+  }
+
+  // End the remaining pipelines
+  event_bus->fire_event(immer::box<events::StopStreamEvent>(events::StopStreamEvent{.session_id = session_id}));
+  std::this_thread::sleep_for(teardown + 300ms);
+  REQUIRE(*fake.ended == *fake.started);
+  REQUIRE(listed_state() == "setup");
+  // Every pipeline counted itself out, which the listed state alone can't tell once either count is 0
+  auto stream_state = running_sessions->load()->front().stream_state->load();
+  REQUIRE(stream_state->video_pipelines == 0);
+  REQUIRE(stream_state->audio_pipelines == 0);
 }
 
 TEST_CASE("Session APIs without app_id or client_id", "[API]") {

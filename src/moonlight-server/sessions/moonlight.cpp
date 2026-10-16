@@ -62,6 +62,77 @@ update_stream_state(const state::SessionsAtoms &running_sessions,
 }
 
 immer::vector<immer::box<events::EventBusHandlers>>
+setup_stream_pipeline_handlers(const std::shared_ptr<events::EventBusType> &ev_bus,
+                               const state::SessionsAtoms &running_sessions,
+                               const StreamPipelines &pipelines) {
+  immer::vector_transient<immer::box<events::EventBusHandlers>> handlers;
+
+  handlers.push_back(ev_bus->register_handler<immer::box<events::PauseStreamEvent>>(
+      [running_sessions](const immer::box<events::PauseStreamEvent> &ev) {
+        update_stream_state(running_sessions, ev->session_id, [](events::StreamState state) {
+          state.paused = true;
+          return state;
+        });
+      }));
+
+  handlers.push_back(ev_bus->register_handler<immer::box<events::VideoSession>>(
+      [ev_bus, running_sessions, pipelines](const immer::box<events::VideoSession> &sess) {
+        update_stream_state(running_sessions, sess->session_id, [](events::StreamState state) {
+          state.paused = false;
+          return state;
+        });
+
+        // Start a thread that will wait for the RTP ping event
+        std::thread([sess, ev_bus, running_sessions, pipelines]() {
+          auto ping_ev = wait_for_ping<events::RTPVideoPingEvent>(ev_bus, sess);
+
+          // Start streaming
+          auto stream_state = update_stream_state(running_sessions, sess->session_id, [](events::StreamState state) {
+            state.video_pipelines++;
+            state.paused = false; // a pipeline started after a pause is streaming again
+            return state;
+          });
+          pipelines.video(sess, ping_ev);
+          if (stream_state) {
+            stream_state->update([](events::StreamState state) {
+              state.video_pipelines--;
+              return state;
+            });
+          }
+        }).detach();
+      }));
+
+  handlers.push_back(ev_bus->register_handler<immer::box<events::AudioSession>>(
+      [ev_bus, running_sessions, pipelines](const immer::box<events::AudioSession> &sess) {
+        update_stream_state(running_sessions, sess->session_id, [](events::StreamState state) {
+          state.paused = false;
+          return state;
+        });
+
+        // Start a thread that will wait for the RTP ping event
+        std::thread([sess, ev_bus, running_sessions, pipelines]() {
+          auto ping_ev = wait_for_ping<events::RTPAudioPingEvent>(ev_bus, sess);
+
+          // Start streaming
+          auto stream_state = update_stream_state(running_sessions, sess->session_id, [](events::StreamState state) {
+            state.audio_pipelines++;
+            state.paused = false; // a pipeline started after a pause is streaming again
+            return state;
+          });
+          pipelines.audio(sess, ping_ev);
+          if (stream_state) {
+            stream_state->update([](events::StreamState state) {
+              state.audio_pipelines--;
+              return state;
+            });
+          }
+        }).detach();
+      }));
+
+  return handlers.persistent();
+}
+
+immer::vector<immer::box<events::EventBusHandlers>>
 setup_moonlight_handlers(const immer::box<state::AppState> &app_state,
                          const std::string &runtime_dir,
                          const std::optional<AudioServer> &audio_server) {
@@ -250,86 +321,39 @@ setup_moonlight_handlers(const immer::box<state::AppState> &app_state,
         }).detach();
       }));
 
-  handlers.push_back(app_state->event_bus->register_handler<immer::box<events::PauseStreamEvent>>(
-      [running_sessions = app_state->running_sessions](const immer::box<events::PauseStreamEvent> &ev) {
-        update_stream_state(running_sessions, ev->session_id, [](events::StreamState state) {
-          state.paused = true;
-          return state;
-        });
-      }));
-
-  handlers.push_back(app_state->event_bus->register_handler<immer::box<events::VideoSession>>(
-      [ev_bus = app_state->event_bus,
-       running_sessions = app_state->running_sessions,
-       gst_context = app_state->gst_context](const immer::box<events::VideoSession> &sess) {
-        update_stream_state(running_sessions, sess->session_id, [](events::StreamState state) {
-          state.paused = false;
-          return state;
-        });
-
-        // Start a thread that will wait for the RTP ping event
-        std::thread([sess, ev_bus, running_sessions, gst_context]() {
-          auto ping_ev = wait_for_ping<events::RTPVideoPingEvent>(ev_bus, sess);
-
-          // Start streaming
-          auto stream_state = update_stream_state(running_sessions, sess->session_id, [](events::StreamState state) {
-            state.video_pipelines++;
-            state.paused = false; // a pipeline started after a pause is streaming again
-            return state;
-          });
-          streaming::start_streaming_video(sess,
-                                           ev_bus,
-                                           ping_ev->client_ip,
-                                           ping_ev->client_port,
-                                           gst_context,
-                                           ping_ev->video_socket.get());
-          if (stream_state) {
-            stream_state->update([](events::StreamState state) {
-              state.video_pipelines--;
-              return state;
-            });
-          }
-        }).detach();
-      }));
-
-  handlers.push_back(app_state->event_bus->register_handler<immer::box<events::AudioSession>>(
-      [ev_bus = app_state->event_bus, running_sessions = app_state->running_sessions, audio_server](
-          const immer::box<events::AudioSession> &sess) {
-        update_stream_state(running_sessions, sess->session_id, [](events::StreamState state) {
-          state.paused = false;
-          return state;
-        });
-
-        // Start a thread that will wait for the RTP ping event
-        std::thread([sess, ev_bus, running_sessions, audio_server]() {
-          auto ping_ev = wait_for_ping<events::RTPAudioPingEvent>(ev_bus, sess);
-
-          // Start streaming
-          auto audio_server_name = audio_server ? audio::get_server_name(audio_server->server)
-                                                : std::optional<std::string>();
-          auto sink_name = fmt::format("{}{}.monitor", VIRTUAL_SINK_PREFIX, sess->session_id);
-          auto server_name = audio_server_name ? audio_server_name.value() : "";
-
-          auto stream_state = update_stream_state(running_sessions, sess->session_id, [](events::StreamState state) {
-            state.audio_pipelines++;
-            state.paused = false; // a pipeline started after a pause is streaming again
-            return state;
-          });
-          streaming::start_streaming_audio(sess,
-                                           ev_bus,
-                                           ping_ev->client_ip,
-                                           ping_ev->client_port,
-                                           ping_ev->audio_socket.get(),
-                                           sink_name,
-                                           server_name);
-          if (stream_state) {
-            stream_state->update([](events::StreamState state) {
-              state.audio_pipelines--;
-              return state;
-            });
-          }
-        }).detach();
-      }));
+  auto pipeline_handlers = setup_stream_pipeline_handlers(
+      app_state->event_bus,
+      app_state->running_sessions,
+      StreamPipelines{
+          .video =
+              [ev_bus = app_state->event_bus, gst_context = app_state->gst_context](
+                  const immer::box<events::VideoSession> &sess,
+                  const immer::box<events::RTPVideoPingEvent> &ping_ev) {
+                streaming::start_streaming_video(sess,
+                                                 ev_bus,
+                                                 ping_ev->client_ip,
+                                                 ping_ev->client_port,
+                                                 gst_context,
+                                                 ping_ev->video_socket.get());
+              },
+          .audio =
+              [ev_bus = app_state->event_bus, audio_server](const immer::box<events::AudioSession> &sess,
+                                                            const immer::box<events::RTPAudioPingEvent> &ping_ev) {
+                auto audio_server_name = audio_server ? audio::get_server_name(audio_server->server)
+                                                      : std::optional<std::string>();
+                auto sink_name = fmt::format("{}{}.monitor", VIRTUAL_SINK_PREFIX, sess->session_id);
+                auto server_name = audio_server_name ? audio_server_name.value() : "";
+                streaming::start_streaming_audio(sess,
+                                                 ev_bus,
+                                                 ping_ev->client_ip,
+                                                 ping_ev->client_port,
+                                                 ping_ev->audio_socket.get(),
+                                                 sink_name,
+                                                 server_name);
+              }});
+  for (const auto &handler : pipeline_handlers) {
+    handlers.push_back(handler);
+  }
 
   return handlers.persistent();
 }
