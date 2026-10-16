@@ -58,6 +58,9 @@ struct VSink {
   boost::shared_future<unsigned int> sink_idx_fut = sink_idx.get_future().share();
   // Only the first delete_virtual_sink() call unloads the module
   std::atomic<bool> deleted = false;
+  // Set when delete_virtual_sink() runs before the module finished loading: the load callback unloads it instead.
+  // Only touched with the PulseAudio mainloop lock held.
+  bool unload_on_load = false;
 };
 
 /**
