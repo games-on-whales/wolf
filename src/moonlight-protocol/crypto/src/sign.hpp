@@ -44,20 +44,21 @@ inline bool verify(std::string_view msg, std::string_view signature, EVP_PKEY *k
 using EVP_PKEY_ptr = std::unique_ptr<EVP_PKEY, decltype(&::EVP_PKEY_free)>;
 
 inline EVP_PKEY_ptr create_key(std::string_view k, bool is_private) {
-  BIO *bio = BIO_new(BIO_s_mem());
+  std::unique_ptr<BIO, decltype(&::BIO_free)> bio(BIO_new(BIO_s_mem()), ::BIO_free);
+  if (!bio)
+    handle_openssl_error("BIO_new failed");
 
-  if (BIO_write(bio, k.data(), k.size()) <= 0)
+  if (BIO_write(bio.get(), k.data(), k.size()) <= 0)
     handle_openssl_error("BIO_write failed");
 
   EVP_PKEY *p_key = nullptr;
   if (is_private)
-    PEM_read_bio_PrivateKey(bio, &p_key, nullptr, nullptr);
+    PEM_read_bio_PrivateKey(bio.get(), &p_key, nullptr, nullptr);
   else
-    PEM_read_bio_PUBKEY(bio, &p_key, nullptr, nullptr);
+    PEM_read_bio_PUBKEY(bio.get(), &p_key, nullptr, nullptr);
   if (p_key == nullptr)
-    handle_openssl_error("PEM_read_bio_PrivateKey failed");
+    handle_openssl_error(is_private ? "PEM_read_bio_PrivateKey failed" : "PEM_read_bio_PUBKEY failed");
 
-  BIO_free(bio);
   return {p_key, ::EVP_PKEY_free};
 }
 } // namespace signature
