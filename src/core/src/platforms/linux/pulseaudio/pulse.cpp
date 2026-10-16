@@ -150,7 +150,8 @@ void queue_op(const std::shared_ptr<Server> &server, const std::function<void()>
 
 std::shared_ptr<VSink> create_virtual_sink(const std::shared_ptr<Server> &server, const AudioDevice &device) {
 
-  auto vsink = std::make_shared<VSink>(VSink{.device = device, .sink_idx = boost::promise<unsigned int>()});
+  auto vsink = std::make_shared<VSink>();
+  vsink->device = device;
 
   queue_op(server, [server, vsink]() {
     auto device = vsink->device;
@@ -176,12 +177,16 @@ std::shared_ptr<VSink> create_virtual_sink(const std::shared_ptr<Server> &server
 }
 
 void delete_virtual_sink(const std::shared_ptr<Server> &server, const std::shared_ptr<VSink> &vsink) {
+  if (vsink->deleted.exchange(true)) {
+    logs::log(logs::debug, "[PULSE] Virtual sink already removed, skipping");
+    return;
+  }
   queue_op(server, [server, vsink]() {
     auto result = std::make_shared<boost::promise<int>>();
 
     auto operation = pa_context_unload_module(
         server->ctx,
-        vsink->sink_idx.get_future().get(),
+        vsink->sink_idx_fut.get(),
         [](pa_context *c, int status, void *data) {
           auto result = (boost::promise<int> *)data;
           result->set_value(status);

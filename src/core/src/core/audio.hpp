@@ -3,6 +3,7 @@
 #include <boost/asio.hpp>
 #define BOOST_THREAD_PROVIDES_FUTURE_CONTINUATION
 #define BOOST_THREAD_PROVIDES_FUTURE
+#include <atomic>
 #include <boost/thread.hpp>
 #include <boost/thread/future.hpp>
 #include <functional>
@@ -52,6 +53,11 @@ struct AudioDevice {
 struct VSink {
   AudioDevice device;
   boost::promise<unsigned int> sink_idx;
+  // A promise's future can only be retrieved once: read the index through this shared future instead,
+  // since every runner started on the same session reaches delete_virtual_sink() when it exits.
+  boost::shared_future<unsigned int> sink_idx_fut = sink_idx.get_future().share();
+  // Only the first delete_virtual_sink() call unloads the module
+  std::atomic<bool> deleted = false;
 };
 
 /**
