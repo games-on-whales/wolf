@@ -23,35 +23,43 @@ std::shared_ptr<events::JoypadTypes> create_new_joypad(const events::StreamSessi
                                                        CONTROLLER_TYPE requested_type,
                                                        uint8_t capabilities) {
 
-  auto on_rumble_fn = ([connected_client, controller_number, aes_key = session.aes_key](int low_freq, int high_freq) {
+  auto on_rumble_fn = ([connected_client,
+                        controller_number,
+                        aes_key = session.aes_key,
+                        encryption = session.encryption](int low_freq, int high_freq) {
     auto rumble_pkt = ControlRumblePacket{
         .header = {.type = RUMBLE_DATA, .length = sizeof(ControlRumblePacket) - sizeof(ControlPacket)},
         .controller_number = boost::endian::native_to_little((uint16_t)controller_number),
         .low_freq = boost::endian::native_to_little((uint16_t)low_freq),
         .high_freq = boost::endian::native_to_little((uint16_t)high_freq)};
     std::string plaintext = {(char *)&rumble_pkt, sizeof(rumble_pkt)};
-    encrypt_and_send(plaintext, aes_key, connected_client);
+    encrypt_and_send(plaintext, aes_key, encryption, connected_client);
   });
 
-  auto on_led_fn = ([connected_client, controller_number, aes_key = session.aes_key](int r, int g, int b) {
-    auto led_pkt = ControlRGBLedPacket{
-        .header{.type = RGB_LED_EVENT, .length = sizeof(ControlRGBLedPacket) - sizeof(ControlPacket)},
-        .controller_number = boost::endian::native_to_little((uint16_t)controller_number),
-        .r = static_cast<uint8_t>(r),
-        .g = static_cast<uint8_t>(g),
-        .b = static_cast<uint8_t>(b)};
-    std::string plaintext = {(char *)&led_pkt, sizeof(led_pkt)};
-    encrypt_and_send(plaintext, aes_key, connected_client);
-  });
+  auto on_led_fn =
+      ([connected_client, controller_number, aes_key = session.aes_key, encryption = session.encryption](int r,
+                                                                                                         int g,
+                                                                                                         int b) {
+        auto led_pkt = ControlRGBLedPacket{
+            .header{.type = RGB_LED_EVENT, .length = sizeof(ControlRGBLedPacket) - sizeof(ControlPacket)},
+            .controller_number = boost::endian::native_to_little((uint16_t)controller_number),
+            .r = static_cast<uint8_t>(r),
+            .g = static_cast<uint8_t>(g),
+            .b = static_cast<uint8_t>(b)};
+        std::string plaintext = {(char *)&led_pkt, sizeof(led_pkt)};
+        encrypt_and_send(plaintext, aes_key, encryption, connected_client);
+      });
 
-  auto on_adaptive_trigger_fn = ([connected_client, controller_number, aes_key = session.aes_key](
-                                     const inputtino::PS5Joypad::TriggerEffect &effect) {
+  auto on_adaptive_trigger_fn = ([connected_client,
+                                  controller_number,
+                                  aes_key = session.aes_key,
+                                  encryption = session.encryption](const inputtino::PS5Joypad::TriggerEffect &effect) {
     auto rumble_pkt = ControlAdaptiveTriggerPacket{
         .header{.type = ADAPTIVE_TRIGGER_EVENT, .length = sizeof(ControlAdaptiveTriggerPacket) - sizeof(ControlPacket)},
         .controller_number = boost::endian::native_to_little((uint16_t)controller_number),
         .effect = effect};
     std::string plaintext = {(char *)&rumble_pkt, sizeof(rumble_pkt)};
-    encrypt_and_send(plaintext, aes_key, connected_client);
+    encrypt_and_send(plaintext, aes_key, encryption, connected_client);
   });
 
   std::shared_ptr<events::JoypadTypes> new_pad;
@@ -176,7 +184,7 @@ std::shared_ptr<events::JoypadTypes> create_new_joypad(const events::StreamSessi
         .reportrate = 100,
         .type = ACCELERATION};
     std::string plaintext = {(char *)&accelerometer_pkt, sizeof(accelerometer_pkt)};
-    encrypt_and_send(plaintext, session.aes_key, connected_client);
+    encrypt_and_send(plaintext, session.aes_key, session.encryption, connected_client);
   }
 
   if (capabilities & GYRO && final_type == wolf::config::ControllerType::PS) {
@@ -188,7 +196,7 @@ std::shared_ptr<events::JoypadTypes> create_new_joypad(const events::StreamSessi
         .reportrate = 100,
         .type = GYROSCOPE};
     std::string plaintext = {(char *)&gyro_pkt, sizeof(gyro_pkt)};
-    encrypt_and_send(plaintext, session.aes_key, connected_client);
+    encrypt_and_send(plaintext, session.aes_key, session.encryption, connected_client);
   }
 
   session.joypads->update([&](events::JoypadList joypads) {

@@ -22,7 +22,8 @@ set(SRC_LIST
         testMoonlight.cpp
         testRTSP.cpp
         testWolfAPI.cpp
-        testBatchedSend.cpp)
+        testBatchedSend.cpp
+        testEncryption.cpp)
 
 option(TEST_RUST_WAYLAND "Test our custom Rust wayland compositor" ON)
 if (UNIX AND NOT APPLE)

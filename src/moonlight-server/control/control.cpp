@@ -84,9 +84,32 @@ bool send_packet(std::string_view payload, ENetPeer *peer) {
 
 bool encrypt_and_send(std::string_view payload,
                       std::string_view aes_key,
+                      const std::shared_ptr<events::StreamEncryption> &encryption,
                       immer::box<std::shared_ptr<ENetPeer>> connected_client) {
   if (auto enet_client = connected_client->get()) {
-    auto encrypted = control::encrypt_packet(aes_key, 0, payload); // TODO: seq?
+    std::unique_ptr<ControlEncryptedPacket> encrypted;
+    try {
+      if (encryption && (encryption->enabled & moonlight::encryption::CONTROL_V2)) {
+        std::uint32_t seq;
+        {
+          std::lock_guard lock(encryption->control_mutex);
+          seq = ++encryption->control_seq;
+        }
+        crypto::aes_gcm gcm(encryption->key);
+        encrypted = control::encrypt_packet_v2(gcm, seq, payload);
+      } else {
+        // V1 only uses 8 bits of the sequence number as IV: at least don't repeat it on every packet
+        std::uint32_t seq = 0;
+        if (encryption) {
+          std::lock_guard lock(encryption->control_mutex);
+          seq = ++encryption->control_seq;
+        }
+        encrypted = control::encrypt_packet(aes_key, seq, payload);
+      }
+    } catch (const std::exception &e) {
+      logs::log(logs::warning, "[ENET] Unable to encrypt packet: {}", e.what());
+      return false;
+    }
     return send_packet({(char *)encrypted.get(), encrypted->full_size()}, enet_client);
   } else {
     logs::log(logs::warning, "[ENET] Failed to send packet, client is not connected");
@@ -149,7 +172,7 @@ void run_control(int port,
         for (auto &[peer, session] : *connected_clients.load()) {
           if (session->session_id == ev->session_id) {
             immer::box<std::shared_ptr<ENetPeer>> enet_client = {to_shared_ptr(peer)};
-            encrypt_and_send(plaintext, session->aes_key, enet_client);
+            encrypt_and_send(plaintext, session->aes_key, session->encryption, enet_client);
             return;
           }
         }
@@ -180,6 +203,9 @@ void run_control(int port,
           break;
         case ENET_EVENT_TYPE_RECEIVE:
           enet_packet packet = {event.packet, enet_packet_destroy};
+          if (packet->dataLength < sizeof(ControlPacket)) {
+            break;
+          }
 
           auto type = ((ControlPacket *)packet->data)->type;
 
@@ -192,9 +218,37 @@ void run_control(int port,
                     crypto::str_to_hex({(char *)packet->data, packet->dataLength}));
 
           if (type == ENCRYPTED) {
+            if (!valid_encrypted_packet(packet->data, packet->dataLength)) {
+              logs::log(logs::warning, "[ENET] Dropping malformed encrypted packet from {}:{}", client_ip, client_port);
+              break;
+            }
             try {
               auto enc_pkt = (ControlEncryptedPacket *)(packet->data);
-              auto decrypted = decrypt_packet(*enc_pkt, client_session->aes_key);
+              const auto &encryption = client_session->encryption;
+              std::string decrypted;
+              if (encryption && (encryption->enabled & moonlight::encryption::CONTROL_V2)) {
+                crypto::aes_gcm gcm(encryption->key);
+                auto opened = decrypt_packet_v2(*enc_pkt, gcm);
+                if (!opened) {
+                  logs::log(logs::warning, "[ENET] Dropping packet that fails authentication from {}", client_ip);
+                  break;
+                }
+                // Checked after authentication, so a forged sequence number can't advance the window
+                std::lock_guard lock(encryption->control_mutex);
+                if (!encryption->control_replay.accept(boost::endian::little_to_native(enc_pkt->seq))) {
+                  logs::log(logs::warning, "[ENET] Dropping replayed packet from {}", client_ip);
+                  break;
+                }
+                decrypted = std::move(*opened);
+              } else if (encryption && encryption->mode == moonlight::encryption::Mode::REQUIRED) {
+                logs::log(logs::warning, "[ENET] Dropping V1 encrypted packet: this session requires V2");
+                break;
+              } else {
+                decrypted = decrypt_packet(*enc_pkt, client_session->aes_key);
+              }
+              if (decrypted.size() < sizeof(ControlPacket)) {
+                break;
+              }
               auto sub_type = ((ControlPacket *)decrypted.data())->type;
 
               logs::log(logs::trace,

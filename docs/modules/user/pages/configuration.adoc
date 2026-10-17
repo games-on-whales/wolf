@@ -70,7 +70,30 @@ Wolf is configured via a TOML config file and some additional optional ENV varia
 |WOLF_DEFAULT_RUN_GID
 |1000
 |The default GID that apps run as, applied to newly paired clients; existing clients keep their saved values
+
+|WOLF_LAN_ENCRYPTION_MODE
+|disabled
+|Stream encryption for clients on private, CGNAT, link-local or loopback addresses: `disabled`, `optional` or `required` (Sunshine's `0`, `1`, `2` also work). See <<stream_encryption>>
+
+|WOLF_WAN_ENCRYPTION_MODE
+|optional
+|Stream encryption for all other clients, same values as `WOLF_LAN_ENCRYPTION_MODE`
 |===
+
+[#stream_encryption]
+=== Stream encryption
+
+Moonlight clients send Wolf a fresh AES key for every session over the paired HTTPS connection.
+With encryption enabled, Wolf uses it to encrypt the RTSP handshake, the control stream (input, rumble, ...),
+every video packet and the audio, following the same protocol as Sunshine.
+
+* `disabled`: video and RTSP are sent in the clear. The control stream and audio are still encrypted when the client
+  asks for it.
+* `optional`: everything the client supports is encrypted. Older clients keep working without it.
+* `required`: clients that can't encrypt RTSP, control, video and audio are refused with a message asking to update
+  Moonlight. Plaintext RTSP messages for an encrypted session are always refused.
+
+Encryption costs a little CPU on both ends; most CPUs accelerate AES, so it's rarely noticeable.
 
 Additional env variables useful when debugging:
 

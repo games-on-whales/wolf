@@ -4,8 +4,12 @@
 #include <core/input.hpp>
 #include <crypto/crypto.hpp>
 #include <cstdint>
+#include <cstring>
 #include <helpers/utils.hpp>
 #include <memory>
+#include <moonlight/encryption.hpp>
+#include <optional>
+#include <stdexcept>
 
 namespace moonlight::control {
 
@@ -409,6 +413,9 @@ static std::string decrypt_packet(const ControlEncryptedPacket &packet_data, std
  */
 static std::unique_ptr<ControlEncryptedPacket>
 encrypt_packet(std::string_view gcm_key, std::uint32_t seq, std::string_view payload) {
+  if (payload.size() > MAX_PAYLOAD_SIZE) {
+    throw std::length_error("control packet too large to encrypt");
+  }
   std::array<std::uint8_t, GCM_TAG_SIZE> iv_data = {0};
   iv_data[0] = boost::endian::native_to_little(seq);
 
@@ -426,6 +433,59 @@ encrypt_packet(std::string_view gcm_key, std::uint32_t seq, std::string_view pay
   std::copy(encrypted_str.begin(), encrypted_str.end(), encrypted_pkt.payload);
 
   return std::make_unique<ControlEncryptedPacket>(encrypted_pkt);
+}
+
+/**
+ * Checks the framing of a received ENCRYPTED control packet before anything reads it as a ControlEncryptedPacket:
+ * the declared length must match what was received, and leave room for the sequence number and the tag.
+ */
+static bool valid_encrypted_packet(const std::uint8_t *data, std::size_t size) {
+  if (size < sizeof(ControlPacket) + sizeof(std::uint32_t) + GCM_TAG_SIZE + 1) {
+    return false;
+  }
+  ControlPacket header;
+  std::memcpy(&header, data, sizeof(header));
+  return header.type == pkts::ENCRYPTED &&
+         sizeof(ControlPacket) + boost::endian::little_to_native(header.length) == size;
+}
+
+/**
+ * Control stream encryption V2 (moonlight::encryption::CONTROL_V2): a 12-byte IV from the full 32-bit sequence
+ * number, tagged 'C' 'C' for client packets. V1 only uses the low 8 bits of the sequence number.
+ * @return nullopt if the tag doesn't authenticate the packet
+ */
+static std::optional<std::string> decrypt_packet_v2(const ControlEncryptedPacket &packet_data, crypto::aes_gcm &gcm) {
+  auto seq = boost::endian::little_to_native(packet_data.seq);
+  auto iv = moonlight::encryption::make_iv(seq, 'C', 'C');
+  auto ciphertext = packet_data.encrypted_msg();
+  std::string plaintext(ciphertext.size(), '\0');
+  if (!gcm.open({iv.data(), iv.size()},
+                ciphertext,
+                {packet_data.gcm_tag, GCM_TAG_SIZE},
+                (std::uint8_t *)plaintext.data())) {
+    return std::nullopt;
+  }
+  return plaintext;
+}
+
+/**
+ * Seals a host control packet with encryption V2 ('H' 'C' IV). seq must never repeat for this key.
+ */
+static std::unique_ptr<ControlEncryptedPacket>
+encrypt_packet_v2(crypto::aes_gcm &gcm, std::uint32_t seq, std::string_view payload) {
+  if (payload.size() > MAX_PAYLOAD_SIZE) {
+    throw std::length_error("control packet too large to encrypt");
+  }
+  auto encrypted_pkt = std::make_unique<ControlEncryptedPacket>();
+  std::uint16_t size = sizeof(seq) + GCM_TAG_SIZE + payload.size();
+  encrypted_pkt->header = {.type = pkts::ENCRYPTED, .length = boost::endian::native_to_little(size)};
+  encrypted_pkt->seq = boost::endian::native_to_little(seq);
+  auto iv = moonlight::encryption::make_iv(seq, 'H', 'C');
+  gcm.seal({iv.data(), iv.size()},
+           payload,
+           (std::uint8_t *)encrypted_pkt->payload,
+           (std::uint8_t *)encrypted_pkt->gcm_tag);
+  return encrypted_pkt;
 }
 
 static constexpr const char *packet_type_to_str(pkts::PACKET_TYPE p) noexcept {

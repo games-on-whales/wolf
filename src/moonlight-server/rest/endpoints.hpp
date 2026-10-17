@@ -368,6 +368,40 @@ void appasset(const std::shared_ptr<typename SimpleWeb::Server<SimpleWeb::HTTPS>
   }
 }
 
+/**
+ * `corever` from a launch or resume request: 0 = video and control V2 encryption, 1 = also encrypted RTSP.
+ * Clients that predate Sunshine's encryption don't send it: -1.
+ */
+inline int client_core_version(const SimpleWeb::CaseInsensitiveMultimap &headers) {
+  try {
+    return std::stoi(get_header(headers, "corever").value_or("-1"));
+  } catch (const std::exception &) {
+    return -1;
+  }
+}
+
+/**
+ * When the policy requires encryption, refuses clients that can't encrypt RTSP (and so everything else).
+ * @return true when the request was refused and a reply has been sent
+ */
+inline bool refuse_unencrypted(const std::shared_ptr<typename SimpleWeb::Server<SimpleWeb::HTTPS>::Response> &response,
+                               const SimpleWeb::CaseInsensitiveMultimap &headers,
+                               const std::string &client_ip) {
+  if (state::encryption_mode_for(client_ip) == moonlight::encryption::Mode::REQUIRED &&
+      client_core_version(headers) < 1) {
+    logs::log(logs::warning,
+              "[HTTPS] Refusing {}: this host requires encryption, which the client doesn't support",
+              client_ip);
+    send_xml<SimpleWeb::HTTPS>(response,
+                               SimpleWeb::StatusCode::success_ok,
+                               moonlight::launch_error(403,
+                                                       "Encryption is required by this host but not supported by this "
+                                                       "Moonlight client. Update Moonlight."));
+    return true;
+  }
+  return false;
+}
+
 auto create_run_session(const SimpleWeb::CaseInsensitiveMultimap &headers,
                         const std::string &client_ip,
                         const state::PairedClient &current_client,
@@ -389,7 +423,9 @@ auto create_run_session(const SimpleWeb::CaseInsensitiveMultimap &headers,
                                             display_mode,
                                             channelCount,
                                             get_header(headers, "rikey").value(),
-                                            get_header(headers, "rikeyid").value());
+                                            get_header(headers, "rikeyid").value(),
+                                            state::encryption_mode_for(client_ip),
+                                            client_core_version(headers));
 
   base_session->ip = client_ip;
   return std::move(base_session);
@@ -429,13 +465,18 @@ void launch(const std::shared_ptr<typename SimpleWeb::Server<SimpleWeb::HTTPS>::
   }
 
   auto client_ip = get_client_ip<SimpleWeb::HTTPS>(request);
+  if (refuse_unencrypted(response, headers, client_ip)) {
+    return;
+  }
   auto new_session = create_run_session(request->parse_query_string(), client_ip, current_client, state, app.value());
   state->event_bus->fire_event(immer::box<events::StreamSession>(*new_session));
   state->running_sessions->update(
       [new_session](const immer::vector<events::StreamSession> &ses_v) { return ses_v.push_back(*new_session); });
 
   auto rtsp_ip = get_rtsp_ip_string(get_host_ip<SimpleWeb::HTTPS>(request, state), *new_session);
-  auto xml = moonlight::launch_success(rtsp_ip, std::to_string(get_port(state::RTSP_SETUP_PORT)));
+  auto xml = moonlight::launch_success(rtsp_ip,
+                                       std::to_string(get_port(state::RTSP_SETUP_PORT)),
+                                       new_session->encryption->rtsp);
   send_xml<SimpleWeb::HTTPS>(response, SimpleWeb::StatusCode::success_ok, xml);
 }
 
@@ -446,6 +487,9 @@ void resume(const std::shared_ptr<typename SimpleWeb::Server<SimpleWeb::HTTPS>::
   log_req<SimpleWeb::HTTPS>(request);
 
   auto client_ip = get_client_ip<SimpleWeb::HTTPS>(request);
+  if (refuse_unencrypted(response, request->parse_query_string(), client_ip)) {
+    return;
+  }
   auto old_session = state::get_session_by_client(state->running_sessions->load(), current_client);
   if (old_session) {
     auto new_session =
@@ -464,7 +508,9 @@ void resume(const std::shared_ptr<typename SimpleWeb::Server<SimpleWeb::HTTPS>::
     });
 
     auto rtsp_ip = get_rtsp_ip_string(get_host_ip<SimpleWeb::HTTPS>(request, state), *new_session);
-    auto xml = moonlight::launch_resume(rtsp_ip, std::to_string(get_port(state::RTSP_SETUP_PORT)));
+    auto xml = moonlight::launch_resume(rtsp_ip,
+                                        std::to_string(get_port(state::RTSP_SETUP_PORT)),
+                                        new_session->encryption->rtsp);
     send_xml<SimpleWeb::HTTPS>(response, SimpleWeb::StatusCode::success_ok, xml);
   } else {
     logs::log(logs::warning, "[HTTPS] Received resume event from an unregistered session, ip: {}", client_ip);

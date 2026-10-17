@@ -183,23 +183,36 @@ XML applist(const immer::vector<App> &apps) {
   return resp;
 }
 
-XML launch_success(const std::string &local_ip, const std::string &rtsp_port) {
-  // TODO: implement error on launch
+static std::string session_url(const std::string &local_ip, const std::string &rtsp_port, bool encrypted_rtsp) {
+  return (encrypted_rtsp ? "rtspenc://" : "rtsp://") + local_ip + ":" + rtsp_port;
+}
+
+XML launch_success(const std::string &local_ip, const std::string &rtsp_port, bool encrypted_rtsp) {
   XML resp;
 
   resp.put("root.<xmlattr>.status_code", 200);
-  resp.put("root.sessionUrl0", "rtsp://" + local_ip + ":" + rtsp_port);
+  resp.put("root.sessionUrl0", session_url(local_ip, rtsp_port, encrypted_rtsp));
   resp.put("root.gamesession", 1);
 
   return resp;
 }
 
-XML launch_resume(const std::string &local_ip, const std::string &rtsp_port) {
+XML launch_resume(const std::string &local_ip, const std::string &rtsp_port, bool encrypted_rtsp) {
   XML resp;
 
   resp.put("root.<xmlattr>.status_code", 200);
-  resp.put("root.sessionUrl0", "rtsp://" + local_ip + ":" + rtsp_port);
+  resp.put("root.sessionUrl0", session_url(local_ip, rtsp_port, encrypted_rtsp));
   resp.put("root.resume", 1);
+
+  return resp;
+}
+
+XML launch_error(int status_code, const std::string &status_message) {
+  XML resp;
+
+  resp.put("root.<xmlattr>.status_code", status_code);
+  resp.put("root.<xmlattr>.status_message", status_message);
+  resp.put("root.gamesession", 0);
 
   return resp;
 }

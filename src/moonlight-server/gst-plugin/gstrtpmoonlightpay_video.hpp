@@ -1,7 +1,9 @@
 #pragma once
 
+#include <crypto/crypto.hpp>
 #include <gst/base/gstbasetransform.h>
 #include <memory>
+#include <openssl/crypto.h>
 
 G_BEGIN_DECLS
 
@@ -27,6 +29,14 @@ struct _gst_rtp_moonlight_pay_video {
 
   u_int32_t cur_seq_number;
   u_int32_t frame_num;
+
+  /* Video encryption (moonlight::encryption::VIDEO); see gst_moonlight_video::encrypt_rtp_packets() */
+  bool encrypt;
+  bool has_aes_key;
+  unsigned char aes_key[16];
+  guint iv_epoch;
+  guint64 iv_counter;
+  crypto::aes_gcm *gcm; // created from aes_key on the first encrypted frame, freed in finalize
 };
 
 struct _gst_rtp_moonlight_pay_videoClass {

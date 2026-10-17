@@ -3,6 +3,7 @@
 #include <chrono>
 #include <control/control.hpp>
 #include <core/batched_send.hpp>
+#include <crypto/crypto.hpp>
 #include <gst-video-context.hpp>
 #include <gstreamer-1.0/gst/app/gstappsink.h>
 #include <gstreamer-1.0/gst/app/gstappsrc.h>
@@ -10,6 +11,7 @@
 #include <immer/array.hpp>
 #include <immer/box.hpp>
 #include <memory>
+#include <openssl/crypto.h>
 #include <streaming/streaming.hpp>
 #include <thread>
 
@@ -372,6 +374,41 @@ static void configure_appsink(GstElement *appsink, UDPSink *udp_sink) {
 } // namespace custom_sink
 
 /**
+ * Stops a pipeline whose stream can't be encrypted; the caller must not connect its UDP sink either.
+ */
+static void fail_encryption(GstElement *pipeline, const char *what) {
+  logs::log(logs::error,
+            "[GSTREAMER] {} encryption was negotiated but the pipeline has no moonlight_pay element",
+            what);
+  GError *error = g_error_new(GST_STREAM_ERROR, GST_STREAM_ERROR_FAILED, "%s encryption unavailable", what);
+  gst_element_post_message(pipeline, gst_message_new_error(GST_OBJECT(pipeline), error, nullptr));
+  g_error_free(error);
+}
+
+/**
+ * Turns on AES-GCM in the pipeline's moonlight_pay element with a fresh IV epoch.
+ * @return false when the pipeline can't encrypt; it has then been told to stop
+ */
+static bool configure_video_encryption(GstElement *pipeline, const events::VideoSession &video_session) {
+  auto pay = gst_bin_get_by_name(GST_BIN(pipeline), "moonlight_pay");
+  const auto &encryption = video_session.encryption.get();
+  if (!pay || !encryption || !g_object_class_find_property(G_OBJECT_GET_CLASS(pay), "iv_epoch")) {
+    if (pay) {
+      gst_object_unref(pay);
+    }
+    fail_encryption(pipeline, "Video");
+    return false;
+  }
+  auto key_hex = crypto::str_to_hex(encryption->key);
+  auto epoch = ++encryption->video_epoch;
+  g_object_set(pay, "aes_key", key_hex.c_str(), "iv_epoch", (guint)epoch, "encrypt", TRUE, nullptr);
+  OPENSSL_cleanse(key_hex.data(), key_hex.size());
+  gst_object_unref(pay);
+  logs::log(logs::debug, "[GSTREAMER] Video encryption on, IV epoch {}", epoch);
+  return true;
+}
+
+/**
  * Start VIDEO pipeline
  */
 void start_streaming_video(immer::box<events::VideoSession> video_session,
@@ -414,10 +451,15 @@ void start_streaming_video(immer::box<events::VideoSession> video_session,
   std::shared_ptr<NeedContextData> ctx_data_ptr = std::make_shared<NeedContextData>(
       NeedContextData{.device_path = video_session->render_node, .gst_context = video_context});
   run_pipeline(pipeline, [video_session, event_bus, udp_sink, ctx_data_ptr](auto pipeline) {
+    // Encryption is set here rather than in the (user editable) pipeline description, so that older configs
+    // can't silently stream plaintext video after the client negotiated encryption
+    bool can_send = !video_session->encrypt_video || configure_video_encryption(pipeline.get(), *video_session);
     if (auto app_sink_el = gst_bin_get_by_name(GST_BIN(pipeline.get()), "wolf_udp_sink")) {
       logs::log(logs::debug, "Setting up wolf_udp_sink");
       g_assert(GST_IS_APP_SINK(app_sink_el));
-      configure_appsink(app_sink_el, udp_sink.get());
+      if (can_send) {
+        configure_appsink(app_sink_el, udp_sink.get());
+      }
       gst_object_unref(app_sink_el);
     }
 
@@ -533,11 +575,31 @@ void start_streaming_audio(immer::box<events::AudioSession> audio_session,
       .socket = audio_socket,
       .client_endpoint = std::make_shared<udp::endpoint>(boost::asio::ip::make_address(client_ip), client_port)});
 
-  run_pipeline(pipeline, [session_id = audio_session->session_id, udp_sink, event_bus](auto pipeline) {
+  run_pipeline(pipeline, [session_id = audio_session->session_id, udp_sink, event_bus, audio_session](auto pipeline) {
+    // Like video, don't rely on the pipeline description to turn on negotiated audio encryption
+    bool can_send = true;
+    if (audio_session->encrypt_audio) {
+      if (auto pay = gst_bin_get_by_name(GST_BIN(pipeline.get()), "moonlight_pay")) {
+        g_object_set(pay,
+                     "aes_key",
+                     audio_session->aes_key.c_str(),
+                     "aes_iv",
+                     audio_session->aes_iv.c_str(),
+                     "encrypt",
+                     TRUE,
+                     nullptr);
+        gst_object_unref(pay);
+      } else {
+        fail_encryption(pipeline.get(), "Audio");
+        can_send = false;
+      }
+    }
     if (auto app_sink_el = gst_bin_get_by_name(GST_BIN(pipeline.get()), "wolf_udp_sink")) {
       logs::log(logs::debug, "Setting up wolf_udp_sink");
       g_assert(GST_IS_APP_SINK(app_sink_el));
-      custom_sink::configure_appsink(app_sink_el, udp_sink.get());
+      if (can_send) {
+        custom_sink::configure_appsink(app_sink_el, udp_sink.get());
+      }
       gst_object_unref(app_sink_el);
     }
 

@@ -5,6 +5,7 @@
 #include <gst-plugin/utils.hpp>
 #include <helpers/logger.hpp>
 #include <moonlight/data-structures.hpp>
+#include <moonlight/encryption.hpp>
 
 namespace gst_moonlight_video {
 
@@ -314,6 +315,56 @@ static GstBufferList *generate_fec_multi_blocks(gst_rtp_moonlight_pay_video *rtp
   gst_buffer_list_unref(rtp_packets);
 
   return final_packets;
+}
+
+/**
+ * Seals every RTP packet (data and FEC shards) with AES-GCM, following moonlight-common-c's VideoStream.c:
+ * each output packet is an EncVideoHeader (IV, frame number, tag) followed by the encrypted RTP packet.
+ * Moonlight already shrank the packet size it asked for by sizeof(EncVideoHeader).
+ *
+ * Takes ownership of rtp_packets. Returns nullptr when no key is set or the IV counter is exhausted.
+ */
+static GstBufferList *encrypt_rtp_packets(gst_rtp_moonlight_pay_video &rtpmoonlightpay, GstBufferList *rtp_packets) {
+  constexpr std::uint64_t max_counter = (std::uint64_t(1) << 48) - 1;
+  auto nr_packets = gst_buffer_list_length(rtp_packets);
+  if (!rtpmoonlightpay.has_aes_key || rtpmoonlightpay.iv_counter + nr_packets > max_counter) {
+    gst_buffer_list_unref(rtp_packets);
+    return nullptr;
+  }
+  if (rtpmoonlightpay.gcm == nullptr) {
+    rtpmoonlightpay.gcm = new crypto::aes_gcm({(char *)rtpmoonlightpay.aes_key, sizeof(rtpmoonlightpay.aes_key)});
+  }
+
+  GstBufferList *encrypted = gst_buffer_list_new_sized(nr_packets);
+  for (guint i = 0; i < nr_packets; i++) {
+    GstBuffer *packet = gst_buffer_list_get(rtp_packets, i);
+    GstMapInfo in;
+    gst_buffer_map(packet, &in, GST_MAP_READ);
+
+    std::uint32_t frame_number = 0; // 0 tells Moonlight not to use it
+    if (in.size >= sizeof(VideoRTPHeaders)) {
+      frame_number = ((VideoRTPHeaders *)in.data)->packet.frameIndex;
+    }
+
+    GstBuffer *sealed =
+        gst_buffer_new_allocate(nullptr, sizeof(moonlight::encryption::EncVideoHeader) + in.size, nullptr);
+    GstMapInfo out;
+    gst_buffer_map(sealed, &out, GST_MAP_WRITE);
+    moonlight::encryption::seal_video(*rtpmoonlightpay.gcm,
+                                      rtpmoonlightpay.iv_counter++,
+                                      rtpmoonlightpay.iv_epoch,
+                                      frame_number,
+                                      {(char *)in.data, in.size},
+                                      out.data);
+    gst_buffer_unmap(sealed, &out);
+    gst_buffer_unmap(packet, &in);
+
+    gst_copy_timestamps(packet, sealed);
+    gst_buffer_list_add(encrypted, sealed);
+  }
+
+  gst_buffer_list_unref(rtp_packets);
+  return encrypted;
 }
 
 /**

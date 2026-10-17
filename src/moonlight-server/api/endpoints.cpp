@@ -279,7 +279,8 @@ void UnixSocketServer::endpoint_StreamSessionAdd(const HTTPRequest &req, std::sh
                                .av1_supported = state_->app_state->config->support_av1},
         ss.audio_channel_count,
         ss.aes_key,
-        ss.aes_iv);
+        ss.aes_iv,
+        state::encryption_mode_for(ss.client_ip));
     new_session->ip = ss.client_ip;
     new_session->rtsp_fake_ip = ss.rtsp_fake_ip;
 

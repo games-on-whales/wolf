@@ -55,6 +55,21 @@ enum {
    * Minimum number of FEC packages required by Moonlight
    */
   PROP_MIN_REQUIRED_FEC_PACKETS = 22,
+
+  /**
+   * If TRUE, every RTP packet is sealed with AES-GCM; aes_key must be set or no packet will be sent
+   */
+  PROP_ENCRYPT = 23,
+
+  /**
+   * The hex encoded 16 byte AES key (the client's rikey)
+   */
+  PROP_AES_KEY = 24,
+
+  /**
+   * Must differ for every pipeline that uses the same key, so that packet IVs never repeat
+   */
+  PROP_IV_EPOCH = 25,
 };
 
 /* pad templates */
@@ -135,6 +150,33 @@ static void gst_rtp_moonlight_pay_video_class_init(gst_rtp_moonlight_pay_videoCl
                                                    2,
                                                    G_PARAM_READWRITE));
 
+  g_object_class_install_property(
+      gobject_class,
+      PROP_ENCRYPT,
+      g_param_spec_boolean("encrypt",
+                           "encrypt",
+                           "If TRUE, every RTP packet is sealed with AES-GCM; aes_key must be set or no packet is sent",
+                           FALSE,
+                           G_PARAM_READWRITE));
+
+  g_object_class_install_property(gobject_class,
+                                  PROP_AES_KEY,
+                                  g_param_spec_string("aes_key",
+                                                      "aes_key",
+                                                      "The hex encoded 16 byte AES key used to encrypt packets",
+                                                      nullptr,
+                                                      G_PARAM_WRITABLE));
+
+  g_object_class_install_property(gobject_class,
+                                  PROP_IV_EPOCH,
+                                  g_param_spec_uint("iv_epoch",
+                                                    "iv_epoch",
+                                                    "Distinguishes the IVs of pipelines that share an AES key",
+                                                    0,
+                                                    G_MAXUINT32,
+                                                    0,
+                                                    G_PARAM_READWRITE));
+
   gobject_class->dispose = gst_rtp_moonlight_pay_video_dispose;
   gobject_class->finalize = gst_rtp_moonlight_pay_video_finalize;
 
@@ -150,6 +192,12 @@ static void gst_rtp_moonlight_pay_video_init(gst_rtp_moonlight_pay_video *rtpmoo
 
   rtpmoonlightpay_video->cur_seq_number = 0;
   rtpmoonlightpay_video->frame_num = 0;
+
+  rtpmoonlightpay_video->encrypt = false;
+  rtpmoonlightpay_video->has_aes_key = false;
+  rtpmoonlightpay_video->iv_epoch = 0;
+  rtpmoonlightpay_video->iv_counter = 0;
+  rtpmoonlightpay_video->gcm = nullptr;
 }
 
 void gst_rtp_moonlight_pay_video_set_property(GObject *object,
@@ -172,6 +220,25 @@ void gst_rtp_moonlight_pay_video_set_property(GObject *object,
     break;
   case PROP_MIN_REQUIRED_FEC_PACKETS:
     rtpmoonlightpay_video->min_required_fec_packets = g_value_get_int(value);
+    break;
+  case PROP_ENCRYPT:
+    rtpmoonlightpay_video->encrypt = g_value_get_boolean(value);
+    break;
+  case PROP_AES_KEY: {
+    auto hex = g_value_get_string(value);
+    auto key = crypto::hex_to_str(hex ? hex : "", true);
+    delete rtpmoonlightpay_video->gcm;
+    rtpmoonlightpay_video->gcm = nullptr;
+    rtpmoonlightpay_video->has_aes_key = key.size() == sizeof(rtpmoonlightpay_video->aes_key);
+    if (rtpmoonlightpay_video->has_aes_key) {
+      memcpy(rtpmoonlightpay_video->aes_key, key.data(), key.size());
+    }
+    OPENSSL_cleanse(key.data(), key.size());
+    break;
+  }
+  case PROP_IV_EPOCH:
+    rtpmoonlightpay_video->iv_epoch = g_value_get_uint(value);
+    rtpmoonlightpay_video->iv_counter = 0;
     break;
   default:
     G_OBJECT_WARN_INVALID_PROPERTY_ID(object, property_id, pspec);
@@ -197,6 +264,12 @@ void gst_rtp_moonlight_pay_video_get_property(GObject *object, guint property_id
   case PROP_MIN_REQUIRED_FEC_PACKETS:
     g_value_set_int(value, rtpmoonlightpay_video->min_required_fec_packets);
     break;
+  case PROP_ENCRYPT:
+    g_value_set_boolean(value, rtpmoonlightpay_video->encrypt);
+    break;
+  case PROP_IV_EPOCH:
+    g_value_set_uint(value, rtpmoonlightpay_video->iv_epoch);
+    break;
   default:
     G_OBJECT_WARN_INVALID_PROPERTY_ID(object, property_id, pspec);
     break;
@@ -219,6 +292,9 @@ void gst_rtp_moonlight_pay_video_finalize(GObject *object) {
   GST_DEBUG_OBJECT(rtpmoonlightpay_video, "finalize");
 
   /* clean up object here */
+  delete rtpmoonlightpay_video->gcm;
+  rtpmoonlightpay_video->gcm = nullptr;
+  OPENSSL_cleanse(rtpmoonlightpay_video->aes_key, sizeof(rtpmoonlightpay_video->aes_key));
 
   G_OBJECT_CLASS(gst_rtp_moonlight_pay_video_parent_class)->finalize(object);
 }
@@ -240,6 +316,16 @@ static GstFlowReturn gst_rtp_moonlight_pay_video_generate_output(GstBaseTransfor
     return GST_FLOW_OK;
 
   auto rtp_packets = gst_moonlight_video::split_into_rtp(rtpmoonlightpay_video, inbuf);
+
+  if (rtpmoonlightpay_video->encrypt) {
+    // Fail closed: when encryption was negotiated, never let a plaintext packet out
+    rtp_packets = gst_moonlight_video::encrypt_rtp_packets(*rtpmoonlightpay_video, rtp_packets);
+    if (rtp_packets == nullptr) {
+      gst_buffer_unref(inbuf);
+      GST_ELEMENT_ERROR(rtpmoonlightpay_video, STREAM, FAILED, ("Unable to encrypt video"), (nullptr));
+      return GST_FLOW_ERROR;
+    }
+  }
 
   /* Send the generated packets to any downstream listener */
   gst_pad_push_list(trans->srcpad, rtp_packets);

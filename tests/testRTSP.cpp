@@ -3,17 +3,21 @@
 
 using Catch::Matchers::Equals;
 
+#include "encryption_client.hpp"
 #include <boost/beast/_experimental/test/stream.hpp>
 #include <crypto/crypto.hpp>
+#include <moonlight/encryption.hpp>
 #include <rtsp/net.hpp>
 #include <rtsp/parser.hpp>
 #include <state/data-structures.hpp>
 #include <string>
+#include <thread>
 using namespace std::string_literals;
 using namespace state;
 using namespace rtsp;
 using namespace wolf::core::audio;
 using namespace wolf::core;
+namespace encryption = moonlight::encryption;
 
 /**
  * In order to test rtsp::tcp_connection we create a derived class that does the opposite:
@@ -637,4 +641,108 @@ TEST_CASE("Commands (IP Matching)", "[RTSP]") {
                        REQUIRE(response.value().seq_number == 7);
                      });
   }
+}
+/* ---------------------------------------------------------------- RTSP server */
+
+static events::StreamSession encrypted_session(encryption::Mode mode, int core_version) {
+  return {.display_mode = {1920, 1080, 60},
+          .audio_channel_count = 2,
+          .event_bus = std::make_shared<events::EventBusType>(),
+          .app = std::make_shared<events::App>(events::App{.base = {},
+                                                           .h264_gst_pipeline = "",
+                                                           .hevc_gst_pipeline = "",
+                                                           .opus_gst_pipeline = "",
+                                                           .runner = nullptr}),
+          .aes_key = "9d804e47a6aa6624b7d4b502b32cc522",
+          .aes_iv = "12345",
+          .rtsp_fake_ip = "00.11.22.33.44",
+          .encryption = std::make_shared<events::StreamEncryption>(KEY, mode, core_version),
+          .session_id = 1234,
+          .ip = "127.0.0.1",
+          .video_stream_port = 1234,
+          .audio_stream_port = 1235,
+          .control_stream_port = 1236};
+}
+
+/** One RTSP transaction the way moonlight-common-c does it: connect, send, read until the server closes */
+static std::string transact(int port, const std::string &bytes) {
+  boost::asio::io_context ioc;
+  boost::asio::ip::tcp::socket socket(ioc);
+  socket.connect({boost::asio::ip::make_address("127.0.0.1"), (unsigned short)port});
+  boost::asio::write(socket, boost::asio::buffer(bytes));
+  std::string reply;
+  boost::system::error_code ec;
+  boost::asio::read(socket, boost::asio::dynamic_buffer(reply), ec);
+  return reply;
+}
+
+TEST_CASE("RTSP server with encryption", "[Encryption]") {
+  constexpr int port = 8091;
+  auto sessions = std::make_shared<immer::atom<immer::vector<events::StreamSession>>>(
+      immer::vector<events::StreamSession>{encrypted_session(encryption::Mode::OPTIONAL, 1)});
+  boost::asio::io_context ioc;
+  rtsp::tcp_server server(ioc, port, sessions);
+  std::thread server_thread([&ioc]() { ioc.run(); });
+
+  // moonlight-common-c uses the rtspenc:// session URL as the request target
+  auto describe = "DESCRIBE rtspenc://00.11.22.33.44:48010 RTSP/1.0\r\nCSeq: 2\r\nHost: 00.11.22.33.44\r\n\r\n"s;
+
+  // Encrypted DESCRIBE: the reply is sealed and offers video, control V2 and audio encryption
+  auto reply = rtsp::parse(client_open_rtsp(transact(port, client_seal_rtsp(1, describe))));
+  REQUIRE(reply);
+  REQUIRE(reply->response.status_code == 200);
+  bool offered = false;
+  for (const auto &[k, v] : reply->payloads) {
+    if (v == "x-ss-general.encryptionSupported: 7") {
+      offered = true;
+    }
+  }
+  REQUIRE(offered);
+
+  // Replaying the same sequence number gets no reply, so an IV is never reused
+  REQUIRE(transact(port, client_seal_rtsp(1, describe)).empty());
+  REQUIRE(transact(port, client_seal_rtsp(2, describe)).size() > 24);
+
+  // Plaintext RTSP for a session that was told to encrypt is refused: no downgrade via a forged ANNOUNCE
+  auto plain = rtsp::parse(transact(port, describe));
+  REQUIRE(plain);
+  REQUIRE(plain->response.status_code == 403);
+
+  // Messages sealed with another key match no session
+  auto other_key = crypto::hex_to_str("00112233445566778899aabbccddeeff", true);
+  REQUIRE(transact(port, client_seal_rtsp(3, describe, other_key)).empty());
+
+  ioc.stop();
+  server_thread.join();
+}
+
+TEST_CASE("RTSP ANNOUNCE enforces required encryption", "[Encryption]") {
+  auto announce = [](std::uint32_t enabled, int feature_flags) {
+    auto payload = fmt::format("v=0\r\n"
+                               "a=x-nv-video[0].clientViewportWd:1920 \r\n"
+                               "a=x-nv-video[0].clientViewportHt:1080 \r\n"
+                               "a=x-nv-video[0].maxFPS:60 \r\n"
+                               "a=x-nv-general.featureFlags:{} \r\n"
+                               "a=x-ss-general.encryptionEnabled:{} \r\n",
+                               feature_flags,
+                               enabled);
+    return rtsp::parse(fmt::format("ANNOUNCE streamid=control/13/0 RTSP/1.0\r\nCSeq: 6\r\nContent-type: "
+                                   "application/sdp\r\nContent-length: {}\r\n\r\n{}",
+                                   payload.size(),
+                                   payload))
+        .value();
+  };
+
+  auto required = encrypted_session(encryption::Mode::REQUIRED, 1);
+  REQUIRE(rtsp::commands::announce(announce(encryption::CONTROL_V2 | encryption::AUDIO, 0x20), required)
+              .response.status_code == 403);
+  REQUIRE(rtsp::commands::announce(announce(encryption::CONTROL_V2 | encryption::VIDEO, 0), required)
+              .response.status_code == 403);
+  REQUIRE(rtsp::commands::announce(announce(encryption::ALL, 0x20), required).response.status_code == 200);
+  REQUIRE(required.encryption->enabled == encryption::ALL);
+
+  // Optional: whatever the client enables, limited to what we offered
+  auto lan = encrypted_session(encryption::Mode::DISABLED, 1);
+  REQUIRE(rtsp::commands::announce(announce(encryption::ALL, 0), lan).response.status_code == 200);
+  REQUIRE(lan.encryption->enabled == (encryption::CONTROL_V2 | encryption::AUDIO));
 }

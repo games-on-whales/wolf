@@ -104,6 +104,12 @@ describe(const RTSP_PACKET &req, const events::StreamSession &session) {
   payloads.push_back(
       {"a", fmt::format("x-ss-general.featureFlags: {}", FS_PEN_TOUCH_EVENTS | FS_CONTROLLER_TOUCH_EVENTS)});
 
+  // Sunshine-style encryption negotiation; the client answers with x-ss-general.encryptionEnabled in ANNOUNCE
+  if (session.encryption && session.encryption->client_core_version >= 0) {
+    payloads.push_back({"a", fmt::format("x-ss-general.encryptionSupported: {}", session.encryption->supported())});
+    payloads.push_back({"a", fmt::format("x-ss-general.encryptionRequested: {}", session.encryption->requested())});
+  }
+
   return ok_msg(req.seq_number, {}, payloads);
 }
 
@@ -166,6 +172,37 @@ announce(const RTSP_PACKET &req, const events::StreamSession &session) {
                 })                                             //
               | views::transform(parse_arg_line)               // turns an arg line into a pair
               | to<std::map<std::string, std::optional<int>>>; // to map
+
+  // Encryption the client enabled, out of what we offered in DESCRIBE
+  bool encrypt_audio = static_cast<bool>(args["x-nv-general.featureFlags"].value_or(167) & 0x20);
+  std::uint32_t encryption = 0;
+  if (session.encryption) {
+    auto &enc = *session.encryption;
+    if (enc.client_core_version >= 0) {
+      encryption = static_cast<std::uint32_t>(args["x-ss-general.encryptionEnabled"].value_or(0)) & enc.supported();
+    }
+    if (encryption & moonlight::encryption::AUDIO) {
+      encrypt_audio = true;
+    }
+    if (enc.mode == moonlight::encryption::Mode::REQUIRED) {
+      auto required = moonlight::encryption::CONTROL_V2 | moonlight::encryption::VIDEO;
+      if ((encryption & required) != required || !encrypt_audio || !enc.rtsp) {
+        logs::log(logs::warning,
+                  "[RTSP] Refusing session {}: encryption is required, the client enabled {:#x}",
+                  session.session_id,
+                  encryption);
+        return error_msg(403, "Forbidden", req.seq_number);
+      }
+    }
+    enc.enabled = encryption;
+  }
+  logs::log(logs::info,
+            "[RTSP] Session {} encryption: RTSP {}, control {}, video {}, audio {}",
+            session.session_id,
+            session.encryption && session.encryption->rtsp ? "on" : "off",
+            encryption & moonlight::encryption::CONTROL_V2 ? "V2" : "V1",
+            encryption & moonlight::encryption::VIDEO ? "on" : "off",
+            encrypt_audio ? "on" : "off");
 
   bool video_format_hevc = args["x-nv-vqos[0].bitStreamFormat"].value_or(0) == 1;
   bool video_format_av1 = args["x-nv-vqos[0].bitStreamFormat"].value_or(0) == 2;
@@ -239,27 +276,29 @@ announce(const RTSP_PACKET &req, const events::StreamSession &session) {
 
       .client_ip = session.ip,
       .rtp_secret_payload = session.rtp_secret_payload,
+
+      .encrypt_video = static_cast<bool>(encryption & moonlight::encryption::VIDEO),
+      .encryption = session.encryption,
   };
   session.event_bus->fire_event(immer::box<events::VideoSession>(video));
 
   // Audio session
   auto high_quality_audio = args["x-nv-audio.surround.AudioQuality"].value_or(0) == 1;
   auto audio_mode = state::get_audio_mode(audio_channels, high_quality_audio);
-  events::AudioSession audio = {
-      .gst_pipeline = session.app->opus_gst_pipeline,
+  events::AudioSession audio = {.gst_pipeline = session.app->opus_gst_pipeline,
 
-      .session_id = session.session_id,
+                                .session_id = session.session_id,
 
-      .encrypt_audio = static_cast<bool>(args["x-nv-general.featureFlags"].value_or(167) & 0x20),
-      .aes_key = session.aes_key,
-      .aes_iv = session.aes_iv,
+                                .encrypt_audio = encrypt_audio,
+                                .aes_key = session.aes_key,
+                                .aes_iv = session.aes_iv,
 
-      .port = session.audio_stream_port,
-      .client_ip = session.ip,
-      .rtp_secret_payload = session.rtp_secret_payload,
+                                .port = session.audio_stream_port,
+                                .client_ip = session.ip,
+                                .rtp_secret_payload = session.rtp_secret_payload,
 
-      .packet_duration = args["x-nv-aqos.packetDuration"].value_or(5),
-      .audio_mode = audio_mode};
+                                .packet_duration = args["x-nv-aqos.packetDuration"].value_or(5),
+                                .audio_mode = audio_mode};
   session.event_bus->fire_event(immer::box<events::AudioSession>(audio));
 
   return ok_msg(req.seq_number);

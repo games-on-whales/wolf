@@ -1,7 +1,9 @@
 #pragma once
 
+#include <cstdint>
 #include <memory>
 #include <openssl/aes.h>
+#include <openssl/evp.h>
 #include <openssl/x509.h>
 #include <optional>
 #include <string>
@@ -100,6 +102,40 @@ std::string aes_decrypt_gcm(std::string_view msg,
                             std::string_view iv = random(AES_BLOCK_SIZE),
                             int iv_size = -1,
                             bool padding = false);
+
+/**
+ * A reusable AES-128-GCM context bound to one key, for streams that seal many small messages with 12-byte IVs
+ * (video packets, encrypted RTSP and control V2). It avoids setting up OpenSSL state for every packet.
+ *
+ * Callers own IV uniqueness: never seal two messages with the same key and IV.
+ * Not thread safe; use one instance per thread.
+ */
+class aes_gcm {
+public:
+  static constexpr std::size_t IV_SIZE = 12;
+  static constexpr std::size_t TAG_SIZE = 16;
+
+  /** @param key: the raw 16 byte AES key */
+  explicit aes_gcm(std::string_view key);
+  aes_gcm(const aes_gcm &) = delete;
+  aes_gcm &operator=(const aes_gcm &) = delete;
+
+  /**
+   * Encrypts plaintext into out (plaintext.size() bytes) and writes the TAG_SIZE bytes tag into tag.
+   * Throws std::runtime_error when OpenSSL fails.
+   */
+  void seal(std::string_view iv, std::string_view plaintext, std::uint8_t *out, std::uint8_t *tag);
+
+  /**
+   * Decrypts ciphertext into out (ciphertext.size() bytes).
+   * @return false when the tag doesn't authenticate the message; out must then be discarded.
+   */
+  bool open(std::string_view iv, std::string_view ciphertext, std::string_view tag, std::uint8_t *out);
+
+private:
+  std::unique_ptr<EVP_CIPHER_CTX, decltype(&::EVP_CIPHER_CTX_free)> enc_;
+  std::unique_ptr<EVP_CIPHER_CTX, decltype(&::EVP_CIPHER_CTX_free)> dec_;
+};
 
 /**
  * Will sign the given message using the private key

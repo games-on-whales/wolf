@@ -25,8 +25,13 @@ using enet_clients_map = immer::map<ENetPeer *, immer::box<events::StreamSession
 
 std::shared_ptr<ENetPeer> to_shared_ptr(ENetPeer *peer);
 
+/**
+ * Encrypts payload for the session's client, with control encryption V2 when the client enabled it,
+ * and sends it. Every packet gets a new sequence number from the session's encryption state.
+ */
 bool encrypt_and_send(std::string_view payload,
                       std::string_view aes_key,
+                      const std::shared_ptr<events::StreamEncryption> &encryption,
                       immer::box<std::shared_ptr<ENetPeer>> connected_client);
 
 bool init();

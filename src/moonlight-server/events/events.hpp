@@ -2,6 +2,7 @@
 
 #define BOOST_THREAD_PROVIDES_FUTURE_CONTINUATION
 #define BOOST_THREAD_PROVIDES_FUTURE
+#include <atomic>
 #include <boost/thread.hpp>
 #include <boost/thread/future.hpp>
 #include <core/audio.hpp>
@@ -17,6 +18,8 @@
 #include <immer/vector.hpp>
 #include <moonlight/control.hpp>
 #include <moonlight/data-structures.hpp>
+#include <moonlight/encryption.hpp>
+#include <mutex>
 #include <rfl.hpp>
 #include <rfl/json.hpp>
 #include <state/serialised_config.hpp>
@@ -236,6 +239,59 @@ enum class ColorSpace : int {
 };
 
 /**
+ * Encryption state shared by every copy of a StreamSession (see moonlight/encryption.hpp).
+ * It lives as long as the session's AES key: a resume creates a new session, key and state.
+ */
+struct StreamEncryption {
+  explicit StreamEncryption(std::string raw_key, moonlight::encryption::Mode mode, int client_core_version)
+      : key(std::move(raw_key)), mode(mode),
+        // corever 1 adds encrypted RTSP on top of video and control V2 (moonlight-common-c
+        // LiGetLaunchUrlQueryParameters)
+        rtsp(mode != moonlight::encryption::Mode::DISABLED && client_core_version >= 1),
+        client_core_version(client_core_version) {}
+
+  /** The raw 16 byte AES key the client sent as `rikey` */
+  const std::string key;
+  const moonlight::encryption::Mode mode;
+  /** RTSP is encrypted: we advertised an rtspenc:// URL and must refuse plaintext RTSP for this session */
+  const bool rtsp;
+  /** `corever` from the launch request; -1 for clients that predate video and control V2 encryption */
+  const int client_core_version;
+
+  /** moonlight::encryption flags the client enabled in its RTSP ANNOUNCE */
+  std::atomic<std::uint32_t> enabled = 0;
+
+  std::mutex rtsp_mutex;
+  moonlight::encryption::ReplayWindow<1> rtsp_replay;
+
+  std::mutex control_mutex;
+  moonlight::encryption::ReplayWindow<64> control_replay;
+  /** Sequence number of the last control packet we sent */
+  std::uint32_t control_seq = 0;
+
+  /** Bumped every time a video pipeline starts with this key, so packet IVs never repeat across restarts */
+  std::atomic<std::uint32_t> video_epoch = 0;
+
+  /** Supported encryption features, as advertised in RTSP DESCRIBE */
+  [[nodiscard]] std::uint32_t supported() const {
+    if (client_core_version < 0) {
+      return 0; // the client won't parse x-ss-general.encryption*
+    }
+    // Control V2 is cheap and fixes V1's 8-bit IVs, so it's always on offer
+    auto flags = moonlight::encryption::CONTROL_V2 | moonlight::encryption::AUDIO;
+    if (mode != moonlight::encryption::Mode::DISABLED) {
+      flags |= moonlight::encryption::VIDEO;
+    }
+    return flags;
+  }
+
+  /** Encryption features the client must enable, as advertised in RTSP DESCRIBE */
+  [[nodiscard]] std::uint32_t requested() const {
+    return mode == moonlight::encryption::Mode::REQUIRED ? supported() : 0;
+  }
+};
+
+/**
  * A VideoSession is created after the param exchange over RTSP
  */
 struct VideoSession {
@@ -262,6 +318,11 @@ struct VideoSession {
 
   std::string client_ip;
   std::array<char, 16> rtp_secret_payload;
+
+  /** Seal every RTP packet with AES-GCM (moonlight::encryption::VIDEO) */
+  bool encrypt_video = false;
+  /** Holds the key and the IV epoch counter; set whenever encrypt_video is. Never serialised. */
+  rfl::Skip<std::shared_ptr<StreamEncryption>> encryption;
 };
 
 struct AudioSession {
@@ -428,6 +489,9 @@ struct StreamSession {
    * So we send out a fake unique IP for each session in order to identify the session back in the RTSP thread.
    */
   std::string rtsp_fake_ip;
+
+  /** Never null for sessions made by create_stream_session() */
+  std::shared_ptr<StreamEncryption> encryption;
 
   // client info
   std::size_t session_id;

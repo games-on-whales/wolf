@@ -5,6 +5,7 @@
 #include <openssl/aes.h>
 #include <openssl/evp.h>
 #include <openssl/rand.h>
+#include <stdexcept>
 
 namespace aes {
 using CIPHER_CTX_ptr = std::unique_ptr<EVP_CIPHER_CTX, decltype(&::EVP_CIPHER_CTX_free)>;
@@ -127,8 +128,10 @@ std::string decrypt_authenticated(EVP_CIPHER_CTX *ctx, std::string_view cipherte
     handle_openssl_error("EVP_CTRL_GCM_SET_TAG failed");
 
   int plaintext_len = len;
+  // Final verifies the GCM tag. handle_openssl_error() only logs, which would hand back plaintext that failed
+  // authentication: throw instead, so callers can drop forged or corrupted messages.
   if (EVP_DecryptFinal_ex(ctx, plaintext + len, &len) != 1)
-    handle_openssl_error("EVP_DecryptFinal_ex failed");
+    throw std::runtime_error("AES-GCM authentication failed");
 
   plaintext_len += len;
   return uc_to_str(plaintext, plaintext_len);

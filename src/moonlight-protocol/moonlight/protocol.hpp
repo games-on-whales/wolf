@@ -152,8 +152,15 @@ XML applist(const immer::vector<App> &apps);
  * @param config: local state
  * @return:
  */
-XML launch_success(const std::string &local_ip, const std::string &rtsp_port);
-// TODO: launch_error()
+/**
+ * @param encrypted_rtsp: advertise an rtspenc:// URL, so that the client encrypts every RTSP message
+ */
+XML launch_success(const std::string &local_ip, const std::string &rtsp_port, bool encrypted_rtsp = false);
 
-XML launch_resume(const std::string &local_ip, const std::string &rtsp_port);
+XML launch_resume(const std::string &local_ip, const std::string &rtsp_port, bool encrypted_rtsp = false);
+
+/**
+ * A failed launch or resume; Moonlight shows status_message to the user.
+ */
+XML launch_error(int status_code, const std::string &status_message);
 } // namespace moonlight
