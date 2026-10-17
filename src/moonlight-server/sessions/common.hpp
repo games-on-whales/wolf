@@ -43,6 +43,11 @@ inline std::chrono::milliseconds get_wayland_socket_wait_timeout() {
 inline bool wait_for_wayland_socket(std::string_view runtime_dir,
                                     const std::string &socket_name,
                                     std::chrono::milliseconds timeout = get_wayland_socket_wait_timeout()) {
+  // Apps with start_virtual_compositor = false get no socket at all: nothing to wait for
+  if (socket_name.empty()) {
+    return true;
+  }
+
   if (auto skip_wait = utils::get_env("WOLF_SKIP_WAYLAND_SOCKET_WAIT")) {
     if (std::string_view(skip_wait) == "TRUE" || std::string_view(skip_wait) == "1") {
       return true;

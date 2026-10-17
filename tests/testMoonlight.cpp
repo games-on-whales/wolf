@@ -16,6 +16,7 @@ using Catch::Matchers::Equals;
 #include <range/v3/view.hpp>
 #include <rest/helpers.hpp>
 #include <rfl/toml.hpp>
+#include <sessions/common.hpp>
 #include <state/config.hpp>
 #include <streaming/streaming.hpp>
 #include <sys/stat.h>
@@ -255,6 +256,26 @@ TEST_CASE("Default config: every encoder has video_params", "[LocalState]") {
       REQUIRE(!encoder.video_params_zero_copy.value_or(has_default ? plugin_default->second.video_params_zero_copy : "")
                    .empty());
     }
+  }
+}
+
+TEST_CASE("Wayland socket wait", "[Sessions]") {
+  // CTest sets WOLF_SKIP_WAYLAND_SOCKET_WAIT for the whole suite; this test needs the real wait
+  std::optional<std::string> skip_wait;
+  if (auto env = std::getenv("WOLF_SKIP_WAYLAND_SOCKET_WAIT")) {
+    skip_wait = env;
+  }
+  ::unsetenv("WOLF_SKIP_WAYLAND_SOCKET_WAIT");
+  auto runtime_dir = std::filesystem::temp_directory_path().string();
+
+  // No virtual compositor (e.g. "Test ball"): no socket name, must not wait for the runtime dir to become one
+  REQUIRE(wolf::core::sessions::wait_for_wayland_socket(runtime_dir, "", std::chrono::milliseconds(100)));
+  REQUIRE_FALSE(wolf::core::sessions::wait_for_wayland_socket(runtime_dir,
+                                                              "wolf-no-such-socket",
+                                                              std::chrono::milliseconds(100)));
+
+  if (skip_wait) {
+    ::setenv("WOLF_SKIP_WAYLAND_SOCKET_WAIT", skip_wait->c_str(), 1);
   }
 }
 
