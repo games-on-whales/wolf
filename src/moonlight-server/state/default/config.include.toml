@@ -475,6 +475,18 @@ video/x-h264, profile=main, stream-format=byte-stream\
 [[gstreamer.video.h264_encoders]]
 plugin_name = "x264" # SW Encoding
 check_elements = ["x264enc"]
+video_params = """
+videoconvertscale !
+videorate !
+video/x-raw, width={width}, height={height}, framerate={fps}/1, format=I420,
+chroma-site={color_range}, colorimetry={color_space}\
+"""
+video_params_zero_copy = """
+videoconvertscale !
+videorate !
+video/x-raw, width={width}, height={height}, framerate={fps}/1, format=I420,
+chroma-site={color_range}, colorimetry={color_space}\
+"""
 encoder_pipeline = """
 x264enc pass=qual tune=zerolatency speed-preset=superfast b-adapt=false bframes=0 ref=1
 sliced-threads=true threads={slices_per_frame} option-string="slices={slices_per_frame}:keyint=infinite:open-gop=0"

@@ -15,6 +15,7 @@ using Catch::Matchers::Equals;
 #include <moonlight/protocol.hpp>
 #include <range/v3/view.hpp>
 #include <rest/helpers.hpp>
+#include <rfl/toml.hpp>
 #include <state/config.hpp>
 #include <streaming/streaming.hpp>
 #include <sys/stat.h>
@@ -236,6 +237,25 @@ TEST_CASE("LocalState concurrent updates", "[LocalState]") {
           initial_clients + n_threads + 2);
   REQUIRE(!std::filesystem::exists(std::filesystem::symlink_status(cfg_file + ".tmp")));
   std::filesystem::remove(cfg_file);
+}
+
+TEST_CASE("Default config: every encoder has video_params", "[LocalState]") {
+  constexpr char const *default_toml =
+#include <state/default/config.include.toml>
+      ;
+  auto cfg = rfl::toml::read<wolf::config::WolfConfig, rfl::DefaultIfMissing>(default_toml).value();
+  auto video = cfg.gstreamer.video;
+  for (const auto &encoders : {video.h264_encoders, video.hevc_encoders, video.av1_encoders}) {
+    for (const auto &encoder : encoders) {
+      INFO("plugin_name: " << encoder.plugin_name << ", encoder: " << encoder.check_elements.at(0));
+      auto plugin_default = video.defaults.find(encoder.plugin_name);
+      auto has_default = plugin_default != video.defaults.end();
+      // An encoder without its own params falls back to the plugin default, otherwise to an empty string
+      REQUIRE(!encoder.video_params.value_or(has_default ? plugin_default->second.video_params : "").empty());
+      REQUIRE(!encoder.video_params_zero_copy.value_or(has_default ? plugin_default->second.video_params_zero_copy : "")
+                   .empty());
+    }
+  }
 }
 
 TEST_CASE("Mocked serverinfo", "[MoonlightProtocol]") {
