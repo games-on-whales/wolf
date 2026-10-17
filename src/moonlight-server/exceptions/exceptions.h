@@ -8,10 +8,12 @@
 
 #include <cpptrace/cpptrace.hpp>
 #include <csignal>
+#include <cstdio>
 #include <fcntl.h>
 #include <filesystem>
 #include <helpers/logger.hpp>
 #include <helpers/utils.hpp>
+#include <iostream>
 #include <unistd.h>
 
 using namespace std::string_literals;
@@ -68,7 +70,9 @@ static void shutdown_handler(int signum) {
     auto stack_file = backtrace_file_src();
     safe_dump_stacktrace_to(stack_file);
   }
-  exit(signum);
+  // _exit, not exit: exit() isn't async-signal-safe and runs atexit handlers/static destructors, which after a crash
+  // (often inside a driver) can crash again or deadlock on a lock the crashed thread holds, hanging until SIGKILL.
+  _exit(signum);
 }
 
 /**
@@ -77,13 +81,18 @@ static void shutdown_handler(int signum) {
 static void check_exceptions() {
   auto stack_file = backtrace_file_src();
   if (std::filesystem::exists(stack_file)) {
-    if (auto object_trace = load_stacktrace_from(stack_file)) {
-      object_trace->resolve().print();
-    }
+    // Rename first: if printing kills us (e.g. SIGPIPE on a dead log pipe) the next start mustn't trip on it again
     auto now = std::chrono::system_clock::now();
-    std::filesystem::rename(
-        stack_file,
-        fmt::format("{}/backtrace.{:%Y-%m-%d-%H-%M-%S}.dump", utils::get_env("WOLF_CFG_FOLDER", "."), now));
+    auto old_stack_file =
+        fmt::format("{}/backtrace.{:%Y-%m-%d-%H-%M-%S}.dump", utils::get_env("WOLF_CFG_FOLDER", "."), now);
+    std::filesystem::rename(stack_file, old_stack_file);
+    if (auto object_trace = load_stacktrace_from(old_stack_file)) {
+      object_trace->resolve().print();
+      // stdout is block-buffered when redirected (docker/k8s logs) and a crash's _exit drops the buffer: flush now so
+      // a crash loop still shows the previous crash's trace
+      std::cout.flush();
+      std::fflush(stdout);
+    }
   }
 }
 
