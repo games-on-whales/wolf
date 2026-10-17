@@ -10,11 +10,13 @@ using namespace moonlight::control::pkts;
 using namespace wolf::core;
 
 /**
+ * Dispatches a raw input packet of pkt_len bytes; packets shorter than their type requires are dropped.
  * Side effect: session devices might be updated when hotplugging
  */
 void handle_input(events::StreamSession &session,
                   immer::box<std::shared_ptr<ENetPeer>> connected_client,
-                  INPUT_PKT *pkt);
+                  const INPUT_PKT *pkt,
+                  std::size_t pkt_len);
 
 void mouse_move_rel(const MOUSE_MOVE_REL_PACKET &pkt, events::StreamSession &session);
 

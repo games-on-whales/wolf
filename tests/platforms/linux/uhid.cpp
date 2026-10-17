@@ -25,7 +25,7 @@ TEST_CASE("Create PS5 pad with CONTROLLER_ARRIVAL", "[UHID]") {
       .capabilities = pkts::ANALOG_TRIGGERS | pkts::RUMBLE | pkts::TOUCHPAD | pkts::GYRO};
   c_pkt.type = pkts::CONTROLLER_ARRIVAL;
 
-  control::handle_input(session, {}, &c_pkt);
+  control::handle_input(session, {}, &c_pkt, sizeof(c_pkt));
   std::this_thread::sleep_for(std::chrono::milliseconds(400));
 
   auto joypad = session.joypads->load()->at(controller_number);
@@ -57,7 +57,7 @@ TEST_CASE("Create PS5 pad with CONTROLLER_ARRIVAL", "[UHID]") {
                                                         .y = {0, 255, 255, 255}};
       touch_packet.type = pkts::CONTROLLER_TOUCH;
 
-      control::handle_input(session, {}, &touch_packet);
+      control::handle_input(session, {}, &touch_packet, sizeof(touch_packet));
       auto events = fetch_events_debug(touch_rel_dev);
       REQUIRE(events.size() == 3);
 
@@ -82,7 +82,7 @@ TEST_CASE("Create PS5 pad with CONTROLLER_ARRIVAL", "[UHID]") {
                                                        .y = {0, 255, 255, 255}};
       touch_2_pkt.type = pkts::CONTROLLER_TOUCH;
 
-      control::handle_input(session, {}, &touch_2_pkt);
+      control::handle_input(session, {}, &touch_2_pkt, sizeof(touch_2_pkt));
       auto events = fetch_events_debug(touch_rel_dev);
       REQUIRE(events.size() == 4);
 
@@ -111,7 +111,7 @@ TEST_CASE("Create PS5 pad with CONTROLLER_ARRIVAL", "[UHID]") {
                                                        .y = {0}};
       touch_2_pkt.type = pkts::CONTROLLER_TOUCH;
 
-      control::handle_input(session, {}, &touch_2_pkt);
+      control::handle_input(session, {}, &touch_2_pkt, sizeof(touch_2_pkt));
       auto events = fetch_events_debug(touch_rel_dev);
       REQUIRE(events.size() == 4);
 
@@ -140,7 +140,7 @@ TEST_CASE("Create PS5 pad with CONTROLLER_ARRIVAL", "[UHID]") {
                                                        .y = {0}};
       touch_2_pkt.type = pkts::CONTROLLER_TOUCH;
 
-      control::handle_input(session, {}, &touch_2_pkt);
+      control::handle_input(session, {}, &touch_2_pkt, sizeof(touch_2_pkt));
       auto events = fetch_events_debug(touch_rel_dev);
       REQUIRE(events.size() == 4); // TODO: why there are no ABS_X and ABS_Y?
 
@@ -172,7 +172,7 @@ TEST_CASE("Create PS5 pad with CONTROLLER_ARRIVAL", "[UHID]") {
                                                      .z = {0, 0, 0, 0}};
     motion_pkt.type = pkts::CONTROLLER_MOTION;
 
-    control::handle_input(session, {}, &motion_pkt);
+    control::handle_input(session, {}, &motion_pkt, sizeof(motion_pkt));
     auto events = fetch_events_debug(motion_dev);
     REQUIRE(events.size() >= 5);
     // TODO: seems that I only get MSC_TIMESTAMP here
