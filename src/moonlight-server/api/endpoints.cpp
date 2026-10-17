@@ -10,11 +10,13 @@ namespace wolf::api {
 
 void UnixSocketServer::endpoint_Events(const HTTPRequest &req, std::shared_ptr<UnixSocket> socket) {
   // curl -N --unix-socket /tmp/wolf.sock http://localhost/api/v1/events
-  state_->sockets.push_back(socket);
   send_http(socket,
             200,
             {{"Content-Type: text/event-stream"}, {"Connection: keep-alive"}, {"Cache-Control: no-cache"}},
             ""); // Inform clients this is going to be SS
+  // Endpoints run on the HTTP thread pool, the list of sockets belongs to the io_context thread.
+  // Registered after queueing the headers, so that no event can be sent before them.
+  boost::asio::dispatch(state_->io_context, [this, socket]() { state_->sockets.push_back(socket); });
 }
 
 void UnixSocketServer::endpoint_PendingPairRequest(const HTTPRequest &req, std::shared_ptr<UnixSocket> socket) {

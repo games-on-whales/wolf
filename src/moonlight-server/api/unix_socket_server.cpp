@@ -5,6 +5,7 @@ namespace wolf::api {
 using namespace wolf::core;
 
 constexpr auto SSE_KEEPALIVE_INTERVAL = std::chrono::seconds(15);
+constexpr std::size_t MAX_WRITE_QUEUE_BYTES = 64 * 1024 * 1024;
 
 std::string to_str(boost::asio::streambuf &streambuf, std::size_t start, std::size_t end) {
   return {buffers_begin(streambuf.data()) + start, buffers_begin(streambuf.data()) + start + end};
@@ -340,23 +341,27 @@ void UnixSocketServer::sse_keepalive(const boost::system::error_code &e) {
     return;
   }
   cleanup_sockets();
-  sse_broadcast(":keepalive\n\n");
+  // Only idle connections need a keepalive. Queued behind a large backlog, it would also count towards
+  // MAX_WRITE_QUEUE_BYTES and drop a subscriber that is still reading.
+  // The timer runs on the io_context thread, which owns the sockets and their write queues.
+  static const auto keepalive = std::make_shared<const std::string>(":keepalive\n\n");
+  for (const auto &socket : state_->sockets) {
+    if (socket->write_queue.empty()) {
+      queue_write(socket, keepalive);
+    }
+  }
   state_->sse_keepalive_timer.expires_after(SSE_KEEPALIVE_INTERVAL);
   state_->sse_keepalive_timer.async_wait([this](auto e) { sse_keepalive(e); });
 }
 
-void UnixSocketServer::sse_broadcast(const std::string &payload) {
-  for (auto &socket : state_->sockets) {
-    boost::asio::async_write(socket->socket,
-                             boost::asio::buffer(payload),
-                             [this, socket](const boost::system::error_code &ec, std::size_t /*length*/) {
-                               if (ec) {
-                                 logs::log(logs::debug, "[API] Error sending event: {}", ec.message());
-                                 close(*socket);
-                                 cleanup_sockets();
-                               }
-                             });
-  }
+void UnixSocketServer::sse_broadcast(std::string payload) {
+  // Events are fired from any thread: move onto the io_context thread before touching the list of sockets
+  boost::asio::dispatch(state_->io_context,
+                        [this, payload = std::make_shared<const std::string>(std::move(payload))]() {
+                          for (const auto &socket : state_->sockets) {
+                            queue_write(socket, payload);
+                          }
+                        });
 }
 
 void UnixSocketServer::broadcast_event(const std::string &event_type, const std::string &event_data) {
@@ -379,22 +384,71 @@ void UnixSocketServer::send_http(std::shared_ptr<UnixSocket> socket,
                                  const std::vector<std::string_view> &http_headers,
                                  std::string_view body) {
   auto http_reply = fmt::format("HTTP/1.0 {} OK\r\n{}\r\n\r\n{}", status_code, fmt::join(http_headers, "\r\n"), body);
-  send_data(socket, http_reply);
+  send_data(socket, std::move(http_reply));
 }
 
-void UnixSocketServer::send_data(std::shared_ptr<UnixSocket> socket, std::string_view data) {
+void UnixSocketServer::send_data(std::shared_ptr<UnixSocket> socket, std::string data) {
+  // Some endpoints reply from their own thread: move onto the io_context thread, which owns the write queue
+  boost::asio::dispatch(
+      state_->io_context,
+      [this, socket, data = std::make_shared<const std::string>(std::move(data))]() { queue_write(socket, data); });
+}
+
+void UnixSocketServer::queue_write(const std::shared_ptr<UnixSocket> &socket, std::shared_ptr<const std::string> data) {
+  if (!socket->is_alive) {
+    return;
+  }
+  // A client that stops reading (e.g. an SSE subscriber) would otherwise make us buffer every event forever
+  // Only the backlog behind the write in flight counts, and only once it's already over the limit: a client that
+  // is less than MAX_WRITE_QUEUE_BYTES behind gets the next message, however big it is.
+  // A single queued message bigger than the limit counts as backlog too, so the client will be dropped if anything
+  // else queues behind it before it's sent; API messages are far below that size.
+  if (!socket->write_queue.empty() &&
+      socket->write_queue_bytes - socket->write_queue.front()->size() > MAX_WRITE_QUEUE_BYTES) {
+    logs::log(logs::warning,
+              "[API] Client is not reading, dropping it after {} queued bytes",
+              socket->write_queue_bytes);
+    // The queue is released by the completion of the write in flight, which might already be pending.
+    // Not cleanup_sockets(): we might be inside the sse_broadcast loop over the sockets
+    close(*socket);
+    return;
+  }
+  socket->write_queue_bytes += data->size();
+  socket->write_queue.push_back(std::move(data));
+  if (socket->write_queue.size() == 1) { // Otherwise the write in flight will pick it up once done
+    write_next(socket);
+  }
+}
+
+void UnixSocketServer::write_next(const std::shared_ptr<UnixSocket> &socket) {
   boost::asio::async_write(socket->socket,
-                           boost::asio::buffer(data),
+                           boost::asio::buffer(*socket->write_queue.front()),
                            [this, socket](const boost::system::error_code &ec, std::size_t /*length*/) {
-                             if (ec) {
-                               logs::log(logs::error, "[API] Error sending data: {}", ec.message());
+                             if (ec || !socket->is_alive) {
+                               if (ec) {
+                                 logs::log(logs::debug, "[API] Error sending data: {}", ec.message());
+                               }
+                               socket->write_queue.clear();
+                               socket->write_queue_bytes = 0;
                                close(*socket);
+                               cleanup_sockets();
+                               return;
+                             }
+                             socket->write_queue_bytes -= socket->write_queue.front()->size();
+                             socket->write_queue.pop_front();
+                             if (!socket->write_queue.empty()) {
+                               write_next(socket);
                              }
                            });
 }
 
 void UnixSocketServer::handle_request(const HTTPRequest &req, std::shared_ptr<UnixSocket> socket) {
-  logs::log(logs::debug, "[API] Received request: {} {} - {}", rfl::enum_to_string(req.method), req.path, req.body);
+  // Bodies can be megabytes (e.g. apps with inline pipelines): only log the start
+  logs::log(logs::debug,
+            "[API] Received request: {} {} - {}",
+            rfl::enum_to_string(req.method),
+            req.path,
+            std::string_view(req.body).substr(0, 1024));
 
   if (!state_->http.handle_request(req, socket)) {
     send_http(socket, 404, "");

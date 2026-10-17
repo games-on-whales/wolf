@@ -3,6 +3,11 @@
 #include <catch2/matchers/catch_matchers_string.hpp>
 #include <curl/curl.h>
 #include <filesystem>
+#include <future>
+#include <poll.h>
+#ifdef __GLIBC__
+#include <malloc.h>
+#endif
 #include <helpers/tsqueue.hpp>
 #include <helpers/utils.hpp>
 #include <rfl/toml.hpp>
@@ -21,6 +26,30 @@ std::string api_runtime_dir() {
 
 std::string api_socket_path() {
   return (std::filesystem::path(api_runtime_dir()) / "wolf.sock").string();
+}
+
+/**
+ * Start the API server and wait until it accepts connections.
+ * Servers started by earlier tests keep running: their socket file is removed first, so that we can't reach one of
+ * them instead of the new server.
+ */
+void start_api_server(const immer::box<state::AppState> &app_state) {
+  auto socket_path = api_socket_path();
+  std::filesystem::remove(socket_path);
+  std::thread([app_state, runtime_dir = api_runtime_dir()]() {
+    wolf::api::start_server(runtime_dir, app_state);
+  }).detach();
+  for (int attempt = 0; attempt < 500; attempt++) {
+    boost::asio::io_context ctx;
+    boost::asio::local::stream_protocol::socket probe(ctx);
+    boost::system::error_code ec;
+    probe.connect(boost::asio::local::stream_protocol::endpoint(socket_path), ec);
+    if (!ec) {
+      return;
+    }
+    std::this_thread::sleep_for(std::chrono::milliseconds(10));
+  }
+  FAIL("The API server didn't start");
 }
 
 /**
@@ -59,7 +88,7 @@ req(CURL *handle,
 
   /* Pass POST params (if present) */
   if (method == HTTPMethod::POST && !post_body.empty()) {
-    logs::log(logs::trace, "[CURL] POST: {}", post_body);
+    logs::log(logs::trace, "[CURL] POST: {}", post_body.substr(0, 1024));
 
     curl_easy_setopt(handle, CURLOPT_POST, 1L);
     headers = curl_slist_append(headers, "Content-type: application/json");
@@ -92,7 +121,7 @@ req(CURL *handle,
     curl_easy_getinfo(handle, CURLINFO_RESPONSE_CODE, &response_code);
     // Avoid printing binary output if the target is "/api/v1/utils/get-icon"
     if (target.find("/api/v1/utils/get-icon") == std::string::npos) {
-      logs::log(logs::trace, "[CURL] Received {} - {}", response_code, read_buf);
+      logs::log(logs::trace, "[CURL] Received {} - {}", response_code, std::string_view(read_buf).substr(0, 1024));
     }
     return {{response_code, read_buf}};
   }
@@ -117,9 +146,7 @@ TEST_CASE("Pair APIs", "[API]") {
   auto runtime_dir = api_runtime_dir();
   auto socket_path = api_socket_path();
   // Start the server
-  std::thread server_thread([app_state, runtime_dir]() { wolf::api::start_server(runtime_dir, app_state); });
-  server_thread.detach();
-  std::this_thread::sleep_for(std::chrono::milliseconds(42)); // Wait for the server to start
+  start_api_server(app_state);
 
   auto curl = curl_ptr(curl_easy_init(), ::curl_easy_cleanup);
 
@@ -227,9 +254,7 @@ TEST_CASE("APPs APIs", "[API]") {
   auto runtime_dir = api_runtime_dir();
   auto socket_path = api_socket_path();
   // Start the server
-  std::thread server_thread([app_state, runtime_dir]() { wolf::api::start_server(runtime_dir, app_state); });
-  server_thread.detach();
-  std::this_thread::sleep_for(std::chrono::milliseconds(42)); // Wait for the server to start
+  start_api_server(app_state);
 
   auto curl = curl_ptr(curl_easy_init(), ::curl_easy_cleanup);
 
@@ -393,6 +418,26 @@ TEST_CASE("APPs APIs", "[API]") {
     response = req(curl.get(), HTTPMethod::POST, "http://localhost/api/v1/apps/delete", rfl::json::write(app_delete));
     REQUIRE(response);
   }
+  // Replies bigger than a single socket write must arrive intact
+  auto big_app = app;
+  big_app.h264_gst_pipeline = std::string(4 * 1024 * 1024, 'x');
+  response = req(curl.get(), HTTPMethod::POST, "http://localhost/api/v1/apps/add", rfl::json::write(big_app));
+  REQUIRE(response);
+  REQUIRE_THAT(response->second, Equals("{\"success\":true}"));
+#ifdef __GLIBC__
+  mallopt(M_PERTURB, 165); // scrub freed memory, so a reply sent from a freed buffer is reliably corrupted
+#endif
+  response = req(curl.get(), HTTPMethod::GET, "http://localhost/api/v1/apps");
+#ifdef __GLIBC__
+  mallopt(M_PERTURB, 0);
+#endif
+  REQUIRE(response);
+  auto apps4 = rfl::json::read<AppListResponse>(response->second);
+  REQUIRE(apps4);
+  REQUIRE(apps4.value().apps.size() == 3);
+  REQUIRE(apps4.value().apps[2].h264_gst_pipeline == big_app.h264_gst_pipeline);
+  response = req(curl.get(), HTTPMethod::POST, "http://localhost/api/v1/apps/delete", rfl::json::write(app_delete));
+  REQUIRE(response);
 }
 
 TEST_CASE("Profile APIs", "[API]") {
@@ -411,9 +456,7 @@ TEST_CASE("Profile APIs", "[API]") {
   auto runtime_dir = api_runtime_dir();
   auto socket_path = api_socket_path();
   // Start the server
-  std::thread server_thread([app_state, runtime_dir]() { wolf::api::start_server(runtime_dir, app_state); });
-  server_thread.detach();
-  std::this_thread::sleep_for(std::chrono::milliseconds(42)); // Wait for the server to start
+  start_api_server(app_state);
 
   auto curl = curl_ptr(curl_easy_init(), ::curl_easy_cleanup);
 
@@ -494,9 +537,7 @@ TEST_CASE("Sessions APIs", "[API]") {
   auto runtime_dir = api_runtime_dir();
   auto socket_path = api_socket_path();
   // Start the server
-  std::thread server_thread([app_state, runtime_dir]() { wolf::api::start_server(runtime_dir, app_state); });
-  server_thread.detach();
-  std::this_thread::sleep_for(std::chrono::milliseconds(42)); // Wait for the server to start
+  start_api_server(app_state);
 
   auto curl = curl_ptr(curl_easy_init(), ::curl_easy_cleanup);
 
@@ -593,9 +634,7 @@ TEST_CASE("Session APIs without app_id or client_id", "[API]") {
   auto runtime_dir = api_runtime_dir();
   auto socket_path = api_socket_path();
   // Start the server
-  std::thread server_thread([app_state, runtime_dir]() { wolf::api::start_server(runtime_dir, app_state); });
-  server_thread.detach();
-  std::this_thread::sleep_for(std::chrono::milliseconds(42)); // Wait for the server to start
+  start_api_server(app_state);
 
   auto curl = curl_ptr(curl_easy_init(), ::curl_easy_cleanup);
 
@@ -915,9 +954,7 @@ TEST_CASE("SSE APIs", "[API]") {
   auto runtime_dir = api_runtime_dir();
   auto socket_path = api_socket_path();
   // Start the server
-  std::thread server_thread([app_state, runtime_dir]() { wolf::api::start_server(runtime_dir, app_state); });
-  server_thread.detach();
-  std::this_thread::sleep_for(std::chrono::milliseconds(42)); // Wait for the server to start
+  start_api_server(app_state);
 
   auto curl = curl_ptr(curl_easy_init(), ::curl_easy_cleanup);
 
@@ -930,10 +967,110 @@ TEST_CASE("SSE APIs", "[API]") {
   std::this_thread::sleep_for(std::chrono::milliseconds(42)); // Wait for the SSE client to start
 
   // Test out one of the events
-  event_bus->fire_event(events::IDRRequestEvent{.session_id = 42});
-
-  auto event = queue->pop();
+  // The subscriber is registered asynchronously: an event fired before that reaches nobody, so retry until one lands
+  std::optional<SSEEvent> event;
+  for (int attempt = 0; attempt < 50 && !event; attempt++) {
+    event_bus->fire_event(events::IDRRequestEvent{.session_id = 42});
+    event = queue->pop();
+  }
   REQUIRE(event.has_value());
   REQUIRE_THAT(event->event, Equals("wolf::core::events::IDRRequestEvent"));
   REQUIRE_THAT(event->data, Equals("{\"session_id\":\"42\"}"));
+}
+
+TEST_CASE("SSE APIs large events", "[API]") {
+  auto event_bus = std::make_shared<events::EventBusType>();
+  auto running_sessions = std::make_shared<immer::atom<immer::vector<events::StreamSession>>>();
+  auto config = immer::box<state::Config>(state::load_or_default("config.test.toml", event_bus, running_sessions));
+  auto app_state = immer::box<state::AppState>(state::AppState{
+      .config = config,
+      .pairing_cache = std::make_shared<immer::atom<immer::map<std::string, state::PairCache>>>(),
+      .pairing_atom = std::make_shared<immer::atom<immer::map<std::string, immer::box<events::PairSignal>>>>(),
+      .event_bus = event_bus,
+      .running_sessions = running_sessions});
+
+  auto runtime_dir = api_runtime_dir();
+  auto socket_path = api_socket_path();
+  start_api_server(app_state);
+
+  boost::asio::io_context client_ctx;
+  boost::asio::local::stream_protocol::socket client(client_ctx);
+  client.connect(boost::asio::local::stream_protocol::endpoint(socket_path));
+  boost::asio::write(client, boost::asio::buffer(std::string_view("GET /api/v1/events HTTP/1.0\r\n\r\n")));
+  boost::asio::streambuf headers;
+  boost::asio::read_until(client, headers, "\r\n\r\n");
+  std::string received(boost::asio::buffers_begin(headers.data()), boost::asio::buffers_end(headers.data()));
+  received = received.substr(received.find("\r\n\r\n") + 4);
+
+  // Each event is bigger than the socket buffer, so the first write is still in flight when the second one is queued
+  auto first = events::DockerContainerCreated{.container_id = std::string(1024 * 1024, 'a')};
+  auto second = events::DockerContainerCreated{.container_id = std::string(1024 * 1024, 'b')};
+  auto as_sse = [](const events::DockerContainerCreated &ev) {
+    return fmt::format("event: wolf::core::events::DockerContainerCreated\ndata: {}\n\n", rfl::json::write(ev));
+  };
+  auto expected = as_sse(first) + as_sse(second);
+#ifdef __GLIBC__
+  mallopt(M_PERTURB, 165); // scrub freed memory, so an event sent from a freed buffer is reliably corrupted
+#endif
+  event_bus->fire_event(immer::box<events::DockerContainerCreated>(first));
+  event_bus->fire_event(immer::box<events::DockerContainerCreated>(second));
+
+  std::array<char, 64 * 1024> chunk{};
+  while (received.size() < expected.size()) {
+    received.append(chunk.data(), client.read_some(boost::asio::buffer(chunk)));
+    // A keepalive may legitimately land between two events
+    for (auto pos = received.find(":keepalive\n\n"); pos != std::string::npos; pos = received.find(":keepalive\n\n")) {
+      received.erase(pos, 12);
+    }
+  }
+#ifdef __GLIBC__
+  mallopt(M_PERTURB, 0);
+#endif
+  REQUIRE(received.size() == expected.size());
+  // Compare by offset: printing two 2 MiB strings on failure is useless
+  auto first_mismatch = std::mismatch(received.begin(), received.end(), expected.begin()).first - received.begin();
+  REQUIRE(first_mismatch == static_cast<long>(expected.size()));
+
+  {
+    // A subscriber that keeps up gets every event, even when a single one is bigger than MAX_WRITE_QUEUE_BYTES
+    auto huge_event = events::DockerContainerCreated{.container_id = std::string(65 * 1024 * 1024, 'h')};
+    auto huge_expected = as_sse(huge_event) + as_sse(huge_event);
+    std::string huge_received;
+    huge_received.reserve(huge_expected.size());
+    // Both are queued before we start reading: the first one is still in flight when the second one arrives
+    event_bus->fire_event(immer::box<events::DockerContainerCreated>(huge_event));
+    event_bus->fire_event(immer::box<events::DockerContainerCreated>(huge_event));
+    std::this_thread::sleep_for(std::chrono::milliseconds(500));
+    std::vector<char> buf(1024 * 1024);
+    boost::system::error_code read_ec;
+    while (huge_received.size() < huge_expected.size() && !read_ec) {
+      huge_received.append(buf.data(), client.read_some(boost::asio::buffer(buf), read_ec));
+    }
+    for (auto pos = huge_received.find(":keepalive\n\n"); pos != std::string::npos;
+         pos = huge_received.find(":keepalive\n\n")) {
+      huge_received.erase(pos, 12);
+    }
+    REQUIRE(huge_received.size() == huge_expected.size());
+    REQUIRE(huge_received.compare(huge_expected) == 0);
+  }
+
+  // A subscriber that stops reading is dropped instead of having every event buffered for it
+  auto big_event = events::DockerContainerCreated{.container_id = std::string(1024 * 1024, 'c')};
+  for (int i = 0; i < 80; i++) { // More than MAX_WRITE_QUEUE_BYTES
+    event_bus->fire_event(immer::box<events::DockerContainerCreated>(big_event));
+  }
+  std::this_thread::sleep_for(std::chrono::milliseconds(500)); // Let the server queue them up
+  // Fail instead of hanging if the server never drops us (keepalives would keep a blocking read going forever)
+  client.non_blocking(true);
+  auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(10);
+  boost::system::error_code ec;
+  std::size_t drained = 0;
+  while (ec != boost::asio::error::eof && std::chrono::steady_clock::now() < deadline) {
+    pollfd fd = {.fd = client.native_handle(), .events = POLLIN, .revents = 0};
+    if (poll(&fd, 1, 100) > 0) {
+      drained += client.read_some(boost::asio::buffer(chunk), ec);
+    }
+  }
+  REQUIRE(ec == boost::asio::error::eof);
+  REQUIRE(drained < 80 * big_event.container_id.size());
 }

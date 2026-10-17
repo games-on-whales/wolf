@@ -1,5 +1,7 @@
 #pragma once
 
+#include <deque>
+
 #include <api/http_server.hpp>
 #include <events/events.hpp>
 #include <events/reflectors.hpp>
@@ -192,6 +194,13 @@ struct DockerPullImageResponse {
 struct UnixSocket {
   boost::asio::local::stream_protocol::socket socket;
   bool is_alive = true;
+  /**
+   * Pending writes, only touched from the io_context thread.
+   * The front one is in flight: async_write needs its buffer alive until it completes, and a second async_write
+   * on the same socket would interleave its bytes with the first one.
+   */
+  std::deque<std::shared_ptr<const std::string>> write_queue;
+  std::size_t write_queue_bytes = 0;
 };
 
 class UnixSocketServer {
@@ -240,7 +249,7 @@ private:
   void endpoint_DockerInspectImage(const HTTPRequest &req, std::shared_ptr<UnixSocket> socket);
   void endpoint_DockerPullImage(const HTTPRequest &req, std::shared_ptr<UnixSocket> socket);
 
-  void sse_broadcast(const std::string &payload);
+  void sse_broadcast(std::string payload);
   void sse_keepalive(const boost::system::error_code &e);
 
   void send_http(std::shared_ptr<UnixSocket> socket, int status_code, std::string_view body);
@@ -248,7 +257,9 @@ private:
                  int status_code,
                  const std::vector<std::string_view> &http_headers,
                  std::string_view body);
-  void send_data(std::shared_ptr<UnixSocket> socket, std::string_view data);
+  void send_data(std::shared_ptr<UnixSocket> socket, std::string data);
+  void queue_write(const std::shared_ptr<UnixSocket> &socket, std::shared_ptr<const std::string> data);
+  void write_next(const std::shared_ptr<UnixSocket> &socket);
 
   void handle_request(const HTTPRequest &req, std::shared_ptr<UnixSocket> socket);
   void start_connection(std::shared_ptr<UnixSocket> socket);
