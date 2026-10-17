@@ -205,6 +205,50 @@ events::App parse_app(const BaseApp &app,
       .start_audio_server = app.start_audio_server.value_or(true)};
 }
 
+/**
+ * Encoders ship their params inline or via [gstreamer.video.defaults.<plugin_name>]
+ */
+static std::string resolve_video_params(const GstEncoder &encoder,
+                                        const std::map<std::string, GstEncoderDefault> &defaults,
+                                        bool use_zero_copy) {
+  auto plugin_default = utils::get_optional(defaults, encoder.plugin_name).value_or(GstEncoderDefault{});
+  return use_zero_copy ? encoder.video_params_zero_copy.value_or(plugin_default.video_params_zero_copy)
+                       : encoder.video_params.value_or(plugin_default.video_params);
+}
+
+std::string encoder_video_params(std::string_view tech,
+                                 const GstEncoder &encoder,
+                                 const GstVideoCfg &video_cfg,
+                                 const GstVideoCfg &embedded_cfg,
+                                 bool use_zero_copy) {
+  auto params = resolve_video_params(encoder, video_cfg.defaults, use_zero_copy);
+  if (!params.empty()) {
+    return params;
+  }
+  const auto &embedded_encoders = tech == "h264"   ? embedded_cfg.h264_encoders
+                                  : tech == "h265" ? embedded_cfg.hevc_encoders
+                                                   : embedded_cfg.av1_encoders;
+  auto field = use_zero_copy ? "video_params_zero_copy" : "video_params";
+  for (const auto &embedded : embedded_encoders) {
+    if (embedded.plugin_name == encoder.plugin_name) {
+      params = resolve_video_params(embedded, embedded_cfg.defaults, use_zero_copy);
+      if (!params.empty()) {
+        logs::log(logs::warning,
+                  "Encoder {} has no {} in config.toml, using the built-in default; "
+                  "add it to config.toml to silence this warning",
+                  encoder.plugin_name,
+                  field);
+        return params;
+      }
+    }
+  }
+  logs::log(logs::error,
+            "Encoder {} has no {} in config.toml, its pipeline will fail to start",
+            encoder.plugin_name,
+            field);
+  return params;
+}
+
 Config load_or_default(const std::string &source,
                        const std::shared_ptr<events::EventBusType> &ev_bus,
                        SessionsAtoms running_sessions) {
@@ -349,30 +393,18 @@ Config load_or_default(const std::string &source,
     logs::log(logs::warning, "Unable to find an AV1 encoder, disabling it");
   }
 
-  auto empty_enc = GstEncoderDefault{};
-  auto default_h264 = utils::get_optional(default_gst_encoder_settings, h264_encoder.value_or(GstEncoder{}).plugin_name)
-                          .value_or(empty_enc);
-  auto default_hevc = utils::get_optional(default_gst_encoder_settings, hevc_encoder.value_or(GstEncoder{}).plugin_name)
-                          .value_or(empty_enc);
-  auto default_av1 = utils::get_optional(default_gst_encoder_settings, av1_encoder.value_or(GstEncoder{}).plugin_name)
-                         .value_or(empty_enc);
-
-  auto h264_video_params = use_zero_copy
-                               ? h264_encoder->video_params_zero_copy.value_or(default_h264.video_params_zero_copy)
-                               : h264_encoder->video_params.value_or(default_h264.video_params);
-
-  std::string hevc_video_params;
-  if (hevc_encoder) {
-    hevc_video_params = use_zero_copy
-                            ? hevc_encoder->video_params_zero_copy.value_or(default_hevc.video_params_zero_copy)
-                            : hevc_encoder->video_params.value_or(default_hevc.video_params);
-  }
-
-  std::string av1_video_params;
-  if (av1_encoder) {
-    av1_video_params = use_zero_copy ? av1_encoder->video_params_zero_copy.value_or(default_av1.video_params_zero_copy)
-                                     : av1_encoder->video_params.value_or(default_av1.video_params);
-  }
+  auto embedded_video = rfl::toml::read<WolfConfig, rfl::DefaultIfMissing>(default_toml).value().gstreamer.video;
+  auto h264_video_params =
+      h264_encoder
+          ? encoder_video_params("h264", *h264_encoder, default_gst_video_settings, embedded_video, use_zero_copy)
+          : "";
+  auto hevc_video_params =
+      hevc_encoder
+          ? encoder_video_params("h265", *hevc_encoder, default_gst_video_settings, embedded_video, use_zero_copy)
+          : "";
+  auto av1_video_params =
+      av1_encoder ? encoder_video_params("av1", *av1_encoder, default_gst_video_settings, embedded_video, use_zero_copy)
+                  : "";
 
   auto clients_atom = std::make_shared<immer::atom<PairedClientList>>(paired_clients);
 

@@ -26,6 +26,20 @@ Config load_or_default(const std::string &source,
                        state::SessionsAtoms running_sessions);
 
 /**
+ * @brief The video_params (or video_params_zero_copy) for the selected encoder.
+ *
+ * Empty params turn the pipeline into "... ! ! x264enc", which GStreamer can't parse. Configs generated
+ * by older Wolf versions have exactly that for x264, and v7 configs aren't migrated, so when the user's config
+ * resolves to "" this falls back to the first encoder of the same codec and plugin_name in the embedded default
+ * config, logging a warning.
+ */
+std::string encoder_video_params(std::string_view tech, // "h264", "h265" or "av1", as in get_encoder
+                                 const GstEncoder &encoder,
+                                 const GstVideoCfg &video_cfg,
+                                 const GstVideoCfg &embedded_cfg,
+                                 bool use_zero_copy);
+
+/**
  * Side effect, will atomically update the paired clients list in cfg
  * and persist the new state to disk
  */
