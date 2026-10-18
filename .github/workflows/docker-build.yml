@@ -25,6 +25,8 @@ env:
 
 jobs:
   buildx:
+    outputs:
+      has_github_token: ${{ steps.prep.outputs.has_github_token }}
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -67,6 +69,20 @@ jobs:
           echo "push=${PUSH}" >> $GITHUB_OUTPUT
           echo "github_server_url=${GITHUB_SERVER_URL}" >> $GITHUB_OUTPUT
 
+      - name: Determine latest release
+        id: release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          EVENT_TAG: ${{ github.event.release.tag_name }}
+        run: |
+          latest=false
+          if [[ "$GITHUB_EVENT_NAME" == release ]]; then
+            tag=$(gh api "repos/${GH_REPO}/releases/latest" --jq .tag_name)
+            [[ "$tag" != "$EVENT_TAG" ]] || latest=true
+          fi
+          echo "latest=$latest" >> "$GITHUB_OUTPUT"
+
       - name: Docker meta
         id: meta
         uses: docker/metadata-action@v6
@@ -75,16 +91,14 @@ jobs:
           images: ${{ steps.prep.outputs.images }}
           # generate Docker tags based on the following events and attributes
           tags: |
-            type=semver,pattern={{raw}}
-            type=raw,value=stable,enable=${{ github.event_name == 'release' }}
-            type=semver,pattern={{version}}
-            type=semver,pattern={{major}}
-            type=ref,event=branch
-            type=raw,value=alpha
+            type=raw,value=beta,enable=${{ github.ref == 'refs/heads/beta' }}
+            type=match,pattern=^(v[0-9]{4}\.[0-9]{2})$,group=1
+            type=raw,value=stable,enable=${{ steps.release.outputs.latest == 'true' }}
             type=sha
           flavor: latest=false # let's not produce a :latest tag
 
       - name: Set up Docker Buildx
+        id: buildx
         uses: docker/setup-buildx-action@v4
         with:
           install: true
@@ -176,7 +190,7 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Login to GitHub Container Registry
-        if: steps.prep.outputs.has_github_token != '' # secrets not available in PRs
+        if: needs.buildx.outputs.has_github_token != '' # secrets not available in PRs
         uses: docker/login-action@v4
         with:
           registry: ghcr.io

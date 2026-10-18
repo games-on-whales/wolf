@@ -174,7 +174,7 @@ First, let's build an additional docker image that will contain the Nvidia drive
 
 [source,bash]
 ....
-curl https://raw.githubusercontent.com/games-on-whales/gow/master/images/nvidia-driver/Dockerfile | docker build -t gow/nvidia-driver:latest -f - --build-arg NV_VERSION=$(cat /sys/module/nvidia/version) .
+curl https://raw.githubusercontent.com/games-on-whales/gow/beta/images/nvidia-driver/Dockerfile | docker build -t gow/nvidia-driver:latest -f - --build-arg NV_VERSION=$(cat /sys/module/nvidia/version) .
 ....
 
 This will create `gow/nvidia-driver:latest` locally.
@@ -484,7 +484,7 @@ This example is based on Nvidia (Manual), you will need to create the Nvidia vol
 
 [source,bash]
 ....
-sudo curl https://raw.githubusercontent.com/games-on-whales/gow/master/images/nvidia-driver/Dockerfile | sudo podman build -t gow/nvidia-driver:latest -f - --build-arg NV_VERSION=$(cat /sys/module/nvidia/version) .
+sudo curl https://raw.githubusercontent.com/games-on-whales/gow/beta/images/nvidia-driver/Dockerfile | sudo podman build -t gow/nvidia-driver:latest -f - --build-arg NV_VERSION=$(cat /sys/module/nvidia/version) .
 ....
 
 2.{empty} Mount the image and create the new volume:

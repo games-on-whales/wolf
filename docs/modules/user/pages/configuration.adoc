@@ -32,7 +32,7 @@ Wolf is configured via a TOML config file and some additional optional ENV varia
 |PulseAudio server Wolf streams audio from. Left unset, Wolf starts an embedded PulseAudio server inside its own container and uses that. Set it (e.g. to a host socket path) to stream from an external PulseAudio/PipeWire instead.
 
 |WOLF_PULSE_IMAGE
-|ghcr.io/games-on-whales/pulseaudio:fedora
+|ghcr.io/games-on-whales/pulseaudio:fedora-44
 |Fallback only: the PulseAudio image Wolf spins up as a sidecar container if neither the embedded server nor `PULSE_SERVER` is reachable
 
 |WOLF_STOP_CONTAINER_ON_EXIT
@@ -149,7 +149,7 @@ id = 'moonlight-profile-id'
     [[profiles.apps]]
     title = 'Wolf UI'
     start_virtual_compositor = true
-    icon_png_path = "https://raw.githubusercontent.com/games-on-whales/wolf-ui/refs/heads/main/src/Icons/wolf_ui_icon.png"
+    icon_png_path = "https://raw.githubusercontent.com/games-on-whales/wolf-ui/refs/heads/beta/src/Icons/wolf_ui_icon.png"
 
         [profiles.apps.runner]
         type = 'docker'
@@ -213,7 +213,7 @@ name = "User"
         [profiles.apps.runner]
         type = "docker"
         name = "WolfFirefox"
-        image = "ghcr.io/games-on-whales/firefox:fedora"
+        image = "ghcr.io/games-on-whales/firefox:fedora-44"
         mounts = []
         env = [
             "RUN_SWAY=1",
@@ -395,7 +395,7 @@ Example:
 ....
 type = "docker"
 name = "WolfSteam"
-image = "ghcr.io/games-on-whales/steam:fedora"
+image = "ghcr.io/games-on-whales/steam:fedora-44"
 mounts = [ #<1>
   "/run/udev:/run/udev:ro"
 ]
@@ -474,7 +474,7 @@ env = [
 ]
 ....
 
-If both are defined, Gamescoped is used. (see https://github.com/games-on-whales/gow/blob/master/images/base-app/scripts/launch-comp.sh[launch-comp.sh] for details)
+If both are defined, Gamescoped is used. (see https://github.com/games-on-whales/gow/blob/beta/images/base-app/scripts/launch-comp.sh[launch-comp.sh] for details)
 
 [#_multiple_gpu]
 == Multiple GPUs

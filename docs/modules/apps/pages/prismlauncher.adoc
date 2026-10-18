@@ -15,7 +15,7 @@ start_virtual_compositor = true
 [apps.runner]
 type = "docker"
 name = "Prismlauncher"
-image = "ghcr.io/games-on-whales/prismlauncher:fedora"
+image = "ghcr.io/games-on-whales/prismlauncher:fedora-44"
 mounts = []
 env = [
   "RUN_SWAY=1",

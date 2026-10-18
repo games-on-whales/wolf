@@ -1,0 +1,48 @@
+name: Release channels
+
+on:
+  release:
+    types: [published, edited, deleted]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-channel-stable
+  cancel-in-progress: false
+
+jobs:
+  stable:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Point stable at the latest published release
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const {owner, repo} = context.repo;
+            let release;
+            try {
+              ({data: release} = await github.rest.repos.getLatestRelease({owner, repo}));
+            } catch (error) {
+              if (error.status === 404) {
+                core.notice('No published release yet; preserving the initial stable snapshot.');
+                return;
+              }
+              throw error;
+            }
+            if (release.draft || release.prerelease) throw new Error('Latest release must be stable');
+            const {data: commit} = await github.rest.repos.getCommit({owner, repo, ref: release.tag_name});
+            let exists = true;
+            try {
+              await github.rest.git.getRef({owner, repo, ref: 'heads/stable'});
+            } catch (error) {
+              if (error.status !== 404) throw error;
+              exists = false;
+            }
+            if (exists) {
+              await github.rest.git.updateRef({owner, repo, ref: 'heads/stable', sha: commit.sha, force: true});
+            } else {
+              await github.rest.git.createRef({owner, repo, ref: 'refs/heads/stable', sha: commit.sha});
+            }
+            core.notice(`stable now points to ${release.tag_name} (${commit.sha})`);

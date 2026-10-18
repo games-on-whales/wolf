@@ -37,7 +37,7 @@ For example, say that you want to add another emulator to `ES-DE`:
 .This will build the image locally with the tag `gow/es-de:custom`.
 [source,shell]
 ----
-docker build -t gow/es-de:custom --build-arg BASE_APP_IMAGE=ghcr.io/games-on-whales/base-app:fedora images/es-de .
+docker build -t gow/es-de:custom --build-arg BASE_APP_IMAGE=ghcr.io/games-on-whales/base-app:fedora-44 images/es-de .
 ----
 
 * Finally, update the `config.toml` file in Wolf to use the new image.
@@ -76,7 +76,7 @@ Here's an example of running Steam inside Docker *on a Wayland host* without ins
   -e WAYLAND_DISPLAY=${WAYLAND_DISPLAY} \
   -e RUN_SWAY=true \
   -v /tmp/SteamGOWData:/home/retro/ \
-  ghcr.io/games-on-whales/steam:fedora
+  ghcr.io/games-on-whales/steam:fedora-44
 ----
 
 .The Steam big picture mode should start on your host in a normal window

@@ -1,0 +1,42 @@
+name: Organization release channel migration
+
+on:
+  workflow_dispatch:
+    inputs:
+      apply:
+        description: Apply the validated organization-wide branch migration
+        type: boolean
+        default: false
+  push:
+    branches: [chore/standard-release-channels]
+    paths:
+      - scripts/standardize-release-channels.py
+      - .github/workflows/organization-release-channels.yml
+
+permissions:
+  contents: read
+
+concurrency:
+  group: organization-release-channel-migration
+  cancel-in-progress: false
+
+jobs:
+  reconcile:
+    if: github.repository == 'games-on-whales/wolf'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate migration without changing repositories
+        env:
+          GH_TOKEN: ${{ secrets.GH_RELEASE_PAT }}
+        run: python3 scripts/standardize-release-channels.py --report release-channel-migration.json
+      - name: Apply migration
+        if: github.event_name == 'workflow_dispatch' && inputs.apply
+        env:
+          GH_TOKEN: ${{ secrets.GH_RELEASE_PAT }}
+        run: python3 scripts/standardize-release-channels.py --apply --report release-channel-migration.json
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: release-channel-migration
+          path: release-channel-migration.json
