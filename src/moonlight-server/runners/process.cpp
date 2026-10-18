@@ -5,10 +5,58 @@
 #include <helpers/logger.hpp>
 #include <immer/atom.hpp>
 #include <runners/process.hpp>
+#ifdef __linux__
+#include <algorithm>
+#include <fcntl.h>
+#include <sys/resource.h>
+#include <sys/syscall.h>
+#include <unistd.h>
+#if __has_include(<linux/close_range.h>)
+#include <linux/close_range.h>
+#endif
+// close_range (Linux 5.9) is 436 on every architecture that uses the unified syscall table (all but alpha and mips);
+// defined here so builds against older glibc or kernel headers still use it, instead of only the slow fallback below
+#if !defined(SYS_close_range) && !defined(__alpha__) && !defined(__mips__)
+#define SYS_close_range 436
+#endif
+#ifndef CLOSE_RANGE_CLOEXEC
+#define CLOSE_RANGE_CLOEXEC (1U << 2)
+#endif
+#endif
 
 namespace process {
 
 using namespace wolf::core::events;
+
+/**
+ * Wolf's own descriptors (listening sockets, ENet, the API socket, ...) are not opened with close-on-exec, so without
+ * this a spawned app would inherit them. A child that outlives Wolf would then keep its ports bound, and the next
+ * Wolf fails with "bind: Address already in use".
+ *
+ * Runs in the forked child, right before exec: marks every fd above stdio as close-on-exec rather than closing it, so
+ * Boost.Process' own (already close-on-exec) error-reporting pipe keeps working.
+ */
+struct close_inherited_fds : bp::extend::handler {
+  template <class Executor> void on_exec_setup(Executor &) const {
+#ifdef __linux__
+#ifdef SYS_close_range
+    // raw syscall: the glibc wrapper only exists from 2.34
+    if (::syscall(SYS_close_range, 3, ~0U, CLOSE_RANGE_CLOEXEC) == 0) {
+      return;
+    }
+#endif
+    // Kernel < 5.11: fall back to marking each possible fd (fcntl and getrlimit are safe to call after fork).
+    // Capped: RLIMIT_NOFILE can be ~1e9 (LimitNOFILE=infinity), and one fcntl per fd would stall every app launch;
+    // Wolf's own sockets are opened at startup, so they sit at low fd numbers.
+    constexpr rlim_t max_scanned_fds = 65536;
+    rlimit lim{};
+    auto max_fd = ::getrlimit(RLIMIT_NOFILE, &lim) == 0 ? std::min(lim.rlim_cur, max_scanned_fds) : max_scanned_fds;
+    for (int fd = 3; fd < static_cast<int>(max_fd); fd++) {
+      ::fcntl(fd, F_SETFD, FD_CLOEXEC);
+    }
+#endif
+  }
+};
 
 void RunProcess::run(std::string_view session_id,
                      std::string_view app_state_folder,
@@ -39,7 +87,9 @@ void RunProcess::run(std::string_view session_id,
                            bp::std_err > err_out,
                            ios,
 #endif
-                           group_proc);
+                           group_proc,
+                           // last, so it runs after the stdio redirects have set up fds 0-2
+                           close_inherited_fds{});
 
   } catch (const std::system_error &e) {
     logs::log(logs::error, "Unable to start process, error: {} - {}", e.code().value(), e.what());

@@ -2,11 +2,13 @@
 #include <boost/version.hpp>
 #if BOOST_VERSION < 108700
 #include <boost/process.hpp>
+#include <boost/process/extend.hpp>
 namespace bp = boost::process;
 #else
 #include <boost/process/v1/async.hpp>
 #include <boost/process/v1/child.hpp>
 #include <boost/process/v1/env.hpp>
+#include <boost/process/v1/extend.hpp>
 #include <boost/process/v1/group.hpp>
 #include <boost/process/v1/io.hpp>
 #include <boost/process/v1/start_dir.hpp>

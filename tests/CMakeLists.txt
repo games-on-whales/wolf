@@ -78,6 +78,7 @@ if (UNIX AND NOT APPLE)
                 "platforms/linux/libinput.h"
                 "platforms/linux/inputtino.cpp")
     endif ()
+    list(APPEND SRC_LIST "platforms/linux/process.cpp")
 endif ()
 
 find_package(CURL)
