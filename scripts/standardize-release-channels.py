@@ -24,10 +24,20 @@ class GitHub:
             data=json.dumps(body).encode() if body is not None else None,
             headers={'Authorization': 'Bearer ' + self.token,
                      'Accept': 'application/vnd.github+json',
+                     'Content-Type': 'application/json',
                      'X-GitHub-Api-Version': '2022-11-28'}, method=method)
-        with urllib.request.urlopen(req, timeout=60) as response:
-            raw = response.read()
-            return json.loads(raw) if raw else None
+        try:
+            with urllib.request.urlopen(req, timeout=60) as response:
+                raw = response.read()
+                return json.loads(raw) if raw else None
+        except urllib.error.HTTPError as error:
+            if error.code != 403:
+                raise
+            # User role is not token scope: fine-grained credentials also need
+            # Administration:write to change a repository's default branch.
+            detail = json.loads(error.read()).get('message', 'Forbidden')
+            error.close()
+            raise PermissionError(f'{method} {path}: GitHub denied the token: {detail}') from None
 
     def repositories(self):
         result = []
@@ -152,6 +162,10 @@ def main():
     for plan in plans:
         try:
             result = reconcile(api, plan)
+        except PermissionError as error:
+            report['results'].append({'repository': plan['repository'], 'status': 'blocked', 'error': str(error)})
+            target.write_text(json.dumps(report, indent=2) + '\n')
+            raise SystemExit('Stopped after permission denial; no further repositories attempted: ' + str(error))
         except Exception as error:
             result = {'repository': plan['repository'], 'status': 'blocked', 'error': str(error)}
         report['results'].append(result)
