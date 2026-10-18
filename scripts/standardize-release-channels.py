@@ -147,6 +147,13 @@ def main():
     if not token:
         parser.error('GH_TOKEN must contain an existing organization administrator token')
     api = GitHub(token)
+    administration_read = True
+    try:
+        # This read requires Administration permission and does not change settings.
+        api.request('GET', f'/repos/{ORG}/wolf/actions/permissions')
+    except PermissionError as error:
+        administration_read = False
+        print(json.dumps({'administration_permission_probe': str(error)}), flush=True)
     plans = [snapshot(api, repo) for repo in api.repositories()]
     for plan in plans:
         print(json.dumps({'plan': plan}), flush=True)
@@ -157,8 +164,10 @@ def main():
     if missing:
         raise SystemExit('No changes made: missing repository administration access: ' + ', '.join(missing))
     if not args.apply:
-        print(f'Validated {len(plans)} repositories; dry-run report: {target}')
+        print(f'Snapshotted {len(plans)} repositories; no write permissions assumed; dry-run report: {target}')
         return
+    if not administration_read:
+        raise SystemExit('No administrative changes attempted: this token needs Administration:write and Contents:write.')
     for plan in plans:
         try:
             result = reconcile(api, plan)
