@@ -1,5 +1,5 @@
 #pragma once
-#include <boost/json/src.hpp>
+#include <boost/json.hpp>
 #include <core/docker.hpp>
 #include <fmt/core.h>
 #include <helpers/utils.hpp>
@@ -8,7 +8,7 @@ using namespace wolf::core;
 
 namespace boost::json {
 
-void tag_invoke(value_from_tag, value &jv, const std::vector<docker::Port> &ports) {
+inline void tag_invoke(value_from_tag, value &jv, const std::vector<docker::Port> &ports) {
   object obj;
   for (const auto &port : ports) {
     auto key = fmt::format("{}/{}", port.public_port, port.type == docker::TCP ? "tcp" : "udp");
@@ -28,33 +28,32 @@ void tag_invoke(value_from_tag, value &jv, const std::vector<docker::Port> &port
         ]
         }
      */
-    obj[key] = {{{"HostPort", std::to_string(port.private_port)}}};
+    obj[key] = array{object{{"HostPort", std::to_string(port.private_port)}}};
   }
   jv = obj;
 }
 
-void tag_invoke(value_from_tag, value &jv, const docker::MountPoint &mount) {
+inline void tag_invoke(value_from_tag, value &jv, const docker::MountPoint &mount) {
   jv = fmt::format("{}:{}:{}", mount.source, mount.destination, mount.mode);
 }
 
-docker::MountPoint tag_invoke(value_to_tag<docker::MountPoint>, value const &jv) {
-  // ex: /home/ale/repos/gow/local_state:/home/retro:rw
-  auto bind = utils::split(std::string_view{jv.as_string().data(), jv.as_string().size()}, ':');
+inline docker::MountPoint tag_invoke(value_to_tag<docker::MountPoint>, value const &jv) {
+  object const &obj = jv.as_object();
   return docker::MountPoint{
-      .source = utils::to_string(bind[0]),
-      .destination = utils::to_string(bind[1]),
-      .mode = utils::to_string(bind.size() == 3 ? bind[2] : "rw"),
+      .source = json::value_to<std::string>(obj.at("Source")),
+      .destination = json::value_to<std::string>(obj.at("Destination")),
+      .mode = json::value_to<std::string>(obj.at("Mode")),
   };
 }
 
-void tag_invoke(value_from_tag, value &jv, const docker::Device &dev) {
+inline void tag_invoke(value_from_tag, value &jv, const docker::Device &dev) {
   // example: { "PathOnHost": "/dev/deviceName", "PathInContainer": "/dev/deviceName", "CgroupPermissions": "mrw"}
   jv = {{"PathOnHost", dev.path_on_host},
         {"PathInContainer", dev.path_in_container},
         {"CgroupPermissions", dev.cgroup_permission}};
 }
 
-docker::Device tag_invoke(value_to_tag<docker::Device>, value const &jv) {
+inline docker::Device tag_invoke(value_to_tag<docker::Device>, value const &jv) {
   object const &obj = jv.as_object();
   return docker::Device{
       .path_on_host = json::value_to<std::string>(obj.at("PathOnHost")),
@@ -63,7 +62,7 @@ docker::Device tag_invoke(value_to_tag<docker::Device>, value const &jv) {
   };
 }
 
-docker::Container tag_invoke(value_to_tag<docker::Container>, value const &jv) {
+inline docker::Container tag_invoke(value_to_tag<docker::Container>, value const &jv) {
   object const &obj = jv.as_object();
 
   docker::ContainerStatus status;
@@ -90,6 +89,8 @@ docker::Container tag_invoke(value_to_tag<docker::Container>, value const &jv) {
   case (utils::hash("dead")):
     status = docker::DEAD;
     break;
+  default:
+    status = docker::CREATED;
   }
 
   const auto &host_config = obj.at("HostConfig");
@@ -98,16 +99,35 @@ docker::Container tag_invoke(value_to_tag<docker::Container>, value const &jv) {
   if (!host_config.at("PortBindings").is_null()) { // This can be `null` in the APIs for some reason
     for (auto const &port : host_config.at("PortBindings").as_object()) {
       auto settings = utils::split(std::string_view(port.key().data(), port.key().size()), '/');
-      ports.push_back(
-          docker::Port{.private_port = std::stoi(port.value().as_array()[0].at("HostPort").as_string().data()),
-                       .public_port = std::stoi(settings[0].data()),
-                       .type = settings[1] == "tcp" ? docker::TCP : docker::UDP});
+      if (settings.size() != 2) {
+        logs::log(logs::warning, "[DOCKER] Invalid port binding {} skipping..", port.key());
+        continue;
+      }
+
+      int private_port = -1;
+      try {
+        private_port = port.value().is_null() // Can be null in Podman
+                           ? std::stoi(settings[0].data())
+                           : std::stoi(port.value().as_array()[0].at("HostPort").as_string().data());
+      } catch (...) {
+        logs::log(logs::debug, "[DOCKER] Invalid private binding {} skipping..", serialize(port.value()));
+      }
+
+      int public_port = -1;
+      try {
+        public_port = std::stoi(settings[0].data());
+      } catch (...) {
+        logs::log(logs::debug, "[DOCKER] Invalid public port binding {} skipping..", settings[0]);
+      }
+      ports.push_back(docker::Port{.private_port = private_port,
+                                   .public_port = public_port,
+                                   .type = settings[1] == "tcp" ? docker::TCP : docker::UDP});
     }
   }
 
   std::vector<docker::MountPoint> mounts;
-  if (!host_config.at("Binds").is_null()) { // This can be `null` in the APIs for some reason
-    mounts = json::value_to<std::vector<docker::MountPoint>>(host_config.at("Binds"));
+  if (!obj.at("Mounts").is_null()) { // This can be `null` in the APIs for some reason
+    mounts = json::value_to<std::vector<docker::MountPoint>>(obj.at("Mounts"));
   }
 
   std::vector<docker::Device> devices;
@@ -115,13 +135,24 @@ docker::Container tag_invoke(value_to_tag<docker::Container>, value const &jv) {
     devices = json::value_to<std::vector<docker::Device>>(host_config.at("Devices"));
   }
 
+  std::vector<std::string> env;
+  if (!obj.at("Config").at("Env").is_null()) { // This can be `null` in the APIs for some reason
+    env = json::value_to<std::vector<std::string>>(obj.at("Config").at("Env"));
+  }
+
+  std::string hostname;
+  if (!obj.at("Config").at("Hostname").is_null()) { // usually present; kept consistent with above null checks
+    hostname = json::value_to<std::string>(obj.at("Config").at("Hostname"));
+  }
+
   return docker::Container{.id = json::value_to<std::string>(obj.at("Id")),
                            .name = json::value_to<std::string>(obj.at("Name")),
+                           .hostname = hostname,
                            .image = json::value_to<std::string>(obj.at("Config").at("Image")),
                            .status = status,
                            .ports = ports,
                            .mounts = mounts,
                            .devices = devices,
-                           .env = json::value_to<std::vector<std::string>>(obj.at("Config").at("Env"))};
+                           .env = env};
 }
 } // namespace boost::json

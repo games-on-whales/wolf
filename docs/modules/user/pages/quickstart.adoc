@@ -17,9 +17,6 @@ Docker CLI:
 docker run \
     --name wolf \
     --network=host \
-    -e XDG_RUNTIME_DIR=/tmp/sockets \
-    -v /tmp/sockets:/tmp/sockets:rw \
-    -e HOST_APPS_STATE_FOLDER=/etc/wolf \
     -v /etc/wolf:/etc/wolf:rw \
     -v /var/run/docker.sock:/var/run/docker.sock:rw \
     --device /dev/dri/ \
@@ -35,16 +32,12 @@ Docker compose:
 
 [source,yaml]
 ....
-version: "3.8"
+version: "3"
 services:
   wolf:
     image: ghcr.io/games-on-whales/wolf:stable
-    environment:
-      - XDG_RUNTIME_DIR=/tmp/sockets
-      - HOST_APPS_STATE_FOLDER=/etc/wolf
     volumes:
       - /etc/wolf/:/etc/wolf
-      - /tmp/sockets:/tmp/sockets:rw
       - /var/run/docker.sock:/var/run/docker.sock:rw
       - /dev/:/dev/:rw
       - /run/udev:/run/udev:rw
@@ -59,14 +52,117 @@ services:
 ....
 
 --
-Nvidia::
+Nvidia (Container Toolkit)::
 +
 --
 
-Unfortunately, on Nvidia, things are a little bit more complex:
+[WARNING]
+====
+This **isn't recommended at the moment** as it's not as stable as the manual method. +
+You can follow https://github.com/games-on-whales/wolf/issues/152[issue #152] for updates.
+====
 
-* Your driver version must be `>= 530.30.02`
-* `--gpus` and the Nvidia Docker Toolkit seems to not work (to be investigated)
+[NOTE]
+====
+Make sure that the version of the Nvidia container toolkit is `>= 1.16.0` and that your driver version is `>= 530.30.02` (you can check the driver version with `nvidia-smi`).
+
+[source,bash]
+....
+sudo nvidia-container-cli -V
+cli-version: 1.16.0
+lib-version: 1.16.0
+build date: 2024-07-15T13:41+00:00
+....
+====
+
+Docker CLI:
+
+[source,bash]
+....
+docker run \
+    --name wolf \
+    --network=host \
+    -v /etc/wolf:/etc/wolf:rw \
+    -v /var/run/docker.sock:/var/run/docker.sock:rw \
+    -e NVIDIA_DRIVER_CAPABILITIES=all \
+    -e NVIDIA_VISIBLE_DEVICES=all \
+    --gpus=all \
+    --device /dev/dri/ \
+    --device /dev/uinput \
+    --device /dev/uhid \
+    -v /dev/:/dev/:rw \
+    -v /run/udev:/run/udev:rw \
+    --device-cgroup-rule "c 13:* rmw" \
+    ghcr.io/games-on-whales/wolf:stable
+....
+
+Docker compose:
+
+[source,yaml]
+....
+version: "3"
+services:
+  wolf:
+    image: ghcr.io/games-on-whales/wolf:stable
+    environment:
+      - NVIDIA_DRIVER_CAPABILITIES=all
+      - NVIDIA_VISIBLE_DEVICES=all
+    volumes:
+      - /etc/wolf/:/etc/wolf
+      - /var/run/docker.sock:/var/run/docker.sock:rw
+      - /dev/:/dev/:rw
+      - /run/udev:/run/udev:rw
+    device_cgroup_rules:
+      - 'c 13:* rmw'
+    devices:
+      - /dev/dri
+      - /dev/uinput
+      - /dev/uhid
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+    network_mode: host
+    restart: unless-stopped
+....
+
+One last final check: we have to make sure that the `nvidia-drm` module has been loaded and that the module is loaded with the flag `modeset=1`.
+
+[source,bash]
+....
+sudo cat /sys/module/nvidia_drm/parameters/modeset
+Y
+....
+
+.I get `N` or the file is not present, how do I set the flag?
+[%collapsible]
+====
+
+If using Grub, the easiest way to make the change persistent is to add `nvidia-drm.modeset=1` to the `GRUB_CMDLINE_LINUX_DEFAULT` line in `/etc/default/grub` ex:
+
+....
+GRUB_CMDLINE_LINUX_DEFAULT="quiet nvidia-drm.modeset=1"
+....
+
+Then `sudo update-grub` and *reboot*.
+====
+
+--
+Nvidia (Manual)::
++
+--
+
+[WARNING]
+====
+The downside of this method is that you have to manually re-create the Nvidia driver volume every time you update the drivers.
+====
+
+Unfortunately, on Nvidia, things are a little bit more complex..
+
+Make sure that your driver version is `>= 530.30.02`
 
 First, let's build an additional docker image that will contain the Nvidia driver files:
 
@@ -85,6 +181,8 @@ docker create --rm --mount source=nvidia-driver-vol,destination=/usr/nvidia gow/
 ....
 
 It will create a Docker container, populate `nvidia-driver-vol` with Nvidia driver if it wasn't already done and remove the container.
+
+If the volume previously existed with older drivers, you may need to remove it before re-creating the volume with newer drivers: `docker volume rm nvidia-driver-vol`.
 
 Check volume exists with:
 
@@ -126,11 +224,8 @@ You can now finally start the container; Docker CLI:
 docker run \
     --name wolf \
     --network=host \
-    -e XDG_RUNTIME_DIR=/tmp/sockets \
-    -v /tmp/sockets:/tmp/sockets:rw \
     -e NVIDIA_DRIVER_VOLUME_NAME=nvidia-driver-vol \
     -v nvidia-driver-vol:/usr/nvidia:rw \
-    -e HOST_APPS_STATE_FOLDER=/etc/wolf \
     -v /etc/wolf:/etc/wolf:rw \
     -v /var/run/docker.sock:/var/run/docker.sock:rw \
     --device /dev/nvidia-uvm \
@@ -153,17 +248,14 @@ Docker compose:
 
 [source,yaml]
 ....
-version: "3.8"
+version: "3"
 services:
   wolf:
     image: ghcr.io/games-on-whales/wolf:stable
     environment:
-      - XDG_RUNTIME_DIR=/tmp/sockets
       - NVIDIA_DRIVER_VOLUME_NAME=nvidia-driver-vol
-      - HOST_APPS_STATE_FOLDER=/etc/wolf
     volumes:
       - /etc/wolf/:/etc/wolf:rw
-      - /tmp/sockets:/tmp/sockets:rw
       - /var/run/docker.sock:/var/run/docker.sock:rw
       - /dev/:/dev/:rw
       - /run/udev:/run/udev:rw
@@ -233,8 +325,338 @@ fi
 ....
 ====
 
+.I am still not able to see all the Nvidia devices
+[%collapsible]
+====
+You may need to setup your host to automatically load the NVIDIA GPU Kernel modules at boot time.
+
+First, create a new file `nvidia.conf` in the `/etc/modules-load.d/` directory and open it with a text editor.
+
+`nano /etc/modules-load.d/nvidia.conf`
+
+paste the following content to the file:
+
+```
+nvidia
+nvidia_uvm
+```
+
+For the changes to take effect, update the `initramfs` file with the following command:
+`update-initramfs -u`
+
+Add udev rules to add missing Nvidia devices
+`nano /etc/udev/rules.d/70-nvidia.rules`
+paste the following content to the file:
+
+```
+# create necessary NVIDIA device files in /dev/*
+KERNEL=="nvidia", RUN+="/bin/bash -c '/usr/bin/nvidia-smi -L && /bin/chmod 0666 /dev/nvidia*'"
+KERNEL=="nvidia_uvm", RUN+="/bin/bash -c '/usr/bin/nvidia-modprobe -c0 -u && /bin/chmod 0666 /dev/nvidia-uvm*'"
+```
+
+`reboot` you host and try running `ls -l /dev/nvidia*` again.
+====
+
+--
+WSL2::
++
 --
 
+[WARNING,caption=EXPERIMENTAL"]
+====
+Running Wolf in WSL2 hasn't been properly tested.
+====
+
+You can run Wolf in a very unprivileged setting without `uinput/uhid`, unfortunately this means that you'll be restricted to *only using mouse and keyboard*.
+
+[WARNING]
+====
+For Nvidia users, follow the Nvidia instructions above.
+This should work for AMD/Intel users.
+====
+
+[source,bash]
+....
+docker run \
+    --name wolf \
+    --network=host \
+    -v /etc/wolf:/etc/wolf:rw \
+    -v /var/run/docker.sock:/var/run/docker.sock:rw \
+    --device /dev/dri/ \
+    ghcr.io/games-on-whales/wolf:stable
+....
+
+--
+Proxmox LXC::
++
+--
+
+[WARNING,caption=WARNING]
+====
+At the moment it is only possible to run Wolf inside a privileged LXC.
+====
+
+First you need to make sure your GPU drivers are installed and loaded on your PVE host.
+
+Also make sure to add the virtual devices udev rules to the PVE host as explained in the xref:quickstart.adoc#_virtual_devices_support[Virtual devices support] section.
+
+Enter the LXC config file: `nano /etc/pve/lxc/1XX.conf`
+
+Add these lines to the bottom of the file:
+
+For Nvidia
+
+[source]
+----
+dev0: /dev/uinput
+dev1: /dev/uhid
+dev2: /dev/nvidia0
+dev3: /dev/nvidiactl
+dev4: /dev/nvidia-modeset
+dev5: /dev/nvidia-uvm
+dev6: /dev/nvidia-uvm-tools
+dev7: /dev/nvidia-caps/nvidia-cap1
+dev8: /dev/nvidia-caps/nvidia-cap2
+lxc.cgroup2.devices.allow: a
+lxc.cap.drop:
+lxc.mount.entry: /dev/dri dev/dri none bind,optional,create=dir
+lxc.mount.entry: /run/udev mnt/udev none bind,optional,create=dir
+lxc.mount.entry: /dev mnt/dev none bind,optional,create=dir
+----
+
+For Intel/AMD
+
+[source]
+----
+dev0: /dev/uinput
+dev1: /dev/uhid
+lxc.cgroup2.devices.allow: a
+lxc.cap.drop:
+lxc.mount.entry: /dev/dri dev/dri none bind,optional,create=dir
+lxc.mount.entry: /run/udev mnt/udev none bind,optional,create=dir
+lxc.mount.entry: /dev mnt/dev none bind,optional,create=dir
+----
+
+save the file, exit, and restart your LXC.
+
+Your LXC is good to go, complete the installation based on the GPU following the other tabs.
+
+[WARNING,caption=Remarks]
+====
+When creating your docker-compose.yml don't forget to modify the volume mappings for `/run/udev` and `/dev` path, as we mounted it on `/mnt/udev` and `/mnt/dev` inside our LXC
+====
+
+[source]
+----
+volumes:
+    - /mnt/udev:/run/udev:rw
+    - /mnt/dev:/dev:rw
+----
+
+And if you have a multi GPU setup, don't forget to set the below env variable
+
+[source]
+----
+environment:
+    - WOLF_RENDER_NODE=/dev/dri/renderD12X
+----
+
+--
+Podman Quadlets::
++
+--
+
+The easiest way to run Wolf is to use a `rootful` service, this isn't a strict requirement; if you give access to the `/dev/dri` devices, `/etc/wolf` and install the required udev rules everything should work.
+
+Place your `wolf.container` file (populated with either the Nvidia or Intel/AMD examples below) in `/etc/containers/systemd`, then run `sudo systemctl daemon-reload` and `sudo systemctl start wolf.service` to start Wolf.
+
+**Nvidia**
+
+This example is based on Nvidia (Manual), you will need to create the Nvidia volume first before starting the service:
+
+1.{empty} Create a new image that will contain the Nvidia driver files:
+
+[source,bash]
+....
+sudo curl https://raw.githubusercontent.com/games-on-whales/gow/master/images/nvidia-driver/Dockerfile | sudo podman build -t gow/nvidia-driver:latest -f - --build-arg NV_VERSION=$(cat /sys/module/nvidia/version) .
+....
+
+2.{empty} Mount the image and create the new volume:
+
+[source,bash]
+....
+sudo podman create --rm --mount source=nvidia-driver-vol,destination=/usr/nvidia gow/nvidia-driver:latest sh
+....
+
+Check volume exists with:
+
+[source,bash]
+....
+sudo podman volume ls | grep nvidia-driver
+
+local     nvidia-driver-vol
+....
+
+3.{empty} This is an additional step for Podman. Start the temporary container you just created. `sudo podman ps -a` will show a container using a temporary name (e.g. `musing_pascal`) and your local `gow/nvidia-driver` image. Only once this container is started will your new volume be populated. Run:
+
+[source,bash]
+....
+sudo podman start musing_pascal
+....
+
+You can verify the contents of of your `nvidia-driver-vol` by running `sudo podman volume inspect nvidia-driver-vol` and then browsing the `Mountpoint`: `sudo ls -la /var/lib/containers/storage/volumes/nvidia-driver-vol/_data`. You should see a non empty folder:
+
+[source,bash]
+....
+total 12
+drwxr-xr-x. 6 root root   54 Oct 27 22:06 .
+drwx------. 3 root root   19 Oct 28 14:40 ..
+drwxr-xr-x. 2 root root 4096 Oct 27 22:06 bin
+drwxr-xr-x. 5 root root 4096 Oct 28 14:44 lib
+drwxr-xr-x. 4 root root 4096 Oct 27 22:06 lib32
+drwxr-xr-x. 7 root root   77 Oct 27 22:07 share
+....
+
+4.{empty} Use the example below to create a `wolf.container` file in `/etc/containers/systemd`, then run `sudo systemctl daemon-reload` and `sudo systemctl start wolf.service` to start.
+
+[source,bash]
+....
+[Unit]
+Description=Wolf / Games On Whales
+Requires=network-online.target podman.socket
+After=network-online.target podman.socket
+
+[Service]
+TimeoutStartSec=900
+ExecStartPre=-/usr/bin/podman rm --force WolfPulseAudio
+Restart=on-failure
+RestartSec=5
+StartLimitBurst=5
+
+[Container]
+AutoUpdate=registry
+ContainerName=%p
+HostName=%p
+Image=ghcr.io/games-on-whales/wolf:stable
+Network=host
+SecurityLabelDisable=true
+PodmanArgs=--ipc=host --device-cgroup-rule "c 13:* rmw"
+AddDevice=/dev/dri
+AddDevice=/dev/uinput
+AddDevice=/dev/uhid
+AddDevice=/dev/nvidia-uvm
+AddDevice=/dev/nvidia-uvm-tools
+AddDevice=/dev/nvidia-caps/nvidia-cap1
+AddDevice=/dev/nvidia-caps/nvidia-cap2
+AddDevice=/dev/nvidiactl
+AddDevice=/dev/nvidia0
+AddDevice=/dev/nvidia-modeset
+Volume=nvidia-driver-vol:/usr/nvidia
+Volume=/dev/:/dev/:rw
+Volume=/run/udev:/run/udev:rw
+Volume=/etc/wolf/:/etc/wolf:z
+Volume=/run/podman/podman.sock:/var/run/docker.sock:ro
+Environment=WOLF_STOP_CONTAINER_ON_EXIT=TRUE
+Environment=NVIDIA_DRIVER_VOLUME_NAME=nvidia-driver-vol
+Environment=WOLF_RENDER_NODE=/dev/dri/renderD129
+
+[Install]
+WantedBy=multi-user.target
+....
+
+.The service won't start due to missing devices (e.g. /dev/nvidia-modeset)
+[%collapsible]
+====
+Using uCore (CoreOS), I needed to start https://docs.nvidia.com/deploy/driver-persistence/index.html#persistence-daemon[Nvidia persistenced] to get all the required devices in place:
+
+[source,bash]
+....
+sudo systemctl enable --now nvidia-persistenced.service
+....
+
+One last final check: we have to make sure that the `nvidia-drm` module has been loaded and that the module is loaded with the flag `modeset=1`.
+
+[source,bash]
+....
+sudo cat /sys/module/nvidia_drm/parameters/modeset
+Y
+....
+====
+
+.Multiple GPUs / finding the device ID for WOLF_RENDER_NODE
+[%collapsible]
+====
+If you have a multi GPU setup, you need to set the `WOLF_RENDER_NODE` environmnet variable to the correct card. You can find a list of attached graphics cards with:
+
+[source,bash]
+....
+ls -l /sys/class/drm/renderD*/device/driver
+
+lrwxrwxrwx. 1 root root 0 Oct 29 19:44 /sys/class/drm/renderD128/device/driver -> ../../../bus/pci/drivers/i915
+lrwxrwxrwx. 1 root root 0 Oct 29 19:44 /sys/class/drm/renderD129/device/driver -> ../../../../bus/pci/drivers/nvidia
+....
+====
+
+**Intel/AMD**
+
+1.{empty} Use the example below to create a `wolf.container` file in `/etc/containers/systemd`, then run `sudo systemctl daemon-reload` and `sudo systemctl start wolf.service` to start.
+
+[source,bash]
+....
+[Unit]
+Description=Wolf / Games On Whales
+Requires=network-online.target podman.socket
+After=network-online.target podman.socket
+
+[Service]
+TimeoutStartSec=900
+ExecStartPre=-/usr/bin/podman rm --force WolfPulseAudio
+Restart=on-failure
+RestartSec=5
+StartLimitBurst=5
+
+[Container]
+AutoUpdate=registry
+ContainerName=%p
+HostName=%p
+Image=ghcr.io/games-on-whales/wolf:stable
+Network=host
+SecurityLabelDisable=true
+PodmanArgs=--ipc=host --device-cgroup-rule "c 13:* rmw"
+AddDevice=/dev/dri
+AddDevice=/dev/uinput
+AddDevice=/dev/uhid
+Volume=/dev/:/dev/:rw
+Volume=/run/udev:/run/udev:rw
+Volume=/etc/wolf/:/etc/wolf:z
+Volume=/run/podman/podman.sock:/var/run/docker.sock:ro
+Environment=WOLF_STOP_CONTAINER_ON_EXIT=TRUE
+
+[Install]
+WantedBy=multi-user.target
+....
+
+.Issues with Podman socket or Podman socket missing
+[%collapsible]
+====
+Make sure your https://github.com/containers/podman/blob/main/docs/tutorials/socket_activation.md[Podman socket] service is running with `sudo systemctl enable --now podman.socket` and verify it has started correctly with `sudo systemctl status podman.socket`. The output should look like this:
+
+[source,bash]
+....
+● podman.socket - Podman API Socket
+     Loaded: loaded (/usr/lib/systemd/system/podman.socket; enabled; preset: disabled)
+     Active: active (listening) since Wed 2025-10-29 19:44:24 CET; 13min ago
+ Invocation: d15ecfcbb2b04de49af1c977925982e9
+   Triggers: ● podman.service
+       Docs: man:podman-system-service(1)
+     Listen: /run/podman/podman.sock (Stream)
+     CGroup: /system.slice/podman.socket
+....
+
+Make a note of where the socket is running (e.g `/run/podman/podman.sock` in the example above) and update your `wolf.container` if necessary.
+====
+
+--
 ======
 
 .Which ports are used by Wolf?
@@ -252,11 +674,35 @@ EXPOSE 47989/tcp
 EXPOSE 47999/udp
 # RTSP
 EXPOSE 48010/tcp
-# Video (up to 10 users, you can open more ports if needed)
-EXPOSE 48100-48110/udp
-# Audio (up to 10 users, you can open more ports if needed)
-EXPOSE 48200-48210/udp
+# Video
+EXPOSE 48100/udp
+# Audio
+EXPOSE 48200/udp
 ....
+
+These are the default values, if you want to assign custom ports you can set the env variables:
+
+* `WOLF_HTTP_PORT`
+* `WOLF_HTTPS_PORT`
+* `WOLF_CONTROL_PORT`
+* `WOLF_RTSP_SETUP_PORT`
+* `WOLF_VIDEO_PING_PORT`
+* `WOLF_AUDIO_PING_PORT`
+
+====
+
+[TIP]
+====
+Apps run as UID/GID `1000:1000` by default. Newly paired clients inherit this,
+and you can change it per client later from xref:wolf-ui.adoc[]. If your host
+uses a different convention (for example Unraid, where `nobody` is `99:100`),
+set the defaults for every new client with the environment variables:
+
+* `WOLF_DEFAULT_RUN_UID`
+* `WOLF_DEFAULT_RUN_GID`
+
+These only affect the defaults applied to *new* clients; existing clients keep
+their saved values.
 ====
 
 == Moonlight pairing
@@ -265,7 +711,7 @@ You should now be able to point Moonlight to the IP address of the server and st
 
 * In Moonlight, you'll get a prompt for a PIN image:ROOT:moonlight-pairing-code.png[A screenshot of Moonlight asking for a PIN]
 * Wolf will log a line with a link to a page where you can input that PIN (ex: http://localhost:47989/pin/#337327E8A6FC0C66 make sure to replace `localhost` with your server IP) image:ROOT:wolf-pairing-code.png[A screenshot of the Wolf page where you can insert the PIN]
-* In Moonlight, you should now be able to see a list of the applications that are supported by Wolf image:ROOT:moonlight-pairing-done.png[A screenshot of Moonlight showing the apps]
+* In Moonlight, you should now be able to see a list of the applications that are supported by Wolf, the default entrypoint is xref:wolf-ui.adoc[] image:ROOT:moonlight-pairing-done.png[A screenshot of Moonlight showing the apps]
 
 [TIP]
 ====
@@ -276,7 +722,7 @@ Keep an eye on the logs from Wolf to get more details.
 [#_virtual_devices_support]
 == Virtual devices support
 
-We use uinput to create virtual devices (Mouse, Keyboard and Joypad), make sure that `/dev/uinput` is present in the host:
+We use uinput to create virtual Joypad devices, make sure that `/dev/uinput` is present in the host:
 
 [source,bash]
 ....
@@ -284,55 +730,21 @@ ls -la /dev/uinput
 crw------- 1 root root 10, 223 Jan 17 09:08 /dev/uinput
 ....
 
-.Add your user to group `input`
+The `udev` rules live in
+https://github.com/games-on-whales/wolf/blob/stable/85-wolf.rules[`85-wolf.rules`]
+in the Wolf repository; that file is the single source of truth, so install it
+directly rather than copying the rules by hand:
+
 [source,bash]
 ....
-sudo usermod -a -G input $USER
+curl -fsSL https://raw.githubusercontent.com/games-on-whales/wolf/stable/85-wolf.rules \
+  -o /etc/udev/rules.d/85-wolf.rules
 ....
 
-.Create `udev` rules under `/etc/udev/rules.d/85-wolf-virtual-inputs.rules`
-[source,bash]
-....
-# Allows Wolf to acces /dev/uinput
-KERNEL=="uinput", SUBSYSTEM=="misc", MODE="0660", GROUP="input", OPTIONS+="static_node=uinput"
-
-# Allows Wolf to access /dev/uhid
-KERNEL=="uhid", TAG+="uaccess"
-
-# Move virtual keyboard and mouse into a different seat
-SUBSYSTEMS=="input", ATTRS{id/vendor}=="ab00", MODE="0660", GROUP="input", ENV{ID_SEAT}="seat9"
-
-# Joypads
-SUBSYSTEMS=="input", ATTRS{name}=="Wolf X-Box One (virtual) pad", MODE="0660", GROUP="input"
-SUBSYSTEMS=="input", ATTRS{name}=="Wolf PS5 (virtual) pad", MODE="0660", GROUP="input"
-SUBSYSTEMS=="input", ATTRS{name}=="Wolf gamepad (virtual) motion sensors", MODE="0660", GROUP="input"
-SUBSYSTEMS=="input", ATTRS{name}=="Wolf Nintendo (virtual) pad", MODE="0660", GROUP="input"
-....
-
-.What does that mean?
-[%collapsible]
-====
-
-    KERNEL=="uinput", SUBSYSTEM=="misc", MODE="0660", GROUP="input", OPTIONS+="static_node=uinput"
-
-Allows Wolf to access `/dev/uinput` on your system.
-It needs that node to create the virtual devices.
-This is usually not the default on servers, but if that is already working for you on your desktop system, you can skip this line.
-
-    SUBSYSTEMS=="input", ATTRS{id/vendor}=="ab00", MODE="0660", GROUP="input", ENV{ID_SEAT}="seat9"
-
-This line checks for the custom vendor-id that Wolf gives to newly created virtual devices and assigns them to `seat9`, which will cause any session with a lower seat (usually you only have `seat1` for your main session) to ignore the devices.
-
-    SUBSYSTEMS=="input", ATTRS{name}=="Wolf X-Box One (virtual) pad", MODE="0660", GROUP="input"
-    SUBSYSTEMS=="input", ATTRS{name}=="Wolf PS5 (virtual) pad", MODE="0660", GROUP="input"
-    SUBSYSTEMS=="input", ATTRS{name}=="Wolf gamepad (virtual) motion sensors", MODE="0660", GROUP="input"
-    SUBSYSTEMS=="input", ATTRS{name}=="Wolf Nintendo (virtual) pad", MODE="0660", GROUP="input"
-
-Now the virtual controllers are different, because we need to emulate an existing brand for them to be picked up correctly, so our virtual controllers have a vendor/product id resembling a real controller.
-The assigned name instead is specific to Wolf.
-
-You can't assign controllers a seat however (well - you can - but it won't have the same effect), so we just give it permissions where only user+group can pick it up.
-====
+They grant Wolf access to `/dev/uinput` and `/dev/uhid` (needed to create the
+virtual gamepads and to emulate the DualSense), and they keep the virtual
+controllers off the host's active seat so a streamed controller can't also drive
+the host desktop -- see https://github.com/games-on-whales/wolf/issues/451.
 
 Reload the udev rules either by rebooting or run:
 
@@ -341,3 +753,4 @@ Reload the udev rules either by rebooting or run:
 udevadm control --reload-rules && udevadm trigger
 ....
 
+Also restart Wolf container if it's already running.

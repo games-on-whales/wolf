@@ -126,9 +126,14 @@ BOOST_LOG_INLINE_GLOBAL_LOGGER_INIT(my_logger, my_logger_mt) {
  * @param format_str: a valid fmt::format string
  * @param args: optional additional args to be formatted
  */
-template <typename S, typename... Args> inline void log(severity_level lvl, const S &format_str, const Args &...args) {
-  auto msg = fmt::format(format_str, args...);
-  BOOST_LOG_SEV(my_logger::get(), lvl) << msg;
+template <typename... Args>
+inline void log(severity_level lvl, fmt::format_string<Args...> format_str, Args &&...args) {
+  try {
+    auto msg = fmt::format(format_str, std::forward<Args>(args)...);
+    BOOST_LOG_SEV(my_logger::get(), lvl) << msg;
+  } catch (const std::exception &e) {
+    std::cout << "Failed to format log message: " << e.what();
+  }
 }
 
 inline logs::severity_level parse_level(const std::string &level) {

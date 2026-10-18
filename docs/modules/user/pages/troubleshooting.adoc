@@ -116,3 +116,223 @@ Follow the steps outlined in https://www.intel.com/content/www/us/en/support/art
   *  Verify the logs for guc information.
 
 Note: If output doesn't contain guc details, then install the latest guc/huc firmware. Copy the https://git.kernel.org/pub/scm/linux/kernel/git/firmware/linux-firmware.git/tree/i915[firmware] to `/lib/firmware/i915/`, and reboot the system.
+
+
+== Permission error when using uhid
+
+Depending on your system configuration the `uhid` module is only loaded "on demand" (when accessing `/dev/uhid` the first time). +
+This can be easily fixed by adding `uhid` to `/etc/module` to load the module during boot:
+
+[source,bash]
+....
+echo 'uhid' | sudo tee /etc/modules-load.d/uhid.conf
+....
+
+== Controller input also controls the host desktop
+
+If your controller works inside the streamed game *but also* moves the host's
+mouse pointer / presses buttons on the host desktop (for example a DualSense
+touchpad moving the host cursor), the virtual devices Wolf created are not
+isolated from your logged-in host session.
+
+This is almost always because the udev rules from the
+xref:user:quickstart.adoc#_virtual_devices_support[Virtual devices support]
+section are missing, out of date, or don't match your controller. Wolf's
+virtual pads appear as real devices in the *host* kernel, and without the rules
+`systemd-logind` grants your desktop user access to them (`uaccess`).
+
+To confirm which devices are leaking, run the input diagnostic on the host while
+a client + controller are connected:
+
+[source,bash]
+....
+sudo ./scripts/wolf-input-diag.sh host
+....
+
+It lists every `Wolf …` virtual device on the host and flags any that a non-root
+user can read, plus any device name not covered by your rules file. Any line
+marked `LEAK` is reachable by the host desktop.
+
+To fix it, (re)install the rules from the
+xref:user:quickstart.adoc#_virtual_devices_support[Virtual devices support]
+section, then reload them and re-plug the controller:
+
+[source,bash]
+....
+sudo udevadm control --reload-rules && sudo udevadm trigger
+....
+
+[TIP]
+====
+The bundled rules match every Wolf device by the `Wolf *virtual*` name glob, so
+they keep working even if a controller's exact product name changes. If you
+maintain your own rules, prefer the glob over hard-coded names — an out-of-date
+name (e.g. `Wolf PS5 (virtual) pad` after it was renamed to
+`Wolf DualSense (virtual) pad`) silently stops isolating that device.
+====
+
+== Recreating the Nvidia Driver Volume
+
+Anytime you update the Nvidia drivers on your host you'll have to re-created the driver volume as described in xref:user:quickstart.adoc[the quickstart guide]. +
+
+Here's a quick script that does that:
+
+[source,bash]
+....
+curl https://raw.githubusercontent.com/games-on-whales/gow/master/images/nvidia-driver/Dockerfile | docker build -t gow/nvidia-driver:latest -f - --build-arg NV_VERSION=$(cat /sys/module/nvidia/version) .
+docker volume rm -f nvidia-driver-vol && docker create --rm --mount source=nvidia-driver-vol,destination=/usr/nvidia gow/nvidia-driver:latest sh
+docker volume ls | grep nvidia-driver
+....
+
+(thanks to G.Reaper)
+
+== Problems with AV1 Streaming
+
+Cards such as the 7900XTX that have problems with encoding, as well as CPUs such as the N150 have reported problems with AV1 streaming.
+If this occurs, edit the config toml file and comment out the `\[[gstreamer.video.av1_encoders]]` via `#` before the lines within them.
+
+One good step to isolate the issue is to run moonlight statistics, and to validate that the network is behaving as expected. The 7900XTX will, when it runs into this issue, only be able to stream at 30FPS over moonlight regardless of settings or configuration. Users with the UHD 730 have also reported similar issues with AV1 encoding.
+
+== Regular stutter every 5 minutes on Linux laptop
+This is specific to the situation where your moonlight client is a linux laptop running NetworkManager/wpa_supplicant.
+
+It's been observed with at least AMD RZ616 (Mediatek MT7921K) and Intel AX210 wireless cards.
+
+If you encounter a situation where you have a regular dropout every 5 minutes, this is for you.
+
+Its possibly not your network, its NetworkManager/wpa_supplicant running the bgscan every 5 minutes. Purpose of this scan is to verify if you are connected to the strongest AP for your network.
+
+By default, it behaves as follows:
+
+- "scan background AP's for stronger signal every 30 seconds if network strength below -65dB, otherwise scan every 300 seconds"
+
+To verify if you are affected by this, you can run a relatively simple test with `iperf3`.
+Run the server on the same machine as your `wolf` server is running with `iperf3 -s`.
+Run `iperf3 -c <your wolf server> -t 690 -u -R -b 80M` on your client laptop.
+
+  - `-c <your wolf server>` tells iperf3 to connect to the server at ip or hostname in client mode
+  - `-t 690` sets the duration of the test to 690 seconds (11.5 minutes)
+  - `-u` sets it to UDP mode
+  - `-R` ensures that it is testing the data being sent _from_ the server _to_ the client.
+  - `-b 80M` limits the bandwidth used to 80 megabits per second. Alter to match the expected maximum bandwidth you are going to have going over your network.
+
+If you have
+
+If the results of the test show up something similar to:
+```text
+Connecting to host <your wolf server>, port 5201
+Reverse mode, remote host <your wolf server> is sending
+[  5] local <your local client ip> port 53385 connected to <your wolf server> port 5201
+[ ID] Interval           Transfer     Bitrate         Jitter    Lost/Total Datagrams
+
+...
+[  5]   2.00-3.00   sec  11.9 MBytes   100 Mbits/sec  0.188 ms  0/8626 (0%)
+[  5]   3.00-4.00   sec  11.9 MBytes   100 Mbits/sec  0.122 ms  0/8637 (0%)
+[  5]   4.00-5.00   sec  11.9 MBytes  99.9 Mbits/sec  0.135 ms  0/8620 (0%)
+[  5]   5.00-6.00   sec  11.9 MBytes  99.9 Mbits/sec  0.183 ms  0/8628 (0%)
+[  5]   6.00-7.00   sec  11.9 MBytes   100 Mbits/sec  0.180 ms  0/8642 (0%)
+[  5]   7.00-8.00   sec  5.70 MBytes  47.8 Mbits/sec  0.143 ms  3676/7805 (47%)
+[  5]   8.00-9.00   sec  5.31 MBytes  44.5 Mbits/sec  0.125 ms  4952/8798 (56%)
+[  5]   9.00-10.00  sec  5.20 MBytes  43.7 Mbits/sec  0.344 ms  5456/9224 (59%)
+[  5]  10.00-11.00  sec  4.49 MBytes  37.7 Mbits/sec  0.150 ms  5459/8712 (63%)
+[  5]  11.00-12.00  sec  4.84 MBytes  40.5 Mbits/sec  0.146 ms  3858/7362 (52%)
+[  5]  12.00-13.00  sec  6.78 MBytes  57.0 Mbits/sec  0.149 ms  4984/9896 (50%)
+[  5]  13.00-14.00  sec  11.9 MBytes   100 Mbits/sec  0.154 ms  0/8645 (0%)
+[  5]  14.00-15.00  sec  11.9 MBytes  99.9 Mbits/sec  0.150 ms  0/8625 (0%)
+[  5]  15.00-16.00  sec  11.9 MBytes   100 Mbits/sec  0.152 ms  0/8640 (0%)
+[  5]  16.00-17.00  sec  11.9 MBytes  99.9 Mbits/sec  0.153 ms  0/8620 (0%)
+[  5]  17.00-18.00  sec  11.9 MBytes   100 Mbits/sec  0.144 ms  0/8638 (0%)
+[  5]  18.00-19.00  sec  11.9 MBytes   100 Mbits/sec  0.171 ms  0/8630 (0%)
+[  5]  19.00-20.00  sec  11.9 MBytes   100 Mbits/sec  0.138 ms  0/8632 (0%)
+...
+# followed by a similar dropout 300 seconds later
+...
+ 254.00-255.00 sec  11.9 MBytes   100 Mbits/sec  0.152 ms  0/8633 (0%)
+[  5] 255.00-256.00 sec  11.9 MBytes   100 Mbits/sec  0.169 ms  0/8635 (0%)
+[  5] 256.00-257.00 sec  11.9 MBytes   100 Mbits/sec  0.140 ms  0/8638 (0%)
+[  5] 257.00-258.00 sec  11.9 MBytes  99.9 Mbits/sec  0.161 ms  0/8624 (0%)
+[  5] 258.00-259.00 sec  11.9 MBytes   100 Mbits/sec  0.191 ms  0/8627 (0%)
+[  5] 259.00-260.00 sec  11.9 MBytes   100 Mbits/sec  0.148 ms  0/8639 (0%)
+[  5] 260.00-261.00 sec  11.9 MBytes  99.8 Mbits/sec  0.198 ms  0/8614 (0%)
+[  5] 261.00-262.00 sec  11.9 MBytes  99.8 Mbits/sec  0.207 ms  0/8616 (0%)
+[  5] 262.00-263.00 sec  11.9 MBytes   100 Mbits/sec  0.261 ms  0/8647 (0%)
+[  5] 263.00-264.00 sec  11.9 MBytes   100 Mbits/sec  0.160 ms  0/8653 (0%)
+[  5] 264.00-265.00 sec  11.9 MBytes   100 Mbits/sec  0.153 ms  0/8635 (0%)
+[  5] 265.00-266.00 sec  11.9 MBytes   100 Mbits/sec  0.162 ms  0/8635 (0%)
+[  5] 266.00-267.00 sec  11.9 MBytes   100 Mbits/sec  0.144 ms  0/8625 (0%)
+[  5] 267.00-268.00 sec  11.9 MBytes   100 Mbits/sec  0.159 ms  0/8643 (0%)
+[  5] 268.00-269.00 sec  11.9 MBytes   100 Mbits/sec  0.159 ms  0/8627 (0%)
+[  5] 269.00-270.00 sec  8.48 MBytes  71.1 Mbits/sec  0.170 ms  2468/8608 (29%)
+[  5] 270.00-271.00 sec  4.69 MBytes  39.3 Mbits/sec  0.119 ms  5235/8629 (61%)
+[  5] 271.00-272.00 sec  4.64 MBytes  38.9 Mbits/sec  0.147 ms  4038/7401 (55%)
+[  5] 272.00-273.00 sec  5.29 MBytes  44.4 Mbits/sec  0.125 ms  5441/9272 (59%)
+[  5] 273.00-274.00 sec  5.30 MBytes  44.5 Mbits/sec  0.120 ms  5368/9205 (58%)
+[  5] 274.00-275.00 sec  5.88 MBytes  49.3 Mbits/sec  0.112 ms  4369/8630 (51%)
+[  5] 275.00-276.00 sec  5.27 MBytes  44.2 Mbits/sec  0.156 ms  4185/8003 (52%)
+[  5] 276.00-277.00 sec  11.3 MBytes  94.7 Mbits/sec  0.127 ms  1146/9310 (12%)
+[  5] 277.00-278.00 sec  11.9 MBytes  99.9 Mbits/sec  0.139 ms  0/8624 (0%)
+[  5] 278.00-279.00 sec  11.9 MBytes   100 Mbits/sec  0.197 ms  0/8643 (0%)
+[  5] 279.00-280.00 sec  11.9 MBytes   100 Mbits/sec  0.162 ms  0/8634 (0%)
+...
+```
+
+then read on, as you are affected by this issue.
+
+There's 2 ways to work around it.
+
+ 1. If you know you only have a single Wifi Access Point and dont need your laptop to roam between multiple AP's, connect to it in `BSSID` mode. If you are using any of the more modern Linux distros and DE's, the NetworkManager frontend will have a dropdown selection for this, and there should only be one entry.
+
+ 2. If you know you have more than a single AP and that your laptop will need to roam due to the shape of your house/where you use the laptop, you can tweak the `bgscan` options.
+
+To query the bgscan setting at any point,  `busctl get-property --system fi.w1.wpa_supplicant1 /fi/w1/wpa_supplicant1/Interfaces/0/Networks/0 fi.w1.wpa_supplicant1.Network Properties --json=short | jq '.data.bgscan'`
+
+It should show similar to
+```json
+{
+  "type": "s",
+  "data": "\"simple:30:-65:300\""
+}
+```
+
+If you see dropouts more frequent than every 5 minutes, dont worry, its probably still the same thing. I've seen up to every 10 seconds on my laptop with AMD R616 (MEDIATEK Corp. MT7922 802.11ax PCI Express Wireless Network Adapter).
+
+If you have different patterns of packet drops, please ensure your wifi is configured correctly and not overloaded.
+
+
+The default `bgscan` value is going to be `simple:30:-65:300`, which translates to "scan background AP's for stronger signal every 30 seconds if network strength below -65dB, otherwise scan every 300 seconds".
+
+Now, in my case, I'm running 3 AP's as i have an oddly shaped, very long house, so I do in fact need roaming configured in my wifi.
+
+solution: https://unix.stackexchange.com/a/799011
+
+```bash
+#!/bin/bash
+
+set -e
+
+# Run only when an interface is up
+if [[ "$2" != "up" ]]; then
+    exit 0
+fi
+
+# Check that the interface that went up is a wireless one
+if iw dev | grep -wq "$1"; then
+    ALL_NETS="$(busctl tree fi.w1.wpa_supplicant1 | grep -Eo '/fi/w1/wpa_supplicant1/Interfaces/.+/Networks/[[:digit:]]+')"
+
+    for DBUS_PATH_TO_NET in $ALL_NETS; do
+        busctl  call --system \
+                fi.w1.wpa_supplicant1 \
+                "$DBUS_PATH_TO_NET" \
+                org.freedesktop.DBus.Properties Set \
+                ssv \
+                fi.w1.wpa_supplicant1.Network Properties \
+                'a{sv}' 1 \
+                bgscan s "simple:30:-80:86400"
+    done
+fi
+
+```
+
+Save this file to `/etc/NetworkManager/dispatcher.d/fix_roaming.sh` and make it executable with `chmod +x /etc/NetworkManager/dispatcher.d/fix_roaming.sh`, run `systemctl stop wpa_supplicant.service` and wait for your wifi to reconnect.
+
+This should reduce the frequency of this issue happening to once every hour, provided you have good signal.

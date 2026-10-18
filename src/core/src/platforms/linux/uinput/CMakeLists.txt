@@ -26,9 +26,6 @@ target_include_directories(wolf_uinput PUBLIC .)
 set_target_properties(wolf_uinput PROPERTIES PUBLIC_HEADER .)
 set_target_properties(wolf_uinput PROPERTIES OUTPUT_NAME "input")
 
-find_package(Boost REQUIRED COMPONENTS locale)
-include_directories(${Boost_INCLUDE_DIRS})
-
 # This library depends on:
 target_link_libraries(wolf_uinput PUBLIC
         ${Boost_LIBRARIES}

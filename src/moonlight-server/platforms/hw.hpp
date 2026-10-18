@@ -13,6 +13,12 @@
  */
 std::vector<std::string> linked_devices(std::string_view gpu);
 
+/**
+ * Given /dev/dri/renderD128 returns renderD128
+ * works with symlinks too, /dev/dri/by-path/pci-0000:2d:00.0-render returns renderD128
+ */
+std::string get_render_node_name(std::string_view render_node);
+
 enum GPU_VENDOR {
   NVIDIA,
   AMD,
@@ -21,5 +27,7 @@ enum GPU_VENDOR {
 };
 
 GPU_VENDOR get_vendor(std::string_view gpu);
+
+std::string get_vendor_name(GPU_VENDOR vendor);
 
 std::string get_mac_address(std::string_view local_ip);

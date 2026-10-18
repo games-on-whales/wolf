@@ -1,0 +1,15 @@
+= Frequently Asked Questions
+
+.Why was gstreamer chosen as the foundation for this project?
+[%collapsible]
+====
+
+The main reason for choosing Gstreamer is modularity: having everything as a plugin is a great advantage! For example there are other projects that are using our little Wayland compositor for virtual desktops but they aren't using Moonlight for streaming. Everything is encapsulated and can be reused by other projects.
+
+The other great thing is that you can very easily manipulate the audio/video pipeline in real time. For example for lobbies (think of co-op sessions) we can swap one session video feed from one source to another one without having to write much code for it.
+
+Another example is that someone asked recently if it's possible to also save the video to report a bug in a game and gstreamer makes that easy to add, just push the encoded video frame to a file. Again, not much code change just a few edits on the pipeline. The fact that is described as a simple string makes it fully hackable just by editing the config.toml
+
+The whole model of making plugins that are basically just buffer in -> buffer out generally works very well and allows to have very easy composition to make more and more complex pipelines.
+
+====

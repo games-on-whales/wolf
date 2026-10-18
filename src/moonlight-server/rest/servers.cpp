@@ -1,5 +1,7 @@
 #include <boost/property_tree/json_parser.hpp>
+#include <events/events.hpp>
 #include <immer/atom.hpp>
+#include <immer/map_transient.hpp>
 #include <rest/endpoints.hpp>
 
 namespace HTTPServers {
@@ -9,9 +11,11 @@ namespace HTTPServers {
  */
 constexpr char const *pin_html =
 #include "html/pin.include.html"
+
     ;
 
 namespace bt = boost::property_tree;
+using namespace wolf::core;
 
 /**
  * @brief Start the generic server on the specified port
@@ -24,14 +28,12 @@ void startServer(HttpServer *server, const immer::box<state::AppState> state, in
   server->default_resource["POST"] = endpoints::not_found<SimpleWeb::HTTP>;
 
   server->resource["^/serverinfo$"]["GET"] = [&state](auto resp, auto req) {
-    endpoints::serverinfo<SimpleWeb::HTTP>(resp, req, state);
+    endpoints::serverinfo<SimpleWeb::HTTP>(resp, req, {}, state);
   };
 
-  server->resource["^/pair$"]["GET"] = [&state](auto resp, auto req) {
-    endpoints::pair<SimpleWeb::HTTP>(resp, req, state);
-  };
+  server->resource["^/pair$"]["GET"] = [&state](auto resp, auto req) { endpoints::pair(resp, req, state); };
 
-  auto pairing_atom = std::make_shared<immer::atom<immer::map<std::string, immer::box<state::PairSignal>>>>();
+  auto pairing_atom = state->pairing_atom;
 
   server->resource["^/pin/$"]["GET"] = [](auto resp, auto req) { resp->write(pin_html); };
   server->resource["^/pin/$"]["POST"] = [pairing_atom](auto resp, auto req) {
@@ -68,12 +70,22 @@ void startServer(HttpServer *server, const immer::box<state::AppState> state, in
     send_xml<SimpleWeb::HTTP>(resp, SimpleWeb::StatusCode::success_ok, xml);
   };
 
-  auto pair_handler = state->event_bus->register_handler<immer::box<state::PairSignal>>(
-      [pairing_atom](const immer::box<state::PairSignal> pair_sig) {
-        pairing_atom->update([&pair_sig](auto m) {
+  auto pair_handler = state->event_bus->register_handler<immer::box<events::PairSignal>>(
+      [pairing_atom](const immer::box<events::PairSignal> pair_sig) {
+        pairing_atom->update([&pair_sig](const immer::map<std::string, immer::box<events::PairSignal>> &m) {
           auto secret = crypto::str_to_hex(crypto::random(8));
-          logs::log(logs::info, "Insert pin at http://{}:47989/pin/#{}", pair_sig->host_ip, secret);
-          return m.set(secret, pair_sig);
+          auto http_port = std::to_string(state::get_port(state::HTTP_PORT));
+          logs::log(logs::info, "Insert pin at http://{}:{}/pin/#{}", pair_sig->host_ip, http_port, secret);
+          // filter out any other (dangling) pair request from the same client
+          auto t_map = m.transient();
+          for (auto [key, value] : m) {
+            if (value->client_ip == pair_sig->client_ip) {
+              t_map.erase(key);
+            }
+          }
+          // insert the new pair request
+          t_map.set(secret, pair_sig);
+          return t_map.persistent();
         });
       });
 
@@ -87,7 +99,7 @@ std::optional<state::PairedClient>
 get_client_if_paired(const immer::box<state::AppState> state,
                      const std::shared_ptr<typename SimpleWeb::ServerBase<SimpleWeb::HTTPS>::Request> &request) {
   auto client_cert = SimpleWeb::Server<SimpleWeb::HTTPS>::get_client_cert(request);
-  return state::get_client_via_ssl(state->config, client_cert);
+  return state::get_client_via_ssl(state->config, std::move(client_cert));
 }
 
 void reply_unauthorized(const std::shared_ptr<typename SimpleWeb::ServerBase<SimpleWeb::HTTPS>::Request> &request,
@@ -110,8 +122,9 @@ void startServer(HttpsServer *server, const immer::box<state::AppState> state, i
   server->default_resource["POST"] = endpoints::not_found<SimpleWeb::HTTPS>;
 
   server->resource["^/serverinfo$"]["GET"] = [&state](auto resp, auto req) {
-    if (get_client_if_paired(state, req)) {
-      endpoints::serverinfo<SimpleWeb::HTTPS>(resp, req, state);
+    if (auto client = get_client_if_paired(state, req)) {
+      auto client_session = state::get_session_by_client(state->running_sessions->load(), client.value());
+      endpoints::serverinfo<SimpleWeb::HTTPS>(resp, req, client_session, state);
     } else {
       reply_unauthorized(req, resp);
     }
@@ -119,7 +132,7 @@ void startServer(HttpsServer *server, const immer::box<state::AppState> state, i
 
   server->resource["^/pair$"]["GET"] = [&state](auto resp, auto req) {
     if (get_client_if_paired(state, req)) {
-      endpoints::pair<SimpleWeb::HTTPS>(resp, req, state);
+      endpoints::https::pair(resp, req);
     } else {
       reply_unauthorized(req, resp);
     }
@@ -157,8 +170,13 @@ void startServer(HttpsServer *server, const immer::box<state::AppState> state, i
     }
   };
 
-  // TODO: add missing
-  // https_server.resource["^/appasset$"]["GET"]
+  server->resource["^/appasset$"]["GET"] = [&state](auto resp, auto req) {
+    if (get_client_if_paired(state, req)) {
+      endpoints::https::appasset(resp, req, state);
+    } else {
+      reply_unauthorized(req, resp);
+    }
+  };
 
   server->start([](unsigned short port) { logs::log(logs::info, "HTTPS server listening on port: {} ", port); });
 }

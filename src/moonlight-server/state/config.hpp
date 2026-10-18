@@ -4,35 +4,48 @@
 #include <boost/uuid/uuid_generators.hpp> // generators
 #include <boost/uuid/uuid_io.hpp>         // streaming operators etc.
 #include <crypto/crypto.hpp>
+#include <events/events.hpp>
 #include <helpers/logger.hpp>
+#include <runners/docker.hpp>
+#include <runners/process.hpp>
 #include <state/data-structures.hpp>
 
 namespace state {
+
+using namespace wolf::core;
+using namespace wolf::config;
+
 /**
  * @brief Will load a configuration from the given source.
  *
  * If the source is not present, it'll provide some sensible defaults
  */
-Config load_or_default(const std::string &source, const std::shared_ptr<dp::event_bus> &ev_bus);
+Config load_or_default(const std::string &source,
+                       const std::shared_ptr<events::EventBusType> &ev_bus,
+                       state::SessionsAtoms running_sessions);
 
 /**
  * Side effect, will atomically update the paired clients list in cfg
+ * and persist the new state to disk
  */
 void pair(const Config &cfg, const PairedClient &client);
 
 /**
  * Side effect, will atomically remove the client from the list of paired clients
+ * and persist the new state to disk
  */
 void unpair(const Config &cfg, const PairedClient &client);
 
 /**
  * Returns the first PairedClient with the given client_cert
  */
-inline std::optional<PairedClient> get_client_via_ssl(const Config &cfg, x509_st *client_cert) {
-  auto paired_clients = cfg.paired_clients.load();
-  auto search_result =
-      std::find_if(paired_clients->begin(), paired_clients->end(), [&client_cert](const PairedClient &pair_client) {
-        auto paired_cert = x509::cert_from_string(pair_client.client_cert);
+inline std::optional<PairedClient> get_client_via_ssl(const Config &cfg, x509::x509_ptr client_cert) {
+  auto paired_clients = cfg.paired_clients->load();
+  auto search_result = std::find_if(
+      paired_clients->begin(),
+      paired_clients->end(),
+      [&client_cert](const immer::box<PairedClient> &pair_client) {
+        auto paired_cert = x509::cert_from_string(pair_client->client_cert);
         auto verification_error = x509::verification_error(paired_cert, client_cert);
         if (verification_error) {
           logs::log(logs::trace, "X509 certificate verification error: {}", verification_error.value());
@@ -42,7 +55,7 @@ inline std::optional<PairedClient> get_client_via_ssl(const Config &cfg, x509_st
         }
       });
   if (search_result != paired_clients->end()) {
-    return *search_result;
+    return **search_result;
   } else {
     return std::nullopt;
   }
@@ -56,17 +69,62 @@ inline std::optional<PairedClient> get_client_via_ssl(const Config &cfg, const s
 }
 
 /**
- * Return the app with the given app_id, throws an exception if not found
+ * Returns the client ID for a given client
  */
-inline immer::box<App> get_app_by_id(const Config &cfg, std::string_view app_id) {
-  auto search_result = std::find_if(cfg.apps.begin(), cfg.apps.end(), [&app_id](const state::App &app) {
-    return app.base.id == app_id;
+inline std::size_t get_client_id(const PairedClient &current_client) {
+  return std::hash<std::string>{}(current_client.client_cert);
+}
+
+/**
+ * Returns the first PairedClient with the given client_id
+ */
+inline std::optional<PairedClient> get_client_by_id(const Config &cfg, const std::string &client_id) {
+  auto paired_clients = cfg.paired_clients->load();
+  auto client_id_num = std::stoull(client_id);
+
+  auto search_result = std::find_if(paired_clients->begin(),
+                                    paired_clients->end(),
+                                    [client_id_num](const immer::box<PairedClient> &pair_client) -> bool {
+                                      auto id = get_client_id(*pair_client);
+                                      return id == client_id_num;
+                                    });
+
+  if (search_result != paired_clients->end()) {
+    return **search_result;
+  }
+  return std::nullopt;
+}
+
+/**
+ * Returns the profile that represent apps shown in the Moonlight UI
+ */
+inline std::optional<immer::box<events::Profile>> get_moonlight_profile(const Config &cfg) {
+  ProfilesList profiles = cfg.profiles->load();
+  auto profile = std::find_if(profiles.begin(), profiles.end(), [](const immer::box<events::Profile> &profile) {
+    return profile->id == events::MOONLIGHT_PROFILE_ID;
   });
 
-  if (search_result != cfg.apps.end())
-    return *search_result;
+  if (profile != profiles.end())
+    return *profile;
   else
-    throw std::runtime_error(fmt::format("Unable to find app with id: {}", app_id));
+    return std::nullopt;
+}
+
+/**
+ * Returns the app with the given app_id (if it exists)
+ */
+inline std::optional<immer::box<events::App>> get_moonlight_app_by_id(const Config &cfg, std::string_view app_id) {
+  auto moonlight_profile = get_moonlight_profile(cfg);
+  if (!moonlight_profile)
+    return std::nullopt;
+  immer::vector<immer::box<events::App>> apps = moonlight_profile.value()->apps->load();
+  auto search_result =
+      std::find_if(apps.begin(), apps.end(), [&app_id](const events::App &app) { return app.base.id == app_id; });
+
+  if (search_result != apps.end())
+    return {*search_result};
+  else
+    return std::nullopt;
 }
 
 inline bool file_exist(const std::string &filename) {
@@ -78,4 +136,46 @@ inline std::string gen_uuid() {
   auto uuid = boost::uuids::random_generator()();
   return boost::lexical_cast<std::string>(uuid);
 }
+
+static std::shared_ptr<events::Runner> get_runner(const events::RunnerTypes &runner,
+                                                  const std::shared_ptr<events::EventBusType> &ev_bus) {
+  if (rfl::holds_alternative<AppCMD>(runner.variant())) {
+    auto run_cmd = rfl::get<AppCMD>(runner.variant()).run_cmd;
+    return std::make_shared<process::RunProcess>(ev_bus, run_cmd);
+  } else if (rfl::holds_alternative<AppDocker>(runner.variant())) {
+    return std::make_shared<docker::RunDocker>(
+        docker::RunDocker::from_cfg(ev_bus, rfl::get<AppDocker>(runner.variant())));
+  } else {
+    logs::log(logs::error, "Found runner of unknown type");
+    throw std::runtime_error("Unknown runner type");
+  }
+}
+
+static moonlight::control::pkts::CONTROLLER_TYPE get_controller_type(const ControllerType &ctrl_type) {
+  switch (ctrl_type) {
+  case ControllerType::XBOX:
+    return moonlight::control::pkts::CONTROLLER_TYPE::XBOX;
+  case ControllerType::PS:
+    return moonlight::control::pkts::CONTROLLER_TYPE::PS;
+  case ControllerType::NINTENDO:
+    return moonlight::control::pkts::CONTROLLER_TYPE::NINTENDO;
+  case ControllerType::AUTO:
+    return moonlight::control::pkts::CONTROLLER_TYPE::AUTO;
+  }
+  return moonlight::control::pkts::CONTROLLER_TYPE::AUTO;
+}
+
+std::optional<PairedClient> get_client_by_id(const Config &cfg, const std::string &client_id);
+
+/**
+ * Replaces the specified client_id with the updated_client
+ * Side effects: will save back the configuration to disk
+ */
+void update_client_settings(const Config &cfg, std::size_t client_id, const PairedClient &updated_client);
+
+/**
+ * Replaces the currently loaded profiles
+ * Side effects: will save back the configuration to disk
+ */
+void update_profiles(const Config &cfg, const ProfilesList &profiles);
 } // namespace state

@@ -1,5 +1,7 @@
 #pragma once
+#include <array>
 #include <cstdint>
+#include <optional>
 #include <string>
 
 namespace moonlight {
@@ -16,6 +18,7 @@ struct App {
   const std::string title;
   const std::string id;
   const bool support_hdr;
+  std::optional<std::string> icon_png_path;
 };
 
 #define FLAG_EXTENSION 0x10
@@ -25,6 +28,15 @@ struct App {
 #define FLAG_SOF 0x4
 
 #define MAX_RTP_HEADER_SIZE 16
+
+// Client feature flags for x-ml-general.featureFlags SDP attribute
+#define ML_FF_FEC_STATUS 0x01    // Client sends SS_FRAME_FEC_STATUS for frame losses
+#define ML_FF_SESSION_ID_V1 0x02 // Client supports X-SS-Ping-Payload and X-SS-Connect-Data
+
+struct SS_PING {
+  std::array<char, 16> payload;
+  uint32_t sequenceNumber;
+};
 
 typedef struct _NV_VIDEO_PACKET {
   uint32_t streamPacketIndex;

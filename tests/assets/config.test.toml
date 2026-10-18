@@ -6,35 +6,43 @@ uuid = "0000-1111-2222-3333"
 support_hevc = true
 support_av1 = false
 # The version of this config file
-config_version = 3
+config_version = 7
 
 
 # A list of paired clients that will be allowed to stream
 [[paired_clients]]
 client_cert = "A VERY VALID CERTIFICATE"
+app_state_folder = "some/folder"
+[paired_clients.settings]
 run_uid = 1234
 run_gid = 5678
-app_state_folder = "some/folder"
+controllers_override = ["PS"]
+mouse_acceleration = 2.5
+v_scroll_acceleration = 1.5
+h_scroll_acceleration = 10.2
 
+[[profiles]]
+id = "moonlight-profile-id"
 
-[[apps]]
+[[profiles.apps]]
 title = "Firefox"
 start_virtual_compositor = true
+icon_png_path = "firefox.png"
 
-[apps.runner]
+[profiles.apps.runner]
 type = "docker"
 name = "WolfRetroarch"
 image = "ghcr.io/games-on-whales/firefox:master"
 mounts = [
-  "/tmp/sockets:/tmp/.X11-unix/:ro",
-  "/tmp/sockets:/run/user/1000/pulse/:ro",
-  "/run/udev:/run/udev:ro",
-  "/var/local/retro:/home/retro:rw",
+    "/tmp/sockets:/tmp/.X11-unix/:ro",
+    "/tmp/sockets:/run/user/1000/pulse/:ro",
+    "/run/udev:/run/udev:ro",
+    "/var/local/retro:/home/retro:rw",
 ]
 devices = []
 ports = []
 env = [
-  "LOG_LEVEL=info"
+    "LOG_LEVEL=info"
 ]
 base_create_json = """
 {
@@ -47,26 +55,32 @@ base_create_json = """
 \
 """
 
-[[apps]]
+[[profiles.apps]]
 title = "Test ball"
 start_virtual_compositor = false
 render_node = "/tmp/dead_beef"
-joypad_type = "xbox"
+joypad_type = "XBOX"
 
-[apps.runner]
+[profiles.apps.runner]
 type = "process"
 run_cmd = "destroy_computer_now"
 
-[apps.video]
+[profiles.apps.video]
 source = "override DEFAULT SOURCE"
 
-
+# An example profile that will be shown in our Wolf UI
+[[profiles]]
+id = "user"
+name = "User"
+apps = []
 
 [gstreamer]
 
 [gstreamer.video]
 default_source = "video_source"
 default_sink = "video_sink"
+
+defaults = { "coreelements" = { "video_params" = "default", "video_params_zero_copy" = "default" } }
 
 ######################
 # AV1 encoders
@@ -82,7 +96,8 @@ encoder_pipeline = ""
 plugin_name = "coreelements"
 check_elements = ["identity"]
 video_params = "params"
-encoder_pipeline = "h264_pipeline"
+video_params_zero_copy = "params_zero"
+encoder_pipeline = "av1_pipeline"
 
 ######################
 # HEVC encoders
@@ -97,7 +112,6 @@ encoder_pipeline = ""
 [[gstreamer.video.hevc_encoders]]
 plugin_name = "coreelements"
 check_elements = ["identity"]
-video_params = "params"
 encoder_pipeline = "hevc_pipeline"
 
 
@@ -114,7 +128,6 @@ encoder_pipeline = ""
 [[gstreamer.video.h264_encoders]]
 plugin_name = "coreelements"
 check_elements = ["identity"]
-video_params = "params"
 encoder_pipeline = "h264_pipeline"
 
 
@@ -126,4 +139,3 @@ default_source = "audio_source"
 default_audio_params = "audio_params"
 default_opus_encoder = "audio_encoder"
 default_sink = "audio_sink"
-

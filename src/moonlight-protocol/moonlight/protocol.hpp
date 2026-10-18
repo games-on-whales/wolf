@@ -154,4 +154,6 @@ XML applist(const immer::vector<App> &apps);
  */
 XML launch_success(const std::string &local_ip, const std::string &rtsp_port);
 // TODO: launch_error()
+
+XML launch_resume(const std::string &local_ip, const std::string &rtsp_port);
 } // namespace moonlight

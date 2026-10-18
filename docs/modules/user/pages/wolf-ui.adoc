@@ -1,0 +1,37 @@
+:experimental:
+= Wolf UI
+
+Wolf UI is an application launcher and profile manager.
+It provides an intuitive interface for organizing, downloading and updating applications and set up cooperative lobbies.
+
+image:ROOT:wolf-ui-users.png[]
+
+== User Interface Overview
+
+Wolf UI consists of two main screens:
+
+1. *Profile Selection Screen*: Choose which user profile to access
+
+[NOTE]
+====
+Profiles can be **protected by a PIN** to prevent unauthorized access, see xref:user:configuration.adoc#_profile_example[configuration/profiles]
+====
+
+2. *Application Selection Screen*: Browse and launch applications for the selected profile
+
+image:ROOT:wolf-ui-apps.png[]
+
+Greyed out applications aren't currently installed, you can download them directly from Wolf UI.
+This will actually pull the Docker images from our https://github.com/games-on-whales/gow[open source registry].
+
+== Lobbies
+
+When launching an app, you can create a lobby so that multiple users will be able to connect to the same instance.
+When you do that, Wolf UI will show a lobby in the first page below the profile selection screen.
+
+== Return to Wolf UI Hotkey
+
+When you are running an application, you can instantly return to Wolf UI by:
+
+* pressing kbd:[Ctrl+ALT+SHIFT+W] on your keyboard
+* pressing kbd:[START + UP + RB] on a joypad

@@ -3,10 +3,9 @@ add_library(wolf_audio)
 add_library(wolf::audio ALIAS wolf_audio)
 
 target_include_directories(wolf_audio PRIVATE ../../../)
-find_package(Boost REQUIRED)
 target_link_libraries_system(wolf_audio
         PUBLIC
-        Boost::boost
+        ${Boost_LIBRARIES}
         wolf::helpers)
 
 

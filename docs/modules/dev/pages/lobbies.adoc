@@ -1,0 +1,49 @@
+= Lobbies implementation
+
+WIP...
+
+== Wolf UI
+
+== Gstreamer pipeline
+
+[mermaid,format=svg]
+....
+flowchart LR
+    GStreamer["gst-wayland-comp"]
+    App["App"]
+
+    GStreamer -->|Wayland Socket| App
+
+    subgraph Pipeline["GStreamer Encoding Pipeline"]
+        direction LR
+        InterlaceSink["interpipe_sink"]
+
+        subgraph ClientA["Client A pipeline"]
+            InterfaceA["interpipe_src"]
+            ScalingA["Resolution Scaling"]
+            EncodingA["H.264/HEVC/AV1<br/>Encoding"]
+            UDPA["UDP<br/>Sink"]
+        end
+
+        subgraph ClientB["Client B pipeline"]
+            InterfaceB["interpipe_src"]
+            ScalingB["Resolution Scaling"]
+            EncodingB["H.264/HEVC/AV1<br/>Encoding"]
+            UDPB["UDP<br/>Sink"]
+        end
+
+        InterlaceSink -.->|Client A| InterfaceA
+        InterfaceA --> ScalingA
+        ScalingA --> EncodingA
+        EncodingA --> UDPA
+
+        InterlaceSink -.->|Client B| InterfaceB
+        InterfaceB --> ScalingB
+        ScalingB --> EncodingB
+        EncodingB --> UDPB
+    end
+
+    GStreamer -->|Raw Framebuffer| InterlaceSink
+    UDPA --> MonitorA["Moonlight<br/>Client A"]
+    UDPB --> MonitorB["Moonlight<br/>Client B"]
+....

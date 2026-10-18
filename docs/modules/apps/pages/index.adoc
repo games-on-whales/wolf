@@ -1,0 +1,88 @@
+= Apps
+
+== Overview
+
+Wolf will start different Docker containers that are preconfigured for different apps such as Steam, Pegasus or Firefox.
+Once the container is launched, Wolf streams the output to the connected Moonlight client.
+
+Currently, when opening and closing the app through Moonlight, the app container will be deleted.
+Therefore, all data except for the mounted paths will be deleted, which ensures application consistency to some extent.
+However, if modifications to the container are needed, such as installing additional software, the best approach is to create a custom app image.
+Wolf uses the same app image as in the GoW project.
+Therefore, you can refer to this https://games-on-whales.github.io/gow/adding-an-app.html[link] for customizing app content.
+
+See each subpage for further details and additional configuration steps.
+
+== Build your own
+
+If you want to build your own app, you can use the following template:
+
+* Clone the https://github.com/games-on-whales/gow[GOW] repo
+
+[source,shell]
+----
+git clone https://github.com/games-on-whales/gow.git
+----
+
+* All the published images are in the `images/` directory.
+You can edit any of the images or create a new one.
+
+=== Example: edit an already existing image
+
+For example, say that you want to add another emulator to `ES-DE`:
+
+* Edit the `images/es-de/Dockerfile` file and add the necessary software.
+* Build the image: open a shell *in the root of the GOW repo*, then use Docker to build with the following command:
+
+.This will build the image locally with the tag `gow/es-de:custom`.
+[source,shell]
+----
+docker build -t gow/es-de:custom --build-arg BASE_APP_IMAGE=ghcr.io/games-on-whales/base-app:edge images/es-de .
+----
+
+* Finally, update the `config.toml` file in Wolf to use the new image.
+Just change the `image` field under `[apps.runner]` to the newly locally built `gow/es-de:custom`.
+* Don't forget to contribute back by creating a pull request in https://github.com/games-on-whales/gow[games-on-whales/gow]!
+
+.I want to edit something in `base` or `base-app`
+[%collapsible]
+====
+Our builds are hierarchical: all images are based on `base-app` which is based on `base`.
+You can build them with:
+
+[source,shell]
+----
+docker build -t gow/base images/base .
+docker build -t gow/base-app --build-arg BASE_IMAGE=gow/base images/base-app .
+----
+====
+
+=== Testing out an image locally
+
+If you have a desktop environment running on your host, you can run the built image without even using Wolf. +
+Here's an example of running Steam inside Docker *on a Wayland host* without installing anything else on your host:
+
+[source,shell]
+----
+  docker run --name=steam --rm -it \
+  --device=/dev/dri/renderD128 \
+  --device=/dev/dri/card0 \
+  --ipc=host \
+  --cap-add=ALL \
+  --security-opt seccomp=unconfined \
+  -e XDG_RUNTIME_DIR=/tmp \
+  -v ${XDG_RUNTIME_DIR}/${WAYLAND_DISPLAY}:/tmp/${WAYLAND_DISPLAY}:rw \
+  -e XDG_SESSION_TYPE=wayland \
+  -e WAYLAND_DISPLAY=${WAYLAND_DISPLAY} \
+  -e RUN_SWAY=true \
+  -v /tmp/SteamGOWData:/home/retro/ \
+  ghcr.io/games-on-whales/steam:edge
+----
+
+.The Steam big picture mode should start on your host in a normal window
+image::ROOT:steam-on-desktop.png[A screenshot of Steam running on a Wayland desktop]
+
+Depending on your host setup, you might need to adjust this command. +
+For example, for *Nvidia users* with the container toolkit installed you might need to add `--gpus=all` instead of `--device=/dev/dri/renderD128 --device=/dev/dri/card0` and `-e NVIDIA_DRIVER_CAPABILITIES=all` to the environment variables.
+
+In the command above `/tmp/SteamGOWData` in your host is where the home folder (containing Steam client and settings in this example) will be stored, make sure to adjust that to your liking. +

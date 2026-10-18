@@ -1,7 +1,7 @@
 #pragma once
 
-#include "streaming/data-structures.hpp"
 #include <chrono>
+#include <events/events.hpp>
 #include <helpers/logger.hpp>
 #include <helpers/utils.hpp>
 #include <rtp/udp-ping.hpp>
@@ -15,6 +15,7 @@ using namespace ranges;
 using namespace std::string_literals;
 using namespace std::chrono_literals;
 using namespace rtsp;
+using namespace wolf::core;
 
 RTSP_PACKET error_msg(unsigned short status_code, std::string_view error_msg, int sequence_number = 0) {
   return {.type = RESPONSE,
@@ -37,9 +38,10 @@ RTSP_PACKET ok_msg(int sequence_number,
 // Additional feature supports
 constexpr uint32_t FS_PEN_TOUCH_EVENTS = 0x01;
 constexpr uint32_t FS_CONTROLLER_TOUCH_EVENTS = 0x02;
+using namespace wolf::core::audio;
 
 RTSP_PACKET
-describe(const RTSP_PACKET &req, const state::StreamSession &session) {
+describe(const RTSP_PACKET &req, const events::StreamSession &session) {
   std::vector<std::pair<std::string, std::string>> payloads;
   if (session.display_mode.hevc_supported) {
     payloads.push_back({"", "sprop-parameter-sets=AAAAAU"});
@@ -48,16 +50,56 @@ describe(const RTSP_PACKET &req, const state::StreamSession &session) {
     payloads.push_back({"a", "a=rtpmap:98 AV1/90000"});
   }
 
-  std::string audio_speakers = session.audio_mode.speakers                                            //
-                               | views::transform([](auto speaker) { return (char)(speaker + '0'); }) //
-                               | to<std::string>;                                                     //
+  // Advertise all audio configurations
+  for (const auto audio_mode : state::AUDIO_CONFIGURATIONS) {
+    auto mapping_p = audio_mode.speakers;
+    // Opusenc forces a re-mapping to Vorbis; see
+    // https://gitlab.freedesktop.org/gstreamer/gstreamer/-/blob/1.24.6/subprojects/gst-plugins-base/ext/opus/gstopusenc.c#L549-572
+    if (audio_mode.channels == 6) { // 5.1
+      mapping_p = {
+          // The mapping for 5.1 is: [0 1 4 5 2 3]
+          AudioMode::Speakers::FRONT_LEFT,
+          AudioMode::Speakers::FRONT_RIGHT,
+          AudioMode::Speakers::BACK_LEFT,
+          AudioMode::Speakers::BACK_RIGHT,
+          AudioMode::Speakers::FRONT_CENTER,
+          AudioMode::Speakers::LOW_FREQUENCY,
+      };
+    } else if (audio_mode.channels == 8) { // 7.1
+      mapping_p = {
+          // The mapping for 7.1 is: [0 1 4 5 2 3 6 7]
+          AudioMode::Speakers::FRONT_LEFT,
+          AudioMode::Speakers::FRONT_RIGHT,
+          AudioMode::Speakers::BACK_LEFT,
+          AudioMode::Speakers::BACK_RIGHT,
+          AudioMode::Speakers::FRONT_CENTER,
+          AudioMode::Speakers::LOW_FREQUENCY,
+          AudioMode::Speakers::SIDE_LEFT,
+          AudioMode::Speakers::SIDE_RIGHT,
+      };
+    }
 
-  payloads.push_back({"a",
-                      fmt::format("fmtp:97 surround-params={}{}{}{}",
-                                  session.audio_mode.channels,
-                                  session.audio_mode.streams,
-                                  session.audio_mode.coupled_streams,
-                                  audio_speakers)});
+    /**
+     * GFE advertises incorrect mapping for normal quality configurations,
+     * as a result, Moonlight rotates all channels from index '3' to the right
+     * To work around this, rotate channels to the left from index '3'
+     */
+    if (audio_mode.channels > 2) { // 5.1 and 7.1
+      std::rotate(mapping_p.begin() + 3, mapping_p.begin() + 4, mapping_p.end());
+    }
+    std::string audio_speakers =
+        mapping_p                                                                                //
+        | views::transform([](auto speaker) { return (char)(static_cast<int>(speaker) + '0'); }) //
+        | to<std::string>;
+    auto surround_params = fmt::format("fmtp:97 surround-params={}{}{}{}",
+                                       audio_mode.channels,
+                                       audio_mode.streams,
+                                       audio_mode.coupled_streams,
+                                       audio_speakers);
+
+    payloads.push_back({"a", surround_params});
+    logs::log(logs::trace, "[RTSP] Sending audio surround params: {}", surround_params);
+  }
 
   payloads.push_back(
       {"a", fmt::format("x-ss-general.featureFlags: {}", FS_PEN_TOUCH_EVENTS | FS_CONTROLLER_TOUCH_EVENTS)});
@@ -65,29 +107,34 @@ describe(const RTSP_PACKET &req, const state::StreamSession &session) {
   return ok_msg(req.seq_number, {}, payloads);
 }
 
-RTSP_PACKET setup(const RTSP_PACKET &req, unsigned short number_of_sessions) {
+RTSP_PACKET setup(const RTSP_PACKET &req, const events::StreamSession &session) {
 
-  int service_port;
   auto type = req.request.stream.type;
   logs::log(logs::trace, "[RTSP] setup type: {}", type);
 
+  std::map<std::string, std::string> options = {{"Session", "DEADBEEFCAFE;timeout = 90"}};
+
   switch (utils::hash(type)) {
-  case utils::hash("audio"):
-    service_port = state::AUDIO_PING_PORT + number_of_sessions;
+  case utils::hash("audio"): {
+    options["Transport"] = "server_port=" + std::to_string(session.audio_stream_port);
+    options["X-SS-Ping-Payload"] = {session.rtp_secret_payload.begin(), session.rtp_secret_payload.end()};
     break;
-  case utils::hash("video"):
-    service_port = state::VIDEO_PING_PORT + number_of_sessions;
+  }
+  case utils::hash("video"): {
+    options["Transport"] = "server_port=" + std::to_string(session.video_stream_port);
+    options["X-SS-Ping-Payload"] = {session.rtp_secret_payload.begin(), session.rtp_secret_payload.end()};
     break;
-  case utils::hash("control"):
-    service_port = state::CONTROL_PORT;
+  }
+  case utils::hash("control"): {
+    options["Transport"] = "server_port=" + std::to_string(session.control_stream_port);
+    options["X-SS-Connect-Data"] = std::to_string(session.enet_secret_payload);
     break;
+  }
   default:
     return error_msg(404, "NOT FOUND", req.seq_number);
   }
 
-  auto session_opt = "DEADBEEFCAFE;timeout = 90"s;
-  return ok_msg(req.seq_number,
-                {{"Session", session_opt}, {"Transport", "server_port=" + std::to_string(service_port)}});
+  return ok_msg(req.seq_number, options);
 }
 
 /**
@@ -111,10 +158,7 @@ std::pair<std::string, std::optional<int>> parse_arg_line(const std::pair<std::s
 }
 
 RTSP_PACKET
-announce(const RTSP_PACKET &req,
-         const state::StreamSession &session,
-         std::shared_ptr<dp::event_bus> event_bus,
-         unsigned short number_of_sessions) {
+announce(const RTSP_PACKET &req, const events::StreamSession &session) {
 
   auto args = req.payloads //
               | views::filter([](const std::pair<std::string, std::string> &line) {
@@ -146,32 +190,62 @@ announce(const RTSP_PACKET &req,
     gst_pipeline = session.app->h264_gst_pipeline;
   }
 
+  auto audio_channels = args["x-nv-audio.surround.numChannels"].value_or(session.audio_channel_count);
+  auto fec_percentage = 20; // TODO: setting?
+
+  long bitrate = args["x-nv-vqos[0].bw.maximumBitrateKbps"].value_or(15500);
+  // If the client sent a configured bitrate adjust it (Moonlight extension)
+  if (auto configured_bitrate = args["x-ml-video.configuredBitrateKbps"]; configured_bitrate.has_value()) {
+    bitrate = *configured_bitrate;
+
+    // If the FEC percentage isn't too high, adjust the configured bitrate to ensure video
+    // traffic doesn't exceed the user's selected bitrate when the FEC shards are included.
+    if (fec_percentage <= 80) {
+      bitrate /= 100.f / (100 - fec_percentage);
+    }
+
+    // Adjust the bitrate to account for audio traffic bandwidth usage (capped at 20% reduction).
+    // The bitrate per channel is 256 Kbps for high quality mode and 96 Kbps for normal quality.
+    auto audioBitrateAdjustment = 96 * audio_channels;
+    bitrate -= std::min((std::int64_t)audioBitrateAdjustment, bitrate / 5);
+
+    // Reduce it by another 500Kbps to account for A/V packet overhead and control data
+    // traffic (capped at 10% reduction).
+    bitrate -= std::min((std::int64_t)500, bitrate / 10);
+    logs::log(logs::debug, "[RTSP] Adjusted video bitrate to {} Kbps", bitrate);
+  }
+
   // Video session
-  unsigned short video_port = state::VIDEO_PING_PORT + number_of_sessions;
-  state::VideoSession video = {
+  events::VideoSession video = {
       .display_mode = {.width = display.width, .height = display.height, .refreshRate = display.refreshRate},
       .gst_pipeline = gst_pipeline,
+      .render_node = session.app->render_node,
 
       .session_id = session.session_id,
 
-      .port = video_port,
-      .timeout = std::chrono::milliseconds(args["x-nv-video[0].timeoutLengthMs"].value_or(7000)),
-      .packet_size = args["x-nv-video[0].packetSize"].value_or(1024),
+      .port = session.video_stream_port,
+      .timeout_ms = args["x-nv-video[0].timeoutLengthMs"].value_or(7000),
+      .packet_size = args["x-nv-video[0].packetSize"].value_or(1392),
       .frames_with_invalid_ref_threshold = args["x-nv-video[0].framesWithInvalidRefThreshold"].value_or(0),
-      .fec_percentage = 20,
-      .min_required_fec_packets = args["x-nv-vqos[0].fec.minRequiredFecPackets"].value_or(0),
-      .bitrate_kbps = args["x-nv-video[0].initialBitrateKbps"].value_or(15500),
+      .fec_percentage = fec_percentage,
+      // Moonlight clients always send minRequiredFecPackets=2 (moonlight-common-c/SdpGenerator.c)
+      // to ensure small frames (1-2 data packets) get at least 2 FEC parity packets for recovery
+      .min_required_fec_packets = args["x-nv-vqos[0].fec.minRequiredFecPackets"].value_or(2),
+      .bitrate_kbps = bitrate,
       .slices_per_frame = args["x-nv-video[0].videoEncoderSlicesPerFrame"].value_or(1),
 
-      .color_range = (csc & 0x1) ? state::JPEG : state::MPEG,
-      .color_space = state::ColorSpace(csc >> 1),
+      .color_range = (csc & 0x1) ? events::ColorRange::JPEG : events::ColorRange::MPEG,
+      .color_space = events::ColorSpace(csc >> 1),
 
-      .client_ip = session.ip};
-  event_bus->fire_event(immer::box<state::VideoSession>(video));
+      .client_ip = session.ip,
+      .rtp_secret_payload = session.rtp_secret_payload,
+  };
+  session.event_bus->fire_event(immer::box<events::VideoSession>(video));
 
   // Audio session
-  unsigned short audio_port = state::AUDIO_PING_PORT + number_of_sessions;
-  state::AudioSession audio = {
+  auto high_quality_audio = args["x-nv-audio.surround.AudioQuality"].value_or(0) == 1;
+  auto audio_mode = state::get_audio_mode(audio_channels, high_quality_audio);
+  events::AudioSession audio = {
       .gst_pipeline = session.app->opus_gst_pipeline,
 
       .session_id = session.session_id,
@@ -180,21 +254,19 @@ announce(const RTSP_PACKET &req,
       .aes_key = session.aes_key,
       .aes_iv = session.aes_iv,
 
-      .port = audio_port,
+      .port = session.audio_stream_port,
       .client_ip = session.ip,
+      .rtp_secret_payload = session.rtp_secret_payload,
 
       .packet_duration = args["x-nv-aqos.packetDuration"].value_or(5),
-      .channels = args["x-nv-audio.surround.numChannels"].value_or(2)};
-  event_bus->fire_event(immer::box<state::AudioSession>(audio));
+      .audio_mode = audio_mode};
+  session.event_bus->fire_event(immer::box<events::AudioSession>(audio));
 
   return ok_msg(req.seq_number);
 }
 
 RTSP_PACKET
-message_handler(const RTSP_PACKET &req,
-                const state::StreamSession &session,
-                std::shared_ptr<dp::event_bus> event_bus,
-                unsigned short number_of_sessions) {
+message_handler(const RTSP_PACKET &req, const events::StreamSession &session) {
   auto cmd = req.request.cmd;
   logs::log(logs::debug, "[RTSP] received command {}", cmd);
 
@@ -204,9 +276,9 @@ message_handler(const RTSP_PACKET &req,
   case utils::hash("DESCRIBE"):
     return describe(req, session);
   case utils::hash("SETUP"):
-    return setup(req, number_of_sessions);
+    return setup(req, session);
   case utils::hash("ANNOUNCE"):
-    return announce(req, session, event_bus, number_of_sessions);
+    return announce(req, session);
   case utils::hash("PLAY"):
     return ok_msg(req.seq_number);
   default:
