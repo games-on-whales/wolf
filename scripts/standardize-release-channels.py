@@ -45,6 +45,7 @@ def optional(api, path):
         return api.request('GET', path)
     except urllib.error.HTTPError as error:
         if error.code == 404:
+            error.close()
             return None
         raise
 
@@ -137,6 +138,8 @@ def main():
         parser.error('GH_TOKEN must contain an existing organization administrator token')
     api = GitHub(token)
     plans = [snapshot(api, repo) for repo in api.repositories()]
+    for plan in plans:
+        print(json.dumps({'plan': plan}), flush=True)
     report = {'plans': plans, 'results': []}
     target = Path(args.report)
     target.write_text(json.dumps(report, indent=2) + '\n')
