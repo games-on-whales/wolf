@@ -3,11 +3,14 @@ FROM $BASE_IMAGE
 
 # Intel VA-API / QSV drivers and VPL runtime
 # intel-media-driver lives in RPM Fusion free on Fedora (not in the base repos),
-# so enable it first; libvpl and mesa-va-drivers come from the main repos.
+# so enable it first; libvpl comes from the main repos.
+# Fedora's stock Mesa is built without the patent-encumbered H.264/HEVC VA-API
+# entrypoints, so we pull the same Mesa version rebuilt from RPM Fusion's
+# freeworld repo, which ships them (installs into /usr/lib64/dri-freeworld/).
 ARG REQUIRED_PACKAGES="libva libva-utils \
                        intel-media-driver \
                        libvpl \
-                       mesa-va-drivers"
+                       mesa-va-drivers-freeworld"
 
 RUN dnf install -y \
       https://mirrors.rpmfusion.org/free/fedora/rpmfusion-free-release-$(rpm -E %fedora).noarch.rpm && \
