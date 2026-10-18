@@ -32,7 +32,7 @@ Wolf is configured via a TOML config file and some additional optional ENV varia
 |PulseAudio server Wolf streams audio from. Left unset, Wolf starts an embedded PulseAudio server inside its own container and uses that. Set it (e.g. to a host socket path) to stream from an external PulseAudio/PipeWire instead.
 
 |WOLF_PULSE_IMAGE
-|ghcr.io/games-on-whales/pulseaudio:master
+|ghcr.io/games-on-whales/pulseaudio:fedora
 |Fallback only: the PulseAudio image Wolf spins up as a sidecar container if neither the embedded server nor `PULSE_SERVER` is reachable
 
 |WOLF_STOP_CONTAINER_ON_EXIT
@@ -213,7 +213,7 @@ name = "User"
         [profiles.apps.runner]
         type = "docker"
         name = "WolfFirefox"
-        image = "ghcr.io/games-on-whales/firefox:edge"
+        image = "ghcr.io/games-on-whales/firefox:fedora"
         mounts = []
         env = [
             "RUN_SWAY=1",
@@ -395,7 +395,7 @@ Example:
 ....
 type = "docker"
 name = "WolfSteam"
-image = "ghcr.io/games-on-whales/steam:edge"
+image = "ghcr.io/games-on-whales/steam:fedora"
 mounts = [ #<1>
   "/run/udev:/run/udev:ro"
 ]
