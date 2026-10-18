@@ -1,12 +1,12 @@
 #pragma once
 #include <cstdlib>
+#include <functional>
 #include <optional>
 #include <stdexcept>
 #include <string>
 #include <vector>
 
 namespace wolf::core::docker {
-constexpr auto DOCKER_API_VERSION = "v1.40";
 
 enum ContainerStatus {
   CREATED,
@@ -44,6 +44,7 @@ struct Device {
 struct Container {
   std::string id;
   std::string name;
+  std::string hostname;
 
   std::string image;
 
@@ -60,12 +61,20 @@ struct Container {
  */
 void init();
 
+/**
+ * Container engines do not all use the same status code for name conflicts.
+ */
+bool is_container_name_conflict_response(long status_code, std::string_view response_body);
+
 class DockerAPI {
 private:
   std::string socket_path; // TODO: add B64 registry_auth
+  std::string docker_api_version;
 
 public:
-  inline explicit DockerAPI(std::string socket_path = "/var/run/docker.sock") : socket_path(std::move(socket_path)) {}
+  explicit DockerAPI(std::string socket_path = "/var/run/docker.sock") : socket_path(std::move(socket_path)) {
+    docker_api_version = get_api_version();
+  }
 
   /**
    * Get a list of all containers
@@ -132,9 +141,28 @@ public:
   bool remove_by_name(std::string_view name, bool remove_volumes = false, bool force = false, bool link = false) const;
 
   /**
+   * Returns the full json response as is from /images/{image_name}/json
+   * Optional because the image might be missing locally
+   */
+  std::optional<std::string> inspect_image(std::string_view image_name) const;
+
+  /**
    * Downloads a Docker image
    */
   bool pull_image(std::string_view image_name, std::string_view registry_auth = {}) const;
+
+  struct DockerProgressEvent {
+    std::string layer_id;
+    long current_progress;
+    long total;
+  };
+
+  /**
+   * Download a docker image with a callback for progress
+   */
+  bool pull_image(std::string_view image_name,
+                  std::string_view registry_auth,
+                  const std::function<void(const DockerProgressEvent &)> &progress_fn) const;
 
   bool exec(std::string_view id, const std::vector<std::string_view> &command, std::string_view user = "root") const;
 
@@ -148,6 +176,8 @@ public:
                        int since = 0,
                        int until = 0,
                        bool timestamps = false);
+
+  std::string get_api_version();
 };
 
 } // namespace wolf::core::docker

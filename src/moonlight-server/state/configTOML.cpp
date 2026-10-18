@@ -1,78 +1,12 @@
+#include <events/events.hpp>
+#include <events/reflectors.hpp>
 #include <fstream>
 #include <gst/gstelementfactory.h>
 #include <gst/gstregistry.h>
+#include <platforms/hw.hpp>
 #include <range/v3/view.hpp>
-#include <runners/docker.hpp>
-#include <runners/process.hpp>
+#include <rfl/toml.hpp>
 #include <state/config.hpp>
-#include <toml.hpp>
-#include <utility>
-
-namespace state {
-
-struct GstEncoder {
-  std::string plugin_name;
-  std::vector<std::string> check_elements;
-  std::string video_params;
-  std::string encoder_pipeline;
-};
-
-struct GstVideoCfg {
-  std::string default_source;
-  std::string default_sink;
-
-  std::vector<GstEncoder> av1_encoders;
-  std::vector<GstEncoder> hevc_encoders;
-  std::vector<GstEncoder> h264_encoders;
-};
-
-struct GstAudioCfg {
-  std::string default_source;
-  std::string default_audio_params;
-  std::string default_opus_encoder;
-  std::string default_sink;
-};
-} // namespace state
-
-TOML11_DEFINE_CONVERSION_NON_INTRUSIVE(state::GstEncoder, plugin_name, check_elements, video_params, encoder_pipeline)
-TOML11_DEFINE_CONVERSION_NON_INTRUSIVE(
-    state::GstVideoCfg, default_source, default_sink, av1_encoders, hevc_encoders, h264_encoders)
-TOML11_DEFINE_CONVERSION_NON_INTRUSIVE(
-    state::GstAudioCfg, default_source, default_audio_params, default_opus_encoder, default_sink)
-
-namespace toml {
-
-template <> struct into<state::App> {
-
-  static toml::value into_toml(const state::App &f) {
-    return toml::value{{"title", f.base.title}, {"support_hdr", f.base.support_hdr}, {"runner", f.runner->serialise()}};
-  }
-};
-
-template <> struct into<state::PairedClient> {
-  static toml::value into_toml(const state::PairedClient &c) {
-    return toml::value{{"client_cert", c.client_cert},
-                       {"app_state_folder", c.app_state_folder},
-                       {"run_uid", c.run_uid},
-                       {"run_gid", c.run_gid}};
-  }
-};
-
-template <> struct from<state::PairedClient> {
-  template <typename C, template <typename...> class M, template <typename...> class A>
-  static state::PairedClient from_toml(const basic_value<C, M, A> &v) {
-    state::PairedClient client;
-
-    client.client_cert = find<std::string>(v, "client_cert");
-    client.app_state_folder =
-        find_or<std::string>(v, "app_state_folder", std::to_string(std::hash<std::string>{}(client.client_cert)));
-    client.run_uid = find_or<uint>(v, "run_uid", 1000);
-    client.run_gid = find_or<uint>(v, "run_gid", 1000);
-
-    return client;
-  }
-};
-} // namespace toml
 
 namespace state {
 
@@ -81,16 +15,11 @@ namespace state {
  */
 constexpr char const *default_toml =
 #include "default/config.include.toml"
+
     ;
 
 using namespace std::literals;
-
-void write(const toml::value &data, const std::string &dest) {
-  std::ofstream out_file;
-  out_file.open(dest);
-  out_file << toml::format(data, 120);
-  out_file.close();
-}
+using namespace wolf::config;
 
 void create_default(const std::string &source) {
   std::ofstream out_file;
@@ -101,37 +30,8 @@ void create_default(const std::string &source) {
   out_file.close();
 }
 
-std::shared_ptr<state::Runner> get_runner(const toml::value &item, const std::shared_ptr<dp::event_bus> &ev_bus) {
-  auto runner_obj = toml::find_or(item, "runner", {{"type", "process"}});
-  auto runner_type = toml::find_or(runner_obj, "type", "process");
-  if (runner_type == "process") {
-    auto run_cmd = toml::find_or(runner_obj, "run_cmd", "sh -c \"while :; do echo 'running...'; sleep 1; done\"");
-    return std::make_shared<process::RunProcess>(ev_bus, run_cmd);
-  } else if (runner_type == "docker") {
-    return std::make_shared<docker::RunDocker>(docker::RunDocker::from_toml(ev_bus, runner_obj));
-  } else {
-    logs::log(logs::warning, "[TOML] Found runner of type: {}, valid types are: 'process' or 'docker'", runner_type);
-    return std::make_shared<process::RunProcess>(ev_bus, "sh -c \"while :; do echo 'running...'; sleep 1; done\"");
-  }
-}
-
-static bool is_available(const GstEncoder &settings) {
-  if (auto plugin = gst_registry_find_plugin(gst_registry_get(), settings.plugin_name.c_str())) {
-    gst_object_unref(plugin);
-    return std::all_of(settings.check_elements.begin(), settings.check_elements.end(), [](const auto &el_name) {
-      if (auto el = gst_element_factory_make(el_name.c_str(), nullptr)) {
-        gst_object_unref(el);
-        return true;
-      } else {
-        return false;
-      }
-    });
-  }
-  return false;
-}
-
-static state::Encoder encoder_type(const std::string &gstreamer_plugin_name) {
-  switch (utils::hash(gstreamer_plugin_name)) {
+static Encoder encoder_type(const GstEncoder &settings) {
+  switch (utils::hash(settings.plugin_name)) {
   case (utils::hash("nvcodec")):
     return NVIDIA;
   case (utils::hash("vaapi")):
@@ -146,224 +46,455 @@ static state::Encoder encoder_type(const std::string &gstreamer_plugin_name) {
   case (utils::hash("aom")):
     return SOFTWARE;
   }
-  logs::log(logs::warning, "Unrecognised Gstreamer plugin name: {}", gstreamer_plugin_name);
+  logs::log(logs::warning, "Unrecognised Gstreamer plugin name: {}", settings.plugin_name);
   return UNKNOWN;
 }
 
-toml::value v1_to_v2(const toml::value &v1, const std::string &source) {
-  create_default(source);
-  auto v2 = toml::parse<toml::preserve_comments>(source);
-  v2["hostname"] = v1.at("hostname").as_string();
-  v2["uuid"] = v1.at("uuid").as_string();
-  v2["support_hevc"] = v1.at("support_hevc").as_boolean();
-  v2["paired_clients"] = v1.at("paired_clients").as_array() |                                        //
-                         ranges::views::transform([](const toml::value &client) {                    //
-                           return PairedClient{.client_cert = client.at("client_cert").as_string()}; //
-                         })                                                                          //
-                         | ranges::to<toml::array>();
-  write(v2, source);
-  return v2;
+static bool is_available(const GPU_VENDOR &gpu_vendor, const GstEncoder &settings) {
+  if (auto plugin = gst_registry_find_plugin(gst_registry_get(), settings.plugin_name.c_str())) {
+    gst_object_unref(plugin);
+    return std::all_of(
+        settings.check_elements.begin(),
+        settings.check_elements.end(),
+        [settings, gpu_vendor](const auto &el_name) {
+          // Is the selected GPU vendor compatible with the encoder?
+          // (Particularly useful when using multiple GPUs, e.g. nvcodec might be available but user
+          // wants to encode using the Intel GPU)
+          auto encoder_vendor = encoder_type(settings);
+          if (encoder_vendor == NVIDIA && gpu_vendor != GPU_VENDOR::NVIDIA) {
+            logs::log(logs::debug, "Skipping NVIDIA encoder, not a NVIDIA GPU ({})", (int)gpu_vendor);
+          } else if (encoder_vendor == VAAPI && (gpu_vendor != GPU_VENDOR::INTEL && gpu_vendor != GPU_VENDOR::AMD)) {
+            logs::log(logs::debug, "Skipping VAAPI encoder, not an Intel or AMD GPU ({})", (int)gpu_vendor);
+          } else if (encoder_vendor == QUICKSYNC && gpu_vendor != GPU_VENDOR::INTEL) {
+            logs::log(logs::debug, "Skipping QUICKSYNC encoder, not an Intel GPU ({})", (int)gpu_vendor);
+          }
+          // Can Gstreamer instantiate the element? This will only work if all the drivers are in place
+          else if (auto el = gst_element_factory_make(el_name.c_str(), nullptr)) {
+            gst_object_unref(el);
+            return true;
+          }
+
+          return false;
+        });
+  }
+  return false;
 }
 
-toml::value v2_to_v3(const toml::value &v2, const std::string &source) {
-  auto v3 = toml::parse<toml::preserve_comments>(source);
-  v3["uuid"] = v2.at("uuid").as_string();
-  v3["config_version"] = 3;
-  v3["gstreamer"]["video"]["default_sink"] =
-      "rtpmoonlightpay_video name=moonlight_pay\n"
-      "payload_size={payload_size} fec_percentage={fec_percentage} "
-      "min_required_fec_packets={min_required_fec_packets} !\n"
-      "udpsink bind-port={host_port} host={client_ip} port={client_port} sync=true";
-  v3["gstreamer"]["audio"]["default_sink"] =
-      "rtpmoonlightpay_audio name=moonlight_pay packet_duration={packet_duration} encrypt={encrypt}\n"
-      "aes_key=\"{aes_key}\" aes_iv=\"{aes_iv}\"  !\n"
-      "udpsink bind-port={host_port} host={client_ip} port={client_port} sync=true";
-  write(v3, source);
-  return v3;
+std::optional<GstEncoder> get_encoder(std::string_view tech,
+                                      std::string_view encoder_node,
+                                      const std::vector<GstEncoder> &encoders,
+                                      const GPU_VENDOR &vendor) {
+  auto default_is_available = std::bind(is_available, vendor, std::placeholders::_1);
+  auto encoder = std::find_if(encoders.begin(), encoders.end(), default_is_available);
+  if (encoder != std::end(encoders)) {
+    auto encoder_node_name = get_render_node_name(encoder_node);
+    if (encoder_type(*encoder) == VAAPI && encoder_node_name != "renderD128") {
+      auto possible_vaapi_plugin = fmt::format("va{}{}enc", encoder_node_name, tech);
+      auto possible_encoder = GstEncoder{.plugin_name = encoder->plugin_name,
+                                         .check_elements = {possible_vaapi_plugin, "vapostproc"},
+                                         .video_params = encoder->video_params,
+                                         .video_params_zero_copy = encoder->video_params_zero_copy,
+                                         .encoder_pipeline = encoder->encoder_pipeline};
+      logs::log(logs::debug, "Checking if {} is available", possible_vaapi_plugin);
+      if (is_available(vendor, possible_encoder)) {
+        possible_encoder.encoder_pipeline = std::regex_replace(possible_encoder.encoder_pipeline,
+                                                               std::regex(fmt::format("va{}enc", tech)),
+                                                               possible_vaapi_plugin);
+        logs::log(logs::info, "Detected multiple VAAPI capable devices, using {} encoder", possible_vaapi_plugin);
+        return possible_encoder;
+      }
+    }
+    if (encoder_type(*encoder) == NVIDIA && encoder_node_name != "renderD128") {
+      // TODO: do the same trick for Nvidia and nvh265device{dev-number}enc we have to get that dev-number though..
+    }
+    logs::log(logs::info, "Using {} encoder: {}", tech, encoder->plugin_name);
+    if (encoder_type(*encoder) == SOFTWARE) {
+      logs::log(logs::warning, "Software {} encoder detected", tech);
+    }
+    return *encoder;
+  }
+  return std::nullopt;
 }
 
-Config load_or_default(const std::string &source, const std::shared_ptr<dp::event_bus> &ev_bus) {
+/**
+ * ID is used by Moonlight to uniquely identify the app.
+ * We have to change it if we change something that will be displayed
+ */
+std::string generate_app_id(const BaseApp &app) {
+  auto hash = utils::hash(app.icon_png_path.value_or("") + app.title);
+  // Value must be truncated to signed 32-bit range due to client limitations
+  return std::to_string(abs((int32_t)hash));
+}
+
+std::shared_ptr<immer::atom<immer::vector<immer::box<events::App>>>>
+parse_apps(const std::vector<BaseApp> &apps,
+           const std::string &default_app_render_node,
+           const std::string &default_gst_render_node,
+           const BaseAppVideoOverride &default_video_settings,
+           const std::string &h264_video_params,
+           const std::string &hevc_video_params,
+           const std::string &av1_video_params,
+           const BaseAppAudioOverride &default_audio_settings,
+           SessionsAtoms running_sessions,
+           const std::shared_ptr<events::EventBusType> &ev_bus) {
+
+  auto parsed_apps =
+      apps |                                             //
+      ranges::views::transform([&](const BaseApp &app) { //
+        auto app_render_node = app.render_node.value_or(default_app_render_node);
+        if (app_render_node != default_gst_render_node) {
+          logs::log(logs::warning,
+                    "App {} render node ({}) doesn't match the default GPU ({})",
+                    app.title,
+                    app_render_node,
+                    default_gst_render_node);
+          // TODO: allow user to override gst_render_node
+        }
+        auto app_video_settings = app.video.value_or(default_video_settings);
+        auto app_audio_settings = app.audio.value_or(default_audio_settings);
+
+        auto h264_gst_pipeline = fmt::format(
+            "{} !\n{} !\n{} !\n{}", //
+            app_video_settings.source.value_or(default_video_settings.source.value()),
+            app_video_settings.video_params.value_or(h264_video_params),
+            app_video_settings.h264_encoder.value_or(default_video_settings.h264_encoder.value()),
+            app_video_settings.sink.value_or(default_video_settings.sink.value()));
+
+        auto hevc_gst_pipeline =
+            default_video_settings.hevc_encoder.has_value()
+                ? fmt::format("{} !\n{} !\n{} !\n{}", //
+                              app_video_settings.source.value_or(default_video_settings.source.value()),
+                              app_video_settings.video_params.value_or(hevc_video_params),
+                              app_video_settings.hevc_encoder.value_or(default_video_settings.hevc_encoder.value()),
+                              app_video_settings.sink.value_or(default_video_settings.sink.value()))
+                : "";
+
+        auto av1_gst_pipeline =
+            default_video_settings.av1_encoder.has_value()
+                ? fmt::format("{} !\n{} !\n{} !\n{}", //
+                              app_video_settings.source.value_or(default_video_settings.source.value()),
+                              app_video_settings.video_params.value_or(av1_video_params),
+                              app_video_settings.av1_encoder.value_or(default_video_settings.av1_encoder.value()),
+                              app_video_settings.sink.value_or(default_video_settings.sink.value()))
+                : "";
+
+        auto opus_gst_pipeline = fmt::format(
+            "{} !\n{} !\n{} !\n{}", //
+            app_audio_settings.source.value_or(default_audio_settings.source.value()),
+            app_audio_settings.audio_params.value_or(default_audio_settings.audio_params.value()),
+            app_audio_settings.opus_encoder.value_or(default_audio_settings.opus_encoder.value()),
+            app_audio_settings.sink.value_or(default_audio_settings.sink.value()));
+
+        return immer::box<events::App>{
+            events::App{.base = {.title = app.title,
+                                 .id = generate_app_id(app),
+                                 .support_hdr = false,
+                                 .icon_png_path = app.icon_png_path},
+                        .video_producer_buffer_caps = default_video_settings.producer_buffer_caps.value(),
+                        .h264_gst_pipeline = h264_gst_pipeline,
+                        .hevc_gst_pipeline = hevc_gst_pipeline,
+                        .av1_gst_pipeline = av1_gst_pipeline,
+                        .render_node = app_render_node,
+
+                        .opus_gst_pipeline = opus_gst_pipeline,
+                        .start_virtual_compositor = app.start_virtual_compositor.value_or(true),
+                        .start_audio_server = app.start_audio_server.value_or(true),
+                        .runner = get_runner(app.runner, ev_bus)}};
+      }) |                                                  //
+      ranges::to<immer::vector<immer::box<events::App>>>(); //
+
+  return std::make_shared<immer::atom<immer::vector<immer::box<events::App>>>>(parsed_apps);
+}
+
+Config load_or_default(const std::string &source,
+                       const std::shared_ptr<events::EventBusType> &ev_bus,
+                       SessionsAtoms running_sessions) {
   if (!file_exist(source)) {
     logs::log(logs::warning, "Unable to open config file: {}, creating one using defaults", source);
     create_default(source);
   }
 
-  auto cfg = toml::parse<toml::preserve_comments>(source);
-  auto version = toml::find_or(cfg, "config_version", 2);
-  if (version <= 1) {
-    logs::log(logs::warning, "Found old config file, migrating to newer version");
-    cfg = v1_to_v2(cfg, source);
-    version = 2;
+  // First check the version of the config file
+  auto base_cfg = rfl::toml::load<BaseConfig, rfl::DefaultIfMissing>(source).value();
+  auto version = base_cfg.config_version.value_or(0);
+  if (version <= 6) {
+    logs::log(logs::warning, "Found old config file (v{}), migrating to v7", version);
+    auto backup = source + ".v" + std::to_string(version) + ".old";
+    std::filesystem::rename(source, backup);
+    auto old_cfg = toml::parse_file(backup);
+    create_default(source);
+    auto new_cfg = toml::parse_file(source);
+    new_cfg.insert_or_assign("hostname", old_cfg.at("hostname"));
+    new_cfg.insert_or_assign("uuid", old_cfg.at("uuid"));
+    new_cfg.insert_or_assign("paired_clients", old_cfg.at("paired_clients"));
+    if (old_cfg.contains("profiles")) {
+      new_cfg.insert_or_assign("profiles", old_cfg.at("profiles"));
+    } else if (old_cfg.contains("apps")) {
+      auto moonlight_profile = new_cfg["profiles"].as_array()->at(0).as_table();
+      new_cfg.insert_or_assign(
+          "profiles",
+          toml::array{*moonlight_profile,
+                      toml::table({{"id", "user"}, {"name", "User"}, {"apps", old_cfg.at("apps")}})});
+    }
+    std::ofstream out_file;
+    out_file.open(source);
+    if (!out_file.is_open()) {
+      throw std::runtime_error("Failed to open config file for writing");
+    }
+    out_file << new_cfg;
+    out_file.close();
+    logs::log(logs::debug, "Migrated config from v{} to v7", version);
   }
 
-  if (version <= 2) {
-    logs::log(logs::warning, "Found old config file, migrating to newer version");
-    cfg = v2_to_v3(cfg, source);
-    version = 3;
+  // Will throw if the config is invalid
+  auto cfg = rfl::toml::load<WolfConfig, rfl::DefaultIfMissing>(source).value();
+
+  auto default_gst_video_settings = cfg.gstreamer.video;
+  auto default_gst_audio_settings = cfg.gstreamer.audio;
+  if (default_gst_video_settings.default_source.find("name=interpipesrc") == std::string::npos) {
+    logs::log(logs::debug, "Found interpipesrc without name, adding it");
+    default_gst_video_settings.default_source =
+        default_gst_video_settings.default_source.replace(0, 12, "interpipesrc name=interpipesrc_{}_video");
+  }
+  if (default_gst_audio_settings.default_source.find("name=interpipesrc") == std::string::npos) {
+    logs::log(logs::debug, "Found interpipesrc without name, adding it");
+    default_gst_audio_settings.default_source =
+        default_gst_audio_settings.default_source.replace(0, 12, "interpipesrc name=interpipesrc_{}_audio");
   }
 
-  std::string uuid;
-  if (cfg.contains("uuid")) {
-    uuid = toml::find(cfg, "uuid").as_string();
-  } else {
-    logs::log(logs::warning, "No uuid found, generating a new one");
-    uuid = gen_uuid();
-    cfg["uuid"] = uuid;
-    write(cfg, source);
+  auto default_gst_encoder_settings = default_gst_video_settings.defaults;
+  bool use_zero_copy = utils::get_env("WOLF_USE_ZERO_COPY", "") != std::string("FALSE");
+
+  auto default_app_render_node = utils::get_env("WOLF_RENDER_NODE", "/dev/dri/renderD128");
+  auto default_gst_render_node = utils::get_env("WOLF_ENCODER_NODE", default_app_render_node);
+  auto vendor = get_vendor(default_gst_render_node);
+  if (vendor == GPU_VENDOR::UNKNOWN) {
+    logs::log(logs::warning, "Unable to detect GPU vendor, disabling zero copy pipeline.");
+    use_zero_copy = false;
   }
 
-  auto hostname = toml::find_or(cfg, "hostname", "Wolf");
-  bool support_av1 = toml::find_or<bool>(cfg, "support_av1", false);
-
-  GstVideoCfg default_gst_video_settings = toml::find<GstVideoCfg>(cfg, "gstreamer", "video");
-  GstAudioCfg default_gst_audio_settings = toml::find<GstAudioCfg>(cfg, "gstreamer", "audio");
-
-  /* Automatic pick best H264 encoder */
-  auto h264_encoder = std::find_if(default_gst_video_settings.h264_encoders.begin(),
-                                   default_gst_video_settings.h264_encoders.end(),
-                                   is_available);
-  if (h264_encoder == std::end(default_gst_video_settings.h264_encoders)) {
-    throw std::runtime_error("Unable to find a compatible H264 encoder, please check [[gstreamer.video.h264_encoders]] "
-                             "in your config.toml or your Gstreamer installation");
+  /* Automatically pick the best encoders */
+  auto h264_encoder = get_encoder("h264", default_gst_render_node, default_gst_video_settings.h264_encoders, vendor);
+  if (!h264_encoder) {
+    throw std::runtime_error(
+        "Unable to find a compatible H.264 encoder, please check [[gstreamer.video.h264_encoders]] "
+        "in your config.toml or your Gstreamer installation");
   }
-  logs::log(logs::info, "Selected H264 encoder: {}", h264_encoder->plugin_name);
-
-  /* Automatic pick best HEVC encoder */
-  auto hevc_encoder = std::find_if(default_gst_video_settings.hevc_encoders.begin(),
-                                   default_gst_video_settings.hevc_encoders.end(),
-                                   is_available);
-  if (hevc_encoder == std::end(default_gst_video_settings.hevc_encoders)) {
-    throw std::runtime_error("Unable to find a compatible HEVC encoder, please check [[gstreamer.video.hevc_encoders]] "
-                             "in your config.toml or your Gstreamer installation");
-  }
-  logs::log(logs::info, "Selected HEVC encoder: {}", hevc_encoder->plugin_name);
-
-  /* Automatic pick best AV1 encoder */
-  auto av1_encoder = std::find_if(default_gst_video_settings.av1_encoders.begin(),
-                                  default_gst_video_settings.av1_encoders.end(),
-                                  is_available);
-  if (support_av1 && av1_encoder == std::end(default_gst_video_settings.av1_encoders)) {
-    throw std::runtime_error("Unable to find a compatible AV1 encoder, please check [[gstreamer.video.av1_encoders]] "
-                             "in your config.toml or your Gstreamer installation");
-  } else if (support_av1) {
-    logs::log(logs::info, "Selected AV1 encoder: {}", av1_encoder->plugin_name);
-  }
+  auto hevc_encoder = get_encoder("h265", default_gst_render_node, default_gst_video_settings.hevc_encoders, vendor);
+  auto av1_encoder = get_encoder("av1", default_gst_render_node, default_gst_video_settings.av1_encoders, vendor);
 
   /* Get paired clients */
-  auto cfg_clients = toml::find<std::vector<PairedClient>>(cfg, "paired_clients");
   auto paired_clients =
-      cfg_clients                                                                                             //
+      cfg.paired_clients                                                                                      //
       | ranges::views::transform([](const PairedClient &client) { return immer::box<PairedClient>{client}; }) //
       | ranges::to<immer::vector<immer::box<PairedClient>>>();
 
-  std::string default_app_render_node = utils::get_env("WOLF_RENDER_NODE", "/dev/dri/renderD128");
-  /* Get apps, here we'll merge the default gstreamer settings with the app specific overrides */
-  auto cfg_apps = toml::find<std::vector<toml::value>>(cfg, "apps");
-  auto apps =
-      cfg_apps |                                                               //
-      ranges::views::enumerate |                                               //
-      ranges::views::transform([&](std::pair<int, const toml::value &> pair) { //
-        auto [idx, item] = pair;
-        auto h264_gst_pipeline = toml::find_or(item, "video", "source", default_gst_video_settings.default_source) +
-                                 " ! " + toml::find_or(item, "video", "video_params", h264_encoder->video_params) +
-                                 " ! " + toml::find_or(item, "video", "h264_encoder", h264_encoder->encoder_pipeline) +
-                                 " ! " +
-                                 toml::find_or(item, "video", " sink ", default_gst_video_settings.default_sink);
+  auto default_base_video = BaseAppVideoOverride{.source = default_gst_video_settings.default_source,
+                                                 .sink = default_gst_video_settings.default_sink,
+                                                 .producer_buffer_caps = "video/x-raw"};
+  auto default_base_audio = BaseAppAudioOverride{.source = default_gst_audio_settings.default_source,
+                                                 .audio_params = default_gst_audio_settings.default_audio_params,
+                                                 .opus_encoder = default_gst_audio_settings.default_opus_encoder,
+                                                 .sink = default_gst_audio_settings.default_sink};
 
-        auto hevc_gst_pipeline = toml::find_or(item, "video", "source", default_gst_video_settings.default_source) +
-                                 " ! " + toml::find_or(item, "video", "video_params", hevc_encoder->video_params) +
-                                 " ! " + toml::find_or(item, "video", "hevc_encoder", hevc_encoder->encoder_pipeline) +
-                                 " ! " +
-                                 toml::find_or(item, "video", " sink ", default_gst_video_settings.default_sink);
+  auto video_encoder = encoder_type(*h264_encoder);
+  if (use_zero_copy) {
+    switch (video_encoder) {
+    case NVIDIA: {
+      default_base_video.producer_buffer_caps = "video/x-raw(memory:CUDAMemory)";
+      break;
+    }
+    case VAAPI:
+    case QUICKSYNC: {
+      auto required_caps = gstreamer::get_dma_caps("vapostproc");
+      logs::log(logs::debug, "Required DMA formats for vapostproc: {}", required_caps);
+      auto gst_caps = required_caps | //
+                      ranges::views::remove_if([](const std::string &cap) {
+                        // TODO: HDR isn't supported by Wolf yet (so we remove P010 and AR30 format)
+                        return cap.find("P010") != std::string::npos || cap.find("AR30") != std::string::npos ||
+                               // We also remove formats that are padded with spaces since they need escaping
+                               cap.find(" ") != std::string::npos;
+                      }) | //
+                      ranges::to<std::vector>();
+      if (gst_caps.empty()) {
+        logs::log(logs::warning,
+                  "Unable to find any compatible DMA formats for vapostproc, disabling zero copy pipeline.");
+        use_zero_copy = false;
+      } else {
+        default_base_video.producer_buffer_caps =
+            fmt::format("video/x-raw(memory:DMABuf), drm-format={{{}}}", utils::join(gst_caps, ","));
+      }
+      break;
+    }
+    default: {
+    }
+    }
+  }
 
-        auto av1_gst_pipeline =
-            support_av1 ? toml::find_or(item, "video", "source", default_gst_video_settings.default_source) + " ! " +
-                              toml::find_or(item, "video", "video_params", av1_encoder->video_params) + " ! " +
-                              toml::find_or(item, "video", "av1_encoder", av1_encoder->encoder_pipeline) + " ! " +
-                              toml::find_or(item, "video", " sink ", default_gst_video_settings.default_sink)
-                        : "";
+  logs::log(logs::info,
+            "Using {} pipeline on {} ({})",
+            use_zero_copy ? "zero copy" : "legacy",
+            get_vendor_name(vendor),
+            default_gst_render_node);
 
-        auto opus_gst_pipeline =
-            toml::find_or(item, "audio", "source", default_gst_audio_settings.default_source) + " ! " +
-            toml::find_or(item, "audio", "video_params", default_gst_audio_settings.default_audio_params) + " ! " +
-            toml::find_or(item, "audio", "opus_encoder", default_gst_audio_settings.default_opus_encoder) + " ! " +
-            toml::find_or(item, "audio", "sink", default_gst_audio_settings.default_sink);
+  default_base_video.h264_encoder = h264_encoder.value().encoder_pipeline;
+  if (hevc_encoder) {
+    default_base_video.hevc_encoder = hevc_encoder.value().encoder_pipeline;
+  } else {
+    logs::log(logs::warning, "Unable to find an HEVC encoder, disabling it");
+  }
 
-        auto joypad_type = utils::to_lower(toml::find_or(item, "joypad_type", "auto"s));
-        moonlight::control::pkts::CONTROLLER_TYPE joypad_type_enum = moonlight::control::pkts::CONTROLLER_TYPE::AUTO;
-        if (joypad_type == "xbox") {
-          joypad_type_enum = moonlight::control::pkts::CONTROLLER_TYPE::XBOX;
-        } else if (joypad_type == "nintendo") {
-          joypad_type_enum = moonlight::control::pkts::CONTROLLER_TYPE::NINTENDO;
-        } else if (joypad_type == "ps") {
-          joypad_type_enum = moonlight::control::pkts::CONTROLLER_TYPE::PS;
-        } else if (joypad_type != "auto") {
-          logs::log(logs::warning, "Unknown joypad type: {}", joypad_type);
-        }
+  if (av1_encoder) {
+    default_base_video.av1_encoder = av1_encoder.value().encoder_pipeline;
+  } else {
+    logs::log(logs::warning, "Unable to find an AV1 encoder, disabling it");
+  }
 
-        return state::App{.base = {.title = toml::find<std::string>(item, "title"),
-                                   .id = std::to_string(idx + 1),
-                                   .support_hdr = toml::find_or<bool>(item, "support_hdr", false)},
-                          .h264_gst_pipeline = h264_gst_pipeline,
-                          .h264_encoder = encoder_type(h264_encoder->plugin_name),
-                          .hevc_gst_pipeline = hevc_gst_pipeline,
-                          .hevc_encoder = encoder_type(hevc_encoder->plugin_name),
-                          .av1_gst_pipeline = av1_gst_pipeline,
-                          .av1_encoder = support_av1 ? encoder_type(av1_encoder->plugin_name) : UNKNOWN,
-                          .render_node = toml::find_or(item, "render_node", default_app_render_node),
+  auto empty_enc = GstEncoderDefault{};
+  auto default_h264 = utils::get_optional(default_gst_encoder_settings, h264_encoder.value_or(GstEncoder{}).plugin_name)
+                          .value_or(empty_enc);
+  auto default_hevc = utils::get_optional(default_gst_encoder_settings, hevc_encoder.value_or(GstEncoder{}).plugin_name)
+                          .value_or(empty_enc);
+  auto default_av1 = utils::get_optional(default_gst_encoder_settings, av1_encoder.value_or(GstEncoder{}).plugin_name)
+                         .value_or(empty_enc);
 
-                          .opus_gst_pipeline = opus_gst_pipeline,
-                          .start_virtual_compositor = toml::find_or<bool>(item, "start_virtual_compositor", true),
-                          .runner = get_runner(item, ev_bus),
-                          .joypad_type = joypad_type_enum};
-      }) |                                     //
-      ranges::to<immer::vector<state::App>>(); //
+  auto h264_video_params = use_zero_copy
+                               ? h264_encoder->video_params_zero_copy.value_or(default_h264.video_params_zero_copy)
+                               : h264_encoder->video_params.value_or(default_h264.video_params);
 
-  auto clients_atom = new immer::atom<state::PairedClientList>(paired_clients);
-  return Config{.uuid = uuid,
-                .hostname = hostname,
+  std::string hevc_video_params;
+  if (hevc_encoder) {
+    hevc_video_params = use_zero_copy
+                            ? hevc_encoder->video_params_zero_copy.value_or(default_hevc.video_params_zero_copy)
+                            : hevc_encoder->video_params.value_or(default_hevc.video_params);
+  }
+
+  std::string av1_video_params;
+  if (av1_encoder) {
+    av1_video_params = use_zero_copy ? av1_encoder->video_params_zero_copy.value_or(default_av1.video_params_zero_copy)
+                                     : av1_encoder->video_params.value_or(default_av1.video_params);
+  }
+
+  auto clients_atom = std::make_shared<immer::atom<PairedClientList>>(paired_clients);
+
+  /* Get profiles, for each app defined will merge with default settings */
+  auto profiles = cfg.profiles | //
+                  ranges::views::transform([&](const Profile &profile) {
+                    return events::Profile{.id = profile.id,
+                                           .name = profile.name.value_or(""),
+                                           .icon_png_path = profile.icon_png_path.value_or(""),
+                                           .pin = profile.pin,
+                                           .apps = parse_apps(profile.apps,
+                                                              default_app_render_node,
+                                                              default_gst_render_node,
+                                                              default_base_video,
+                                                              h264_video_params,
+                                                              hevc_video_params,
+                                                              av1_video_params,
+                                                              default_base_audio,
+                                                              running_sessions,
+                                                              ev_bus)};
+                  }) |
+                  ranges::to<ProfilesList>();
+  auto profiles_atom = std::make_shared<immer::atom<ProfilesList>>(profiles);
+
+  return Config{.uuid = cfg.uuid,
+                .hostname = cfg.hostname,
                 .config_source = source,
-                .support_hevc = toml::find_or<bool>(cfg, "support_hevc", false),
-                .support_av1 = support_av1,
-                .paired_clients = *clients_atom,
-                .apps = apps};
+                .support_hevc = hevc_encoder.has_value(),
+                .support_av1 = av1_encoder.has_value() && encoder_type(*av1_encoder) != SOFTWARE,
+                .paired_clients = clients_atom,
+                .profiles = profiles_atom};
 }
 
 void pair(const Config &cfg, const PairedClient &client) {
   // Update CFG
-  cfg.paired_clients.update(
-      [&client](const state::PairedClientList &paired_clients) { return paired_clients.push_back(client); });
+  cfg.paired_clients->update([&client](const PairedClientList &paired_clients) {
+    // Removing the client if already present (see: https://github.com/games-on-whales/wolf/issues/211)
+    auto filtered_clients = paired_clients                                               //
+                            | ranges::views::filter([&client](auto paired_client) {      //
+                                return paired_client->client_cert != client.client_cert; //
+                              })                                                         //
+                            | ranges::to<PairedClientList>();                            //
+    return filtered_clients.push_back(client);
+  });
 
   // Update TOML
-  toml::value tml = toml::parse<toml::preserve_comments>(cfg.config_source);
-  tml.at("paired_clients").as_array().emplace_back(client);
-
-  write(tml, cfg.config_source);
+  auto tml = rfl::toml::load<WolfConfig, rfl::DefaultIfMissing>(cfg.config_source).value();
+  tml.paired_clients.push_back(client);
+  rfl::toml::save(cfg.config_source, tml);
 }
 
 void unpair(const Config &cfg, const PairedClient &client) {
   // Update CFG
-  cfg.paired_clients.update([&client](const state::PairedClientList &paired_clients) {
+  cfg.paired_clients->update([&client](const PairedClientList &paired_clients) {
     return paired_clients                                               //
            | ranges::views::filter([&client](auto paired_client) {      //
                return paired_client->client_cert != client.client_cert; //
              })                                                         //
-           | ranges::to<state::PairedClientList>();                     //
+           | ranges::to<PairedClientList>();                            //
   });
 
   // Update TOML
-  toml::value tml = toml::parse<toml::preserve_comments>(cfg.config_source);
+  auto tml = rfl::toml::load<WolfConfig, rfl::DefaultIfMissing>(cfg.config_source).value();
+  tml.paired_clients.erase(std::remove_if(tml.paired_clients.begin(),
+                                          tml.paired_clients.end(),
+                                          [&client](const auto &v) { return v.client_cert == client.client_cert; }),
+                           tml.paired_clients.end());
+  rfl::toml::save(cfg.config_source, tml);
+}
 
-  auto &saved_clients = tml.at("paired_clients").as_array();
-  saved_clients.erase(std::remove_if(saved_clients.begin(),
-                                     saved_clients.end(),
-                                     [&client](const toml::value &v) {
-                                       auto cert = toml::find<std::string>(v, "client_cert");
-                                       return cert == client.client_cert;
-                                     }),
-                      saved_clients.end());
+void update_client_settings(const Config &cfg, std::size_t client_id, const PairedClient &updated_client) {
 
-  write(tml, cfg.config_source);
+  auto update_client_fn = [&](immer::box<PairedClient> client) -> immer::box<PairedClient> {
+    if (get_client_id(client) == client_id) {
+      return immer::box<PairedClient>(updated_client);
+    }
+    return client;
+  };
+
+  cfg.paired_clients->update([&](const PairedClientList &paired_clients) {
+    return paired_clients |                             //
+           ranges::views::transform(update_client_fn) | //
+           ranges::to<PairedClientList>();
+  });
+
+  // Update the TOML file
+  auto tml = rfl::toml::load<WolfConfig, rfl::DefaultIfMissing>(cfg.config_source).value();
+
+  tml.paired_clients = tml.paired_clients |                         //
+                       ranges::views::transform(update_client_fn) | //
+                       ranges::to<std::vector<PairedClient>>();
+
+  // Save back to file
+  rfl::toml::save(cfg.config_source, tml);
+}
+
+void update_profiles(const Config &cfg, const ProfilesList &profiles) {
+  cfg.profiles->store(profiles);
+
+  auto tml = rfl::toml::load<WolfConfig, rfl::DefaultIfMissing>(cfg.config_source).value();
+  tml.profiles = profiles | //
+                 ranges::views::transform([](const immer::box<events::Profile> &p) {
+                   return Profile{
+                       .id = p->id,
+                       .name = p->name,
+                       .icon_png_path = p->icon_png_path,
+                       .pin = p->pin,
+                       .apps = p->apps->load().get() | //
+                               ranges::views::transform([](const immer::box<events::App> &app) {
+                                 return BaseApp{.title = app->base.title,
+                                                .icon_png_path = app->base.icon_png_path,
+                                                .render_node = app->render_node,
+                                                .start_virtual_compositor = app->start_virtual_compositor,
+                                                .start_audio_server = app->start_audio_server,
+                                                .runner = app->runner->serialize()};
+                               }) | //
+                               ranges::to_vector,
+                   };
+                 }) | //
+                 ranges::to_vector;
+  rfl::toml::save(cfg.config_source, tml);
 }
 
 } // namespace state

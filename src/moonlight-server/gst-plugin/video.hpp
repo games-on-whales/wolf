@@ -199,7 +199,7 @@ static void generate_fec_packets(const gst_rtp_moonlight_pay_video &rtpmoonlight
 
   auto payload_size = (int)gst_buffer_get_size(rtp_payload);
   auto blocks = determine_split(rtpmoonlightpay, gst_buffer_list_length(rtp_packets));
-  auto nr_shards = blocks.data_shards + blocks.parity_shards;
+  const auto nr_shards = blocks.data_shards + blocks.parity_shards;
 
   if (nr_shards > DATA_SHARDS_MAX) {
     logs::log(logs::warning,
@@ -223,11 +223,11 @@ static void generate_fec_packets(const gst_rtp_moonlight_pay_video &rtpmoonlight
 
   // Reed Solomon encode the full stream of bytes
   auto rs = moonlight::fec::create(blocks.data_shards, blocks.parity_shards);
-  unsigned char *ptr[nr_shards];
+  std::vector<unsigned char *> ptr(nr_shards);
   for (int shard_idx = 0; shard_idx < nr_shards; shard_idx++) {
     ptr[shard_idx] = info.data + (shard_idx * blocks.block_size);
   }
-  if (moonlight::fec::encode(rs.get(), ptr, nr_shards, blocks.block_size) != 0) {
+  if (moonlight::fec::encode(rs.get(), &ptr.front(), nr_shards, blocks.block_size) != 0) {
     logs::log(logs::warning, "Error during video FEC encoding");
   }
 

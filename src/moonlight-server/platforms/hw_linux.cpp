@@ -8,8 +8,12 @@
 #include <helpers/utils.hpp>
 #include <ifaddrs.h>
 #include <iostream>
+#include <linux/if_packet.h>
+#include <net/ethernet.h>
 #include <netinet/in.h>
 #include <optional>
+#include <sys/socket.h>
+#include <system_error>
 #include <unistd.h>
 
 extern "C" {
@@ -102,6 +106,26 @@ std::shared_ptr<drmDevice> drm_open_device(std::string_view device) {
           }};
 }
 
+void add_character_device(std::vector<std::string> &devices, std::string_view path, bool optional = false) {
+  std::error_code err;
+  auto device_path = std::filesystem::path(path);
+  if (std::filesystem::is_character_file(device_path, err)) {
+    devices.emplace_back(path);
+    return;
+  }
+
+  if (!err && std::filesystem::exists(device_path, err)) {
+    if (optional) {
+      logs::log(logs::warning, "Skipping {}, it exists but is not a character device", path);
+    } else {
+      logs::log(logs::error,
+                "{} exists but is not a character device; this NVIDIA device is required and the container may not "
+                "work correctly. In LXC containers, ensure the device is properly mapped as a character device.",
+                path);
+    }
+  }
+}
+
 std::vector<std::string> linked_devices(std::string_view gpu) {
   std::vector<std::string> found_devices;
 
@@ -115,20 +139,16 @@ std::vector<std::string> linked_devices(std::string_view gpu) {
     std::string primary_node = device->nodes[DRM_NODE_PRIMARY];
     found_devices.emplace_back(primary_node);
     if (auto nvidia_node = get_nvidia_node(primary_node)) {
-      found_devices.emplace_back(nvidia_node.value());
+      add_character_device(found_devices, nvidia_node.value());
+      add_character_device(found_devices, "/dev/nvidia-modeset");
+      add_character_device(found_devices, "/dev/nvidia-uvm");
+      add_character_device(found_devices, "/dev/nvidia-uvm-tools", true);
+      add_character_device(found_devices, "/dev/nvidiactl");
+    }
 
-      if (std::filesystem::exists("/dev/nvidia-modeset")) {
-        found_devices.emplace_back("/dev/nvidia-modeset");
-      }
-      if (std::filesystem::exists("/dev/nvidia-uvm")) {
-        found_devices.emplace_back("/dev/nvidia-uvm");
-      }
-      if (std::filesystem::exists("/dev/nvidia-uvm-tools")) {
-        found_devices.emplace_back("/dev/nvidia-uvm-tools");
-      }
-      if (std::filesystem::exists("/dev/nvidiactl")) {
-        found_devices.emplace_back("/dev/nvidiactl");
-      }
+    std::string render_node = device->nodes[DRM_NODE_RENDER];
+    if (render_node != primary_node) {
+      found_devices.emplace_back(render_node);
     }
   } else {
     logs::log(logs::warning, "{} doesn't have a primary node! Available nodes: {}", gpu, device->available_nodes);
@@ -171,6 +191,30 @@ GPU_VENDOR get_vendor(std::string_view gpu) {
   return UNKNOWN;
 }
 
+std::string get_vendor_name(GPU_VENDOR vendor) {
+  switch (vendor) {
+  case NVIDIA:
+    return "Nvidia";
+  case AMD:
+    return "AMD";
+  case INTEL:
+    return "Intel";
+  default:
+    return "Unknown";
+  }
+}
+
+std::string get_render_node_name(std::string_view render_node) {
+  char resolved_path[PATH_MAX];
+  if (realpath(render_node.data(), resolved_path) == nullptr) {
+    return ""; // Error resolving path
+  }
+
+  std::string path_copy(resolved_path);
+  char *base = basename(&path_copy[0]); // Get mutable data from string
+  return std::string(base);
+}
+
 std::string get_ip_address(ifaddrs *ifa) {
   if (ifa->ifa_addr->sa_family == AF_INET) { // IP4
     auto tmpAddrPtr = &((struct sockaddr_in *)ifa->ifa_addr)->sin_addr;
@@ -189,16 +233,34 @@ std::string get_ip_address(ifaddrs *ifa) {
 
 std::string get_mac_address(std::string_view local_ip) {
   ifaddrs *ifaddrptr = nullptr;
-  getifaddrs(&ifaddrptr);
+  if (getifaddrs(&ifaddrptr) == -1) {
+    logs::log(logs::warning,
+              "Unable to get ifaddrs: {} . You can override this by settings the env variables "
+              "WOLF_INTERNAL_MAC or WOLF_INTERNAL_IP",
+              strerror(errno));
+    return "00:00:00:00:00:00";
+  }
   std::unique_ptr<ifaddrs, decltype(&freeifaddrs)> ifAddrStruct = {ifaddrptr, ::freeifaddrs};
 
+  // First: search for the interface name that has the same IP address
+  std::string interface = "";
   for (auto ifa = ifAddrStruct.get(); ifa != NULL; ifa = ifa->ifa_next) {
     if (ifa->ifa_addr && local_ip == get_ip_address(ifa)) {
-      std::ifstream mac_file(fmt::format("/sys/class/net/{}/address", ifa->ifa_name));
-      if (mac_file.is_open()) {
-        std::string mac_address;
-        std::getline(mac_file, mac_address);
-        return mac_address;
+      interface = ifa->ifa_name;
+    }
+  }
+
+  // Second: search for the mac address of the interface
+  if (!interface.empty()) {
+    logs::log(logs::trace, "Found interface: {}, looking for MAC address", interface);
+    for (auto ifa = ifAddrStruct.get(); ifa != NULL; ifa = ifa->ifa_next) {
+      if (ifa->ifa_name && interface == ifa->ifa_name && ifa->ifa_addr && ifa->ifa_addr->sa_family == AF_PACKET) {
+        struct sockaddr_ll *s = (struct sockaddr_ll *)(ifa->ifa_addr);
+        std::vector<std::string> mac(s->sll_halen);
+        for (int i = 0; i < s->sll_halen; i++) {
+          mac[i] = fmt::format("{:02x}", s->sll_addr[i]);
+        }
+        return utils::join(mac, ":");
       }
     }
   }

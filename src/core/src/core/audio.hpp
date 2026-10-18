@@ -8,17 +8,45 @@
 #include <functional>
 #include <memory>
 #include <string>
+#include <vector>
+
+struct pa_context;
 
 namespace wolf::core::audio {
 
 typedef struct Server Server;
 
+pa_context *context(const std::shared_ptr<Server> &server);
+
 std::shared_ptr<Server> connect(std::string_view server = {});
+
+constexpr auto SAMPLE_RATE = 48000;
+
+struct AudioMode {
+
+  enum class Speakers {
+    FRONT_LEFT,
+    FRONT_RIGHT,
+    FRONT_CENTER,
+    LOW_FREQUENCY,
+    BACK_LEFT,
+    BACK_RIGHT,
+    SIDE_LEFT,
+    SIDE_RIGHT,
+    MAX_SPEAKERS,
+  };
+
+  int channels{};
+  int streams{};
+  int coupled_streams{};
+  std::vector<Speakers> speakers;
+  int bitrate{};
+  int sample_rate = SAMPLE_RATE;
+};
 
 struct AudioDevice {
   std::string_view sink_name;
-  int n_channels;
-  int bitrate = 48000;
+  AudioMode mode;
 };
 
 struct VSink {
@@ -30,6 +58,8 @@ struct VSink {
  * Will sit here and wait until the server accepts the connection or some error happens
  */
 bool connected(const std::shared_ptr<Server> &server);
+
+void queue_op(const std::shared_ptr<Server> &server, const std::function<void()> &op);
 
 std::shared_ptr<VSink> create_virtual_sink(const std::shared_ptr<Server> &server, const AudioDevice &device);
 

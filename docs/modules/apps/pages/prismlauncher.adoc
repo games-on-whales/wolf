@@ -1,0 +1,44 @@
+= Prism Launcher
+
+https://github.com/PrismLauncher/PrismLauncher[Prism Launcher] is a custom launcher for *Minecraft* that allows you to easily manage multiple installations of Minecraft at once.
+
+== How to use in Wolf
+
+Just add the following entry to your `config.toml`
+
+[source,toml]
+----
+[[apps]]
+title = "Prismlauncher"
+start_virtual_compositor = true
+
+[apps.runner]
+type = "docker"
+name = "Prismlauncher"
+image = "ghcr.io/games-on-whales/prismlauncher:edge"
+mounts = []
+env = [
+  "RUN_SWAY=1",
+  "GOW_REQUIRED_DEVICES=/dev/input/event* /dev/dri/* /dev/nvidia* /var/lutris/",
+]
+devices = []
+ports = []
+base_create_json = """
+{
+  "HostConfig": {
+    "IpcMode": "host",
+    "CapAdd": ["NET_RAW", "MKNOD", "NET_ADMIN", "SYS_ADMIN", "SYS_NICE"],
+    "Privileged": false,
+    "DeviceCgroupRules": ["c 13:* rmw", "c 244:* rmw"]
+  }
+}
+\
+"""
+----
+
+== Known issues
+
+When the image starts, it thinks to be in fullscreen and the mouse pointer could be messy, to fix this open the terminal and type exit to close it. +
+The issue is present only in the launcher once, when the game is in fullscreen mode everything is fine.
+
+Controller support also works 100% with `Controllify`, you'll still need keyboard+mouse for first setup but after that mouse mode on the controller is enough to start minecraft.

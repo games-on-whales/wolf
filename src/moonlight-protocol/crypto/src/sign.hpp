@@ -1,13 +1,14 @@
 #pragma once
 
 #include <crypto/utils.hpp>
+#include <cstdint>
 #include <openssl/evp.h>
 #include <openssl/pem.h>
 
 namespace signature {
 using EVP_MD_CTX_ptr = std::unique_ptr<EVP_MD_CTX, decltype(&::EVP_MD_CTX_free)>;
 
-std::string sign(std::string_view msg, EVP_PKEY *key_data, const EVP_MD *digest_type) {
+inline std::string sign(std::string_view msg, EVP_PKEY *key_data, const EVP_MD *digest_type) {
   EVP_MD_CTX_ptr ctx(EVP_MD_CTX_create(), ::EVP_MD_CTX_free);
   int msg_size = (int)msg.size();
 
@@ -26,7 +27,7 @@ std::string sign(std::string_view msg, EVP_PKEY *key_data, const EVP_MD *digest_
   return {reinterpret_cast<char *>(digest), digest_size};
 }
 
-bool verify(std::string_view msg, std::string_view signature, EVP_PKEY *key_data, const EVP_MD *digest_type) {
+inline bool verify(std::string_view msg, std::string_view signature, EVP_PKEY *key_data, const EVP_MD *digest_type) {
   EVP_MD_CTX_ptr ctx(EVP_MD_CTX_create(), ::EVP_MD_CTX_free);
   int msg_size = (int)msg.size();
 
@@ -42,7 +43,7 @@ bool verify(std::string_view msg, std::string_view signature, EVP_PKEY *key_data
 
 using EVP_PKEY_ptr = std::unique_ptr<EVP_PKEY, decltype(&::EVP_PKEY_free)>;
 
-EVP_PKEY_ptr create_key(std::string_view k, bool is_private) {
+inline EVP_PKEY_ptr create_key(std::string_view k, bool is_private) {
   BIO *bio = BIO_new(BIO_s_mem());
 
   if (BIO_write(bio, k.data(), k.size()) <= 0)

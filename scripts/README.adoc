@@ -1,0 +1,40 @@
+= Wolf helper scripts
+
+== wolf-input-diag.sh
+
+Host-side diagnostic that validates controller/input passthrough for Wolf. It
+answers two questions:
+
+* *Isolation* — is a session's controller input leaking somewhere it shouldn't
+  (into the host desktop, or into another container such as the Wolf UI while
+  you play an app)?
+* *Delivery* — is the controller actually producing events inside the container
+  it's supposed to be in?
+
+Run it on the *host* (needs `bash`, `docker`/`podman`, coreutils; the host audit
+also uses `getfacl`/`udevadm`/`stat`). All reads are non-destructive — it never
+grabs a device, so it can't steal input from a running game.
+
+[source,bash]
+....
+# Audit host-side isolation (catches "controller drives the host desktop"):
+sudo ./scripts/wolf-input-diag.sh host
+
+# List Wolf containers and the input devices mounted in each:
+./scripts/wolf-input-diag.sh discover
+
+# Fail if any device node is shared across containers:
+./scripts/wolf-input-diag.sh static
+
+# Live: press pads and watch which container(s) register input:
+./scripts/wolf-input-diag.sh monitor
+
+# Targeted pass/fail for one container (delivery + isolation):
+./scripts/wolf-input-diag.sh live <container-name>
+
+# Everything (host + discover + static):
+./scripts/wolf-input-diag.sh all
+....
+
+Use `DOCKER=podman` and/or `RULES_FILE=/path/to/85-wolf.rules` to override
+defaults.
