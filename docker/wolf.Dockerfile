@@ -45,7 +45,10 @@ RUN <<_GST_WAYLAND_DISPLAY
     git checkout 016b4fc
     # Pinned because it can cause issues when RUST_VERSION isn't the absolute latest
     cargo install cargo-c@0.10.23 --locked
-    cargo cinstall --features="cuda" --prefix=/usr/local/lib/x86_64-linux-gnu/ --libdir=/usr/local/lib/x86_64-linux-gnu/gstreamer-1.0
+    # The plugin installs into <libdir>/gstreamer-1.0, the C library into <libdir>.
+    # A libdir of the plugin dir itself put the C library (unused by Wolf) into
+    # GST_PLUGIN_PATH, where GStreamer blacklists it as a plugin on every scan.
+    cargo cinstall --features="cuda" --prefix=/usr/local/lib/x86_64-linux-gnu/ --libdir=/usr/local/lib/x86_64-linux-gnu
 _GST_WAYLAND_DISPLAY
 
 COPY . /wolf/
