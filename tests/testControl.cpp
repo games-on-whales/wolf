@@ -309,19 +309,35 @@ TEST_CASE("streaming: a superseded stream instance ends only its own pipelines",
   auto other_session_video = start_video(7, 1);
   std::this_thread::sleep_for(700ms);
 
-  event_bus->fire_event(immer::box<events::EndSupersededStreamEvent>(
-      events::EndSupersededStreamEvent{.session_id = 42, .rtp_secret_payload = rtp_secret(1)}));
-  std::this_thread::sleep_for(1500ms);
+  // A pipeline only hears events once it's running, which can take seconds on a loaded runner (TSan): keep firing
+  // until the expected pipelines have ended. Each fire only ever reaches the pipelines it targets.
+  auto fire_until = [&](auto fire, auto ended) {
+    auto deadline = std::chrono::steady_clock::now() + 30s;
+    while (!ended() && std::chrono::steady_clock::now() < deadline) {
+      fire();
+      std::this_thread::sleep_for(200ms);
+    }
+  };
+  fire_until(
+      [&] {
+        event_bus->fire_event(immer::box<events::EndSupersededStreamEvent>(
+            events::EndSupersededStreamEvent{.session_id = 42, .rtp_secret_payload = rtp_secret(1)}));
+      },
+      [&] { return *old_video && *old_audio; });
+  std::this_thread::sleep_for(500ms); // time for a wrongly targeted pipeline to end too
   CHECK(*old_video);
   CHECK(*old_audio);
   CHECK_FALSE(*resumed_video);
   CHECK_FALSE(*resumed_audio);
   CHECK_FALSE(*other_session_video);
 
-  for (std::size_t session_id : {42, 7}) {
-    event_bus->fire_event(immer::box<events::StopStreamEvent>(events::StopStreamEvent{.session_id = session_id}));
-  }
-  std::this_thread::sleep_for(1500ms);
+  fire_until(
+      [&] {
+        for (std::size_t session_id : {42, 7}) {
+          event_bus->fire_event(immer::box<events::StopStreamEvent>(events::StopStreamEvent{.session_id = session_id}));
+        }
+      },
+      [&] { return *resumed_video && *resumed_audio && *other_session_video; });
   CHECK(*resumed_video);
   CHECK(*resumed_audio);
   CHECK(*other_session_video);
