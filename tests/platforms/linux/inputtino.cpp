@@ -353,6 +353,17 @@ TEST_CASE("uinput - joypad", "[UINPUT]") {
         REQUIRE_THAT(event[".INPUT_CLASS"], StartsWith("joystick"));
       }
     }
+
+    { // UDEV hw db: one entry per node (eventN and jsN), all tagged as joystick
+      std::vector<std::pair<std::string, std::vector<std::string>>> hw_db_entries;
+      std::visit([&hw_db_entries](auto &joypad) { hw_db_entries = joypad.get_udev_hw_db_entries(); }, *joypad);
+
+      REQUIRE(hw_db_entries.size() == dev_nodes.size());
+      for (const auto &[filename, content] : hw_db_entries) {
+        REQUIRE_THAT(filename, StartsWith("c13:"));
+        REQUIRE_THAT(content, Catch::Matchers::VectorContains("E:ID_INPUT_JOYSTICK=1"s));
+      }
+    }
   }
 }
 
