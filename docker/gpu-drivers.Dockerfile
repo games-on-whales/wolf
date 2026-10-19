@@ -2,19 +2,19 @@ ARG BASE_IMAGE=ghcr.io/games-on-whales/base-app:fedora
 FROM $BASE_IMAGE
 
 # Intel VA-API / QSV drivers and VPL runtime
-# intel-media-driver lives in RPM Fusion free on Fedora (not in the base repos),
-# so enable it first; libvpl comes from the main repos.
+# libva-intel-media-driver (renamed from intel-media-driver in Fedora 44) and
+# libvpl both come from the main Fedora repos.
 # Fedora's stock Mesa is built without the patent-encumbered H.264/HEVC VA-API
 # entrypoints, so we pull the same Mesa version rebuilt from RPM Fusion's
 # freeworld repo, which ships them (installs into /usr/lib64/dri-freeworld/).
 ARG REQUIRED_PACKAGES="libva libva-utils \
-                       intel-media-driver \
+                       libva-intel-media-driver \
                        libvpl \
                        mesa-va-drivers-freeworld"
 
 RUN dnf install -y \
       https://mirrors.rpmfusion.org/free/fedora/rpmfusion-free-release-$(rpm -E %fedora).noarch.rpm && \
-    dnf install -y --skip-unavailable $REQUIRED_PACKAGES && \
+    dnf install -y $REQUIRED_PACKAGES && \
     dnf clean all
 
 # libmfx is not available in Fedora so we build from sources (see: https://github.com/games-on-whales/wolf/issues/221)
