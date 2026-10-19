@@ -45,7 +45,7 @@ for plugin in libgstnvcodec.so libgstvaapi.so libgstmsdk.so; do
 done
 
 echo "==> 7. VA-API driver files present (encoding still needs a GPU)"
-[ -e /usr/lib64/dri/iHD_drv_video.so ] || fail "Intel iHD VA driver missing (libva-intel-media-driver not installed?)"
+[ -e /usr/lib64/dri-nonfree/iHD_drv_video.so ] || fail "Intel non-free iHD VA driver missing (intel-media-driver not installed?)"
 [ -e /usr/lib64/dri-freeworld/radeonsi_drv_video.so ] || fail "AMD freeworld VA driver missing (mesa-va-drivers-freeworld not installed?)"
 
 echo "==> 8. Embedded PulseAudio + supervisord present"

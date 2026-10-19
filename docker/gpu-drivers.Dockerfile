@@ -2,18 +2,26 @@ ARG BASE_IMAGE=ghcr.io/games-on-whales/base-app:fedora
 FROM $BASE_IMAGE
 
 # Intel VA-API / QSV drivers and VPL runtime
-# libva-intel-media-driver (renamed from intel-media-driver in Fedora 44) and
-# libvpl both come from the main Fedora repos.
+# The Intel media driver comes in two variants on Fedora:
+# - libva-intel-media-driver (main repos): free shaders only — these have a
+#   history of breaking VPP/encode contexts (see
+#   https://github.com/intel/media-driver/issues/1662), which leaves Wolf on
+#   software encoding.
+# - intel-media-driver (RPM Fusion NONFREE): the full non-free shader set,
+#   equivalent to Ubuntu's intel-media-va-driver-non-free. Installs into
+#   /usr/lib64/dri-nonfree/, which libva probes with higher priority.
+# libvpl (dispatcher + oneVPL GPU runtime for QSV) comes from the main repos.
 # Fedora's stock Mesa is built without the patent-encumbered H.264/HEVC VA-API
 # entrypoints, so we pull the same Mesa version rebuilt from RPM Fusion's
 # freeworld repo, which ships them (installs into /usr/lib64/dri-freeworld/).
 ARG REQUIRED_PACKAGES="libva libva-utils \
-                       libva-intel-media-driver \
+                       intel-media-driver \
                        libvpl \
                        mesa-va-drivers-freeworld"
 
 RUN dnf install -y \
-      https://mirrors.rpmfusion.org/free/fedora/rpmfusion-free-release-$(rpm -E %fedora).noarch.rpm && \
+      https://mirrors.rpmfusion.org/free/fedora/rpmfusion-free-release-$(rpm -E %fedora).noarch.rpm \
+      https://mirrors.rpmfusion.org/nonfree/fedora/rpmfusion-nonfree-release-$(rpm -E %fedora).noarch.rpm && \
     dnf install -y $REQUIRED_PACKAGES && \
     dnf clean all
 
