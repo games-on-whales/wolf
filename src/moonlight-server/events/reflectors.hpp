@@ -48,6 +48,13 @@ template <> struct Reflector<events::App> {
     const bool support_hdr;
     std::optional<std::string> icon_png_path;
 
+    /// The caps the Wayland producer is built with. Optional on the wire: an
+    /// app added through the API without one (or from a config written before
+    /// this field existed) falls back to the plain system-memory caps instead
+    /// of an empty string, which would make the producer pipeline
+    /// `waylanddisplaysrc … ! , width=…` and fail to parse.
+    std::optional<std::string> video_producer_buffer_caps;
+
     std::string h264_gst_pipeline;
     std::string hevc_gst_pipeline;
     std::string av1_gst_pipeline;
@@ -65,6 +72,7 @@ template <> struct Reflector<events::App> {
             .id = v.base.id,
             .support_hdr = v.base.support_hdr,
             .icon_png_path = v.base.icon_png_path,
+            .video_producer_buffer_caps = v.video_producer_buffer_caps,
             .h264_gst_pipeline = v.h264_gst_pipeline,
             .hevc_gst_pipeline = v.hevc_gst_pipeline,
             .av1_gst_pipeline = v.av1_gst_pipeline,
@@ -75,10 +83,17 @@ template <> struct Reflector<events::App> {
             .runner = v.runner->serialize()};
   }
 
+  static constexpr std::string_view DEFAULT_PRODUCER_BUFFER_CAPS = "video/x-raw";
+
   static events::App to(const ReflType &app, const std::shared_ptr<events::EventBusType> &ev_bus) {
     auto runner = Reflector<events::Runner>::to(app.runner, ev_bus);
+    auto buffer_caps = app.video_producer_buffer_caps.value_or(std::string{DEFAULT_PRODUCER_BUFFER_CAPS});
+    if (buffer_caps.empty()) {
+      buffer_caps = std::string{DEFAULT_PRODUCER_BUFFER_CAPS};
+    }
     return events::App{
         .base = {.title = app.title, .id = app.id, .support_hdr = app.support_hdr, .icon_png_path = app.icon_png_path},
+        .video_producer_buffer_caps = buffer_caps,
         .h264_gst_pipeline = app.h264_gst_pipeline,
         .hevc_gst_pipeline = app.hevc_gst_pipeline,
         .av1_gst_pipeline = app.av1_gst_pipeline,
