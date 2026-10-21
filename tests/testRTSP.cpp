@@ -638,3 +638,40 @@ TEST_CASE("Commands (IP Matching)", "[RTSP]") {
                      });
   }
 }
+TEST_CASE("RTSP sessions sharing an IP", "[RTSP][shared-ip]") {
+  auto first = test_init_state()->load()->at(0);
+  auto second = first;
+  second.session_id = 5678;
+  second.rtsp_fake_ip = "11.22.33.44";
+  const immer::vector<events::StreamSession> sessions{first, second};
+  auto packet = rtsp::parse("OPTIONS rtsp://11.22.33.44:48010 RTSP/1.0\r\nCSeq: 1\r\n\r\n").value();
+
+  SECTION("URI identifier wins over an earlier IP match") {
+    for (const auto &host : {"", "0.0.0.0"}) {
+      packet.options["Host"] = host;
+      auto match = tcp_connection::get_session(sessions, packet, first.ip);
+      REQUIRE(match.has_value());
+      REQUIRE(match->session_id == second.session_id);
+    }
+  }
+  SECTION("Host identifier routes to the second session") {
+    packet.request.uri.ip = "0.0.0.0";
+    packet.options["Host"] = second.rtsp_fake_ip;
+    auto match = tcp_connection::get_session(sessions, packet, first.ip);
+    REQUIRE(match.has_value());
+    REQUIRE(match->session_id == second.session_id);
+  }
+  SECTION("Ambiguous legacy IP is rejected, then recovers when one session leaves") {
+    packet.request.uri.ip = "0.0.0.0";
+    REQUIRE_FALSE(tcp_connection::get_session(sessions, packet, first.ip).has_value());
+    auto match = tcp_connection::get_session({second}, packet, first.ip);
+    REQUIRE(match.has_value());
+    REQUIRE(match->session_id == second.session_id);
+  }
+  SECTION("Unknown IP and explicit unknown Host are rejected") {
+    packet.request.uri.ip = "0.0.0.0";
+    REQUIRE_FALSE(tcp_connection::get_session(sessions, packet, "192.0.2.1").has_value());
+    packet.options["Host"] = "unknown";
+    REQUIRE_FALSE(tcp_connection::get_session({first}, packet, first.ip).has_value());
+  }
+}
