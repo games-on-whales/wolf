@@ -94,13 +94,17 @@ std::optional<std::string> get_nvidia_node(std::string_view primary_node) {
  */
 std::shared_ptr<drmDevice> drm_open_device(std::string_view device) {
   auto render_node_fd = open(device.data(), O_RDWR | O_CLOEXEC);
+  if (render_node_fd < 0) {
+    throw std::runtime_error(fmt::format("Error opening DRM device {}, {}", device, strerror(errno)));
+  }
   drmDevice *dev = nullptr;
   auto ret = drmGetDevice2(render_node_fd, 0, &dev);
   if (ret < 0) {
+    close(render_node_fd);
     throw std::runtime_error(fmt::format("Error during drmGetDevice for {}, {}", device, strerror(-ret)));
   }
 
-  return {dev, [&render_node_fd](auto dev) {
+  return {dev, [render_node_fd](auto dev) {
             drmFreeDevice(&dev);
             close(render_node_fd);
           }};
