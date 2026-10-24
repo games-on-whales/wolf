@@ -67,15 +67,17 @@ describe(const RTSP_PACKET &req, const events::StreamSession &session) {
       };
     } else if (audio_mode.channels == 8) { // 7.1
       mapping_p = {
-          // The mapping for 7.1 is: [0 1 4 5 2 3 6 7]
+          // Decoder mapping for GStreamer's 7.1 Opus packets, in Moonlight's
+          // FL FR FC LFE BL BR SL SR output order: [0 1 4 5 6 7 2 3].
+          // These enum values represent Opus channel indices here, not speaker positions.
           AudioMode::Speakers::FRONT_LEFT,
           AudioMode::Speakers::FRONT_RIGHT,
           AudioMode::Speakers::BACK_LEFT,
           AudioMode::Speakers::BACK_RIGHT,
-          AudioMode::Speakers::FRONT_CENTER,
-          AudioMode::Speakers::LOW_FREQUENCY,
           AudioMode::Speakers::SIDE_LEFT,
           AudioMode::Speakers::SIDE_RIGHT,
+          AudioMode::Speakers::FRONT_CENTER,
+          AudioMode::Speakers::LOW_FREQUENCY,
       };
     }
 
