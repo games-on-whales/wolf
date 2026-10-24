@@ -313,7 +313,7 @@ TEST_CASE("Commands (Payload matching)", "[RTSP]") {
                        REQUIRE_THAT(response.value().payloads[0].second, Equals("AAAAAU"));
                        REQUIRE_THAT(response.value().payloads[1].second, Equals("fmtp:97 surround-params=21101"));
                        REQUIRE_THAT(response.value().payloads[2].second, Equals("fmtp:97 surround-params=642014235"));
-                       REQUIRE_THAT(response.value().payloads[3].second, Equals("fmtp:97 surround-params=85301423675"));
+                       REQUIRE_THAT(response.value().payloads[3].second, Equals("fmtp:97 surround-params=85301467235"));
                        REQUIRE_THAT(response.value().payloads[4].second, Equals("x-ss-general.featureFlags: 3"));
                      });
   }
@@ -499,7 +499,7 @@ TEST_CASE("Commands (IP Matching)", "[RTSP]") {
                        REQUIRE_THAT(response.value().payloads[0].second, Equals("AAAAAU"));
                        REQUIRE_THAT(response.value().payloads[1].second, Equals("fmtp:97 surround-params=21101"));
                        REQUIRE_THAT(response.value().payloads[2].second, Equals("fmtp:97 surround-params=642014235"));
-                       REQUIRE_THAT(response.value().payloads[3].second, Equals("fmtp:97 surround-params=85301423675"));
+                       REQUIRE_THAT(response.value().payloads[3].second, Equals("fmtp:97 surround-params=85301467235"));
                        REQUIRE_THAT(response.value().payloads[4].second, Equals("x-ss-general.featureFlags: 3"));
                      });
   }
