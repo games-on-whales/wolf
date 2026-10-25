@@ -74,7 +74,9 @@ void RunProcess::run(std::string_view session_id,
   bp::group group_proc;
 
   try {
-    auto env = boost::this_process::environment();
+    // A copy: this_process::environment() is Wolf's own, and assigning to it would setenv() in Wolf while other
+    // threads read the environment (and leak this app's variables into every later one)
+    bp::environment env = boost::this_process::environment();
     for (const auto &env_var : env_variables) {
       env[env_var.first] = env_var.second;
     };
