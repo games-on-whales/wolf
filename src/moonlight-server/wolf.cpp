@@ -228,7 +228,7 @@ void run() {
       mdns_cpp::mDNS mdns;
       mdns.setServiceName("_nvstream._tcp.local.");
       mdns.setServiceHostname(hostname);
-      mdns.setServicePort(state::HTTP_PORT);
+      mdns.setServicePort(state::get_port(state::HTTP_PORT));
       mdns.startService(false);
     } catch (const std::exception &e) {
       logs::log(logs::error, "mDNS error: {}", e.what());
