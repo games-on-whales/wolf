@@ -159,7 +159,7 @@ TEST_CASE("uinput - touch screen", "[UINPUT]") {
     event = get_event(li);
     REQUIRE(libinput_event_get_type(event.get()) == LIBINPUT_EVENT_TOUCH_DOWN);
     auto t_event = libinput_event_get_touch_event(event.get());
-    REQUIRE(libinput_event_touch_get_slot(t_event) == 1);
+    REQUIRE(libinput_event_touch_get_slot(t_event) == 0);
     REQUIRE_THAT(libinput_event_touch_get_x_transformed(t_event, TARGET_W), WithinRel(TARGET_W * 0.5f, 0.5f));
     REQUIRE_THAT(libinput_event_touch_get_y_transformed(t_event, TARGET_H), WithinRel(TARGET_H * 0.5f, 0.5f));
     event = get_event(li);
@@ -178,7 +178,7 @@ TEST_CASE("uinput - touch screen", "[UINPUT]") {
     event = get_event(li);
     REQUIRE(libinput_event_get_type(event.get()) == LIBINPUT_EVENT_TOUCH_UP);
     auto t_event = libinput_event_get_touch_event(event.get());
-    REQUIRE(libinput_event_touch_get_slot(t_event) == 1);
+    REQUIRE(libinput_event_touch_get_slot(t_event) == 0);
     event = get_event(li);
     REQUIRE(libinput_event_get_type(event.get()) == LIBINPUT_EVENT_TOUCH_FRAME);
   }
