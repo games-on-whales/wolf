@@ -87,7 +87,7 @@ jobs:
             std: 20
             test_docker: ON
             test_nvidia: OFF
-            test_virtual_input: OFF
+            test_virtual_input: ON
             test_exceptions: OFF
             name: aarch64
           - runner: ubuntu-26.04
@@ -98,7 +98,7 @@ jobs:
             std: 20
             test_docker: ON
             test_nvidia: OFF
-            test_virtual_input: OFF
+            test_virtual_input: ON
             test_exceptions: ON
             name: g++-12 - STD 20 - Shared true
           - runner: ubuntu-26.04
@@ -109,7 +109,7 @@ jobs:
             std: 20
             test_docker: ON
             test_nvidia: OFF
-            test_virtual_input: OFF
+            test_virtual_input: ON
             test_exceptions: ON
             name: g++-12 - STD 20 - Shared false
           - runner: ubuntu-26.04
@@ -120,7 +120,7 @@ jobs:
             std: 20
             test_docker: ON
             test_nvidia: OFF
-            test_virtual_input: OFF
+            test_virtual_input: ON
             test_exceptions: ON
             name: clang++ - STD 20 - Shared true
           - runner: ubuntu-26.04
@@ -131,7 +131,7 @@ jobs:
             std: 20
             test_docker: ON
             test_nvidia: OFF
-            test_virtual_input: OFF
+            test_virtual_input: ON
             test_exceptions: ON
             name: clang++ - STD 20 - Shared false
 
@@ -177,6 +177,25 @@ jobs:
           mkdir build
           meson build -Denable-gtk-doc=false --prefix ${{runner.workspace}}/libgstwaylanddisplay
           meson install -C build
+
+      # GitHub-hosted runners are VMs without uinput/uhid loaded, and the runner user can't open the
+      # devices the tests create. Load the modules and open the nodes up (the VM is throwaway) so the
+      # virtual input tests (inputtino, uhid, fake-udev, lobby joypads) run instead of being skipped.
+      - name: Enable virtual input devices
+        if: matrix.test_virtual_input == 'ON'
+        run: |
+          sudo modprobe uinput
+          sudo modprobe uhid
+          sudo tee /etc/udev/rules.d/99-wolf-ci.rules <<'RULES'
+          KERNEL=="uinput", SUBSYSTEM=="misc", MODE="0666", OPTIONS+="static_node=uinput"
+          KERNEL=="uhid", MODE="0666"
+          SUBSYSTEM=="input", MODE="0666"
+          KERNEL=="hidraw*", MODE="0666"
+          RULES
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger
+          sudo chmod 0666 /dev/uinput /dev/uhid
+          ls -l /dev/uinput /dev/uhid
 
       - name: Configure build
         working-directory: ${{runner.workspace}}
