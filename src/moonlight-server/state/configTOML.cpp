@@ -8,6 +8,7 @@
 #include <range/v3/view.hpp>
 #include <rfl/toml.hpp>
 #include <state/config.hpp>
+#include <state/producer_caps.hpp>
 
 namespace state {
 
@@ -159,10 +160,8 @@ parse_apps(const std::vector<BaseApp> &apps,
         const bool support_hdr = app.support_hdr.value_or(default_support_hdr);
         auto producer_buffer_caps =
             app_video_settings.producer_buffer_caps.value_or(default_video_settings.producer_buffer_caps.value());
-        if (support_hdr && producer_buffer_caps.find("memory:VulkanImage") != std::string::npos) {
-          producer_buffer_caps = "video/x-raw(memory:VulkanImage), format=P010_10LE";
-        } else if (support_hdr && producer_buffer_caps.find("memory:DMABuf") != std::string::npos) {
-          producer_buffer_caps = "video/x-raw(memory:DMABuf), drm-format=P010";
+        if (support_hdr) {
+          producer_buffer_caps = producer_caps_for_hdr(producer_buffer_caps, true);
         }
 
         auto h264_gst_pipeline = fmt::format(
@@ -351,9 +350,9 @@ Config load_or_default(const std::string &source,
       // [gstreamer.video] hdr = true selects the 10-bit P010 producer format, which
       // (via the hdr=true producer prop and vulkanh265enc's Main-10 + HDR10 SEI path)
       // yields an HDR10 stream. Default 8-bit NV12 so SDR clients aren't mis-signaled.
-      default_base_video.producer_buffer_caps = default_gst_video_settings.hdr
-                                                    ? "video/x-raw(memory:VulkanImage), format=P010_10LE"
-                                                    : "video/x-raw(memory:VulkanImage), format=NV12";
+      default_base_video.producer_buffer_caps =
+          default_gst_video_settings.hdr ? "video/x-raw(memory:VulkanImage), format=P010_10LE, colorimetry=bt2100-pq"
+                                         : "video/x-raw(memory:VulkanImage), format=NV12";
       break;
     }
     default: {
