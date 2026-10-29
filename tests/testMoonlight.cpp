@@ -557,11 +557,13 @@ TEST_CASE("applist", "[MoonlightProtocol]") {
   REQUIRE(moonlight_profile);
   immer::vector<immer::box<events::App>> apps = moonlight_profile.value()->apps->load();
   auto base_apps = apps | views::transform([](auto app) { return app->base; }) | to<immer::vector<moonlight::App>>();
+  REQUIRE(apps.at(0)->base.support_hdr);
+  REQUIRE_FALSE(apps.at(1)->base.support_hdr);
   auto result = applist(base_apps);
   REQUIRE(xml_to_str(result) ==
           "<?xml version=\"1.0\" encoding=\"utf-8\"?>\n"
           "<root status_code=\"200\">"
-          "<App><IsHdrSupported>0</IsHdrSupported><AppTitle>Firefox</AppTitle><ID>304556286</ID></App>"
+          "<App><IsHdrSupported>1</IsHdrSupported><AppTitle>Firefox</AppTitle><ID>304556286</ID></App>"
           "<App><IsHdrSupported>0</IsHdrSupported><AppTitle>Test ball</AppTitle><ID>378473508</ID></App>"
           "</root>");
 }
