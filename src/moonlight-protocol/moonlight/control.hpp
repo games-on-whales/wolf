@@ -349,6 +349,12 @@ struct ControlHdrModePacket {
 
 #pragma pack(pop)
 
+static ControlHdrModePacket hdr_mode_packet(bool enabled) {
+  auto packet = ControlHdrModePacket{};
+  packet.enableHdr = enabled ? 1 : 0;
+  return packet;
+}
+
 struct ControlRumblePacket {
   ControlPacket header;
 

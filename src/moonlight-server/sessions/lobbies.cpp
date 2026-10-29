@@ -101,6 +101,7 @@ setup_lobbies_handlers(const immer::box<state::AppState> &app_state,
                                             {.width = lobby_settings->video_settings.width,
                                              .height = lobby_settings->video_settings.height,
                                              .refreshRate = lobby_settings->video_settings.refresh_rate},
+                                            lobby_settings->video_settings.hdr_output,
                                             gst_context,
                                             on_ready,
                                             ev_bus);

@@ -7,8 +7,8 @@
 #include <gst-plugin/gstrtpmoonlightpay_audio.hpp>
 #include <gst-plugin/gstrtpmoonlightpay_video.hpp>
 #include <gst-plugin/video.hpp>
+#include <gst/app/gstappsrc.h>
 #include <gst/gst.h>
-#include <gstreamer-1.0/gst/app/gstappsrc.h>
 #include <immer/box.hpp>
 #include <memory>
 #include <moonlight/fec.hpp>
@@ -34,6 +34,7 @@ void start_video_producer(const std::string &session_id,
                           const std::string &buffer_format,
                           const std::string &render_node,
                           const wolf::core::virtual_display::DisplayMode &display_mode,
+                          bool hdr_capable,
                           std::shared_ptr<immer::atom<gst_video_context::gst_context_ptr>> video_context,
                           std::shared_ptr<boost::promise<WaylandDisplayReady>> on_ready,
                           std::shared_ptr<events::EventBusType> event_bus);
@@ -50,6 +51,9 @@ void start_streaming_video(immer::box<events::VideoSession> video_session,
                            unsigned short client_port,
                            std::shared_ptr<immer::atom<gst_video_context::gst_context_ptr>> video_context,
                            std::shared_ptr<udp::socket> video_socket);
+
+std::string initial_video_colorimetry(bool hdr_requested, events::ColorSpace requested_color_space);
+std::string prepare_video_pipeline(std::string pipeline, bool hdr_requested);
 
 void start_streaming_audio(immer::box<events::AudioSession> audio_session,
                            const std::shared_ptr<events::EventBusType> &event_bus,

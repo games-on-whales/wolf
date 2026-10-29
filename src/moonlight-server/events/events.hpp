@@ -145,6 +145,7 @@ struct VideoSettings {
   std::string wayland_render_node;
   std::string runner_render_node;
   std::string video_producer_buffer_caps;
+  bool hdr_output = false;
 };
 
 struct AudioSettings {
@@ -259,6 +260,7 @@ struct VideoSession {
 
   ColorRange color_range;
   ColorSpace color_space;
+  bool hdr_requested = false;
 
   std::string client_ip;
   std::array<char, 16> rtp_secret_payload;
@@ -298,16 +300,6 @@ struct ResumeStreamEvent {
 
 struct StopStreamEvent {
   std::size_t session_id;
-};
-
-/**
- * Fired when the content's HDR/SDR state changes (signalled by the producer
- * pipeline via a "wolf-hdr-state" bus message). The control thread reacts by
- * sending the Moonlight HDR_MODE control packet to the matching client.
- */
-struct HDRModeEvent {
-  std::size_t session_id;
-  bool enable_hdr;
 };
 
 struct ClientWolfUIComboEvent {
@@ -354,7 +346,6 @@ using EventBusHandlers = dp::handler_registration<immer::box<PlugDeviceEvent>,
                                                   immer::box<PauseStreamEvent>,
                                                   immer::box<ResumeStreamEvent>,
                                                   immer::box<StopStreamEvent>,
-                                                  immer::box<HDRModeEvent>,
                                                   immer::box<ClientWolfUIComboEvent>,
                                                   immer::box<RTPVideoPingEvent>,
                                                   immer::box<RTPAudioPingEvent>,
@@ -376,7 +367,6 @@ using EventBusType = dp::event_bus<immer::box<PlugDeviceEvent>,
                                    immer::box<PauseStreamEvent>,
                                    immer::box<ResumeStreamEvent>,
                                    immer::box<StopStreamEvent>,
-                                   immer::box<HDRModeEvent>,
                                    immer::box<ClientWolfUIComboEvent>,
                                    immer::box<RTPVideoPingEvent>,
                                    immer::box<RTPAudioPingEvent>,
@@ -398,7 +388,6 @@ using EventsVariant = std::variant<immer::box<PlugDeviceEvent>,
                                    immer::box<PauseStreamEvent>,
                                    immer::box<ResumeStreamEvent>,
                                    immer::box<StopStreamEvent>,
-                                   immer::box<HDRModeEvent>,
                                    immer::box<ClientWolfUIComboEvent>,
                                    immer::box<RTPVideoPingEvent>,
                                    immer::box<RTPAudioPingEvent>,

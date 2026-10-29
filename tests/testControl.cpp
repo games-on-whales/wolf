@@ -89,3 +89,15 @@ TEST_CASE("control joypad input packets") {
   REQUIRE(input_data->active_gamepad_mask == 1);
   REQUIRE(pressed_btns & pkts::CONTROLLER_BTN::A);
 }
+
+TEST_CASE("HDR mode control packet carries BT.2020 mastering metadata") {
+  auto packet = hdr_mode_packet(true);
+
+  REQUIRE(packet.header.type == pkts::HDR_MODE);
+  REQUIRE(packet.header.length == sizeof(packet) - sizeof(ControlPacket));
+  REQUIRE(packet.enableHdr == 1);
+  REQUIRE(packet.metadata.displayPrimaries[0].x == 35400);
+  REQUIRE(packet.metadata.whitePoint.x == 15635);
+  REQUIRE(packet.metadata.maxDisplayLuminance == 1000);
+  REQUIRE(sizeof(packet) == sizeof(ControlPacket) + 1 + sizeof(SS_HDR_METADATA));
+}

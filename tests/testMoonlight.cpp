@@ -10,10 +10,12 @@
 using Catch::Matchers::Equals;
 
 #include <crypto/crypto.hpp>
+#include <gst/video/video.h>
 #include <moonlight/protocol.hpp>
 #include <range/v3/view.hpp>
 #include <rest/helpers.hpp>
 #include <state/config.hpp>
+#include <state/producer_caps.hpp>
 #include <streaming/streaming.hpp>
 
 using namespace moonlight;
@@ -37,6 +39,7 @@ TEST_CASE("LocalState load TOML", "[LocalState]") {
     auto first_app = apps.at(0);
     REQUIRE_THAT(first_app->base.title, Equals("Firefox"));
     REQUIRE_THAT(first_app->base.id, Equals("304556286"));
+    REQUIRE(first_app->base.support_hdr);
     REQUIRE_THAT(first_app->base.icon_png_path.value(), Equals("firefox.png"));
     auto default_video_source = "interpipesrc name=interpipesrc_{}_video";
     REQUIRE_THAT(first_app->h264_gst_pipeline,
@@ -53,6 +56,7 @@ TEST_CASE("LocalState load TOML", "[LocalState]") {
     auto second_app = apps.at(1);
     REQUIRE_THAT(second_app->base.title, Equals("Test ball"));
     REQUIRE_THAT(second_app->base.id, Equals("378473508"));
+    REQUIRE_FALSE(second_app->base.support_hdr);
     REQUIRE(second_app->base.icon_png_path.has_value() == false);
     REQUIRE_THAT(second_app->h264_gst_pipeline,
                  Equals("override DEFAULT SOURCE !\ndefault !\nh264_pipeline !\nvideo_sink"));
@@ -221,6 +225,66 @@ TEST_CASE("Mocked serverinfo", "[MoonlightProtocol]") {
             "</root>");
     REQUIRE(result.get<bool>("root.PairStatus") == true);
   }
+
+  SECTION("server_info advertises AV1 Main10 for an HDR-capable host") {
+    auto result = serverinfo(false,
+                             0,
+                             0,
+                             1,
+                             cfg.uuid,
+                             cfg.hostname,
+                             "AA:BB:CC:DD",
+                             "192.168.1.1",
+                             displayModes,
+                             true,
+                             false,
+                             true,
+                             true);
+
+    REQUIRE(result.get<int>("root.ServerCodecModeSupport") == 196609);
+  }
+}
+
+TEST_CASE("HDR video pipeline selects a 10-bit encoder path", "[Streaming][HDR]") {
+  auto pipeline = "vapostproc ! video/x-raw(memory:VAMemory), format=NV12, colorimetry={color_space} ! "
+                  "vah265enc ! video/x-h265, profile=main, stream-format=byte-stream";
+
+  auto hdr = streaming::prepare_video_pipeline(pipeline, true);
+  REQUIRE_THAT(hdr, Catch::Matchers::ContainsSubstring("format=P010_10LE"));
+  REQUIRE_THAT(hdr, Catch::Matchers::ContainsSubstring("profile=main-10"));
+  REQUIRE(streaming::prepare_video_pipeline(pipeline, false) == pipeline);
+}
+
+TEST_CASE("HDR transport remains PQ while SDR producer frames are converted", "[Streaming][HDR]") {
+  REQUIRE(streaming::initial_video_colorimetry(true, events::ColorSpace::BT2020) == "bt2100-pq");
+  REQUIRE(streaming::initial_video_colorimetry(true, events::ColorSpace::BT709) == "bt2100-pq");
+  REQUIRE(streaming::initial_video_colorimetry(false, events::ColorSpace::BT601) == "bt601");
+  REQUIRE(streaming::initial_video_colorimetry(false, events::ColorSpace::BT709) == "bt709");
+  REQUIRE(streaming::initial_video_colorimetry(false, events::ColorSpace::BT2020) == "bt2020");
+}
+
+TEST_CASE("HDR host capability requires an encoder and a live HDR application", "[LocalState][HDR]") {
+  auto apps =
+      std::make_shared<immer::atom<immer::vector<immer::box<events::App>>>>(immer::vector<immer::box<events::App>>{
+          events::App{.base = moonlight::App{.title = "SDR", .support_hdr = false}},
+      });
+  auto profiles = std::make_shared<immer::atom<state::ProfilesList>>(state::ProfilesList{events::Profile{
+      .id = std::string{events::MOONLIGHT_PROFILE_ID},
+      .name = "Moonlight",
+      .icon_png_path = "",
+      .apps = apps,
+  }});
+  auto cfg = state::Config{.support_hdr = false, .profiles = profiles};
+
+  REQUIRE_FALSE(state::supports_hdr(cfg));
+
+  cfg.support_hdr = true;
+  REQUIRE_FALSE(state::supports_hdr(cfg));
+
+  apps->update([](auto current) {
+    return current.push_back(events::App{.base = moonlight::App{.title = "HDR", .support_hdr = true}});
+  });
+  REQUIRE(state::supports_hdr(cfg));
 }
 
 // Stuff generated from Moonlight
@@ -493,11 +557,13 @@ TEST_CASE("applist", "[MoonlightProtocol]") {
   REQUIRE(moonlight_profile);
   immer::vector<immer::box<events::App>> apps = moonlight_profile.value()->apps->load();
   auto base_apps = apps | views::transform([](auto app) { return app->base; }) | to<immer::vector<moonlight::App>>();
+  REQUIRE(apps.at(0)->base.support_hdr);
+  REQUIRE_FALSE(apps.at(1)->base.support_hdr);
   auto result = applist(base_apps);
   REQUIRE(xml_to_str(result) ==
           "<?xml version=\"1.0\" encoding=\"utf-8\"?>\n"
           "<root status_code=\"200\">"
-          "<App><IsHdrSupported>0</IsHdrSupported><AppTitle>Firefox</AppTitle><ID>304556286</ID></App>"
+          "<App><IsHdrSupported>1</IsHdrSupported><AppTitle>Firefox</AppTitle><ID>304556286</ID></App>"
           "<App><IsHdrSupported>0</IsHdrSupported><AppTitle>Test ball</AppTitle><ID>378473508</ID></App>"
           "</root>");
 }
@@ -557,4 +623,135 @@ TEST_CASE("Multiple users", "[HTTP]") {
 
   REQUIRE(session4->video_stream_port == 48100);
   REQUIRE(session4->audio_stream_port == 48200);
+}
+
+TEST_CASE("HDR producer storage is selected before every session starts", "[Streaming][HDR]") {
+  REQUIRE(state::producer_caps_for_hdr("video/x-raw(memory:VulkanImage), format=NV12", true) ==
+          "video/x-raw(memory:VulkanImage), format=P010_10LE, colorimetry=bt2100-pq");
+  // Storage depth does not define the transport transfer function. An SDR
+  // launcher in an HDR connection needs the converter's SDR-to-PQ path.
+  auto hdr_caps =
+      gst_caps_from_string(state::producer_caps_for_hdr("video/x-raw(memory:VulkanImage), format=NV12", true).c_str());
+  const auto hdr_structure = gst_caps_get_structure(hdr_caps, 0);
+  const auto colorimetry = gst_structure_get_string(hdr_structure, "colorimetry");
+  REQUIRE(colorimetry != nullptr);
+  GstVideoColorimetry hdr_color{};
+  REQUIRE(gst_video_colorimetry_from_string(&hdr_color, colorimetry));
+  REQUIRE(hdr_color.range == GST_VIDEO_COLOR_RANGE_16_235);
+  REQUIRE(hdr_color.matrix == GST_VIDEO_COLOR_MATRIX_BT2020);
+  REQUIRE(hdr_color.transfer == GST_VIDEO_TRANSFER_SMPTE2084);
+  REQUIRE(hdr_color.primaries == GST_VIDEO_COLOR_PRIMARIES_BT2020);
+  gst_caps_unref(hdr_caps);
+  REQUIRE(state::producer_caps_for_hdr("video/x-raw(memory:DMABuf), drm-format=NV12", true) == "EMPTY");
+
+  // NVIDIA's compositor-owned BGRA surface stays device-local. The encoder
+  // branch selects NV12/P010 independently for each SDR/HDR client.
+  const auto cuda_caps = "video/x-raw(memory:CUDAMemory), format=BGRA";
+  REQUIRE(state::producer_caps_for_hdr(cuda_caps, true) == cuda_caps);
+
+  const auto sdr_caps = "video/x-raw(memory:VulkanImage), format=NV12";
+  REQUIRE(state::producer_caps_for_hdr(sdr_caps, false) == sdr_caps);
+  REQUIRE(state::producer_caps_for_hdr("video/x-raw(memory:VulkanImage), format=P010_10LE", false) == sdr_caps);
+}
+
+TEST_CASE("HDR DMA admission preserves advertised storage modifiers", "[Streaming][HDR]") {
+  const std::string admitted = "video/x-raw(memory:DMABuf),format=DMA_DRM,"
+                               "drm-format={NV12:0x0100000000000009,P010:0x0100000000000009},width=1920,height=1080";
+  const auto selected = gst_caps_from_string(state::producer_caps_for_hdr(admitted, true).c_str());
+  const auto importer =
+      gst_caps_from_string("video/x-raw(memory:DMABuf),format=DMA_DRM,drm-format=P010:0x0100000000000009");
+  const auto wrong_storage = gst_caps_from_string("video/x-raw(memory:DMABuf),format=DMA_DRM,drm-format=P010");
+  REQUIRE(gst_caps_can_intersect(selected, importer));
+  REQUIRE_FALSE(gst_caps_can_intersect(selected, wrong_storage));
+  int width = 0;
+  REQUIRE(gst_structure_get_int(gst_caps_get_structure(selected, 0), "width", &width));
+  REQUIRE(width == 1920);
+  const auto sdr = gst_caps_from_string(state::producer_caps_for_hdr(admitted, false).c_str());
+  const auto sdr_importer =
+      gst_caps_from_string("video/x-raw(memory:DMABuf),format=DMA_DRM,drm-format=NV12:0x0100000000000009");
+  REQUIRE(gst_caps_can_intersect(sdr, sdr_importer));
+  REQUIRE_FALSE(gst_caps_can_intersect(sdr, importer));
+  gst_caps_unref(sdr_importer);
+  gst_caps_unref(sdr);
+  gst_caps_unref(selected);
+  gst_caps_unref(importer);
+  gst_caps_unref(wrong_storage);
+
+  SECTION("HDR renegotiation requires PQ even when untagged storage is advertised first") {
+    for (const auto color_field : {"", ",colorimetry=bt709"}) {
+      auto hdr = gst_caps_from_string(state::producer_caps_for_hdr(admitted + color_field, true).c_str());
+      auto offers = gst_caps_from_string(
+          "video/x-raw(memory:DMABuf),format=DMA_DRM,drm-format=P010:0x0100000000000009,width=1920,height=1080;"
+          "video/x-raw(memory:DMABuf),format=DMA_DRM,drm-format=P010:0x0100000000000009,width=1920,height=1080,"
+          "colorimetry=bt2100-pq");
+      auto fixed = gst_caps_fixate(gst_caps_intersect_full(offers, hdr, GST_CAPS_INTERSECT_FIRST));
+      REQUIRE_FALSE(gst_caps_is_empty(fixed));
+      const auto color = gst_structure_get_string(gst_caps_get_structure(fixed, 0), "colorimetry");
+      REQUIRE(color);
+      GstVideoColorimetry parsed{};
+      REQUIRE(gst_video_colorimetry_from_string(&parsed, color));
+      REQUIRE(parsed.range == GST_VIDEO_COLOR_RANGE_16_235);
+      REQUIRE(parsed.matrix == GST_VIDEO_COLOR_MATRIX_BT2020);
+      REQUIRE(parsed.transfer == GST_VIDEO_TRANSFER_SMPTE2084);
+      REQUIRE(parsed.primaries == GST_VIDEO_COLOR_PRIMARIES_BT2020);
+      gst_caps_unref(fixed);
+      gst_caps_unref(offers);
+      gst_caps_unref(hdr);
+    }
+  }
+  SECTION("HDR keeps admitted static metadata and SDR keeps its original color contract") {
+    const std::string tagged = admitted + ",colorimetry=bt709,mastering-display-info=original-mastering,"
+                                          "content-light-level=original-light-level";
+    for (const bool hdr : {false, true}) {
+      auto caps = gst_caps_from_string(state::producer_caps_for_hdr(tagged, hdr).c_str());
+      const auto structure = gst_caps_get_structure(caps, 0);
+      REQUIRE(std::string(gst_structure_get_string(structure, "colorimetry")) == (hdr ? "bt2100-pq" : "bt709"));
+      REQUIRE(std::string(gst_structure_get_string(structure, "mastering-display-info")) == "original-mastering");
+      REQUIRE(std::string(gst_structure_get_string(structure, "content-light-level")) == "original-light-level");
+      gst_caps_unref(caps);
+    }
+  }
+  SECTION("no P010 is not a grant to invent linear storage") {
+    REQUIRE(state::producer_caps_for_hdr("video/x-raw(memory:DMABuf),format=DMA_DRM,drm-format=NV12:0x0100000000000009",
+                                         true) == "EMPTY");
+  }
+  SECTION("both directions use the admission list without widening storage") {
+    const std::string multiple = "video/x-raw(memory:DMABuf,meta:GstVideoMeta),format=DMA_DRM,"
+                                 "drm-format={NV12:0x0200000010401b04,P010:0x0200000010401b04,"
+                                 "NV12:0x0100000000000009,P010:0x0100000000000009},width=1920,height=1080";
+    for (const bool hdr : {false, true, false}) {
+      auto caps = gst_caps_from_string(state::producer_caps_for_hdr(multiple, hdr).c_str());
+      REQUIRE(gst_caps_get_size(caps) == 1);
+      REQUIRE(gst_caps_features_contains(gst_caps_get_features(caps, 0), "meta:GstVideoMeta"));
+      const auto structure = gst_caps_get_structure(caps, 0);
+      const auto formats = gst_structure_get_value(structure, "drm-format");
+      REQUIRE(GST_VALUE_HOLDS_LIST(formats));
+      REQUIRE(gst_value_list_get_size(formats) == 2);
+      const std::string format = hdr ? "P010" : "NV12";
+      REQUIRE(std::string(g_value_get_string(gst_value_list_get_value(formats, 0))) == format + ":0x0200000010401b04");
+      REQUIRE(std::string(g_value_get_string(gst_value_list_get_value(formats, 1))) == format + ":0x0100000000000009");
+      int height = 0;
+      REQUIRE(gst_structure_get_int(structure, "height", &height));
+      REQUIRE(height == 1080);
+      gst_caps_unref(caps);
+    }
+  }
+  SECTION("missing or malformed storage fails closed in both directions") {
+    for (const bool hdr : {false, true}) {
+      for (const auto fields : {"", ",drm-format=(int)10", ",drm-format={NV12_BAD,P010_BAD}"}) {
+        REQUIRE(state::producer_caps_for_hdr(std::string("video/x-raw(memory:DMABuf),format=DMA_DRM") + fields, hdr) ==
+                "EMPTY");
+      }
+    }
+    REQUIRE(state::producer_caps_for_hdr("video/x-raw(memory:DMABuf),format=DMA_DRM,drm-format=P010:0x0200000010401b04",
+                                         false) == "EMPTY");
+  }
+  SECTION("an explicitly supported linear format remains available") {
+    auto caps = gst_caps_from_string(
+        state::producer_caps_for_hdr("video/x-raw(memory:DMABuf),format=DMA_DRM,drm-format={NV12,P010}", true).c_str());
+    auto linear = gst_caps_from_string("video/x-raw(memory:DMABuf),format=DMA_DRM,drm-format=P010");
+    REQUIRE(gst_caps_can_intersect(caps, linear));
+    gst_caps_unref(caps);
+    gst_caps_unref(linear);
+  }
 }

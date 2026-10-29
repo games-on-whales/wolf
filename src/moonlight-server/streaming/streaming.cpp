@@ -4,8 +4,8 @@
 #include <control/control.hpp>
 #include <core/batched_send.hpp>
 #include <gst-video-context.hpp>
-#include <gstreamer-1.0/gst/app/gstappsink.h>
-#include <gstreamer-1.0/gst/app/gstappsrc.h>
+#include <gst/app/gstappsink.h>
+#include <gst/app/gstappsrc.h>
 #include <helpers/utils.hpp>
 #include <immer/array.hpp>
 #include <immer/box.hpp>
@@ -22,11 +22,6 @@ using namespace wolf::core;
 struct GstBusData {
   std::shared_ptr<boost::promise<WaylandDisplayReady>> on_ready;
   gst_element_ptr wayland_plugin;
-  // Used to forward the producer's HDR<->SDR content-state changes to the control thread.
-  std::string session_id;
-  std::shared_ptr<events::EventBusType> event_bus;
-  // Last HDR state we forwarded; guards against re-sending HDR_MODE on no-op messages.
-  std::optional<bool> last_hdr_state;
 };
 
 gboolean structure_each(GQuark field_id, const GValue *value, gpointer user_data) {
@@ -52,29 +47,6 @@ static void application_message_handler(GstBus *bus, GstMessage *msg, gpointer d
   auto structure = gst_message_get_structure(msg);
   if (gst_structure_has_name(structure, "wayland.src")) {
     gst_structure_foreach(structure, structure_each, data);
-  } else if (gst_structure_has_name(structure, "wolf-hdr-state")) {
-    // The producer pipeline signals an HDR<->SDR content change by posting a
-    // "wolf-hdr-state" application message carrying a single "hdr" gboolean.
-    // Forward it to the control thread so it can send the Moonlight HDR_MODE packet.
-    auto bus_data = static_cast<GstBusData *>(data);
-    gboolean hdr = FALSE;
-    if (!gst_structure_get_boolean(structure, "hdr", &hdr)) {
-      logs::log(logs::warning, "[HDR] Received wolf-hdr-state message without a valid 'hdr' boolean");
-      return;
-    }
-    bool enable = hdr == TRUE;
-    if (bus_data->last_hdr_state && *bus_data->last_hdr_state == enable) {
-      return; // Only react to actual changes.
-    }
-    bus_data->last_hdr_state = enable;
-    logs::log(logs::info, "[HDR] Content switched to {} for session {}", enable ? "HDR" : "SDR", bus_data->session_id);
-    try {
-      auto session_id = std::stoull(bus_data->session_id);
-      bus_data->event_bus->fire_event(
-          immer::box<events::HDRModeEvent>(events::HDRModeEvent{.session_id = session_id, .enable_hdr = enable}));
-    } catch (const std::exception &e) {
-      logs::log(logs::warning, "[HDR] Failed to parse session id '{}': {}", bus_data->session_id, e.what());
-    }
   }
 }
 
@@ -100,37 +72,60 @@ static GstBusSyncReply bus_sync_handler(GstBus *bus, GstMessage *msg, gpointer d
   return GST_BUS_PASS;
 }
 
+std::string initial_video_colorimetry(bool hdr_requested, events::ColorSpace requested_color_space) {
+  if (hdr_requested) {
+    // HDR is a connection-level transport contract. SDR producer frames are
+    // converted into BT.2020/PQ while native PQ frames pass through.
+    return "bt2100-pq";
+  }
+
+  switch (requested_color_space) {
+  case events::ColorSpace::BT601:
+    return "bt601";
+  case events::ColorSpace::BT709:
+    return "bt709";
+  case events::ColorSpace::BT2020:
+    return "bt2020";
+  }
+  return "bt709";
+}
+
 std::pair<std::string, std::string> get_color_params(immer::box<events::VideoSession> video_session) {
   std::string color_range = (video_session->color_range == events::ColorRange::JPEG) ? "jpeg" : "mpeg2";
-  std::string color_space;
-  switch (video_session->color_space) {
-  case events::ColorSpace::BT601:
-    color_space = "bt601";
-    break;
-  case events::ColorSpace::BT709:
-    color_space = "bt709";
-    break;
-  case events::ColorSpace::BT2020:
-    color_space = "bt2020";
-    break;
+  return std::make_pair(color_range,
+                        initial_video_colorimetry(video_session->hdr_requested, video_session->color_space));
+}
+
+static void replace_all(std::string &value, std::string_view from, std::string_view to) {
+  std::size_t offset = 0;
+  while ((offset = value.find(from, offset)) != std::string::npos) {
+    value.replace(offset, from.size(), to);
+    offset += to.size();
   }
-  return std::make_pair(color_range, color_space);
+}
+
+std::string prepare_video_pipeline(std::string pipeline, bool hdr_requested) {
+  if (hdr_requested) {
+    replace_all(pipeline, "format=NV12", "format=P010_10LE");
+    replace_all(pipeline, "profile=main,", "profile=main-10,");
+  }
+  return pipeline;
 }
 
 void start_video_producer(const std::string &session_id,
                           const std::string &buffer_format,
                           const std::string &render_node,
                           const wolf::core::virtual_display::DisplayMode &display_mode,
+                          bool hdr_capable,
                           std::shared_ptr<immer::atom<gst_video_context::gst_context_ptr>> video_context,
                           std::shared_ptr<boost::promise<WaylandDisplayReady>> on_ready,
                           std::shared_ptr<events::EventBusType> event_bus) {
   // The native Vulkan zero-copy path needs the source in Vulkan mode so it emits NV12
   // memory:VulkanImage (selected when the negotiated producer caps are VulkanImage).
   std::string vulkan_prop = buffer_format.find("VulkanImage") != std::string::npos ? " vulkan=true" : "";
-  // A P010 producer format selects the 10-bit / HDR path: tell the source to emit
-  // BT.2020 PQ-tagged frames (mastering-display + content-light metadata) so the
-  // downstream vulkanh265enc produces an HDR10 Main-10 stream.
-  std::string hdr_prop = buffer_format.find("P010") != std::string::npos ? " hdr=true" : "";
+  // HDR is an application/producer capability, not an inference from the
+  // selected allocation format.
+  std::string hdr_prop = hdr_capable ? " hdr=true" : "";
   auto pipeline = fmt::format(
       "waylanddisplaysrc name=wolf_wayland_source render_node={render_node}{vulkan_prop}{hdr_prop} ! "
       "{buffer_format}, width={width}, height={height}, framerate={fps}/1 ! \n"    //
@@ -144,10 +139,8 @@ void start_video_producer(const std::string &session_id,
       fmt::arg("height", display_mode.height),
       fmt::arg("fps", display_mode.refreshRate));
   logs::log(logs::debug, "[GSTREAMER] Starting video producer: {}", pipeline);
-  auto bus_data_ptr = std::make_shared<GstBusData>(GstBusData{.on_ready = std::move(on_ready),
-                                                              .wayland_plugin = nullptr,
-                                                              .session_id = session_id,
-                                                              .event_bus = event_bus});
+  auto bus_data_ptr =
+      std::make_shared<GstBusData>(GstBusData{.on_ready = std::move(on_ready), .wayland_plugin = nullptr});
   std::shared_ptr<NeedContextData> ctx_data_ptr =
       std::make_shared<NeedContextData>(NeedContextData{.device_path = render_node, .gst_context = video_context});
   run_pipeline(pipeline, [=](auto pipeline) {
@@ -419,8 +412,9 @@ void start_streaming_video(immer::box<events::VideoSession> video_session,
                            std::shared_ptr<udp::socket> video_socket) {
   auto [color_range, color_space] = get_color_params(video_session);
 
+  auto pipeline_template = prepare_video_pipeline(video_session->gst_pipeline, video_session->hdr_requested);
   auto pipeline = fmt::format(
-      fmt::runtime(video_session->gst_pipeline),
+      fmt::runtime(pipeline_template),
       fmt::arg("session_id", video_session->session_id),
       fmt::arg("width", video_session->display_mode.width),
       fmt::arg("height", video_session->display_mode.height),

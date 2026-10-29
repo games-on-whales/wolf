@@ -250,9 +250,10 @@ state::SessionsAtoms test_init_state() {
   events::StreamSession session = {.display_mode = {1920, 1080, 60},
                                    .audio_channel_count = 2,
                                    .event_bus = std::make_shared<events::EventBusType>(),
-                                   .app = std::make_shared<events::App>(events::App{.base = {},
+                                   .app = std::make_shared<events::App>(events::App{.base = {.support_hdr = true},
                                                                                     .h264_gst_pipeline = "",
                                                                                     .hevc_gst_pipeline = "",
+                                                                                    .av1_gst_pipeline = "",
                                                                                     .opus_gst_pipeline = "",
                                                                                     .runner = nullptr}),
                                    .aes_key = crypto::hex_to_str("9d804e47a6aa6624b7d4b502b32cc522", true),
@@ -375,6 +376,10 @@ TEST_CASE("Commands (Payload matching)", "[RTSP]") {
   }
 
   SECTION("ANNOUNCE control") {
+    std::optional<events::VideoSession> announced_video;
+    auto video_handler = state->load()->operator[](0).event_bus->register_handler<immer::box<events::VideoSession>>(
+        [&announced_video](const immer::box<events::VideoSession> &video) { announced_video = *video; });
+
     // This is a very long message, it'll kick the recursion in receive_message()
     wolf_client->run("ANNOUNCE streamid=control/13/0 RTSP/1.0\n"
                      "CSeq: 6\n"
@@ -409,8 +414,8 @@ TEST_CASE("Commands (Payload matching)", "[RTSP]") {
                      "a=x-nv-general.enableRecoveryMode:0 \n"
                      "a=x-nv-video[0].videoEncoderSlicesPerFrame:1 \n"
                      "a=x-nv-clientSupportHevc:0 \n"
-                     "a=x-nv-vqos[0].bitStreamFormat:0 \n"
-                     "a=x-nv-video[0].dynamicRangeMode:0 \n"
+                     "a=x-nv-vqos[0].bitStreamFormat:1 \n"
+                     "a=x-nv-video[0].dynamicRangeMode:1 \n"
                      "a=x-nv-video[0].maxNumReferenceFrames:1 \n"
                      "a=x-nv-video[0].clientRefreshRateX100:0 \n"
                      "a=x-nv-audio.surround.numChannels:2 \n"
@@ -418,7 +423,9 @@ TEST_CASE("Commands (Payload matching)", "[RTSP]") {
                      "a=x-nv-audio.surround.enable:0 \n"
                      "a=x-nv-audio.surround.AudioQuality:0 \n"
                      "a=x-nv-aqos.packetDuration:5 \n"
-                     "a=x-nv-video[0].encoderCscMode:0 \n"
+                     // dynamicRangeMode is authoritative even when a client
+                     // retains an SDR encoderCscMode during negotiation.
+                     "a=x-nv-video[0].encoderCscMode:2 \n"
                      "t=0 0\n"
                      "m=video 47998 \n"sv,
                      [](std::optional<RTSP_PACKET> response) {
@@ -426,6 +433,11 @@ TEST_CASE("Commands (Payload matching)", "[RTSP]") {
                        REQUIRE(response.value().response.status_code == 200);
                        REQUIRE(response.value().seq_number == 6);
                      });
+
+    REQUIRE(announced_video.has_value());
+    REQUIRE(announced_video->hdr_requested);
+    REQUIRE(announced_video->color_space == events::ColorSpace::BT2020);
+    video_handler.unregister();
   }
 
   SECTION("Non valid payload") {

@@ -28,6 +28,7 @@ id = "moonlight-profile-id"
 title = "Firefox"
 start_virtual_compositor = true
 icon_png_path = "firefox.png"
+support_hdr = true
 
 [profiles.apps.runner]
 type = "docker"

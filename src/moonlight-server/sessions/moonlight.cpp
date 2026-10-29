@@ -107,6 +107,7 @@ setup_moonlight_handlers(const immer::box<state::AppState> &app_state,
                                             {.width = session->display_mode.width,
                                              .height = session->display_mode.height,
                                              .refreshRate = session->display_mode.refreshRate},
+                                            session->app->base.support_hdr,
                                             gst_context,
                                             on_ready,
                                             session->event_bus);

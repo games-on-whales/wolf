@@ -170,6 +170,25 @@ announce(const RTSP_PACKET &req, const events::StreamSession &session) {
   bool video_format_hevc = args["x-nv-vqos[0].bitStreamFormat"].value_or(0) == 1;
   bool video_format_av1 = args["x-nv-vqos[0].bitStreamFormat"].value_or(0) == 2;
   auto csc = args["x-nv-video[0].encoderCscMode"].value_or(0);
+  bool hdr_requested = args["x-nv-video[0].dynamicRangeMode"].value_or(0) == 1;
+  auto color_space = events::ColorSpace(csc >> 1);
+
+  if (hdr_requested && !session.app->base.support_hdr) {
+    logs::log(logs::warning, "[RTSP] Ignoring HDR request for an SDR-only application");
+    hdr_requested = false;
+  }
+
+  if (hdr_requested && !video_format_hevc && !video_format_av1) {
+    logs::log(logs::warning, "[RTSP] Ignoring HDR request without a 10-bit capable codec");
+    hdr_requested = false;
+  }
+
+  if (hdr_requested && color_space != events::ColorSpace::BT2020) {
+    // dynamicRangeMode is the explicit transport request. Some clients retain
+    // their SDR encoderCscMode while negotiating a 10-bit HDR codec profile.
+    logs::log(logs::info, "[RTSP] HDR requested with non-BT.2020 CSC {}; selecting BT.2020/PQ", csc);
+    color_space = events::ColorSpace::BT2020;
+  }
 
   // Video session
   moonlight::DisplayMode display = {.width = args["x-nv-video[0].clientViewportWd"].value(),
@@ -261,7 +280,8 @@ announce(const RTSP_PACKET &req, const events::StreamSession &session) {
       .slices_per_frame = args["x-nv-video[0].videoEncoderSlicesPerFrame"].value_or(1),
 
       .color_range = (csc & 0x1) ? events::ColorRange::JPEG : events::ColorRange::MPEG,
-      .color_space = events::ColorSpace(csc >> 1),
+      .color_space = color_space,
+      .hdr_requested = hdr_requested,
 
       .client_ip = session.ip,
       .rtp_secret_payload = session.rtp_secret_payload,
