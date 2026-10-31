@@ -293,3 +293,38 @@ fi
 Save this file to `/etc/NetworkManager/dispatcher.d/fix_roaming.sh` and make it executable with `chmod +x /etc/NetworkManager/dispatcher.d/fix_roaming.sh`, run `systemctl stop wpa_supplicant.service` and wait for your wifi to reconnect.
 
 This should reduce the frequency of this issue happening to once every hour, provided you have good signal.
+
+== SDR colors look washed out with native NVIDIA encoding
+
+Keep `hdr = false` under `[gstreamer.video]` when streaming SDR. The setting
+selects the producer format globally; it does not negotiate HDR separately for
+each client. Forcing HDR capture can feed PQ pixels into an SDR stream, including
+the 8-bit H.264 conversion path. Reducing P010 to NV12 alone is not HDR-to-SDR
+tone mapping.
+
+The native H.264 default now converts to BT.709 explicitly with `cudaconvertscale`
+before encoding. Existing configuration files retain their saved pipelines. For
+an existing native NVIDIA installation, update its first
+`[[gstreamer.video.h264_encoders]]` entry with:
+
+[source,toml]
+----
+video_params_zero_copy = 'dmabuftocuda render-node={render_node} ! cudaconvertscale ! video/x-raw(memory:CUDAMemory),format=NV12,colorimetry=bt709'
+----
+
+Save and exit running games before restarting Wolf to apply the configuration.
+The SDR path was verified on RTX 5080 / Shield with both Steam and gameplay;
+the encoded H.264 stream carries BT.709 matrix, transfer, and primaries with
+limited range. This workaround disables HDR capture; per-client HDR negotiation
+and conversion still require separate work.
+
+== Stream FPS is steady but movement is uneven
+
+The stream's FPS counter measures encoded frames, which can repeat an unchanged
+game image. Compare the game's own presentation timing with stream timing before
+attributing a hitch to encoding or delivery. In one Star Ocean 6 movement test,
+the game presented about 30 FPS with V-sync enabled while Wolf sent 60 FPS.
+Disabling game V-sync with its frame limit still at 60 raised presentation to
+about 50 FPS, but a 230 ms presentation gap remained. A busy game thread suggested
+CPU pressure; this did not establish whether game work or compositor synchronization
+caused the remaining stall.
