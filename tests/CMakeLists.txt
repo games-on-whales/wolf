@@ -26,6 +26,7 @@ set(SRC_LIST
 
 option(TEST_RUST_WAYLAND "Test our custom Rust wayland compositor" ON)
 if (UNIX AND NOT APPLE)
+    list(APPEND SRC_LIST "testDockerLookup.cpp")
     if (TEST_RUST_WAYLAND)
         find_package(PkgConfig)
         pkg_check_modules(wayland-client REQUIRED IMPORTED_TARGET wayland-client)
