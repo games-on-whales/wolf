@@ -1,6 +1,61 @@
+#include <map>
 #include <runners/docker.hpp>
 
 namespace wolf::core::docker {
+
+namespace {
+std::string format_bytes(long bytes) {
+  if (bytes >= 1'000'000'000) {
+    return fmt::format("{:.1f} GB", bytes / 1e9);
+  }
+  return fmt::format("{} MB", bytes / 1'000'000);
+}
+} // namespace
+
+void RunDocker::prepare(const std::string &app_title,
+                        const std::function<void(const std::optional<std::string> &)> &status) {
+  if (docker_api.image_exists(container.image)) {
+    return;
+  }
+  // Downloading an app image takes minutes the first time; tell the client on the stream.
+  logs::log(logs::info, "[DOCKER] Image {} not present, downloading", container.image);
+  status(fmt::format("Downloading {}...", app_title));
+  std::map<std::string, std::pair<long, long>> layers; // id -> (current, total)
+  auto last_update = std::chrono::steady_clock::now() - 1s;
+  bool unpacking = false;
+  auto ok = docker_api.pull_image(container.image, {}, [&](const DockerAPI::DockerProgressEvent &progress) {
+    if (progress.total > 0) {
+      layers[progress.layer_id] = {progress.current_progress, progress.total};
+    }
+    long current = 0, total = 0;
+    for (const auto &[id, layer] : layers) {
+      current += std::min(layer.first, layer.second);
+      total += layer.second;
+    }
+    auto now = std::chrono::steady_clock::now();
+    if (now - last_update < 500ms || total == 0) {
+      return;
+    }
+    last_update = now;
+    if (current >= total) {
+      // Every byte is in; the image is being unpacked and prepared now.
+      if (!unpacking) {
+        unpacking = true;
+        status(fmt::format("Unpacking {}...", app_title));
+      }
+      return;
+    }
+    status(fmt::format("Downloading {}... {} of {} ({}%)",
+                       app_title,
+                       format_bytes(current),
+                       format_bytes(total),
+                       current * 100 / total));
+  });
+  if (!ok) {
+    logs::log(logs::warning, "[DOCKER] Download of {} failed", container.image);
+    status(fmt::format("Downloading {} failed. Check the server logs.", app_title));
+  }
+}
 
 void create_udev_hw_files(std::filesystem::path base_hw_db_path,
                           std::vector<std::pair<std::string, std::vector<std::string>>> udev_hw_db_entries) {

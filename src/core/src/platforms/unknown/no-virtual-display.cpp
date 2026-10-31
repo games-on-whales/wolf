@@ -4,6 +4,8 @@ namespace wolf::core::virtual_display {
 
 struct WaylandState {};
 
+void set_status(WaylandState &w_state, const std::optional<std::string> &status) {}
+
 std::shared_ptr<WaylandState> create_wayland_display(const immer::array<std::string> &input_devices,
                                                      const std::string &render_node) {
   return {};

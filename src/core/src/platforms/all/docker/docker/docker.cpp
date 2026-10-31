@@ -164,6 +164,15 @@ std::optional<Container> DockerAPI::get_by_id(std::string_view id) const {
   return {};
 }
 
+bool DockerAPI::image_exists(std::string_view image_name) const {
+  if (auto conn = docker_connect(socket_path)) {
+    auto url = fmt::format("http://localhost/{}/images/{}/json", docker_api_version, image_name);
+    auto raw_msg = req(conn.value().get(), GET, url);
+    return raw_msg && raw_msg->first == 200;
+  }
+  return false;
+}
+
 std::vector<Container> DockerAPI::get_containers(bool all) const {
   if (auto conn = docker_connect(socket_path)) {
     auto url = fmt::format("http://localhost/{}/containers/json{}", docker_api_version, all ? "?all=true" : "");

@@ -41,6 +41,9 @@ struct RunnerArgs {
   const std::string &xdg_runtime_dir;
 
   immer::box<config::ClientSettings> client_settings;
+
+  /* Shown to the client while the app downloads or starts */
+  std::string app_title = {};
 };
 
 /**

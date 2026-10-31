@@ -15,7 +15,7 @@ FROM $BASE_IMAGE AS wolf-builder
 # libraries Wolf links that the gst image doesn't carry.
 RUN dnf install -y \
     ccache \
-    boost-devel \
+    boost-devel boost-static \
     libevdev-devel \
     pulseaudio-libs-devel \
     libcurl-devel \

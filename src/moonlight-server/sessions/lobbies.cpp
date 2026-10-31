@@ -144,7 +144,8 @@ setup_lobbies_handlers(const immer::box<state::AppState> &app_state,
                                      .app_host_state_folder = std::filesystem::path(host->host_base_state_folder) /
                                                               lobby_settings->runner_state_folder,
                                      .xdg_runtime_dir = runtime_dir,
-                                     .client_settings = lobby_settings->client_settings}});
+                                     .client_settings = lobby_settings->client_settings,
+                                     .app_title = lobby->name}});
                     // Runner process ended, stop the lobby
                     lobby->wayland_display->store(nullptr);
 

@@ -93,6 +93,9 @@ public:
            const immer::map<std::string, std::string> &env_variables,
            std::string_view render_node) override;
 
+  void prepare(const std::string &app_title,
+               const std::function<void(const std::optional<std::string> &)> &status) override;
+
   events::RunnerTypes serialize() const override {
     return wolf::config::AppDocker{
         .name = container.name,
