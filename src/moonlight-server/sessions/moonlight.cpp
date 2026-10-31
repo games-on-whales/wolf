@@ -222,7 +222,8 @@ setup_moonlight_handlers(const immer::box<state::AppState> &app_state,
                   .app_local_state_folder = run_session->stream_session->app_local_state_folder,
                   .app_host_state_folder = run_session->stream_session->app_host_state_folder,
                   .xdg_runtime_dir = runtime_dir,
-                  .client_settings = run_session->stream_session->client_settings}});
+                  .client_settings = run_session->stream_session->client_settings,
+                  .app_title = run_session->stream_session->app->base.title}});
 
           // Runner process ended
           if (run_session->stop_stream_when_over) {

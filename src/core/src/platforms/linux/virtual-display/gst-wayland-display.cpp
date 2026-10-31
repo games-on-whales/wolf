@@ -36,6 +36,14 @@ std::string get_wayland_socket_name(WaylandState &w_state) {
   return w_state.wayland_socket_name;
 }
 
+void set_status(WaylandState &w_state, const std::optional<std::string> &status) {
+  auto plugin = w_state.wayland_plugin.get();
+  if (!plugin || !g_object_class_find_property(G_OBJECT_GET_CLASS(plugin), "status")) {
+    return; // an older gst-wayland-display without status text
+  }
+  g_object_set(plugin, "status", status ? status->c_str() : nullptr, nullptr);
+}
+
 bool add_input_device(WaylandState &w_state, const std::string &device_path) {
   gstreamer::send_message(w_state.wayland_plugin.get(),
                           gst_structure_new("VirtualDevicesReady", "path", G_TYPE_STRING, device_path.c_str(), NULL));

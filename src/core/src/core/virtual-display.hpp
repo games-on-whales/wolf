@@ -24,6 +24,13 @@ std::string get_wayland_socket_name(WaylandState &w_state);
 
 bool add_input_device(WaylandState &w_state, const std::string &device_path);
 
+/**
+ * Text the stream shows while no application window is on screen (the app is downloading or
+ * starting), so the client doesn't sit on a black screen; cleared once a window is mapped.
+ * std::nullopt clears it. A no-op with a waylanddisplaysrc that has no `status` property.
+ */
+void set_status(WaylandState &w_state, const std::optional<std::string> &status);
+
 class WaylandMouse {
 public:
   WaylandMouse(wl_state_ptr w_state) : w_state(w_state) {};

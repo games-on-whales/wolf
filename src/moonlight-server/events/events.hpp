@@ -58,6 +58,13 @@ struct Runner {
                    std::string_view render_node) = 0;
 
   virtual RunnerTypes serialize() const = 0;
+
+  /**
+   * Called before run(): prepare what the app needs (e.g. download its image), reporting
+   * progress through `status` so the client sees it on the stream.
+   */
+  virtual void prepare(const std::string &app_title,
+                       const std::function<void(const std::optional<std::string> &)> &status) {}
 };
 
 struct App {

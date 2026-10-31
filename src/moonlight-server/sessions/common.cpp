@@ -71,6 +71,16 @@ void start_runner(std::shared_ptr<events::Runner> runner,
       {std::filesystem::path(args->host->host_base_state_folder) / "fake-udev", "/usr/bin/fake-udev"});
   mounted_paths.push_back({std::filesystem::path(args->app_host_state_folder) / "udev", "/run/udev/"});
 
+  /* Tell the client what's happening until the app has a window (the stream is black till then) */
+  auto status = [w_display = args->wayland_display](const std::optional<std::string> &text) {
+    if (w_display) {
+      virtual_display::set_status(*w_display, text);
+    }
+  };
+  auto title = args->app_title.empty() ? std::string{"the app"} : args->app_title;
+  runner->prepare(title, status);
+  status(fmt::format("Starting {}...", title));
+
   /* Finally run the app, this will stop here until over */
   runner->run(args->session_id,
               args->app_local_state_folder,

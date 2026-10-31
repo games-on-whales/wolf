@@ -151,6 +151,11 @@ public:
    */
   bool pull_image(std::string_view image_name, std::string_view registry_auth = {}) const;
 
+  /**
+   * Whether the image is present locally (no pull needed to create a container from it)
+   */
+  [[nodiscard]] bool image_exists(std::string_view image_name) const;
+
   struct DockerProgressEvent {
     std::string layer_id;
     long current_progress;
