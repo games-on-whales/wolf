@@ -24,6 +24,13 @@ void RunDocker::prepare(const std::string &app_title,
   auto last_update = std::chrono::steady_clock::now() - 1s;
   bool unpacking = false;
   auto ok = docker_api.pull_image(container.image, {}, [&](const DockerAPI::DockerProgressEvent &progress) {
+    if (progress.layer_id.empty()) {
+      // A status line without byte counts ("Unpacking image layers"): show the phase.
+      if (layers.empty() && !progress.status.empty()) {
+        status(fmt::format("Downloading {}... {}", app_title, progress.status));
+      }
+      return;
+    }
     if (progress.total > 0) {
       layers[progress.layer_id] = {progress.current_progress, progress.total};
     }

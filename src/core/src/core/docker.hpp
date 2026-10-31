@@ -160,6 +160,9 @@ public:
     std::string layer_id;
     long current_progress;
     long total;
+    /* The daemon's status line ("Downloading", "Extracting", ...); some daemons send no
+     * per-layer byte counts, only these */
+    std::string status;
   };
 
   /**

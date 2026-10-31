@@ -630,28 +630,25 @@ void UnixSocketServer::endpoint_DockerPullImage(const HTTPRequest &req, std::sha
     // TODO: implement coroutines for CURL
     std::thread([this, socket, image = input_payload.value().image_name]() {
       docker::DockerAPI docker_api(utils::get_env("WOLF_DOCKER_SOCKET", "/var/run/docker.sock"));
-      bool first_send = true;
       broadcast_event("DockerPullImageStartEvent",
                       rfl::json::write(events::DockerPullImageStartEvent{.image_name = image}));
+      // Answer right away: a pull can run for minutes before the daemon reports any layer
+      // progress (some never do), and a client waiting on the headers times out (Wolf UI's
+      // HttpClient after 100 s) and never learns the pull finished.
+      send_data(socket, "HTTP/1.0 200 OK\r\n\r\n");
       if (docker_api.pull_image(image,
                                 {},
-                                [this, &first_send, socket](const docker::DockerAPI::DockerProgressEvent &progress_ev) {
-                                  if (first_send) {
-                                    send_data(socket, "HTTP/1.0 200 OK\r\n\r\n");
-                                    first_send = false;
-                                  }
+                                [this, socket](const docker::DockerAPI::DockerProgressEvent &progress_ev) {
                                   auto serialized_ev = rfl::json::write(progress_ev) + "\r\n";
                                   send_data(socket, serialized_ev);
                                 })) {
-        if (first_send) {
-          send_data(socket, "HTTP/1.0 200 OK\r\n\r\n");
-        }
         auto final_result = rfl::json::write(GenericSuccessResponse{.success = true});
         send_data(socket, final_result + "\r\n");
         broadcast_event("DockerPullImageEndEvent",
                         rfl::json::write(events::DockerPullImageEndEvent{.image_name = image, .success = true}));
       } else {
-        send_http(socket, 500, rfl::json::write(GenericErrorResponse{.error = "Failed to pull image"}));
+        // The 200 is already sent; report the failure in the body the client is reading.
+        send_data(socket, rfl::json::write(GenericErrorResponse{.error = "Failed to pull image"}) + "\r\n");
         broadcast_event("DockerPullImageEndEvent",
                         rfl::json::write(events::DockerPullImageEndEvent{.image_name = image, .success = false}));
       }

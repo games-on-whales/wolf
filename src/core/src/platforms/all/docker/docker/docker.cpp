@@ -370,8 +370,11 @@ bool DockerAPI::pull_image(std::string_view image_name,
             auto &obj = data.as_object();
             DockerProgressEvent event{};
 
-            if (auto error = obj.find("error"); error != obj.end() && error->value().is_object()) {
+            if (auto error = obj.find("error"); error != obj.end() && error->value().is_string()) {
               pull_state->error_msg = error->value().as_string().c_str();
+            }
+            if (auto status = obj.find("status"); status != obj.end() && status->value().is_string()) {
+              event.status = status->value().as_string().c_str();
             }
 
             if (auto it = obj.find("id"); it != obj.end() && it->value().is_string()) {
@@ -386,6 +389,8 @@ bool DockerAPI::pull_image(std::string_view image_name,
                 }
                 pull_state->progress_fn(event);
               }
+            } else if (!event.status.empty()) {
+              pull_state->progress_fn(event); // a status line without per-layer progress
             }
           }
         } catch (...) {
