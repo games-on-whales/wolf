@@ -557,4 +557,42 @@ TEST_CASE("Multiple users", "[HTTP]") {
 
   REQUIRE(session4->video_stream_port == 48100);
   REQUIRE(session4->audio_stream_port == 48200);
+
+  const auto capable_app = events::App{.base = {.title = "test_app", .id = "hdr-capable", .support_hdr = true},
+                                       .video_producer_buffer_caps = "video/x-raw(memory:DMABuf), drm-format=NV12"};
+  auto hdr_headers = client1_headers;
+  hdr_headers.emplace("hdrMode", "1");
+  auto hdr_session = endpoints::https::create_run_session(hdr_headers, client1_ip, client1, app_state, capable_app);
+  auto sdr_session = endpoints::https::create_run_session(client1_headers, client1_ip, client1, app_state, capable_app);
+  REQUIRE(hdr_session);
+  REQUIRE(sdr_session);
+  REQUIRE(state::producer_is_hdr(hdr_session->app->video_producer_buffer_caps));
+  REQUIRE_FALSE(state::producer_is_hdr(sdr_session->app->video_producer_buffer_caps));
+  REQUIRE(sdr_session->app->video_producer_buffer_caps == capable_app.video_producer_buffer_caps);
+  REQUIRE_FALSE(state::producer_is_hdr(capable_app.video_producer_buffer_caps));
+  REQUIRE_FALSE(endpoints::https::create_run_session(hdr_headers, client1_ip, client1, app_state, app1));
+}
+
+TEST_CASE("HDR producer selection is isolated per Moonlight client", "[HTTP][HDR]") {
+  const std::string dma = "video/x-raw(memory:DMABuf), drm-format=NV12";
+  const std::string vk = "video/x-raw(memory:VulkanImage), format=NV12";
+  for (const auto &base : {dma, vk}) {
+    const auto hdr = state::producer_caps_for_client(base, true);
+    const auto sdr = state::producer_caps_for_client(base, false);
+    REQUIRE(hdr);
+    REQUIRE(sdr);
+    REQUIRE(state::producer_is_hdr(*hdr));
+    REQUIRE(*sdr == base);
+    REQUIRE(state::producer_caps_for_client(*hdr, false) == sdr);
+    REQUIRE_FALSE(state::producer_is_hdr(base));
+    REQUIRE(state::valid_client_color_mode(*sdr, false, false));
+    REQUIRE(state::valid_client_color_mode(*sdr, false, true));
+    REQUIRE(state::valid_client_color_mode(*hdr, true, true));
+    REQUIRE_FALSE(state::valid_client_color_mode(*hdr, false, true));
+    REQUIRE_FALSE(state::valid_client_color_mode(*hdr, true, false));
+    REQUIRE_FALSE(state::compatible_color_transport(*hdr, *sdr));
+    REQUIRE(state::compatible_color_transport(*hdr, *hdr));
+  }
+  REQUIRE_FALSE(state::producer_caps_for_client("video/x-raw, format=RGBA", true));
+  REQUIRE_FALSE(state::producer_caps_for_client("video/x-raw(memory:DMABuf), drm-format=NV12:0x1234", true));
 }

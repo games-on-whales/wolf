@@ -176,8 +176,12 @@ std::optional<sessions::AudioServer> setup_audio_server(const std::string &host_
  */
 void run() {
   streaming::init(); // Need to initialise gstreamer once
-  control::init();   // Need to initialise enet once
-  docker::init();    // Need to initialise libcurl once
+  // Initialize the Vulkan ICD before producer and encoder threads can race its first load.
+  if (auto source = gst_element_factory_make("waylanddisplaysrc", nullptr)) {
+    gst_object_unref(source);
+  }
+  control::init(); // Need to initialise enet once
+  docker::init();  // Need to initialise libcurl once
   gst_video_context::init();
 
   auto runtime_dir = utils::get_env("XDG_RUNTIME_DIR", "/tmp/sockets");

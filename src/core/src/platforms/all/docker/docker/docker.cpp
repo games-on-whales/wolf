@@ -171,12 +171,17 @@ std::vector<Container> DockerAPI::get_containers(bool all) const {
     if (raw_msg && raw_msg->first == 200) {
       auto json = parse_json(raw_msg->second);
       auto containers = json::value_to<std::vector<json::value>>(json);
-      return containers                                                            //
-             | ranges::views::transform([this](const json::value &container) {     //
-                 auto id = container.at("Id").as_string();                         //
-                 return get_by_id(std::string_view{id.data(), id.size()}).value(); //
-               })                                                                  //
-             | ranges::to_vector;                                                  //
+      std::vector<Container> inspected_containers;
+      inspected_containers.reserve(containers.size());
+      for (const auto &container : containers) {
+        const auto &id = container.at("Id").as_string();
+        // A container can disappear after listing, especially during reconnect.
+        // Inspect it once and keep the containers that still exist.
+        if (auto inspected = get_by_id(std::string_view{id.data(), id.size()})) {
+          inspected_containers.push_back(std::move(*inspected));
+        }
+      }
+      return inspected_containers;
     } else if (raw_msg) {
       logs::log(logs::warning, "[CURL] error {} - {}", raw_msg->first, raw_msg->second);
     }

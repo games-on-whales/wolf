@@ -109,6 +109,7 @@ struct Lobby {
   std::optional<std::vector<short>> pin;
 
   const bool stop_when_everyone_leaves;
+  std::string video_producer_buffer_caps;
   /**
    * The app that is currently running in the lobby
    */

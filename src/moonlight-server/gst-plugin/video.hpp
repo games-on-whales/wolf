@@ -272,7 +272,7 @@ static void generate_fec_packets(const gst_rtp_moonlight_pay_video &rtpmoonlight
 }
 
 /**
- * Given a list of RTP packets will split them in 3 macro blocks of:
+ * Given a list of RTP packets will split them into protocol FEC blocks:
  * [Payloads + FEC], [Payloads + FEC], [Payloads + FEC]
  *
  * Returns a new linear list of all the blocks
@@ -281,11 +281,11 @@ static void generate_fec_packets(const gst_rtp_moonlight_pay_video &rtpmoonlight
 static GstBufferList *generate_fec_multi_blocks(gst_rtp_moonlight_pay_video *rtpmoonlightpay,
                                                 GstBufferList *rtp_packets,
                                                 int data_shards,
-                                                GstBuffer *inbuf) {
+                                                GstBuffer *inbuf,
+                                                int nr_blocks = 3) {
   auto rtp_packets_size = gst_buffer_list_length(rtp_packets);
 
-  constexpr auto nr_blocks = 3;
-  constexpr auto last_block_index = 2 << 6;
+  const auto last_block_index = (nr_blocks - 1) << 6;
 
   GstBufferList *final_packets = gst_buffer_list_new(); // we'll increase the size on each block iteration
 
@@ -332,14 +332,23 @@ static GstBufferList *split_into_rtp(gst_rtp_moonlight_pay_video *rtpmoonlightpa
     auto rtp_packets_size = gst_buffer_list_length(rtp_packets);
     auto blocks = determine_split(*rtpmoonlightpay, rtp_packets_size);
 
-    // With a fec_percentage of 255, if payload is broken up into more than a 100 data_shards
-    // it will generate greater than DATA_SHARDS_MAX shards and FEC will fail to encode.
-    if (blocks.data_shards > 90) {
-      rtp_packets = generate_fec_multi_blocks(rtpmoonlightpay, rtp_packets, blocks.data_shards, inbuf);
+    // Each Reed-Solomon block is limited to 255 data + parity shards, and
+    // Moonlight's two block-count bits permit up to four blocks per frame.
+    const auto max_data_shards = std::min((DATA_SHARDS_MAX * 100) / (100 + rtpmoonlightpay->fec_percentage),
+                                          DATA_SHARDS_MAX - rtpmoonlightpay->min_required_fec_packets);
+    const auto nr_blocks = max_data_shards > 0 ? (blocks.data_shards + max_data_shards - 1) / max_data_shards : 5;
+    if (nr_blocks > 4) {
+      // The original packets already describe one complete frame with zero
+      // parity. Do not split them into blocks whose FEC headers cannot be built.
+      rtpmoonlightpay->cur_seq_number += rtp_packets_size;
+    } else if (nr_blocks > 1) {
+      rtp_packets = generate_fec_multi_blocks(rtpmoonlightpay, rtp_packets, blocks.data_shards, inbuf, nr_blocks);
     } else {
       generate_fec_packets(*rtpmoonlightpay, rtp_packets, inbuf, 0, 0);
       rtpmoonlightpay->cur_seq_number += gst_buffer_list_length(rtp_packets);
     }
+  } else {
+    rtpmoonlightpay->cur_seq_number += gst_buffer_list_length(rtp_packets);
   }
 
   rtpmoonlightpay->frame_num++;
