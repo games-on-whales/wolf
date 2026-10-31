@@ -155,6 +155,51 @@ TEST_CASE_METHOD(GStreamerTestsFixture, "RTP VIDEO Splits", "[GSTPlugin]") {
   gst_buffer_unref(payload_buf);
 }
 
+TEST_CASE_METHOD(GStreamerTestsFixture, "Large video frames use valid FEC blocks", "[GSTPlugin]") {
+  auto pay = (gst_rtp_moonlight_pay_video *)g_object_new(gst_TYPE_rtp_moonlight_pay_video, nullptr);
+  pay->payload_size = 1400;
+  pay->add_padding = true;
+  pay->fec_percentage = 50;
+  pay->min_required_fec_packets = 2;
+  int data_packets = 600;
+  bool fallback = false;
+  SECTION("Four blocks protect a frame that exceeds three-block capacity") {}
+  SECTION("Oversized frames retain valid single-block headers without parity") {
+    data_packets = 900;
+    fallback = true;
+  }
+  SECTION("No-FEC frames still advance RTP sequence numbers") {
+    pay->fec_percentage = 0;
+    fallback = true;
+  }
+  auto payload = gst_buffer_new_and_fill(
+      data_packets * (pay->payload_size - MAX_RTP_HEADER_SIZE) - sizeof(gst_moonlight_video::VideoShortHeader),
+      0x42);
+  auto packets = gst_moonlight_video::split_into_rtp(pay, payload);
+  const auto count = gst_buffer_list_length(packets);
+  REQUIRE(count == (fallback ? data_packets : 900));
+  for (guint i = 0; i < count; ++i) {
+    auto content = gst_buffer_copy_content(gst_buffer_list_get(packets, i));
+    auto header = reinterpret_cast<const gst_moonlight_video::VideoRTPHeaders *>(content.data());
+    REQUIRE(boost::endian::big_to_native(header->rtp.sequenceNumber) == i);
+    const auto data = (header->packet.fecInfo >> 22) & 0x3ff;
+    const auto percentage = (header->packet.fecInfo >> 4) & 0xff;
+    if (fallback) {
+      REQUIRE(header->packet.multiFecBlocks == 0);
+      REQUIRE(data == data_packets);
+      REQUIRE(percentage == 0);
+    } else {
+      REQUIRE((header->packet.multiFecBlocks >> 6) == 3);
+      REQUIRE(((header->packet.multiFecBlocks >> 4) & 3) == i / 225);
+      REQUIRE(data + (data * percentage + 99) / 100 <= DATA_SHARDS_MAX);
+    }
+  }
+  REQUIRE(pay->cur_seq_number == count);
+  gst_buffer_list_unref(packets);
+  gst_buffer_unref(payload);
+  g_object_unref(pay);
+}
+
 TEST_CASE_METHOD(GStreamerTestsFixture, "Create RTP VIDEO packets", "[GSTPlugin]") {
   auto rtpmoonlightpay = (gst_rtp_moonlight_pay_video *)g_object_new(gst_TYPE_rtp_moonlight_pay_video, nullptr);
 
