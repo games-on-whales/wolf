@@ -8,6 +8,7 @@
 #include <core/gstreamer.hpp>
 #include <csignal>
 #include <exceptions/exceptions.h>
+#include <inputtino/input.hpp>
 #include <filesystem>
 #include <immer/array_transient.hpp>
 #include <immer/map_transient.hpp>
@@ -179,6 +180,10 @@ void run() {
   control::init();   // Need to initialise enet once
   docker::init();    // Need to initialise libcurl once
   gst_video_context::init();
+
+  // Joypad backend (uhid vs uinput) is now chosen per-session at controller
+  // creation time by inputtino::Joypad::create() based on host capability and the
+  // app's use_uhid setting — no global build-time switch or startup probe needed.
 
   auto runtime_dir = utils::get_env("XDG_RUNTIME_DIR", "/tmp/sockets");
   logs::log(logs::debug, "XDG_RUNTIME_DIR={}", runtime_dir);
