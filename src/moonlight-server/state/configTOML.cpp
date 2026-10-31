@@ -309,7 +309,9 @@ Config load_or_default(const std::string &source,
       // buffer can't cross the interpipe -- it's tied to a CUDA context/stream the
       // per-client encoder pipeline doesn't share -- so the producer must hand off
       // the context-free dmabuf, exactly like the VAAPI path below.
-      default_base_video.producer_buffer_caps = "video/x-raw(memory:DMABuf), drm-format=NV12";
+      default_base_video.producer_buffer_caps = default_gst_video_settings.hdr
+                                                    ? "video/x-raw(memory:DMABuf), drm-format=P010"
+                                                    : "video/x-raw(memory:DMABuf), drm-format=NV12";
       break;
     }
     case VAAPI:

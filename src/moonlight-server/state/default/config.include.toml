@@ -347,7 +347,7 @@ chroma-site={color_range}, format=NV12, colorimetry={color_space}, pixel-aspect-
 # is available; cudaupload can't (it has no DMABuf sink caps).
 video_params_zero_copy = """
 queue !
-dmabuftocuda !
+dmabuftocuda render-node={render_node} !
 cudaconvertscale add-borders=true !
 video/x-raw(memory:CUDAMemory),format=NV12, width={width}, height={height}, pixel-aspect-ratio=1/1
 """
@@ -380,12 +380,27 @@ video/x-raw(memory:VAMemory), format=NV12, width={width}, height={height}, pixel
 # HEVC encoders
 # Order here matters: Wolf will try them in order and pick the first one that's not failing
 ###
+# Prefer native NVENC on NVIDIA while retaining the Vulkan fallback.
+[[gstreamer.video.hevc_encoders]]
+plugin_name = "nvcodec"
+check_elements = ["nvh265enc", "dmabuftocuda", "cudaconvertscale", "cudaupload"]
+encoder_pipeline = """
+nvh265enc gop-size=-1 bitrate={bitrate} vbv-buffer-size={vbv_buffer_size} aud=false rc-mode=cbr zerolatency=true preset=p1 tune=ultra-low-latency !
+h265parse !
+video/x-h265, stream-format=byte-stream\
+"""
+# Preserve the producer's NV12/P010 format and HDR metadata. The consumer's CUDA
+# context owns the device-to-device transfer; no frame passes through CPU memory.
+video_params_zero_copy = """
+queue ! dmabuftocuda render-node={render_node}\
+"""
+
 # Native Vulkan Video zero-copy HEVC encode (waylanddisplaysrc vulkan=true emits NV12/P010
 # memory:VulkanImage). Unlike the nvcodec/va entries below there is NO `profile=main` capsfilter,
 # so the 10-bit P010 Main-10 HDR path negotiates. Tunables come from WOLF_VULKAN_QUALITY /
 # _REF_FRAMES / _B_FRAMES. Works on NVIDIA (RTX 50-series VCN/Vulkan video encode); Mesa/RADV
 # does not expose HEVC Vulkan encode yet, so check_elements gates it out and Wolf falls through
-# to nvcodec/va. Listed first so the zero-copy HDR path is preferred where available.
+# to va. Native NVENC is preferred on NVIDIA; the Vulkan encoder can bottleneck 4K streaming.
 [[gstreamer.video.hevc_encoders]]
 plugin_name = "vulkan"
 check_elements = ["vulkanh265enc"]
@@ -398,15 +413,6 @@ video/x-h265, stream-format=byte-stream\
 # is just a decoupling queue (convert/scale elements can't negotiate the VulkanImage memory feature).
 video_params_zero_copy = """
 queue\
-"""
-
-[[gstreamer.video.hevc_encoders]]
-plugin_name = "nvcodec"
-check_elements = ["nvh265enc", "cudaconvertscale", "cudaupload"]
-encoder_pipeline = """
-nvh265enc gop-size=-1 bitrate={bitrate} vbv-buffer-size={vbv_buffer_size} aud=false rc-mode=cbr zerolatency=true preset=p1 tune=ultra-low-latency multi-pass=two-pass-quarter !
-h265parse !
-video/x-h265, profile=main, stream-format=byte-stream\
 """
 
 [[gstreamer.video.hevc_encoders]]
@@ -464,7 +470,7 @@ video/x-h265, profile=main, stream-format=byte-stream\
 ###
 [[gstreamer.video.h264_encoders]]
 plugin_name = "nvcodec"
-check_elements = ["nvh264enc", "cudaconvertscale", "cudaupload"]
+check_elements = ["nvh264enc", "dmabuftocuda", "cudaconvertscale", "cudaupload"]
 encoder_pipeline = """
 nvh264enc preset=low-latency-hq zerolatency=true gop-size=0 rc-mode=cbr-ld-hq bitrate={bitrate} vbv-buffer-size={vbv_buffer_size} aud=false !
 h264parse !

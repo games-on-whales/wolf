@@ -432,6 +432,7 @@ void start_streaming_video(immer::box<events::VideoSession> video_session,
       fmt::arg("fec_percentage", video_session->fec_percentage),
       fmt::arg("min_required_fec_packets", video_session->min_required_fec_packets),
       fmt::arg("slices_per_frame", video_session->slices_per_frame),
+      fmt::arg("render_node", video_session->render_node),
       fmt::arg("vbv_buffer_size", video_session->bitrate_kbps / video_session->display_mode.refreshRate),
       // Vulkan encoder tunables (defaults = low-latency streaming preset: fastest quality,
       // single reference, no B-frames -> full VCN throughput). Override per-deployment via env.
