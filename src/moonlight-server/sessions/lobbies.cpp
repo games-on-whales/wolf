@@ -207,8 +207,9 @@ setup_lobbies_handlers(const immer::box<state::AppState> &app_state,
           return;
         }
 
-        if (!state::compatible_color_transport(lobby->video_producer_buffer_caps,
-                                               session->app->video_producer_buffer_caps)) {
+        // API-created sessions can join before a launch app/color mode is selected.
+        if (session->app && !state::compatible_color_transport(lobby->video_producer_buffer_caps,
+                                                               session->app->video_producer_buffer_caps)) {
           join_lobby_event->error_message.get()->set_value(
               "Lobby and client colour modes differ; mixed HDR/SDR requires per-client conversion");
           return;

@@ -14,7 +14,7 @@ RUN dnf install -y \
     gcc-c++ \
     glibc-static \
     libstdc++-static \
-    boost-devel \
+    boost-devel boost-static \
     wayland-devel libinput-devel libxkbcommon-devel mesa-libgbm-devel \
     libcurl-devel \
     openssl-devel \
