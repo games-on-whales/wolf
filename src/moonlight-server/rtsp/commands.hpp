@@ -174,8 +174,20 @@ announce(const RTSP_PACKET &req, const events::StreamSession &session) {
   auto csc = args["x-nv-video[0].encoderCscMode"].value_or(0);
   const bool hdr = args["x-nv-video[0].dynamicRangeMode"].value_or(0) == 1;
   if (!state::valid_client_color_mode(session.app->video_producer_buffer_caps, hdr, video_format_hevc)) {
+    logs::log(logs::warning,
+              "[HDR] RTSP mismatch for session {}: client dynamicRangeMode={}, codec={}, producer={}",
+              session.session_id,
+              hdr,
+              video_format_av1 ? "AV1" : (video_format_hevc ? "HEVC" : "H264"),
+              session.app->video_producer_buffer_caps);
     return error_msg(400, "HDR mode must match the launched producer and HEVC codec", req.seq_number);
   }
+  logs::log(logs::info,
+            "[HDR] RTSP session {}: codec={}, client dynamicRangeMode={}, encoderCscMode={}",
+            session.session_id,
+            video_format_av1 ? "AV1" : (video_format_hevc ? "HEVC" : "H264"),
+            hdr,
+            csc);
 
   // Video session
   moonlight::DisplayMode display = {.width = args["x-nv-video[0].clientViewportWd"].value(),

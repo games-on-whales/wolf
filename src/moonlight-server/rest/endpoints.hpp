@@ -81,6 +81,14 @@ void serverinfo(const std::shared_ptr<typename SimpleWeb::Server<T>::Response> &
                                    cfg->support_av1,
                                    cfg->support_hdr);
 
+  logs::log(logs::info,
+            "[HDR] {} serverinfo to {}: HEVC={}, HDR={}, codec_modes={}",
+            is_https ? "HTTPS" : "HTTP",
+            get_client_ip<T>(request),
+            cfg->support_hevc,
+            cfg->support_hdr,
+            xml.template get<int>("root.ServerCodecModeSupport"));
+
   send_xml<T>(response, SimpleWeb::StatusCode::success_ok, xml);
 }
 
@@ -407,6 +415,11 @@ auto create_run_session(const SimpleWeb::CaseInsensitiveMultimap &headers,
     return std::shared_ptr<events::StreamSession>();
   }
   client_app.video_producer_buffer_caps = *caps;
+  logs::log(logs::info,
+            "[HDR] Launch/resume from {}: client hdrMode={}, selected producer={}",
+            client_ip,
+            hdr,
+            client_app.video_producer_buffer_caps);
   auto base_session = create_stream_session(state,
                                             client_app,
                                             current_client,
