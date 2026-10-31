@@ -4,6 +4,7 @@
 #include <state/config.hpp>
 #include <state/data-structures.hpp>
 #include <state/sessions.hpp>
+#include <state/video-color.hpp>
 #include <streaming/streaming.hpp>
 
 namespace wolf::core::sessions {
@@ -84,6 +85,7 @@ setup_lobbies_handlers(const immer::box<state::AppState> &app_state,
                           .multi_user = lobby_settings->multi_user,
                           .pin = lobby_settings->pin,
                           .stop_when_everyone_leaves = lobby_settings->stop_when_everyone_leaves,
+                          .video_producer_buffer_caps = lobby_settings->video_settings.video_producer_buffer_caps,
                           .runner = lobby_settings->runner});
         app_state->lobbies->update(
             [lobby](const immer::vector<events::Lobby> &lobbies) { return lobbies.push_back(*lobby); });
@@ -202,6 +204,13 @@ setup_lobbies_handlers(const immer::box<state::AppState> &app_state,
         if (!lobby->multi_user && lobby->connected_sessions->load()->size() >= 1) {
           logs::log(logs::error, "[LOBBY] Lobby {} is full", lobby->id);
           join_lobby_event->error_message.get()->set_value("Lobby is full");
+          return;
+        }
+
+        if (!state::compatible_color_transport(lobby->video_producer_buffer_caps,
+                                               session->app->video_producer_buffer_caps)) {
+          join_lobby_event->error_message.get()->set_value(
+              "Lobby and client colour modes differ; mixed HDR/SDR requires per-client conversion");
           return;
         }
 

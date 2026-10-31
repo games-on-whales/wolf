@@ -8,6 +8,7 @@
 #include <range/v3/view.hpp>
 #include <rfl/toml.hpp>
 #include <state/config.hpp>
+#include <state/video-color.hpp>
 
 namespace state {
 
@@ -139,7 +140,8 @@ parse_apps(const std::vector<BaseApp> &apps,
            const std::string &av1_video_params,
            const BaseAppAudioOverride &default_audio_settings,
            SessionsAtoms running_sessions,
-           const std::shared_ptr<events::EventBusType> &ev_bus) {
+           const std::shared_ptr<events::EventBusType> &ev_bus,
+           bool support_hdr) {
 
   auto parsed_apps =
       apps |                                             //
@@ -188,21 +190,24 @@ parse_apps(const std::vector<BaseApp> &apps,
             app_audio_settings.opus_encoder.value_or(default_audio_settings.opus_encoder.value()),
             app_audio_settings.sink.value_or(default_audio_settings.sink.value()));
 
-        return immer::box<events::App>{
-            events::App{.base = {.title = app.title,
-                                 .id = generate_app_id(app),
-                                 .support_hdr = false,
-                                 .icon_png_path = app.icon_png_path},
-                        .video_producer_buffer_caps = default_video_settings.producer_buffer_caps.value(),
-                        .h264_gst_pipeline = h264_gst_pipeline,
-                        .hevc_gst_pipeline = hevc_gst_pipeline,
-                        .av1_gst_pipeline = av1_gst_pipeline,
-                        .render_node = app_render_node,
+        return immer::box<events::App>{events::App{
+            .base = {.title = app.title,
+                     .id = generate_app_id(app),
+                     .support_hdr =
+                         support_hdr &&
+                         state::producer_caps_for_client(default_video_settings.producer_buffer_caps.value(), true)
+                             .has_value(),
+                     .icon_png_path = app.icon_png_path},
+            .video_producer_buffer_caps = default_video_settings.producer_buffer_caps.value(),
+            .h264_gst_pipeline = h264_gst_pipeline,
+            .hevc_gst_pipeline = hevc_gst_pipeline,
+            .av1_gst_pipeline = av1_gst_pipeline,
+            .render_node = app_render_node,
 
-                        .opus_gst_pipeline = opus_gst_pipeline,
-                        .start_virtual_compositor = app.start_virtual_compositor.value_or(true),
-                        .start_audio_server = app.start_audio_server.value_or(true),
-                        .runner = get_runner(app.runner, ev_bus)}};
+            .opus_gst_pipeline = opus_gst_pipeline,
+            .start_virtual_compositor = app.start_virtual_compositor.value_or(true),
+            .start_audio_server = app.start_audio_server.value_or(true),
+            .runner = get_runner(app.runner, ev_bus)}};
       }) |                                                  //
       ranges::to<immer::vector<immer::box<events::App>>>(); //
 
@@ -309,9 +314,7 @@ Config load_or_default(const std::string &source,
       // buffer can't cross the interpipe -- it's tied to a CUDA context/stream the
       // per-client encoder pipeline doesn't share -- so the producer must hand off
       // the context-free dmabuf, exactly like the VAAPI path below.
-      default_base_video.producer_buffer_caps = default_gst_video_settings.hdr
-                                                    ? "video/x-raw(memory:DMABuf), drm-format=P010"
-                                                    : "video/x-raw(memory:DMABuf), drm-format=NV12";
+      default_base_video.producer_buffer_caps = "video/x-raw(memory:DMABuf), drm-format=NV12";
       break;
     }
     case VAAPI:
@@ -341,12 +344,8 @@ Config load_or_default(const std::string &source,
       // NV12 memory:VulkanImage that crosses the interpipe on a shared GstVulkanDevice (shared
       // via the producer's bus_sync_handler / NeedContextData). vulkanh264enc consumes it
       // directly -- no upload/convert.
-      // [gstreamer.video] hdr = true selects the 10-bit P010 producer format, which
-      // (via the hdr=true producer prop and vulkanh265enc's Main-10 + HDR10 SEI path)
-      // yields an HDR10 stream. Default 8-bit NV12 so SDR clients aren't mis-signaled.
-      default_base_video.producer_buffer_caps = default_gst_video_settings.hdr
-                                                    ? "video/x-raw(memory:VulkanImage), format=P010_10LE"
-                                                    : "video/x-raw(memory:VulkanImage), format=NV12";
+      // Start with SDR caps; the client launch request selects P010 for HDR.
+      default_base_video.producer_buffer_caps = "video/x-raw(memory:VulkanImage), format=NV12";
       break;
     }
     default: {
@@ -387,12 +386,6 @@ Config load_or_default(const std::string &source,
   default_base_video.h264_encoder = h264_encoder.value().encoder_pipeline;
   if (hevc_encoder) {
     auto hevc_pipeline = hevc_encoder.value().encoder_pipeline;
-    if (default_gst_video_settings.hdr && encoder_type(*hevc_encoder) == VULKAN) {
-      // The 10-bit P010 producer makes vulkanh265enc emit Main-10; the downstream
-      // capsfilter must allow it. An 8-bit `profile=main` constraint rejects the
-      // P010 input with "No valid profile found" -> not-negotiated -> no video.
-      hevc_pipeline = std::regex_replace(hevc_pipeline, std::regex("profile=main,"), "profile=main-10,");
-    }
     default_base_video.hevc_encoder = hevc_pipeline;
   } else {
     logs::log(logs::warning, "Unable to find an HEVC encoder, disabling it");
@@ -431,6 +424,10 @@ Config load_or_default(const std::string &source,
 
   auto clients_atom = std::make_shared<immer::atom<PairedClientList>>(paired_clients);
 
+  const bool support_hdr = default_gst_video_settings.hdr && use_zero_copy && hevc_encoder &&
+                           ((video_encoder == NVIDIA && encoder_type(*hevc_encoder) == NVIDIA) ||
+                            (video_encoder == VULKAN && encoder_type(*hevc_encoder) == VULKAN));
+
   /* Get profiles, for each app defined will merge with default settings */
   auto profiles = cfg.profiles | //
                   ranges::views::transform([&](const Profile &profile) {
@@ -447,7 +444,8 @@ Config load_or_default(const std::string &source,
                                                               av1_video_params,
                                                               default_base_audio,
                                                               running_sessions,
-                                                              ev_bus)};
+                                                              ev_bus,
+                                                              support_hdr)};
                   }) |
                   ranges::to<ProfilesList>();
   auto profiles_atom = std::make_shared<immer::atom<ProfilesList>>(profiles);
@@ -457,7 +455,7 @@ Config load_or_default(const std::string &source,
                 .config_source = source,
                 .support_hevc = hevc_encoder.has_value(),
                 .support_av1 = av1_encoder.has_value() && encoder_type(*av1_encoder) != SOFTWARE,
-                .support_hdr = default_gst_video_settings.hdr && hevc_encoder.has_value(),
+                .support_hdr = support_hdr,
                 .paired_clients = clients_atom,
                 .profiles = profiles_atom};
 }

@@ -4,6 +4,7 @@
 #include <events/events.hpp>
 #include <immer/box.hpp>
 #include <state/sessions.hpp>
+#include <state/video-color.hpp>
 #include <sys/socket.h>
 
 namespace control {
@@ -189,6 +190,9 @@ void run_control(int port,
           });
           event_bus->fire_event(
               immer::box<ResumeStreamEvent>(ResumeStreamEvent{.session_id = client_session->session_id}));
+          event_bus->fire_event(immer::box<HDRModeEvent>(
+              HDRModeEvent{.session_id = client_session->session_id,
+                           .enable_hdr = state::producer_is_hdr(client_session->app->video_producer_buffer_caps)}));
           break;
         case ENET_EVENT_TYPE_DISCONNECT:
           logs::log(logs::debug, "[ENET] disconnected client: {}:{}", client_ip, client_port);

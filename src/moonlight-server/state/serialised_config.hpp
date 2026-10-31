@@ -65,10 +65,9 @@ struct GstVideoCfg {
   std::string default_sink;
   std::map<std::string, GstEncoderDefault> defaults;
 
-  // When true, the native Vulkan zero-copy HEVC path uses a 10-bit P010 producer
-  // format with BT.2020/PQ tagging, so vulkanh265enc emits an HDR10 Main-10 stream.
-  // Default false (8-bit SDR NV12) so SDR clients are never mis-signaled as HDR.
-  bool hdr = false;
+  // Permit advertising HDR on supported hardware. The client's launch hdrMode
+  // selects P010/PQ for its own producer; SDR clients always retain NV12.
+  bool hdr = true;
 
   // SDR diffuse-white level in nits when hdr=true. The desktop/SDR content is tone-mapped
   // into the PQ container with this as 100% white (BT.2408 graphics white = 203). Lower it

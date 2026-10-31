@@ -321,9 +321,9 @@ base_create_json = """
 
 [gstreamer.video]
 
-# Keep SDR capture in SDR. This is a global producer setting, not per-client HDR
-# negotiation; forcing P010/PQ also affects H.264's 8-bit conversion path.
-hdr = false
+# Allow HDR on supported hardware. Each client's hdrMode selects its producer
+# format; enabling this capability never forces SDR clients into P010/PQ.
+hdr = true
 
 default_source = 'interpipesrc name=interpipesrc_{}_video listen-to={session_id}_video is-live=true stream-sync=restart-ts max-bytes=0 max-buffers=1 leaky-type=downstream'
 default_sink = """

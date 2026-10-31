@@ -19,6 +19,7 @@
 #include <state/config.hpp>
 #include <state/sessions.hpp>
 #include <state/utils.hpp>
+#include <state/video-color.hpp>
 #include <utility>
 
 namespace endpoints {
@@ -397,8 +398,17 @@ auto create_run_session(const SimpleWeb::CaseInsensitiveMultimap &headers,
   auto surround_info = std::stoi(get_header(headers, "surroundAudioInfo").value_or("196610"));
   int channelCount = surround_info & (0xffff /* last 16 bits */);
 
+  // The app configuration advertises capability; the client chooses the transport.
+  const bool hdr = get_header(headers, "hdrMode").value_or("0") == "1";
+  auto client_app = run_app;
+  auto caps = state::producer_caps_for_client(run_app.video_producer_buffer_caps, hdr);
+  if (!caps || (hdr && !run_app.base.support_hdr)) {
+    logs::log(logs::warning, "[HDR] Client requested an unsupported HDR producer");
+    return std::shared_ptr<events::StreamSession>();
+  }
+  client_app.video_producer_buffer_caps = *caps;
   auto base_session = create_stream_session(state,
-                                            run_app,
+                                            client_app,
                                             current_client,
                                             display_mode,
                                             channelCount,
@@ -444,6 +454,10 @@ void launch(const std::shared_ptr<typename SimpleWeb::Server<SimpleWeb::HTTPS>::
 
   auto client_ip = get_client_ip<SimpleWeb::HTTPS>(request);
   auto new_session = create_run_session(request->parse_query_string(), client_ip, current_client, state, app.value());
+  if (!new_session) {
+    server_error<SimpleWeb::HTTPS>(response);
+    return;
+  }
   state->event_bus->fire_event(immer::box<events::StreamSession>(*new_session));
   state->running_sessions->update(
       [new_session](const immer::vector<events::StreamSession> &ses_v) { return ses_v.push_back(*new_session); });
@@ -464,6 +478,13 @@ void resume(const std::shared_ptr<typename SimpleWeb::Server<SimpleWeb::HTTPS>::
   if (old_session) {
     auto new_session =
         create_run_session(request->parse_query_string(), client_ip, current_client, state, *old_session->app);
+    if (!new_session || !state::compatible_color_transport(old_session->app->video_producer_buffer_caps,
+                                                           new_session->app->video_producer_buffer_caps)) {
+      logs::log(logs::warning,
+                "[HDR] Resume cannot change the existing producer colour transport; start a new session");
+      server_error<SimpleWeb::HTTPS>(response);
+      return;
+    }
     // Carry over the old session display handle
     new_session->wayland_display = std::move(old_session->wayland_display);
     // Carry over the old session devices, they'll be already plugged into the container

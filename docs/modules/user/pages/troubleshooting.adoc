@@ -296,11 +296,11 @@ This should reduce the frequency of this issue happening to once every hour, pro
 
 == SDR colors look washed out with native NVIDIA encoding
 
-Keep `hdr = false` under `[gstreamer.video]` when streaming SDR. The setting
-selects the producer format globally; it does not negotiate HDR separately for
-each client. Forcing HDR capture can feed PQ pixels into an SDR stream, including
-the 8-bit H.264 conversion path. Reducing P010 to NV12 alone is not HDR-to-SDR
-tone mapping.
+Wolf selects SDR NV12 or HDR P010 for each Moonlight session using the client's
+launch `hdrMode`. The `[gstreamer.video] hdr` setting permits advertising HDR on
+supported hardware; it does not force the producer format. H.264 remains SDR.
+The RTSP range and codec must agree with the launched producer before encoding
+starts, preventing PQ pixels from being sent as an SDR stream.
 
 The native H.264 default now converts to BT.709 explicitly with `cudaconvertscale`
 before encoding. Existing configuration files retain their saved pipelines. For
@@ -315,8 +315,10 @@ video_params_zero_copy = 'dmabuftocuda render-node={render_node} ! cudaconvertsc
 Save and exit running games before restarting Wolf to apply the configuration.
 The SDR path was verified on RTX 5080 / Shield with both Steam and gameplay;
 the encoded H.264 stream carries BT.709 matrix, transfer, and primaries with
-limited range. This workaround disables HDR capture; per-client HDR negotiation
-and conversion still require separate work.
+limited range. Changing SDR/HDR on resume requires starting a new session,
+because the existing compositor retains its producer format. Shared lobbies
+currently require matching client and producer color transports; mixed HDR/SDR
+joins return an explicit error until per-client tone mapping is implemented.
 
 == Stream FPS is steady but movement is uneven
 

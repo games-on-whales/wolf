@@ -4,9 +4,11 @@
 #include <events/events.hpp>
 #include <helpers/logger.hpp>
 #include <helpers/utils.hpp>
+#include <regex>
 #include <rtp/udp-ping.hpp>
 #include <rtsp/parser.hpp>
 #include <state/data-structures.hpp>
+#include <state/video-color.hpp>
 #include <string>
 
 namespace rtsp::commands {
@@ -170,6 +172,10 @@ announce(const RTSP_PACKET &req, const events::StreamSession &session) {
   bool video_format_hevc = args["x-nv-vqos[0].bitStreamFormat"].value_or(0) == 1;
   bool video_format_av1 = args["x-nv-vqos[0].bitStreamFormat"].value_or(0) == 2;
   auto csc = args["x-nv-video[0].encoderCscMode"].value_or(0);
+  const bool hdr = args["x-nv-video[0].dynamicRangeMode"].value_or(0) == 1;
+  if (!state::valid_client_color_mode(session.app->video_producer_buffer_caps, hdr, video_format_hevc)) {
+    return error_msg(400, "HDR mode must match the launched producer and HEVC codec", req.seq_number);
+  }
 
   // Video session
   moonlight::DisplayMode display = {.width = args["x-nv-video[0].clientViewportWd"].value(),
@@ -188,6 +194,10 @@ announce(const RTSP_PACKET &req, const events::StreamSession &session) {
   } else {
     logs::log(logs::debug, "[RTSP] Moonlight requested video format H264");
     gst_pipeline = session.app->h264_gst_pipeline;
+  }
+
+  if (hdr && gst_pipeline.find("vulkanh265enc") != std::string::npos) {
+    gst_pipeline = std::regex_replace(gst_pipeline, std::regex("profile=main,"), "profile=main-10,");
   }
 
   // RADV's Vulkan HEVC encoder corrupts the bottom/right partial coding-tree
