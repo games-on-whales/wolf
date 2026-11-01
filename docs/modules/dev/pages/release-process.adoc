@@ -1,0 +1,26 @@
+= Release process
+
+== Branches
+
+The `beta` branch is the default branch and receives development changes.
+The `stable` branch holds the latest monthly release.
+
+== Monthly releases
+
+The monthly release workflow runs at 09:00 UTC on the first day of each month.
+It opens or updates a pull request from `beta` into `stable`.
+The pull request title uses this format: `Release vYYYY.MM`.
+For example, the October 2026 release uses `Release v2026.10`.
+Maintainers can also run the `Open monthly release PR` workflow manually.
+
+Merge the release pull request to publish the release.
+The workflow creates a GitHub release and a Git tag on the merge commit.
+The published release event starts the Docker build.
+The build publishes the `stable` image tag and a versioned image such as `ghcr.io/games-on-whales/wolf:v2026.10`.
+The `beta` image tag represents a Docker build from the `beta` branch.
+
+== Configure the release token
+
+Create a fine-grained personal access token for the `games-on-whales/wolf` repository.
+Grant it `Contents: Read and write` access.
+Store it in the `GH_RELEASE_PAT` repository secret.

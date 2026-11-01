@@ -1,5 +1,7 @@
 #pragma once
 
+#include "catch2/catch_test_macros.hpp"
+
 #include <fcntl.h>
 #include <helpers/logger.hpp>
 #include <inputtino/protected_types.hpp>
@@ -28,11 +30,13 @@ static void LogHandler(libinput __attribute__((unused)) * libinput,
                        libinput_log_priority priority,
                        const char *format,
                        va_list args) {
-  if (priority == LIBINPUT_LOG_PRIORITY_DEBUG) {
-    char buf[512];
-    int n = vsnprintf(buf, sizeof(buf), format, args);
-    if (n > 0)
-      logs::log(logs::debug, "libinput: {}", buf);
+  char buf[512];
+  int n = vsnprintf(buf, sizeof(buf), format, args);
+  logs::severity_level severity = logs::severity_level::info;
+  if(priority == LIBINPUT_LOG_PRIORITY_DEBUG) severity = logs::severity_level::debug;
+  else if(priority == LIBINPUT_LOG_PRIORITY_ERROR) severity = logs::severity_level::error;
+  if (n > 0) {
+    logs::log(severity, "libinput: {}", buf);
   }
 }
 
@@ -57,7 +61,7 @@ static void link_devnode(libevdev *dev, const std::string &device_node) {
   std::this_thread::sleep_for(std::chrono::milliseconds(200));
 
   auto fd = open(device_node.c_str(), O_RDONLY | O_NONBLOCK);
-  assert(fd >= 0 && "Unable to open device node");
+  REQUIRE(fd >= 0);
   libevdev_set_fd(dev, fd);
 }
 

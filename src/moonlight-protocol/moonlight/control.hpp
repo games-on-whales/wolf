@@ -27,6 +27,7 @@ enum PACKET_TYPE : std::uint16_t {
   RUMBLE_TRIGGERS = boost::endian::little_to_native(0x5500),
   MOTION_EVENT = boost::endian::little_to_native(0x5501),
   RGB_LED_EVENT = boost::endian::little_to_native(0x5502),
+  ADAPTIVE_TRIGGER_EVENT = boost::endian::little_to_native(0x5503),
 };
 
 enum INPUT_TYPE : int {
@@ -98,6 +99,28 @@ enum CONTROLLER_BTN : unsigned int {
   Y = 0x8000
 };
 
+enum KEYBOARD_MODIFIERS : char {
+  NONE = 0x00,
+  SHIFT = 0x01,
+  CTRL = 0x02,
+  ALT = 0x04,
+  META = 0x08
+};
+
+enum MOONLIGHT_MODIFIERS : short {
+  M_SHIFT = 0x10,
+  M_CTRL = 0x11,
+  M_MENU = 0x12,
+  M_ALT = 0xA4,
+  M_META = 0x5B,
+  M_LSHIFT = 0xA0,
+  M_RSHIFT = 0xA1,
+  M_LCTRL = 0xA2,
+  M_RCTRL = 0xA3,
+  M_RALT = 0xA5,
+  M_RMETA = 0x5C
+};
+
 // make sure these structs are allocated in 1-byte blocks so the data aligns
 // right
 #pragma pack(push, 1)
@@ -141,7 +164,7 @@ struct MOUSE_HSCROLL_PACKET : INPUT_PKT {
 struct KEYBOARD_PACKET : INPUT_PKT {
   unsigned char flags;
   short key_code;
-  unsigned char modifiers;
+  char modifiers;
   short zero1;
 };
 
@@ -250,7 +273,9 @@ enum MOTION_TYPE : uint8_t {
 
 constexpr uint8_t BATTERY_PERCENTAGE_UNKNOWN = 0xFF;
 
-enum BATTERY_STATE : unsigned short {
+// One byte on the wire -- must stay uint8_t, otherwise it eats the following battery_percentage
+// byte in CONTROLLER_BATTERY_PACKET and the percentage is always read as the trailing zero (0%).
+enum BATTERY_STATE : uint8_t {
   BATTERY_STATE_UNKNOWN = 0x0,
   BATTERY_NOT_PRESENT = 0x1,
   BATTERY_DISCHARGHING = 0x2,
@@ -326,6 +351,15 @@ struct ControlRGBLedPacket {
   std::uint8_t r;
   std::uint8_t g;
   std::uint8_t b;
+};
+
+static constexpr std::uint8_t DS_EFFECT_PAYLOAD_SIZE = 10;
+
+struct ControlAdaptiveTriggerPacket {
+  ControlPacket header;
+
+  std::uint16_t controller_number;
+  inputtino::PS5Joypad::TriggerEffect effect;
 };
 
 struct ControlEncryptedPacket {
@@ -426,6 +460,8 @@ static constexpr const char *packet_type_to_str(pkts::PACKET_TYPE p) noexcept {
     return "MOTION_EVENT";
   case pkts::RGB_LED_EVENT:
     return "RGB_LED_EVENT";
+  case pkts::ADAPTIVE_TRIGGER_EVENT:
+    return "ADAPTIVE_TRIGGER_EVENT";
   }
   return "Unrecognised";
 }

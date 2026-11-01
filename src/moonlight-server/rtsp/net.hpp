@@ -28,10 +28,8 @@ class tcp_connection : public boost::enable_shared_from_this<tcp_connection> {
 public:
   typedef boost::shared_ptr<tcp_connection> pointer;
 
-  static pointer create(boost::asio::io_context &io_context,
-                        const state::SessionsAtoms &stream_sessions,
-                        const std::shared_ptr<dp::event_bus> &event_bus) {
-    return pointer(new tcp_connection(io_context, stream_sessions, event_bus));
+  static pointer create(boost::asio::io_context &io_context, const state::SessionsAtoms &stream_sessions) {
+    return pointer(new tcp_connection(io_context, stream_sessions));
   }
 
   auto &socket() {
@@ -52,8 +50,35 @@ public:
    */
   void close() {
     logs::log(logs::trace, "[RTSP] closing socket");
-    socket_.shutdown(boost::asio::ip::tcp::socket::shutdown_both);
-    socket_.close();
+    // Use the non-throwing overloads. If the peer has already gone away (it
+    // sent a malformed request and reset, or simply hung up) the socket is no
+    // longer connected and shutdown()/close() would throw — e.g. ENOTCONN,
+    // "Transport endpoint is not connected". That exception unwinds out of
+    // io_context.run() in run_server() and tears down the whole RTSP server,
+    // so a single early-disconnecting client stops all future streaming.
+    // Swallowing the error keeps the server alive.
+    boost::system::error_code ec;
+    socket_.shutdown(boost::asio::ip::tcp::socket::shutdown_both, ec);
+    socket_.close(ec);
+  }
+
+  static std::optional<events::StreamSession> get_session(const immer::vector<events::StreamSession> &sessions,
+                                                          const RTSP_PACKET &packet,
+                                                          std::string_view user_ip) {
+    std::string host_option = "";
+    if (auto host = packet.options.find("Host"); host != packet.options.end()) {
+      host_option = host->second;
+    }
+    for (const events::StreamSession &session : sessions) {
+      if (session.rtsp_fake_ip == packet.request.uri.ip || host_option == session.rtsp_fake_ip) {
+        logs::log(logs::debug, "[RTSP] found session by matching payload: {}", session.rtsp_fake_ip);
+        return session;
+      } else if ((host_option == "0.0.0.0" || host_option.empty()) && session.ip == user_ip) {
+        logs::log(logs::debug, "[RTSP] found session by matching IP: {}", session.ip);
+        return session;
+      }
+    }
+    return std::nullopt;
   }
 
   /**
@@ -64,14 +89,26 @@ public:
    *  4- send back the response message
    */
   void start() {
-    logs::log(logs::trace, "[RTSP] received connection from IP: {}", socket().remote_endpoint().address().to_string());
-    receive_message([self = shared_from_this()](auto parsed_msg) {
+    // Resolve the peer address up front and non-throwing. A client that sent a
+    // request and immediately reset (Moonlight does this on a rejected message)
+    // leaves the socket disconnected, and remote_endpoint() would otherwise
+    // throw ENOTCONN — which, thrown from this async handler, would unwind out
+    // of io_context.run() and take the whole RTSP server down. If the peer is
+    // already gone there is nothing to serve, so bail cleanly.
+    boost::system::error_code ep_ec;
+    auto remote = socket_.remote_endpoint(ep_ec);
+    if (ep_ec) {
+      logs::log(logs::debug, "[RTSP] connection gone before processing: {}", ep_ec.message());
+      close();
+      return;
+    }
+    std::string user_ip = remote.address().to_string();
+    logs::log(logs::trace, "[RTSP] received connection from IP: {}", user_ip);
+    receive_message([self = shared_from_this(), user_ip](auto parsed_msg) {
       if (parsed_msg) {
-        auto user_ip = self->socket().remote_endpoint().address().to_string();
-        auto session = get_session_by_ip(self->stream_sessions->load(), user_ip);
+        auto session = get_session(self->stream_sessions->load(), parsed_msg.value(), user_ip);
         if (session) {
-          auto session_idx = self->stream_sessions->load()->size() - 1;
-          auto response = commands::message_handler(parsed_msg.value(), session.value(), self->event_bus, session_idx);
+          auto response = commands::message_handler(parsed_msg.value(), session.value());
           self->send_message(response, [self](auto bytes) { self->close(); });
         } else {
           logs::log(logs::warning, "[RTSP] received packet from unrecognised client: {}", user_ip);
@@ -170,11 +207,9 @@ public:
   }
 
 protected:
-  explicit tcp_connection(boost::asio::io_context &io_context,
-                          state::SessionsAtoms stream_sessions,
-                          const std::shared_ptr<dp::event_bus> &event_bus)
+  explicit tcp_connection(boost::asio::io_context &io_context, state::SessionsAtoms stream_sessions)
       : socket_(io_context), streambuf_(max_msg_size), deadline_(io_context),
-        stream_sessions(std::move(stream_sessions)), prev_read_bytes_(0), event_bus(event_bus) {}
+        stream_sessions(std::move(stream_sessions)), prev_read_bytes_(0) {}
   tcp::socket socket_;
 
   static constexpr auto max_msg_size = 2048;
@@ -186,7 +221,6 @@ protected:
   int prev_read_bytes_;
 
   state::SessionsAtoms stream_sessions;
-  std::shared_ptr<dp::event_bus> event_bus;
 };
 
 /**
@@ -195,12 +229,9 @@ protected:
  */
 class tcp_server {
 public:
-  tcp_server(boost::asio::io_context &io_context,
-             int port,
-             state::SessionsAtoms state,
-             const std::shared_ptr<dp::event_bus> &event_bus)
+  tcp_server(boost::asio::io_context &io_context, int port, state::SessionsAtoms state)
       : io_context_(io_context), acceptor_(io_context, tcp::endpoint(tcp::v4(), port)),
-        stream_sessions(std::move(state)), event_bus(event_bus) {
+        stream_sessions(std::move(state)) {
     acceptor_.set_option(boost::asio::socket_base::reuse_address{true});
     acceptor_.listen(4096);
     start_accept();
@@ -211,7 +242,7 @@ private:
    * Creates a socket and initiates an asynchronous accept operation to wait for a new connection
    */
   void start_accept() {
-    tcp_connection::pointer new_connection = tcp_connection::create(io_context_, stream_sessions, event_bus);
+    tcp_connection::pointer new_connection = tcp_connection::create(io_context_, stream_sessions);
 
     acceptor_.async_accept(new_connection->socket(),
                            [this, new_connection](auto error) { handle_accept(new_connection, error); });
@@ -222,35 +253,49 @@ private:
    * request, and then calls start_accept() to initiate the next accept operation.
    */
   void handle_accept(const tcp_connection::pointer &new_connection, const boost::system::error_code &error) {
+    // Re-arm the acceptor FIRST, so that anything going wrong while servicing
+    // this connection (e.g. the peer reset and a socket op throws) cannot stop
+    // the server from accepting future connections.
+    start_accept();
     if (!error) {
-      new_connection->start();
+      try {
+        new_connection->start();
+      } catch (const std::exception &e) {
+        logs::log(logs::warning, "[RTSP] error servicing connection: {}", e.what());
+      }
     } else {
       logs::log(logs::error, "[RTSP] error during connection: {}", error.message());
     }
-
-    start_accept();
   }
 
   boost::asio::io_context &io_context_;
   tcp::acceptor acceptor_;
   state::SessionsAtoms stream_sessions;
-  std::shared_ptr<dp::event_bus> event_bus;
 };
 
 /**
  * Starts a new RTSP server, calling this method will block execution.
  */
-void run_server(int port,
-                const state::SessionsAtoms &running_sessions,
-                const std::shared_ptr<dp::event_bus> &event_bus) {
+void run_server(int port, const state::SessionsAtoms &running_sessions) {
+  boost::asio::io_context io_context;
   try {
-    boost::asio::io_context io_context;
-    tcp_server server(io_context, port, running_sessions, event_bus);
+    tcp_server server(io_context, port, running_sessions);
 
     logs::log(logs::info, "RTSP server started on port: {}", port);
 
-    // This will block here until the context is stopped
-    io_context.run();
+    // Block here processing connections until the context is stopped. A single
+    // misbehaving connection handler must never take the whole server down: if
+    // one throws, log it and resume the accept loop (the acceptor is still
+    // alive) instead of letting the exception unwind run_server and leave the
+    // RTSP port dead until Wolf restarts.
+    while (true) {
+      try {
+        io_context.run();
+        break; // clean stop: no more work queued
+      } catch (const std::exception &e) {
+        logs::log(logs::warning, "[RTSP] connection handler exception: {} (resuming)", e.what());
+      }
+    }
   } catch (std::exception &e) {
     logs::log(logs::error, "Unable to create RTSP server on port: {} ex: {}", port, e.what());
   }

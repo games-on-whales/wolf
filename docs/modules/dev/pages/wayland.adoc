@@ -210,6 +210,11 @@ frame "Wolf" #lightblue {
 
 === Gstreamer
 
+[WARNING,caption=OUTDATED]
+====
+This section is outdated, we now support outputting DMA buffers in Gstreamer and we've achieved *full support for zero-copy pipelines*!
+====
+
 Our compositor finally composed an image, and we are ready to send this to our Moonlight client, how do we push this to the selected encoder in the Gstreamer pipeline without copying?
 Sad news is, we don't (at least currently).
 

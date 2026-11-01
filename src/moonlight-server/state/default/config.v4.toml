@@ -1,0 +1,420 @@
+# The name that will be displayed in Moonlight
+hostname = "Wolf"
+# The version of this config file
+config_version = 4
+# A list of paired clients that will be allowed to stream
+paired_clients = []
+
+######################
+# Apps, the list of apps that will be shown in Moonlight
+[[apps]]
+title = "Firefox"
+start_virtual_compositor = true
+
+[apps.runner]
+type = "docker"
+name = "WolfFirefox"
+image = "ghcr.io/games-on-whales/firefox:edge"
+mounts = []
+env = [
+    "RUN_SWAY=1",
+    "MOZ_ENABLE_WAYLAND=1",
+    "GOW_REQUIRED_DEVICES=/dev/input/* /dev/dri/* /dev/nvidia*",
+]
+devices = []
+ports = []
+base_create_json = """
+{
+  "HostConfig": {
+    "IpcMode": "host",
+    "Privileged": false,
+    "CapAdd": ["NET_RAW", "MKNOD", "NET_ADMIN"],
+    "DeviceCgroupRules": ["c 13:* rmw", "c 244:* rmw"]
+  }
+}
+\
+"""
+
+[[apps]]
+title = "RetroArch"
+start_virtual_compositor = true
+
+[apps.runner]
+type = "docker"
+name = "WolfRetroarch"
+image = "ghcr.io/games-on-whales/retroarch:edge"
+mounts = []
+env = [
+    "RUN_SWAY=true",
+    "GOW_REQUIRED_DEVICES=/dev/input/* /dev/dri/* /dev/nvidia*",
+]
+devices = []
+ports = []
+base_create_json = """
+{
+  "HostConfig": {
+    "IpcMode": "host",
+    "CapAdd": ["NET_RAW", "MKNOD", "NET_ADMIN", "SYS_ADMIN", "SYS_NICE"],
+    "Privileged": false,
+    "DeviceCgroupRules": ["c 13:* rmw", "c 244:* rmw"]
+  }
+}
+\
+"""
+
+[[apps]]
+title = "Steam"
+start_virtual_compositor = true
+
+[apps.runner]
+type = "docker"
+name = "WolfSteam"
+image = "ghcr.io/games-on-whales/steam:edge"
+mounts = []
+env = [
+    "PROTON_LOG=1",
+    "RUN_SWAY=true",
+    "GOW_REQUIRED_DEVICES=/dev/input/* /dev/dri/* /dev/nvidia*",
+]
+devices = []
+ports = []
+base_create_json = """
+{
+  "HostConfig": {
+    "IpcMode": "host",
+    "CapAdd": ["SYS_ADMIN", "SYS_NICE", "SYS_PTRACE", "NET_RAW", "MKNOD", "NET_ADMIN"],
+    "SecurityOpt": ["seccomp=unconfined", "apparmor=unconfined"],
+    "Ulimits": [{"Name":"nofile", "Hard":10240, "Soft":10240}],
+    "Privileged": false,
+    "DeviceCgroupRules": ["c 13:* rmw", "c 244:* rmw"]
+  }
+}
+\
+"""
+
+[[apps]]
+title = "Pegasus"
+start_virtual_compositor = true
+
+[apps.runner]
+type = "docker"
+name = "WolfPegasus"
+image = "ghcr.io/games-on-whales/pegasus:edge"
+mounts = []
+env = [
+    "RUN_SWAY=1",
+    "GOW_REQUIRED_DEVICES=/dev/input/event* /dev/dri/* /dev/nvidia*",
+]
+devices = []
+ports = []
+base_create_json = """
+{
+  "HostConfig": {
+    "IpcMode": "host",
+    "CapAdd": ["NET_RAW", "MKNOD", "NET_ADMIN", "SYS_ADMIN", "SYS_NICE"],
+    "Privileged": false,
+    "DeviceCgroupRules": ["c 13:* rmw", "c 244:* rmw"]
+  }
+}
+\
+"""
+
+[[apps]]
+title = "Lutris"
+start_virtual_compositor = true
+
+[apps.runner]
+type = "docker"
+name = "WolfLutris"
+image = "ghcr.io/games-on-whales/lutris:edge"
+mounts = ["lutris:/var/lutris/:rw"]
+env = [
+    "RUN_SWAY=1",
+    "GOW_REQUIRED_DEVICES=/dev/input/event* /dev/dri/* /dev/nvidia* /var/lutris/",
+]
+devices = []
+ports = []
+base_create_json = """
+{
+  "HostConfig": {
+    "IpcMode": "host",
+    "CapAdd": ["NET_RAW", "MKNOD", "NET_ADMIN", "SYS_ADMIN", "SYS_NICE"],
+    "Privileged": false,
+    "DeviceCgroupRules": ["c 13:* rmw", "c 244:* rmw"]
+  }
+}
+\
+"""
+
+[[apps]]
+title = "Prismlauncher"
+start_virtual_compositor = true
+
+[apps.runner]
+type = "docker"
+name = "Prismlauncher"
+image = "ghcr.io/games-on-whales/prismlauncher:edge"
+mounts = []
+env = [
+    "RUN_SWAY=1",
+    "GOW_REQUIRED_DEVICES=/dev/input/event* /dev/dri/* /dev/nvidia* /var/lutris/",
+]
+devices = []
+ports = []
+base_create_json = """
+{
+  "HostConfig": {
+    "IpcMode": "host",
+    "CapAdd": ["NET_RAW", "MKNOD", "NET_ADMIN", "SYS_ADMIN", "SYS_NICE"],
+    "Privileged": false,
+    "DeviceCgroupRules": ["c 13:* rmw", "c 244:* rmw"]
+  }
+}
+\
+"""
+
+[[apps]]
+title = "Test ball"
+start_virtual_compositor = false
+start_audio_server = false
+
+[apps.runner]
+type = "process"
+run_cmd = "sh -c \"while :; do echo 'running...'; sleep 10; done\""
+
+[apps.video]
+source = """
+videotestsrc pattern=ball flip=true is-live=true !
+video/x-raw, framerate={fps}/1
+\
+"""
+
+[apps.audio]
+source = "audiotestsrc wave=ticks is-live=true"
+
+######################
+# Gstreamer: Video/Audio encoding pipelines and streaming settings
+[gstreamer]
+
+[gstreamer.video]
+
+default_source = 'interpipesrc listen-to={session_id}_video is-live=true stream-sync=restart-ts max-buffers=1 block=false'
+default_sink = """
+rtpmoonlightpay_video name=moonlight_pay \
+payload_size={payload_size} fec_percentage={fec_percentage} min_required_fec_packets={min_required_fec_packets} !
+appsink sync=false name=wolf_udp_sink
+"""
+
+######################
+# Default settings for the main encoders
+# To avoid repetition between H264, HEVC and AV1 encoders
+[gstreamer.video.defaults.nvcodec]
+video_params = """
+queue leaky=downstream max-size-buffers=1 !
+cudaupload !
+cudaconvertscale !
+video/x-raw(memory:CUDAMemory), width={width}, height={height}, \
+chroma-site={color_range}, format=NV12, colorimetry={color_space}, pixel-aspect-ratio=1/1\
+"""
+
+[gstreamer.video.defaults.qsv]
+video_params = """
+queue leaky=downstream max-size-buffers=1 !
+videoconvertscale !
+video/x-raw, chroma-site={color_range}, width={width}, height={height}, format=NV12, colorimetry={color_space}\
+"""
+
+[gstreamer.video.defaults.vaapi]
+video_params = """
+queue leaky=downstream max-size-buffers=1 !
+videoconvertscale !
+video/x-raw, chroma-site={color_range}, width={width}, height={height}, format=NV12, colorimetry={color_space}\
+"""
+
+######################
+# HEVC encoders
+# Order here matters: Wolf will try them in order and pick the first one that's not failing
+###
+[[gstreamer.video.hevc_encoders]]
+plugin_name = "nvcodec"
+check_elements = ["nvh265enc", "cudaconvertscale", "cudaupload"]
+encoder_pipeline = """
+nvh265enc gop-size=-1 bitrate={bitrate} aud=false rc-mode=cbr zerolatency=true preset=p1 tune=ultra-low-latency multi-pass=two-pass-quarter !
+h265parse !
+video/x-h265, profile=main, stream-format=byte-stream\
+"""
+
+[[gstreamer.video.hevc_encoders]]
+plugin_name = "qsv"
+check_elements = ["qsvh265enc", "videoconvertscale"]
+encoder_pipeline = """
+qsvh265enc b-frames=0 gop-size=0 idr-interval=1 ref-frames=1 bitrate={bitrate} rate-control=cbr low-latency=1 target-usage=6 !
+h265parse !
+video/x-h265, profile=main, stream-format=byte-stream\
+"""
+
+[[gstreamer.video.hevc_encoders]]
+plugin_name = "vaapi"
+check_elements = ["vah265lpenc", "videoconvertscale"] # lp: (Low Power)
+encoder_pipeline = """
+vah265lpenc aud=false b-frames=0 ref-frames=1 num-slices={slices_per_frame} bitrate={bitrate} mbbrc=1 rate-control=cbr target-usage=6 !
+h265parse !
+video/x-h265, profile=main, stream-format=byte-stream\
+"""
+
+[[gstreamer.video.hevc_encoders]]
+plugin_name = "vaapi"
+check_elements = ["vah265enc", "videoconvertscale"]
+encoder_pipeline = """
+vah265enc aud=false b-frames=0 ref-frames=1 num-slices={slices_per_frame} bitrate={bitrate} mbbrc=1 rate-control=cbr target-usage=6 !
+h265parse !
+video/x-h265, profile=main, stream-format=byte-stream\
+"""
+
+[[gstreamer.video.hevc_encoders]]
+plugin_name = "x265" # SW Encoding
+check_elements = ["x265enc"]
+video_params = """
+videoconvertscale !
+videorate !
+video/x-raw, width={width}, height={height}, framerate={fps}/1, format=I420,
+chroma-site={color_range}, colorimetry={color_space}\
+"""
+encoder_pipeline = """
+x265enc tune=zerolatency speed-preset=superfast bitrate={bitrate}
+option-string="info=0:keyint=-1:qp=28:repeat-headers=1:slices={slices_per_frame}:aud=0:annexb=1:log-level=3:open-gop=0:bframes=0:intra-refresh=0" !
+video/x-h265, profile=main, stream-format=byte-stream\
+"""
+
+
+######################
+# H264 encoders
+# Order here matters: Wolf will try them in order and pick the first one that's not failing
+###
+[[gstreamer.video.h264_encoders]]
+plugin_name = "nvcodec"
+check_elements = ["nvh264enc", "cudaconvertscale", "cudaupload"]
+encoder_pipeline = """
+nvh264enc preset=low-latency-hq zerolatency=true gop-size=0 rc-mode=cbr-ld-hq bitrate={bitrate} aud=false !
+h264parse !
+video/x-h264, profile=main, stream-format=byte-stream\
+"""
+
+[[gstreamer.video.h264_encoders]]
+plugin_name = "qsv"
+check_elements = ["qsvh264enc", "videoconvertscale"]
+encoder_pipeline = """
+qsvh264enc b-frames=0 gop-size=0 idr-interval=1 ref-frames=1 bitrate={bitrate} rate-control=cbr target-usage=6  !
+h264parse !
+video/x-h264, profile=main, stream-format=byte-stream\
+"""
+
+[[gstreamer.video.h264_encoders]]
+plugin_name = "vaapi"
+check_elements = ["vah264lpenc", "videoconvertscale"] # lp: (Low Power)
+encoder_pipeline = """
+vah264lpenc aud=false b-frames=0 ref-frames=1 num-slices={slices_per_frame} bitrate={bitrate} target-usage=6 !
+h264parse !
+video/x-h264, profile=main, stream-format=byte-stream\
+"""
+
+[[gstreamer.video.h264_encoders]]
+plugin_name = "vaapi"
+check_elements = ["vah264enc", "videoconvertscale"]
+encoder_pipeline = """
+vah264enc aud=false b-frames=0 ref-frames=1 num-slices={slices_per_frame} bitrate={bitrate} target-usage=6 !
+h264parse !
+video/x-h264, profile=main, stream-format=byte-stream\
+"""
+
+[[gstreamer.video.h264_encoders]]
+plugin_name = "x264" # SW Encoding
+check_elements = ["x264enc"]
+video_params = """
+videoconvertscale !
+videorate !
+video/x-raw, width={width}, height={height}, framerate={fps}/1, format=I420,
+chroma-site={color_range}, colorimetry={color_space}\
+"""
+encoder_pipeline = """
+x264enc pass=qual tune=zerolatency speed-preset=superfast b-adapt=false bframes=0 ref=1
+sliced-threads=true threads={slices_per_frame} option-string="slices={slices_per_frame}:keyint=infinite:open-gop=0"
+b-adapt=false bitrate={bitrate} aud=false !
+video/x-h264, profile=high, stream-format=byte-stream\
+"""
+
+##############
+# AV1 encoders
+###
+[[gstreamer.video.av1_encoders]]
+plugin_name = "nvcodec"
+check_elements = ["nvav1enc", "cudaconvertscale", "cudaupload"]
+encoder_pipeline = """
+nvav1enc gop-size=-1 bitrate={bitrate} rc-mode=cbr zerolatency=true preset=p1 tune=ultra-low-latency multi-pass=two-pass-quarter !
+av1parse !
+video/x-av1, stream-format=obu-stream, alignment=frame, profile=main\
+"""
+
+[[gstreamer.video.av1_encoders]]
+plugin_name = "qsv"
+check_elements = ["qsvav1enc", "videoconvertscale"]
+encoder_pipeline = """
+qsvav1enc gop-size=0 ref-frames=1 bitrate={bitrate} rate-control=cbr low-latency=1 target-usage=6 !
+av1parse !
+video/x-av1, stream-format=obu-stream, alignment=frame, profile=main\
+"""
+
+[[gstreamer.video.av1_encoders]]
+plugin_name = "vaapi"
+check_elements = ["vaav1enc", "videoconvertscale"]
+encoder_pipeline = """
+vaav1enc ref-frames=1 bitrate={bitrate} rate-control=cbr target-usage=6 !
+av1parse !
+video/x-av1, stream-format=obu-stream, alignment=frame, profile=main\
+"""
+
+[[gstreamer.video.av1_encoders]]
+plugin_name = "vaapi"
+check_elements = ["vaav1lpenc", "videoconvertscale"] # LP = Low Power
+encoder_pipeline = """
+vaav1lpenc ref-frames=1 bitrate={bitrate} rate-control=cbr target-usage=6 !
+av1parse !
+video/x-av1, stream-format=obu-stream, alignment=frame, profile=main\
+"""
+
+[[gstreamer.video.av1_encoders]]
+plugin_name = "aom"
+check_elements = ["av1enc"]
+video_params = """
+videoconvertscale !
+videorate !
+video/x-raw, width={width}, height={height}, framerate={fps}/1, format=I420,
+chroma-site={color_range}, colorimetry={color_space}\
+"""
+encoder_pipeline = """
+av1enc usage-profile=realtime end-usage=vbr target-bitrate={bitrate} !
+av1parse !
+video/x-av1, stream-format=obu-stream, alignment=frame, profile=main\
+"""
+
+###########
+# Audio
+###
+[gstreamer.audio]
+default_source = """
+interpipesrc listen-to={session_id}_audio is-live=true stream-sync=restart-ts max-bytes=0 max-buffers=3 block=false\
+"""
+
+default_audio_params = "queue max-size-buffers=3 leaky=downstream ! audiorate ! audioconvert"
+
+default_opus_encoder = """
+opusenc bitrate={bitrate} bitrate-type=cbr frame-size={packet_duration} bandwidth=fullband \
+audio-type=restricted-lowdelay max-payload-size=1400\
+"""
+
+default_sink = """
+rtpmoonlightpay_audio name=moonlight_pay packet_duration={packet_duration} encrypt={encrypt} \
+aes_key="{aes_key}" aes_iv="{aes_iv}" !
+appsink name=wolf_udp_sink\
+"""
+

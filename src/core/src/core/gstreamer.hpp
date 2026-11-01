@@ -1,15 +1,13 @@
 #pragma once
 
-#include <eventbus/event_bus.hpp>
 #include <gst/gst.h>
 #include <helpers/logger.hpp>
-#include <immer/array.hpp>
-#include <immer/box.hpp>
 
 namespace wolf::core::gstreamer {
 
 using gst_element_ptr = std::shared_ptr<GstElement>;
 using gst_main_loop_ptr = std::shared_ptr<GMainLoop>;
+using gst_main_context_ptr = std::shared_ptr<GMainContext>;
 
 static void pipeline_error_handler(GstBus *bus, GstMessage *message, gpointer data) {
   auto loop = (GMainLoop *)data;
@@ -30,74 +28,62 @@ static void pipeline_eos_handler(GstBus *bus, GstMessage *message, gpointer data
   g_main_loop_quit(loop);
 }
 
-static bool run_pipeline(const std::string &pipeline_desc,
-                         const std::function<immer::array<immer::box<dp::handler_registration>>(
-                             gst_element_ptr /* pipeline */, gst_main_loop_ptr /* main_loop */)> &on_pipeline_ready) {
-  GError *error = nullptr;
-  gst_element_ptr pipeline(gst_parse_launch(pipeline_desc.c_str(), &error), [](const auto &pipeline) {
-    logs::log(logs::trace, "~pipeline");
-    gst_object_unref(pipeline);
-  });
-
-  if (!pipeline) {
-    logs::log(logs::error, "[GSTREAMER] Pipeline parse error: {}", error->message);
-    g_error_free(error);
-    return false;
-  } else if (error) { // Please note that you might get a return value that is not NULL even though the error is set. In
-                      // this case there was a recoverable parsing error and you can try to play the pipeline.
-    logs::log(logs::warning, "[GSTREAMER] Pipeline parse error (recovered): {}", error->message);
-    g_error_free(error);
-  }
-
-  /*
-   * create a mainloop that runs/iterates the default GLib main context
-   * (context NULL), in other words: makes the context check if anything
-   * it watches for has happened. When a message has been posted on the
-   * bus, the default main context will automatically call our
-   * my_bus_callback() function to notify us of that message.
-   */
-  gst_main_loop_ptr loop(g_main_loop_new(nullptr, FALSE), ::g_main_loop_unref);
-
-  /*
-   * adds a watch for new message on our pipeline's message bus to
-   * the default GLib main context, which is the main context that our
-   * GLib main loop is attached to below
-   */
-  auto bus = gst_pipeline_get_bus(GST_PIPELINE(pipeline.get()));
-  gst_bus_add_signal_watch(bus);
-  g_signal_connect(bus, "message::error", G_CALLBACK(pipeline_error_handler), loop.get());
-  g_signal_connect(bus, "message::eos", G_CALLBACK(pipeline_eos_handler), loop.get());
-  gst_object_unref(bus);
-
-  /* Set the pipeline to "playing" state*/
-  gst_element_set_state(pipeline.get(), GST_STATE_PLAYING);
-  GST_DEBUG_BIN_TO_DOT_FILE_WITH_TS(reinterpret_cast<GstBin *>(pipeline.get()),
-                                    GST_DEBUG_GRAPH_SHOW_ALL,
-                                    "pipeline-start");
-
-  /* Let the calling thread set extra things */
-  auto handlers = on_pipeline_ready(pipeline, loop);
-
-  /* The main loop will be run until someone calls g_main_loop_quit() */
-  g_main_loop_run(loop.get());
-
-  /* Out of the main loop, clean up nicely */
-  gst_element_set_state(pipeline.get(), GST_STATE_PAUSED);
-  gst_element_set_state(pipeline.get(), GST_STATE_READY);
-  gst_element_set_state(pipeline.get(), GST_STATE_NULL);
-
-  for (const auto &handler : handlers) {
-    handler->unregister();
-  }
-
-  return true;
-}
-
 /**
  * Sends a custom message in the pipeline
  */
 static void send_message(GstElement *recipient, GstStructure *message) {
+  if (!recipient) {
+    // Avoid throwing errors when we don't have a recipient
+    // This might happen when we have the control stream connected, but the wayland display isn't ready yet
+    return;
+  }
   auto gst_ev = gst_event_new_custom(GST_EVENT_CUSTOM_UPSTREAM, message);
   gst_element_send_event(recipient, gst_ev);
+}
+
+/**
+ * Given a Gstreamer element returns the supported DRM formats (if any).
+ * Ex: "vah265enc" -> ["P010:0x0200000000042305", "NV12:0x0200000000042305"]
+ */
+static std::vector<std::string> get_dma_caps(const std::string &gst_plugin_name) {
+  std::vector<std::string> caps;
+  GstRegistry *registry = gst_registry_get();
+  if (auto feature = gst_registry_find_feature(registry, gst_plugin_name.c_str(), GST_TYPE_ELEMENT_FACTORY)) {
+    if (auto real_feature = gst_registry_lookup_feature(gst_registry_get(), GST_OBJECT_NAME(feature))) {
+      auto pads = gst_element_factory_get_static_pad_templates(GST_ELEMENT_FACTORY(real_feature));
+      for (auto pad = pads; pad; pad = g_list_next(pad)) {
+        auto pad_template = (GstStaticPadTemplate *)(pad->data);
+        if (pad_template->static_caps.string && pad_template->direction == GST_PAD_SINK) {
+          GstCaps *current_caps = gst_static_caps_get(&pad_template->static_caps);
+          // iterate over caps looking for the type memory:DMABuf
+          gst_caps_foreach(
+              current_caps,
+              [](GstCapsFeatures *features, GstStructure *structure, gpointer user_data) -> gboolean {
+                auto caps = (std::vector<std::string> *)user_data;
+                if (features && gst_caps_features_contains(features, "memory:DMABuf")) {
+                  // get the array of supported formats under "drm-format" (if present)
+                  GValueArray *formats = nullptr;
+                  gst_structure_get_list(structure, "drm-format", &formats);
+                  if (formats) {
+                    for (guint i = 0; i < formats->n_values; i++) {
+                      GValue *format = &formats->values[i];
+                      if (G_VALUE_HOLDS_STRING(format)) {
+                        caps->push_back(g_value_get_string(format));
+                      }
+                    }
+                  }
+                }
+                return true;
+              },
+              &caps);
+          gst_caps_unref(current_caps);
+        }
+      }
+      gst_object_unref(real_feature);
+    }
+    gst_object_unref(feature);
+  }
+
+  return caps;
 }
 } // namespace wolf::core::gstreamer

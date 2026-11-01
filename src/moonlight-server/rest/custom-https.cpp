@@ -17,7 +17,7 @@ Server<HTTPS>::Server(const std::string &certification_file, const std::string &
 
   this->on_error = [](std::shared_ptr<typename ServerBase<HTTPS>::Request> request, const error_code &ec) -> void {
     // TODO: why is stream truncated happening so frequently?
-    logs::log(ec.value() == 1 ? logs::trace : logs::warning,
+    logs::log(ec.value() == 1 || ec.value() == 167773206 ? logs::trace : logs::warning,
               "HTTPS error during request at {} error code: {} - {}",
               request->path,
               ec.value(),
@@ -73,9 +73,10 @@ void Server<HTTPS>::accept() {
   });
 }
 
-x509_st *Server<HTTPS>::get_client_cert(const std::shared_ptr<typename ServerBase<HTTPS>::Request> &request) {
+x509::x509_ptr Server<HTTPS>::get_client_cert(const std::shared_ptr<typename ServerBase<HTTPS>::Request> &request) {
   auto connection = request->connection.lock();
-  return SSL_get_peer_certificate(connection->socket->native_handle());
+  auto cert = SSL_get_peer_certificate(connection->socket->native_handle());
+  return x509::x509_ptr(cert, X509_free);
 }
 
 } // namespace SimpleWeb

@@ -11,7 +11,7 @@ if (CMAKE_PROJECT_NAME STREQUAL PROJECT_NAME)
 
     # Optionally set things like CMAKE_CXX_STANDARD, CMAKE_POSITION_INDEPENDENT_CODE here
 
-    set(CMAKE_CXX_STANDARD 17)
+    set(CMAKE_CXX_STANDARD 20)
 
     set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
@@ -32,6 +32,20 @@ if (CMAKE_PROJECT_NAME STREQUAL PROJECT_NAME)
         add_compile_options("-fno-inline")
     endif ()
 
+    if(POLICY CMP0167)
+        cmake_policy(SET CMP0167 NEW)
+        set(CMAKE_POLICY_DEFAULT_CMP0167 NEW)
+    endif()
+
+    if(POLICY CMP0169)
+        cmake_policy(SET CMP0169 OLD)
+    endif()
+
+    if(POLICY CMP0077)
+        cmake_policy(SET CMP0077 NEW)
+        set(CMAKE_POLICY_DEFAULT_CMP0077 NEW)
+    endif()
+
     # set(Boost_USE_STATIC_LIBS ON)
 
     # Testing only available if this is the main app
@@ -46,14 +60,15 @@ if (CCACHE_FOUND)
     set_property(GLOBAL PROPERTY RULE_LAUNCH_COMPILE ccache)
 endif (CCACHE_FOUND)
 
-
 # FetchContent added in CMake 3.11, downloads during the configure step
 include(FetchContent)
 set(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} ${CMAKE_CURRENT_SOURCE_DIR}/cmake/)
 
+include(BoostLoader)
 include(TargetLinkLibrariesSystem)
 
 add_subdirectory(src/core)
+add_subdirectory(src/gst-video-context)
 
 if (UNIX AND NOT APPLE)
     add_subdirectory(src/fake-udev)

@@ -1,71 +1,78 @@
 #include <boost/bind/bind.hpp>
 #include <boost/enable_shared_from_this.hpp>
+#include <helpers/logger.hpp>
 #include <rtp/udp-ping.hpp>
 #include <thread>
 
 namespace rtp {
 
-UDP_Server::UDP_Server(
-    unsigned short port,
-    const std::function<void(unsigned short /* client_port */, const std::string & /* client_ip */)> &callback)
-    : io_context(), socket_(io_context, udp::endpoint(udp::v4(), port)), callback(callback) {
-  // We have to enable this because we'll bind additional sockets as udpsink in the audio/video pipelines
-  socket_.set_option(udp::socket::reuse_address(true));
-  start_receive();
-}
-
-UDP_Server::~UDP_Server() {
-  socket_.close();
-  io_context.stop();
-}
-
-void UDP_Server::run(std::chrono::milliseconds timeout) {
-  io_context.run_for(timeout);
-}
-
 void UDP_Server::start_receive() {
-  socket_.async_receive_from(boost::asio::buffer(recv_buffer_),
-                             remote_endpoint_,
-                             boost::bind(&UDP_Server::handle_receive,
-                                         this,
-                                         boost::asio::placeholders::error,
-                                         boost::asio::placeholders::bytes_transferred));
+  socket_->async_receive_from(boost::asio::buffer(recv_buffer_),
+                              remote_endpoint_,
+                              0,
+                              boost::bind(&UDP_Server::handle_receive,
+                                          this,
+                                          boost::asio::placeholders::error,
+                                          boost::asio::placeholders::bytes_transferred));
 }
 
-void UDP_Server::handle_receive(const boost::system::error_code &error, std::size_t /*bytes_transferred*/) {
+void UDP_Server::handle_receive(const boost::system::error_code &error, std::size_t bytes_transferred) {
   if (!error) {
     auto client_ip = remote_endpoint_.address().to_string();
     auto client_port = remote_endpoint_.port();
 
-    logs::log(logs::trace, "[RTP] Received ping from {}:{}", client_ip, client_port);
-    callback(client_port, client_ip);
-    // We'll keep receiving pings and sending callback events until the timeout elapsed.
-    // This is because we don't know if downstream they are ready to start the session.
-    // Downstream will make sure to only send one ping per session
-    std::this_thread::sleep_for(std::chrono::milliseconds(500)); // let's avoid spamming though
-    start_receive();
+    logs::log(logs::trace, "[RTP] Received ping from {}:{} ({} bytes)", client_ip, client_port, bytes_transferred);
+
+    if (bytes_transferred == 4) {
+      callback({.client_ip = client_ip, .client_port = client_port, .payload = {}});
+    } else if (bytes_transferred >= sizeof(moonlight::SS_PING)) {
+      auto ping = (moonlight::SS_PING *)recv_buffer_.data();
+      callback({.client_ip = client_ip, .client_port = client_port, .payload = ping->payload});
+    }
+  } else {
+    logs::log(logs::warning, "[RTP] Error receiving ping: {}", error.message());
   }
+
+  // Continue to receive more data
+  start_receive();
 }
 
-void wait_for_ping(
-    unsigned short port,
-    const std::function<void(unsigned short /* client_port */, const std::string & /* client_ip */)> &callback) {
-  auto thread = std::thread(
-      [port](
-          const std::function<void(unsigned short /* client_port */, const std::string & /* client_ip */)> &callback) {
-        try {
-          auto server = UDP_Server(port, callback);
+void start_rtp_ping(unsigned short video_port,
+                    unsigned short audio_port,
+                    std::shared_ptr<wolf::core::events::EventBusType> event_bus) {
+  auto io_context = std::make_shared<boost::asio::io_context>();
 
-          logs::log(logs::info, "RTP server started on port: {}", port);
-          server.run(std::chrono::seconds(4));
-          logs::log(logs::debug, "RTP server on port: {} stopped", port);
+  try {
+    logs::log(logs::info, "[RTP] Starting RTP ping server on ports {} and {}", video_port, audio_port);
+    auto video_socket = std::make_shared<udp::socket>(*io_context, udp::endpoint(udp::v4(), video_port));
+    auto audio_socket = std::make_shared<udp::socket>(*io_context, udp::endpoint(udp::v4(), audio_port));
 
-        } catch (std::exception &e) {
-          logs::log(logs::warning, "[RTP] Unable to start RTP server on {}: {}", port, e.what());
-        }
-      },
-      callback);
-  thread.detach();
+    std::thread([io_context, video_socket, audio_socket, event_bus]() {
+      UDP_Server video_server(video_socket, [event_bus, video_socket](const RTPPingEvent &ping) {
+        logs::log(logs::trace, "[RTP] video from {}:{}", ping.client_ip, ping.client_port);
+        auto ev = wolf::core::events::RTPVideoPingEvent{.client_ip = ping.client_ip,
+                                                        .client_port = ping.client_port,
+                                                        .video_socket = video_socket,
+                                                        .payload = ping.payload};
+        event_bus->fire_event(immer::box<wolf::core::events::RTPVideoPingEvent>(ev));
+      });
+
+      UDP_Server audio_server(audio_socket, [event_bus, audio_socket](const RTPPingEvent &ping) {
+        logs::log(logs::trace, "[RTP] audio from {}:{}", ping.client_ip, ping.client_port);
+        auto ev = wolf::core::events::RTPAudioPingEvent{.client_ip = ping.client_ip,
+                                                        .client_port = ping.client_port,
+                                                        .audio_socket = audio_socket,
+                                                        .payload = ping.payload};
+        event_bus->fire_event(immer::box<wolf::core::events::RTPAudioPingEvent>(ev));
+      });
+
+      io_context->run();
+      logs::log(logs::info, "[RTP] server stopped");
+    }).detach();
+
+  } catch (std::exception &e) {
+    logs::log(logs::warning, "[RTP] Unable to start RTP server: {}", e.what());
+  }
 }
 
 } // namespace rtp

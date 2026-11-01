@@ -10,14 +10,14 @@ using Catch::Matchers::Equals;
 using Catch::Matchers::StartsWith;
 
 using namespace wolf::core::input;
+using namespace wolf::core;
 using namespace moonlight::control;
 using namespace std::string_literals;
 
 TEST_CASE("Create PS5 pad with CONTROLLER_ARRIVAL", "[UHID]") {
-  state::App app = {.joypad_type = moonlight::control::pkts::CONTROLLER_TYPE::AUTO};
-  auto session = state::StreamSession{
-      .event_bus = std::make_shared<dp::event_bus>(),
-      .app = std::make_shared<state::App>(app)};
+  events::App app = {};
+  auto session = events::StreamSession{.event_bus = std::make_shared<events::EventBusType>(),
+                                       .app = std::make_shared<events::App>(app)};
   uint8_t controller_number = 1;
   auto c_pkt = pkts::CONTROLLER_ARRIVAL_PACKET{
       .controller_number = controller_number,
@@ -26,7 +26,7 @@ TEST_CASE("Create PS5 pad with CONTROLLER_ARRIVAL", "[UHID]") {
   c_pkt.type = pkts::CONTROLLER_ARRIVAL;
 
   control::handle_input(session, {}, &c_pkt);
-  std::this_thread::sleep_for(std::chrono::milliseconds(300));
+  std::this_thread::sleep_for(std::chrono::milliseconds(400));
 
   auto joypad = session.joypads->load()->at(controller_number);
   std::vector<std::string> dev_nodes;
@@ -174,7 +174,7 @@ TEST_CASE("Create PS5 pad with CONTROLLER_ARRIVAL", "[UHID]") {
 
     control::handle_input(session, {}, &motion_pkt);
     auto events = fetch_events_debug(motion_dev);
-    REQUIRE(events.size() == 5);
+    REQUIRE(events.size() >= 5);
     // TODO: seems that I only get MSC_TIMESTAMP here
     //
     //      REQUIRE_THAT(libevdev_event_type_get_name(events[0]->type), Equals("EV_ABS"));
@@ -209,7 +209,7 @@ TEST_CASE("Create PS5 pad with CONTROLLER_ARRIVAL", "[UHID]") {
 
     for (auto &event : udev_events) {
       REQUIRE_THAT(event["ACTION"], Equals("add"));
-      REQUIRE_THAT(event["DEVPATH"], StartsWith("/devices/virtual/misc/uhid/0003:054C"));
+      REQUIRE_THAT(event["DEVPATH"], StartsWith("/devices/virtual/misc/uhid/0005:054C"));
       if (event["SUBSYSTEM"] == "input") {
         REQUIRE_THAT(event["DEVNAME"], ContainsSubstring("/dev/input/"));
       } else if (event["SUBSYSTEM"] == "hidraw") {

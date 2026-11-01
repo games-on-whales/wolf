@@ -1,6 +1,9 @@
 #pragma once
 #include <algorithm>
 #include <boost/endian.hpp>
+#include <boost/json.hpp>
+#include <helpers/logger.hpp>
+#include <optional>
 #include <range/v3/view.hpp>
 #include <sstream>
 #include <stdlib.h>
@@ -109,6 +112,34 @@ map_to_string(const std::map<std::string, std::string> &m, char val_separator = 
   }
 
   return ss.str();
+}
+
+/**
+ * @brief: Since optional value_or is not lazy, this function allows to provide a lambda to calculate the value
+ */
+template <typename T, typename F> T lazy_value_or(const std::optional<T> &opt, F fn) {
+  if (opt)
+    return opt.value();
+  return fn();
+}
+
+namespace json = boost::json;
+inline json::value parse_json(std::string_view json) {
+  boost::system::error_code ec;
+  auto parsed = json::parse({json.data(), json.size()}, ec);
+  if (!ec) {
+    return parsed;
+  } else {
+    logs::log(logs::error, "Error while parsing JSON: {} \n {}", ec.message(), json);
+    return json::object(); // Returning an empty object should allow us to continue most of the times
+  }
+}
+
+template <typename T, typename K> auto get_optional(T &&map, K &&key) {
+  auto it = map.find(std::forward<K>(key));
+  if (it == map.end())
+    return std::optional<typename std::decay<T>::type::mapped_type>{};
+  return std::optional<typename std::decay<T>::type::mapped_type>{it->second};
 }
 
 } // namespace utils

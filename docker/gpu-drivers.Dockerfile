@@ -1,20 +1,64 @@
-ARG BASE_IMAGE=ghcr.io/games-on-whales/base-app:edge
+ARG BASE_IMAGE=ghcr.io/games-on-whales/base-app:fedora
 FROM $BASE_IMAGE
-ENV DEBIAN_FRONTEND=noninteractive
-ENV BUILD_ARCHITECTURE=amd64
-ENV DEB_BUILD_OPTIONS=noddebs
 
-# Intel (Quick Synk) specific:
-# - libmfx Provides MSDK runtime (libmfxhw64.so.1) for 11th Gen Rocket Lake and older
-# - libmfx-gen1.2 Provides VPL runtime (libmfx-gen.so.1.2) for 11th Gen Tiger Lake and newer
-ARG REQUIRED_PACKAGES="va-driver-all intel-media-va-driver-non-free \
-                       libmfx1 libmfx-gen1.2 libigfxcmrt7 \
-                       libva-drm2 libva-x11-2 libvpl2"
+# Intel VA-API / QSV drivers and VPL runtime
+# The Intel media driver comes in two variants on Fedora:
+# - libva-intel-media-driver (main repos): free shaders only — these have a
+#   history of breaking VPP/encode contexts (see
+#   https://github.com/intel/media-driver/issues/1662), which leaves Wolf on
+#   software encoding.
+# - intel-media-driver (RPM Fusion NONFREE): the full non-free shader set,
+#   equivalent to Ubuntu's intel-media-va-driver-non-free. Installs into
+#   /usr/lib64/dri-nonfree/, which libva probes with higher priority.
+# libvpl (dispatcher + oneVPL GPU runtime for QSV) comes from the main repos.
+# Fedora's stock Mesa is built without the patent-encumbered H.264/HEVC VA-API
+# entrypoints, so we pull the same Mesa version rebuilt from RPM Fusion's
+# freeworld repo, which ships them (installs into /usr/lib64/dri-freeworld/).
+ARG REQUIRED_PACKAGES="libva libva-utils \
+                       intel-media-driver \
+                       libvpl \
+                       mesa-va-drivers-freeworld"
 
-RUN apt-get update -y && \
-    apt-get install -y --no-install-recommends \
-    $REQUIRED_PACKAGES && \
-    rm -rf /var/lib/apt/lists/*
+RUN dnf install -y \
+      https://mirrors.rpmfusion.org/free/fedora/rpmfusion-free-release-$(rpm -E %fedora).noarch.rpm \
+      https://mirrors.rpmfusion.org/nonfree/fedora/rpmfusion-nonfree-release-$(rpm -E %fedora).noarch.rpm && \
+    dnf install -y $REQUIRED_PACKAGES && \
+    dnf clean all
+
+# libmfx is not available in Fedora so we build from sources (see: https://github.com/games-on-whales/wolf/issues/221)
+RUN <<_BUILD_LIBMFX
+    #!/bin/bash
+    set -e
+
+    dnf install -y curl git gcc gcc-c++ cmake pkg-config \
+                   libdrm-devel libva-devel libX11-devel libxcb-devel libXext-devel
+
+    cd /tmp
+    git clone https://github.com/Intel-Media-SDK/MediaSDK msdk
+    cd msdk
+    git submodule init
+    git pull
+
+    # Patch to fix compilation error on modern gcc
+    curl -fsSL https://patch-diff.githubusercontent.com/raw/Intel-Media-SDK/MediaSDK/pull/3005.patch | git apply -
+    grep -q "#include <cstdint>" samples/sample_vpp/src/sample_vpp_frc_adv.cpp || \
+      sed -i "/#include <algorithm>/a #include <cstdint>" samples/sample_vpp/src/sample_vpp_frc_adv.cpp
+
+    mkdir build
+    cd build
+    cmake -DCMAKE_BUILD_TYPE=Release -DENABLE_WAYLAND=ON -DENABLE_X11_DRI3=ON -DENABLE_OPENCL=ON ../
+    make -j$(nproc)
+    make install -j$(nproc)
+
+    # Adjust library path
+    echo "/opt/intel/mediasdk/lib" >> /etc/ld.so.conf.d/msdk.conf
+    echo "/opt/intel/mediasdk/plugins" >> /etc/ld.so.conf.d/msdk.conf
+    ldconfig
+
+    # Cleanup
+    dnf clean all
+    rm -rf /tmp/*
+_BUILD_LIBMFX
 
 # Adding missing libnvrtc.so and libnvrtc-bulletins.so for Nvidia
 # https://developer.download.nvidia.com/compute/cuda/redist/cuda_nvrtc/LICENSE.txt
@@ -22,9 +66,7 @@ RUN <<_ADD_NVRTC
     #!/bin/bash
     set -e
 
-    #Extra deps
-    apt-get update -y
-    apt-get install -y unzip curl
+    dnf install -y unzip curl
 
     cd /tmp
     curl -fsSL -o nvidia_cuda_nvrtc_linux_x86_64.whl "https://developer.download.nvidia.com/compute/redist/nvidia-cuda-nvrtc/nvidia_cuda_nvrtc-11.0.221-cp36-cp36m-linux_x86_64.whl"
@@ -40,9 +82,8 @@ RUN <<_ADD_NVRTC
     echo "/usr/local/nvidia/lib64" >> /etc/ld.so.conf.d/nvidia.conf
 
     # Cleanup
-    apt-get remove -y --purge unzip curl
-    rm -rf /var/lib/apt/lists/*
+    dnf clean all
 _ADD_NVRTC
 
 LABEL org.opencontainers.image.source="https://github.com/games-on-whales/wolf/"
-LABEL org.opencontainers.image.description="A base image with all the required GPU drivers"
+LABEL org.opencontainers.image.description="A base image with all the required GPU drivers (Fedora)"

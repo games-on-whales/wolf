@@ -3,34 +3,33 @@ name: Run clang-format Linter
 on:
   push:
     paths-ignore:
-      - "docs"
-      - "docker"
-      - ".github"
+      - "docs/**"
+      - "docker/**"
+      - ".github/**"
   pull_request:
-    paths:
-      - "docs"
-      - "docker"
-      - ".github"
+    paths-ignore:
+      - "docs/**"
+      - "docker/**"
+      - ".github/**"
 
 jobs:
   build:
+    # Avoid workflows to run twice for PRs (https://github.com/orgs/community/discussions/57827)
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name != github.event.pull_request.base.repo.full_name
     runs-on: ubuntu-latest
 
     steps:
+      # Default checkout (PR merge ref) works for fork PRs too; an explicit
+      # `ref: github.head_ref` fails for forks because that branch isn't in this repo.
       - uses: actions/checkout@v4
 
+      # Run in check-only mode: fail the job on formatting violations instead of
+      # auto-committing fixes. Auto-commit can't push back to fork PRs (read-only
+      # token), so a verifying lint is the only behaviour that works for every PR.
       - uses: DoozyX/clang-format-lint-action@v0.14
         with:
           source: 'src'
           exclude: 'src/rust'
           extensions: 'h,hpp,cpp,c'
-          clangFormatVersion: 14
-          inplace: True
-
-      - uses: EndBug/add-and-commit@v9
-        with:
-          committer_name: GitHub Actions
-          committer_email: actions@github.com
-          message: 'Committing clang-format changes'
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          clangFormatVersion: 18
+          inplace: False

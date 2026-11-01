@@ -90,6 +90,8 @@ static GstBuffer *create_rtp_audio_buffer(const gst_rtp_moonlight_pay_audio &rtp
   if (rtpmoonlightpay.encrypt) {
     auto derived_iv = derive_iv(rtpmoonlightpay.aes_iv, rtpmoonlightpay.cur_seq_number);
     payload = encrypt_payload(rtpmoonlightpay.aes_key, derived_iv, inbuf);
+  } else {
+    gst_buffer_ref(inbuf);
   }
 
   auto rtp_header = create_rtp_header(rtpmoonlightpay);

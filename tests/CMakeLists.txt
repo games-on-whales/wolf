@@ -1,11 +1,15 @@
+cmake_minimum_required(VERSION 3.16...3.24)
+
 # Testing library
 FetchContent_Declare(
         Catch2
         GIT_REPOSITORY https://github.com/catchorg/Catch2.git
-        GIT_TAG v3.3.2
+        GIT_TAG v3.8.0
 )
 
 FetchContent_MakeAvailable(Catch2)
+
+project(wolftests CXX C)
 
 # Tests need to be added as executables first
 add_executable(wolftests main.cpp)
@@ -16,12 +20,38 @@ set(SRC_LIST
         testCrypto.cpp
         testGSTPlugin.cpp
         testMoonlight.cpp
-        testRTSP.cpp)
+        testRTSP.cpp
+        testWolfAPI.cpp
+        testBatchedSend.cpp)
 
+option(TEST_RUST_WAYLAND "Test our custom Rust wayland compositor" ON)
 if (UNIX AND NOT APPLE)
-    option(TEST_RUST_WAYLAND "Enable custom wayland test" ON)
     if (TEST_RUST_WAYLAND)
-        list(APPEND SRC_LIST "platforms/linux/wayland-display.cpp")
+        find_package(PkgConfig)
+        pkg_check_modules(wayland-client REQUIRED IMPORTED_TARGET wayland-client)
+
+        # Add the wayland protocols
+        find_package(WaylandScanner REQUIRED QUIET)
+        pkg_check_modules(WAYLAND_PROTOCOLS REQUIRED wayland-protocols)
+        pkg_get_variable(WAYLAND_PROTOCOLS_PKGDATADIR wayland-protocols pkgdatadir)
+        # xdg-shell
+        ecm_add_wayland_client_protocol(wolftests
+                PROTOCOL ${WAYLAND_PROTOCOLS_PKGDATADIR}/stable/xdg-shell/xdg-shell.xml
+                BASENAME xdg-shell)
+        # relative-pointer
+        ecm_add_wayland_client_protocol(wolftests
+                PROTOCOL ${WAYLAND_PROTOCOLS_PKGDATADIR}/unstable/relative-pointer/relative-pointer-unstable-v1.xml
+                BASENAME relative-pointer)
+
+        # Add the generated headers and files
+        include_directories(${CMAKE_CURRENT_BINARY_DIR})
+
+        list(APPEND SRC_LIST
+                "platforms/linux/wayland-client.hpp"
+                "platforms/linux/wayland-display.hpp"
+                "platforms/linux/wayland-display.cpp"
+        )
+        target_link_libraries(wolftests PRIVATE PkgConfig::wayland-client)
     endif ()
 
     option(TEST_NVIDIA "Enable Nvidia tests" ON)
@@ -46,9 +76,14 @@ if (UNIX AND NOT APPLE)
         endif ()
         list(APPEND SRC_LIST
                 "platforms/linux/libinput.h"
-                "platforms/linux/input.cpp")
+                "platforms/linux/inputtino.cpp")
     endif ()
 endif ()
+
+find_package(CURL)
+target_link_libraries(wolftests PUBLIC CURL::libcurl)
+
+list(APPEND SRC_LIST "testSerialization.cpp")
 
 option(TEST_DOCKER "Enable docker tests" ON)
 if (TEST_DOCKER)
@@ -71,10 +106,13 @@ target_link_libraries_system(wolftests PRIVATE
         Catch2::Catch2)
 
 ## Test assets
-configure_file(assets/config.v2.toml ${CMAKE_CURRENT_BINARY_DIR}/config.v2.toml COPYONLY)
+configure_file(assets/config.test.toml ${CMAKE_CURRENT_BINARY_DIR}/config.test.toml COPYONLY)
+configure_file(assets/config.test.toml ${CMAKE_CURRENT_BINARY_DIR}/config.test.EDITED.toml COPYONLY)
 
 # See: https://github.com/catchorg/Catch2/blob/devel/docs/cmake-integration.md
 list(APPEND CMAKE_MODULE_PATH ${catch2_SOURCE_DIR}/extras)
 include(CTest)
 include(Catch)
-catch_discover_tests(wolftests)
+catch_discover_tests(wolftests
+        PROPERTIES
+        ENVIRONMENT "WOLF_SKIP_WAYLAND_SOCKET_WAIT=TRUE")

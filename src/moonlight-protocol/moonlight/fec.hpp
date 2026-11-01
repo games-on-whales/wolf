@@ -3,7 +3,7 @@
 #include <memory>
 
 extern "C" {
-#include <rs.h>
+#include "rswrapper.h"
 }
 
 /**
@@ -32,7 +32,7 @@ inline void init() {
 /**
  * A smart pointer to the reed_solomon data structure, it will release the memory when going out of scope
  */
-using rs_ptr = std::unique_ptr<reed_solomon, decltype(&reed_solomon_release)>;
+using rs_ptr = std::shared_ptr<reed_solomon>;
 
 /**
  * Creates and allocates the required Reed Solomon data structure.
@@ -43,8 +43,8 @@ using rs_ptr = std::unique_ptr<reed_solomon, decltype(&reed_solomon_release)>;
  * @return A smart pointer, it will release the memory when going out of scope
  */
 inline rs_ptr create(int data_shards, int parity_shards) {
-  auto rs = reed_solomon_new(data_shards, parity_shards);
-  return {rs, ::reed_solomon_release};
+  auto rs = reed_solomon_new_fn(data_shards, parity_shards);
+  return std::shared_ptr<reed_solomon>(rs, reed_solomon_release_fn);
 }
 
 /**
@@ -63,7 +63,7 @@ inline rs_ptr create(int data_shards, int parity_shards) {
  * @return zero on success or an error code if failing.
  */
 inline int encode(reed_solomon *rs, uint8_t **shards, int nr_shards, int block_size) {
-  return reed_solomon_encode(rs, shards, nr_shards, block_size);
+  return reed_solomon_encode_fn(rs, shards, nr_shards, block_size);
 }
 
 /**
@@ -82,7 +82,7 @@ inline int encode(reed_solomon *rs, uint8_t **shards, int nr_shards, int block_s
  * @return zero on success or an error code if failing
  */
 inline int decode(reed_solomon *rs, uint8_t **shards, uint8_t *marks, int nr_shards, int block_size) {
-  return reed_solomon_decode(rs, shards, marks, nr_shards, block_size);
+  return reed_solomon_decode_fn(rs, shards, marks, nr_shards, block_size);
 }
 
 } // namespace moonlight::fec

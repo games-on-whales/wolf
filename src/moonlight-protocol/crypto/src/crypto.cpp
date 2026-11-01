@@ -168,6 +168,9 @@ std::string sign(std::string_view msg, std::string_view private_key) {
 
 bool verify(std::string_view msg, std::string_view signature, std::string_view public_key) {
   auto p_key = signature::create_key(public_key, false);
+  if (!p_key) {
+    return false;
+  }
   return signature::verify(msg, signature, p_key.get(), EVP_sha256());
 }
 

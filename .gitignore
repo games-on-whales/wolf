@@ -18,6 +18,7 @@ DartConfiguration.tcl
 .run/
 target
 Cargo.lock
-
+build/
 .clj-kondo
 .lsp
+.tmp-local/

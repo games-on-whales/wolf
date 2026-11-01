@@ -1,11 +1,8 @@
-ARG BASE_IMAGE=ghcr.io/games-on-whales/gstreamer:1.22.7
+ARG BASE_IMAGE=ghcr.io/games-on-whales/gstreamer:1.26.7
 ########################################################
 FROM $BASE_IMAGE AS wolf-builder
 
-ENV DEBIAN_FRONTEND=noninteractive
-
-RUN apt-get update -y && \
-    apt-get install -y --no-install-recommends \
+RUN dnf install -y \
     curl \
     ca-certificates \
     ninja-build \
@@ -14,21 +11,29 @@ RUN apt-get update -y && \
     ccache \
     git \
     clang \
-    libboost-thread-dev libboost-locale-dev libboost-filesystem-dev libboost-log-dev libboost-stacktrace-dev \
-    libwayland-dev libwayland-server0 libinput-dev libxkbcommon-dev libgbm-dev \
-    libcurl4-openssl-dev \
-    libssl-dev \
-    libevdev-dev \
-    libpulse-dev \
-    libunwind-dev \
-    libudev-dev \
-    libdrm-dev \
-    libpci-dev \
-    && rm -rf /var/lib/apt/lists/*
+    gcc-c++ \
+    glibc-static \
+    libstdc++-static \
+    boost-devel boost-static \
+    wayland-devel libinput-devel libxkbcommon-devel mesa-libgbm-devel \
+    libcurl-devel \
+    openssl-devel \
+    libevdev-devel \
+    pulseaudio-libs-devel \
+    libunwind-devel \
+    systemd-devel \
+    libdrm-devel \
+    pciutils-devel \
+    glib2-devel mesa-libEGL-devel mesa-libGLES-devel libglvnd-devel \
+    && dnf clean all
 
 ## Install Rust in order to build our custom compositor
 RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
 ENV PATH="$HOME/.cargo/bin:${PATH}"
+
+ARG RUST_VERSION=1.96.0
+ENV RUST_VERSION=$RUST_VERSION
+RUN rustup install $RUST_VERSION && rustup default $RUST_VERSION
 
 WORKDIR /tmp/
 RUN <<_GST_WAYLAND_DISPLAY
@@ -37,9 +42,10 @@ RUN <<_GST_WAYLAND_DISPLAY
 
     git clone https://github.com/games-on-whales/gst-wayland-display
     cd gst-wayland-display
-    git checkout 49529dc
-    cargo install cargo-c
-    cargo cinstall -p c-bindings --prefix=/usr/local --libdir=/usr/local/lib/
+    git checkout 016b4fc
+    # Pinned because it can cause issues when RUST_VERSION isn't the absolute latest
+    cargo install cargo-c@0.10.23 --locked
+    cargo cinstall --features="cuda" --prefix=/usr/local/lib/x86_64-linux-gnu/ --libdir=/usr/local/lib/x86_64-linux-gnu/gstreamer-1.0
 _GST_WAYLAND_DISPLAY
 
 COPY . /wolf/
@@ -50,8 +56,9 @@ ENV CMAKE_BUILD_DIR=/cache/cmake-build
 RUN --mount=type=cache,target=/cache/ccache \
     cmake -B$CMAKE_BUILD_DIR \
     -DCMAKE_BUILD_TYPE=RelWithDebInfo \
-    -DCMAKE_CXX_STANDARD=17 \
+    -DCMAKE_CXX_STANDARD=20 \
     -DCMAKE_CXX_EXTENSIONS=OFF \
+    -DCMAKE_CXX_FLAGS="-Wno-missing-template-arg-list-after-template-kw" \
     -DBUILD_SHARED_LIBS=OFF \
     -DBoost_USE_STATIC_LIBS=ON \
     -DBUILD_FAKE_UDEV_CLI=ON \
@@ -65,51 +72,79 @@ RUN --mount=type=cache,target=/cache/ccache \
 
 ########################################################
 FROM $BASE_IMAGE AS runner
-ENV DEBIAN_FRONTEND=noninteractive
 
 # Wolf runtime dependencies
-RUN apt-get update -y && \
-    apt-get install -y --no-install-recommends \
+RUN dnf install -y \
     ca-certificates \
-    libssl3 \
-    libevdev2 \
-    libudev1 \
-    libcurl4 \
-    libdrm2 \
-    libpci3 \
-    libunwind8 \
-    && rm -rf /var/lib/apt/lists/*
+    openssl-libs \
+    libicu \
+    libevdev \
+    systemd-libs \
+    libcurl \
+    libdrm \
+    pciutils-libs \
+    libunwind \
+    && dnf clean all
 
 # gst-plugin-wayland runtime dependencies
-RUN apt-get update -y && \
-    apt-get install -y --no-install-recommends \
-    libwayland-server0 libinput10 libxkbcommon0 libgbm1 \
-    libglvnd0 libgl1 libglx0 libegl1 libgles2 xwayland \
-    && rm -rf /var/lib/apt/lists/*
+RUN dnf install -y \
+    libwayland-server libinput libxkbcommon mesa-libgbm \
+    libglvnd mesa-libGL mesa-libEGL mesa-libGLES xorg-x11-server-Xwayland hwdata \
+    && dnf clean all
 
-ENV GST_PLUGIN_PATH=/usr/local/lib/x86_64-linux-gnu/gstreamer-1.0/
+# Embedded PulseAudio: Wolf runs its own PulseAudio server inside this container
+# (supervised by supervisord, see startup.sh + supervisord.conf) so audio is
+# available as soon as Wolf boots, without the legacy external "WolfPulseAudio"
+# sidecar container and its startup race. pulseaudio-utils ships pactl, handy for debugging audio from inside the container.
+# --allowerasing: Fedora ships PipeWire by default and base-app:fedora has
+# pipewire-pulseaudio installed, which conflicts with the real pulseaudio
+# server package; erase it in favor of PulseAudio proper.
+RUN dnf install -y --allowerasing \
+    pulseaudio pulseaudio-utils supervisor \
+    && dnf clean all
+
+COPY docker/supervisord.conf /etc/supervisord.conf
+
+# The custom gstreamer plugins (meson) install to /usr/local/lib64, while
+# gst-wayland-display (cargo cinstall) lands in the Debian-style multiarch
+# libdir; both are on GST_PLUGIN_PATH. The ld.so.conf entry for
+# /usr/local/lib64 comes from the gstreamer base image.
+ENV GST_PLUGIN_PATH=/usr/local/lib64/gstreamer-1.0:/usr/local/lib/x86_64-linux-gnu/gstreamer-1.0
 # Copying out our custom compositor from the build stage
-COPY --from=wolf-builder /usr/local/lib/x86_64-linux-gnu/gstreamer-1.0/* $GST_PLUGIN_PATH
-COPY --from=wolf-builder /usr/local/lib/liblibgstwaylanddisplay* /usr/local/lib/
+COPY --from=wolf-builder /usr/local/lib/x86_64-linux-gnu/gstreamer-1.0/* /usr/local/lib/x86_64-linux-gnu/gstreamer-1.0/
+# Rebuild the loader cache now that the compositor libs are in place
+RUN ldconfig
+
+# Bundle the exact libicu the builder linked wolf against, so a builder/runner
+# layer-cache skew can't produce a wolf binary that can't resolve its own
+# libicuuc soname at runtime.
+COPY --from=wolf-builder /usr/lib64/libicu*.so.* /usr/lib64/
 
 WORKDIR /wolf
 
-ARG WOLF_CFG_FOLDER=/etc/wolf/cfg
-ENV WOLF_CFG_FOLDER=$WOLF_CFG_FOLDER
+ENV WOLF_CFG_FOLDER=/etc/wolf/cfg
+# Pre-create it so Wolf can write its default config on first boot, before
+# any volume is mounted over /etc/wolf
 RUN mkdir -p $WOLF_CFG_FOLDER
 
 COPY --from=wolf-builder /wolf/wolf /wolf/wolf
 COPY --from=wolf-builder /wolf/fake-udev /wolf/fake-udev
 
-ENV XDG_RUNTIME_DIR=/tmp/sockets \
+ENV GST_GL_API=gles2 \
+    GST_GL_PLATFORM=egl \
+    GST_GL_WINDOW=surfaceless \
+    WOLF_USE_ZERO_COPY=TRUE \
     WOLF_LOG_LEVEL=INFO \
     WOLF_CFG_FILE=$WOLF_CFG_FOLDER/config.toml \
     WOLF_PRIVATE_KEY_FILE=$WOLF_CFG_FOLDER/key.pem \
     WOLF_PRIVATE_CERT_FILE=$WOLF_CFG_FOLDER/cert.pem \
-    WOLF_PULSE_IMAGE=ghcr.io/games-on-whales/pulseaudio:master \
+    WOLF_PULSE_IMAGE=ghcr.io/games-on-whales/pulseaudio:fedora \
     WOLF_RENDER_NODE=/dev/dri/renderD128 \
     WOLF_STOP_CONTAINER_ON_EXIT=TRUE \
+    WOLF_WAYLAND_SOCKET_WAIT_TIMEOUT_MS=5000 \
     WOLF_DOCKER_SOCKET=/var/run/docker.sock \
+    WOLF_DEFAULT_RUN_UID=1000 \
+    WOLF_DEFAULT_RUN_GID=1000 \
     RUST_BACKTRACE=full \
     RUST_LOG=WARN \
     HOST_APPS_STATE_FOLDER=/etc/wolf \
@@ -117,6 +152,10 @@ ENV XDG_RUNTIME_DIR=/tmp/sockets \
     PUID=0 \
     PGID=0 \
     UNAME="root"
+
+# Setting up XDG_RUNTIME_DIR this will automatically create a volume when starting the container
+VOLUME /run/user/wolf/
+ENV XDG_RUNTIME_DIR=/run/user/wolf
 
 # HTTPS
 EXPOSE 47984/tcp
@@ -126,13 +165,13 @@ EXPOSE 47989/tcp
 EXPOSE 47999/udp
 # RTSP
 EXPOSE 48010/tcp
-# Video (up to 10 users)
-EXPOSE 48100-48110/udp
-# Audio (up to 10 users)
-EXPOSE 48200-48210/udp
+# Video
+EXPOSE 48100/udp
+# Audio
+EXPOSE 48200/udp
 
 LABEL org.opencontainers.image.source="https://github.com/games-on-whales/wolf/"
-LABEL org.opencontainers.image.description="Wolf: stream virtual desktops and games in Docker"
+LABEL org.opencontainers.image.description="Wolf: stream virtual desktops and games in Docker (Fedora)"
 
 # See GOW/base-app
 COPY --chmod=777 docker/startup.sh /opt/gow/startup-app.sh
