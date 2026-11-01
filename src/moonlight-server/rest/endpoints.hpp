@@ -448,6 +448,14 @@ void resume(const std::shared_ptr<typename SimpleWeb::Server<SimpleWeb::HTTPS>::
   auto client_ip = get_client_ip<SimpleWeb::HTTPS>(request);
   auto old_session = state::get_session_by_client(state->running_sessions->load(), current_client);
   if (old_session) {
+    // The client is re-entering a session that is still running. Only the control channel pauses a
+    // pipeline today (ENet disconnect or a TERMINATION packet). If that never arrived, the old pipeline
+    // still owns the Wayland display that the new session takes over below, and its session id is about
+    // to leave running_sessions, so nothing could stop it afterwards. Pause it here; a pause that reaches
+    // an already-ended pipeline finds no handler and is a no-op.
+    state->event_bus->fire_event(
+        immer::box<events::PauseStreamEvent>(events::PauseStreamEvent{.session_id = old_session->session_id}));
+
     auto new_session =
         create_run_session(request->parse_query_string(), client_ip, current_client, state, *old_session->app);
     // Carry over the old session display handle
