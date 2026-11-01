@@ -34,6 +34,30 @@ Want to give it a spin? [Checkout our docs](https://games-on-whales.github.io/wo
 
 [![Youtube video preview](https://github.com/games-on-whales/wolf/blob/stable/docs/modules/ROOT/images/introduction-video.png?raw=true)](https://www.youtube.com/watch?v=z5jzLIUH6rA)
 
+## NVIDIA on modern drivers (CDI)
+
+On recent NVIDIA drivers together with a recent NVIDIA Container Toolkit and
+a recent Docker/moby, prefer the **Nvidia (CDI, modern drivers)** tab in the
+[Quickstart](https://games-on-whales.github.io/wolf/stable/user/quickstart.html)
+over the older *Nvidia (Container Toolkit)* / *Nvidia (Manual)* paths.
+
+The short version:
+
+- Enable CDI on the daemon (`features.cdi = true` in `/etc/docker/daemon.json`)
+  and make sure `/etc/cdi/nvidia.yaml` (or the toolkit-generated equivalent)
+  exists.
+- Pass the GPU as `--device nvidia.com/gpu=all` (or under `devices:` in
+  compose) instead of `--gpus=all` / `deploy.resources.reservations.devices`.
+- Set `NVIDIA_DRIVER_CAPABILITIES=all`, `NVIDIA_VISIBLE_DEVICES=all` and (on
+  NixOS-style hosts) `__EGL_VENDOR_LIBRARY_FILENAMES=/run/opengl-driver/share/glvnd/egl_vendor.d/10_nvidia.json:/usr/share/glvnd/egl_vendor.d/50_mesa.json`.
+- Also add an explicit `DeviceRequests` CDI entry (and mirror those env vars)
+  in each `[profiles.apps.runner]` block of `/etc/wolf/cfg/config.toml` so
+  Wolf skips its legacy `--gpus all` auto-injection when starting child
+  containers (Wolf UI, Steam, Firefox, ...). Without this, `docker` may reject
+  the child container with the misleading error `AMD CDI spec not found`.
+
+See the quickstart page for the full `docker run` and `docker-compose` examples.
+
 ## Acknowledgements
 
 - [@Drakulix](https://github.com/Drakulix) for the incredible help given in developing Wolf
