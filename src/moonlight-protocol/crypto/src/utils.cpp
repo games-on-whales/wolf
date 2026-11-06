@@ -1,12 +1,10 @@
-#include <iostream>
 #include <openssl/err.h>
-#include <ostream>
 #include <stdexcept>
 #include <string>
 
 void handle_openssl_error(const std::string &msg) {
   ERR_print_errors_fp(stderr);
-  std::cout << msg << std::endl;
+  throw std::runtime_error(msg);
 }
 
 std::string uc_to_str(unsigned char *uc, int len) {

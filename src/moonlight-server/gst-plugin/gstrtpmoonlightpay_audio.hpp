@@ -38,6 +38,8 @@ struct _gst_rtp_moonlight_pay_audio {
   bool encrypt;
   std::string aes_key;
   std::string aes_iv;
+  /* Set after the first failed encryption, so a bad key or IV logs once, not once per packet */
+  bool encrypt_failed;
 
   int packet_duration;
 

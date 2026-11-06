@@ -463,6 +463,31 @@ TEST_CASE("HTTP Pairing", "[MoonlightProtocol]") {
     REQUIRE(phase_4.status == SimpleWeb::StatusCode::client_error_bad_request);
   }
 
+  SECTION("Malformed challenges are rejected") {
+    auto phase_1 = endpoints::pair_phase1(app_state,
+                                          "0.0.0.0",
+                                          "1.1.1.1",
+                                          moonlight_data.client_cert_base64,
+                                          moonlight_data.salt,
+                                          cache_key);
+    REQUIRE(phase_1->get_future().get().status == SimpleWeb::StatusCode::success_ok);
+    auto client_cache = *(app_state->pairing_cache->load().get().find(cache_key));
+
+    // 15 bytes: not a whole AES block, so the unpadded ECB decrypt fails
+    auto bad_challenge = std::string("0102030405060708090a0b0c0d0e0f");
+    auto bad_phase_2 = endpoints::pair_phase2(app_state, client_cache, bad_challenge, cache_key);
+    REQUIRE(bad_phase_2.status == SimpleWeb::StatusCode::client_error_bad_request);
+    REQUIRE(bad_phase_2.xml.get<int>("root.paired") == 0);
+
+    client_cache.last_phase = state::PAIR_PHASE::GETSERVERCERT;
+    REQUIRE(endpoints::pair_phase2(app_state, client_cache, moonlight_data.client_challenge, cache_key).status ==
+            SimpleWeb::StatusCode::success_ok);
+
+    auto bad_phase_3 = endpoints::pair_phase3(app_state, client_cache, bad_challenge, cache_key);
+    REQUIRE(bad_phase_3.status == SimpleWeb::StatusCode::client_error_bad_request);
+    REQUIRE(bad_phase_3.xml.get<int>("root.paired") == 0);
+  }
+
   SECTION("Testing null params") {
     auto phase_1 = endpoints::pair_phase1(app_state, "0.0.0.0", "1.1.1.1", {}, {}, cache_key);
     auto result = phase_1->get_future().get();

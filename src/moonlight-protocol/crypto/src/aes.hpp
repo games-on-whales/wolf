@@ -16,6 +16,8 @@ CIPHER_CTX_ptr init(const evp_cipher_st *chiper,
                     bool is_encryption,
                     bool padding = true) {
   CIPHER_CTX_ptr ctx(EVP_CIPHER_CTX_new(), ::EVP_CIPHER_CTX_free);
+  if (!ctx)
+    handle_openssl_error("EVP_CIPHER_CTX_new failed");
 
   if (is_encryption) {
     if (EVP_EncryptInit_ex(ctx.get(),

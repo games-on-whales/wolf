@@ -28,6 +28,9 @@ TEST_CASE("Control AES Encryption", "CONTROL") {
     auto decrypted = decrypt_packet(encrypted_packet, aes_key);
     REQUIRE_THAT(decrypted, Equals(payload));
     REQUIRE_THAT(packet_type_to_str(((ControlPacket *)decrypted.data())->type), Equals("IDR_FRAME"));
+
+    encrypted_packet.gcm_tag[0] ^= 1;
+    REQUIRE_THROWS_AS(decrypt_packet(encrypted_packet, aes_key), std::runtime_error);
   }
 
   SECTION("29 bytes") { // original packet: 010019000100000021DBB8DC0590AF3A2B20BCE5A347DE31D366E5B9C5"
