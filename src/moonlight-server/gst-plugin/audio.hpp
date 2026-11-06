@@ -111,10 +111,16 @@ static GstBuffer *create_rtp_audio_buffer(const gst_rtp_moonlight_pay_audio &rtp
 static GstBufferList *split_into_rtp(gst_rtp_moonlight_pay_audio *rtpmoonlightpay, GstBuffer *inbuf) {
   bool time_to_fec = (rtpmoonlightpay->cur_seq_number + 1) % AUDIO_DATA_SHARDS == 0;
 
-  /* Encrypting may throw: create the first buffer before anything that would need freeing */
-  auto rtp_audio_buf = create_rtp_audio_buffer(*rtpmoonlightpay, inbuf);
-
   GstBufferList *rtp_packets = gst_buffer_list_new();
+
+  GstBuffer *rtp_audio_buf;
+  try {
+    rtp_audio_buf = create_rtp_audio_buffer(*rtpmoonlightpay, inbuf);
+  } catch (const std::exception &e) {
+    // Encrypting failed (OpenSSL error, or an IV that isn't a number): drop this packet
+    logs::log(logs::warning, "Unable to encrypt audio packet: {}", e.what());
+    return rtp_packets;
+  }
   gst_buffer_list_add(rtp_packets, rtp_audio_buf);
 
   // save the payload locally

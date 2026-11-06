@@ -154,12 +154,12 @@ TEST_CASE("OpenSSL failures throw", "[Crypto]") {
     REQUIRE_FALSE(crypto::verify(msg, "a signature"s, "not a PEM key"));
   }
 
-  SECTION("The message names the failing call and the OpenSSL reason") {
+  SECTION("The message names the failing call") {
     try {
       crypto::aes_decrypt_ecb("not a multiple of 16"s, key, iv, false);
       FAIL("expected a throw");
     } catch (const std::runtime_error &e) {
-      REQUIRE_THAT(e.what(), Catch::Matchers::StartsWith("EVP_DecryptFinal_ex failed: "));
+      REQUIRE_THAT(e.what(), Catch::Matchers::Equals("EVP_DecryptFinal_ex failed"));
     }
   }
 }

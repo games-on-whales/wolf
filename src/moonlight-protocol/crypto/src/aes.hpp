@@ -129,9 +129,8 @@ std::string decrypt_authenticated(EVP_CIPHER_CTX *ctx, std::string_view cipherte
     handle_openssl_error("EVP_CTRL_GCM_SET_TAG failed");
 
   int plaintext_len = len;
-  /* A failure here means the GCM tag didn't verify: the message was tampered with or uses the wrong key/IV */
   if (EVP_DecryptFinal_ex(ctx, plaintext + len, &len) != 1)
-    throw std::runtime_error("AES GCM tag verification failed");
+    handle_openssl_error("EVP_DecryptFinal_ex failed");
 
   plaintext_len += len;
   return uc_to_str(plaintext, plaintext_len);
