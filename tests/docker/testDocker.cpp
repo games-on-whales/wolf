@@ -10,6 +10,17 @@
 #include <state/config.hpp>
 #include <state/serialised_config.hpp>
 
+#ifdef __linux__
+#include <atomic>
+#include <chrono>
+#include <cstring>
+#include <filesystem>
+#include <sys/socket.h>
+#include <sys/un.h>
+#include <thread>
+#include <unistd.h>
+#endif
+
 using Catch::Matchers::Contains;
 using Catch::Matchers::Equals;
 
@@ -63,6 +74,112 @@ TEST_CASE("Docker API", "[DOCKER]") {
 
   REQUIRE(docker_api.inspect_image("hello-world").has_value());
   REQUIRE(!docker_api.inspect_image("hello-world:non-existent-tag").has_value());
+}
+
+#ifdef __linux__
+namespace {
+/**
+ * Minimal fake Docker daemon: listens on a temporary Unix socket, answers the `GET /version` probe
+ * (needed to construct DockerAPI) and then accepts further requests without ever replying,
+ * simulating a hung daemon.
+ */
+struct HungDockerServer {
+  std::string socket_path;
+  int listen_fd = -1;
+  std::atomic<bool> running{true};
+  std::thread accept_thread;
+
+  explicit HungDockerServer(std::string path) : socket_path(std::move(path)) {
+    listen_fd = socket(AF_UNIX, SOCK_STREAM, 0);
+    REQUIRE(listen_fd >= 0);
+
+    /* Make accept() periodic so that the destructor below can always join the thread */
+    struct timeval tv {};
+    tv.tv_sec = 0;
+    tv.tv_usec = 100 * 1000;
+    setsockopt(listen_fd, SOL_SOCKET, SO_RCVTIMEO, &tv, sizeof(tv));
+
+    struct sockaddr_un addr {};
+    addr.sun_family = AF_UNIX;
+    std::strncpy(addr.sun_path, socket_path.c_str(), sizeof(addr.sun_path) - 1);
+    REQUIRE(bind(listen_fd, reinterpret_cast<struct sockaddr *>(&addr), sizeof(addr)) == 0);
+    REQUIRE(listen(listen_fd, 1) == 0);
+
+    accept_thread = std::thread([this] { run(); });
+  }
+
+  void run() {
+    while (running) {
+      int conn_fd = accept(listen_fd, nullptr, nullptr);
+      if (conn_fd < 0) {
+        if (!running) {
+          break;
+        }
+        continue;
+      }
+
+      /* Read the request head, up to the end of the HTTP headers */
+      std::string request;
+      char buf[512];
+      while (request.find("\r\n\r\n") == std::string::npos) {
+        auto n = read(conn_fd, buf, sizeof(buf));
+        if (n <= 0) {
+          break;
+        }
+        request.append(buf, static_cast<size_t>(n));
+      }
+
+      if (request.find("/version") != std::string::npos) {
+        std::string body = R"({"ApiVersion":"1.44"})";
+        auto reply = "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: " +
+                     std::to_string(body.size()) + "\r\nConnection: close\r\n\r\n" + body;
+        (void)write(conn_fd, reply.data(), reply.size());
+      } else {
+        /* Simulate a hung daemon: keep the connection open but never answer */
+        char sink[64];
+        while (running && read(conn_fd, sink, sizeof(sink)) > 0) {
+        }
+      }
+
+      close(conn_fd);
+    }
+  }
+
+  ~HungDockerServer() {
+    running = false;
+    if (listen_fd >= 0) {
+      shutdown(listen_fd, SHUT_RDWR);
+      close(listen_fd);
+    }
+    if (accept_thread.joinable()) {
+      accept_thread.join();
+    }
+    std::error_code ec;
+    std::filesystem::remove(socket_path, ec);
+  }
+};
+} // namespace
+#endif
+
+TEST_CASE("Docker stop_by_id returns when the daemon is unresponsive", "[DOCKER]") {
+#ifdef __linux__
+  docker::init();
+
+  auto socket_path = "/tmp/wolf-test-hung-docker-" + std::to_string(getpid()) + ".sock";
+  HungDockerServer fake_daemon(socket_path);
+
+  docker::DockerAPI docker_api(socket_path);
+
+  auto start = std::chrono::steady_clock::now();
+  auto stopped = docker_api.stop_by_id("deadbeef", 1);
+  auto elapsed = std::chrono::steady_clock::now() - start;
+
+  /* The daemon never replies, so the only way out is curl's own transport timeout
+   * (`timeout_seconds + 5`); the call has to fail and come back in a bounded time. */
+  REQUIRE(!stopped);
+  REQUIRE(elapsed >= std::chrono::seconds(4));
+  REQUIRE(elapsed < std::chrono::seconds(10));
+#endif
 }
 
 TEST_CASE("Docker TOML", "[DOCKER]") {

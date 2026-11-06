@@ -267,6 +267,9 @@ bool DockerAPI::start_by_id(std::string_view id) const {
 
 bool DockerAPI::stop_by_id(std::string_view id, int timeout_seconds) const {
   if (auto conn = docker_connect(socket_path)) {
+    /* The daemon waits up to `t` seconds before sending SIGKILL; bound the whole HTTP transfer to
+     * that plus a small grace period so that a hung daemon can't block the caller forever. */
+    curl_easy_setopt(conn.value().get(), CURLOPT_TIMEOUT, static_cast<long>(timeout_seconds) + 5);
     auto raw_msg = req(
         conn.value().get(),
         POST,
