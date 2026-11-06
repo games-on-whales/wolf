@@ -241,7 +241,16 @@ static GstFlowReturn gst_rtp_moonlight_pay_audio_generate_output(GstBaseTransfor
   if (inbuf == nullptr)
     return GST_FLOW_OK;
 
-  auto rtp_packets = audio::split_into_rtp(rtpmoonlightpay_audio, inbuf);
+  GstBufferList *rtp_packets;
+  try {
+    rtp_packets = audio::split_into_rtp(rtpmoonlightpay_audio, inbuf);
+  } catch (const std::exception &e) {
+    /* An exception must not unwind through GStreamer's C streaming thread: fail the pipeline instead */
+    GST_ELEMENT_ERROR(rtpmoonlightpay_audio, STREAM, ENCODE, ("Unable to encrypt audio packet"), ("%s", e.what()));
+    gst_buffer_unref(inbuf);
+    *outbuf = nullptr;
+    return GST_FLOW_ERROR;
+  }
 
   /* Send the generated packets to any downstream listener */
   gst_pad_push_list(trans->srcpad, rtp_packets);
