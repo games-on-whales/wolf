@@ -499,6 +499,30 @@ TEST_CASE_METHOD(GStreamerTestsFixture, "Audio RTP packet creation", "[GSTPlugin
   }
 }
 
+TEST_CASE_METHOD(GStreamerTestsFixture, "Audio RTP with an IV that isn't a number", "[GSTPlugin]") {
+  auto rtpmoonlightpay = std::shared_ptr<gst_rtp_moonlight_pay_audio>(
+      (gst_rtp_moonlight_pay_audio *)g_object_new(gst_TYPE_rtp_moonlight_pay_audio, nullptr),
+      g_object_unref);
+
+  rtpmoonlightpay->encrypt = true;
+  rtpmoonlightpay->aes_key = "0123456789012345";
+  rtpmoonlightpay->aes_iv = "notanumber";
+
+  auto payload_str = "TUNZ TUNZ TUMP TUMP!"s;
+  for (int i = 0; i < 2; i++) {
+    auto payload = gst_buffer_new_and_fill(payload_str.size(), payload_str.c_str());
+    auto rtp_packets = audio::split_into_rtp(rtpmoonlightpay.get(), payload);
+
+    // The packet is dropped, and the sequence number isn't consumed
+    REQUIRE(gst_buffer_list_length(rtp_packets) == 0);
+    REQUIRE(rtpmoonlightpay->cur_seq_number == 0);
+    REQUIRE(rtpmoonlightpay->encrypt_failed);
+
+    gst_buffer_list_unref(rtp_packets);
+    gst_buffer_unref(payload);
+  }
+}
+
 TEST_CASE_METHOD(GStreamerTestsFixture, "Audio RTP without encryption", "[GSTPlugin]") {
   auto rtpmoonlightpay = std::shared_ptr<gst_rtp_moonlight_pay_audio>(
       (gst_rtp_moonlight_pay_audio *)g_object_new(gst_TYPE_rtp_moonlight_pay_audio, nullptr),
