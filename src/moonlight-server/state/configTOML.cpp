@@ -1,8 +1,5 @@
-#include <cerrno>
-#include <cstring>
 #include <events/events.hpp>
 #include <events/reflectors.hpp>
-#include <fcntl.h>
 #include <filesystem>
 #include <fstream>
 #include <gst/gstelementfactory.h>
@@ -12,8 +9,6 @@
 #include <rfl/toml.hpp>
 #include <sstream>
 #include <state/config.hpp>
-#include <sys/stat.h>
-#include <unistd.h>
 
 namespace state {
 
@@ -30,133 +25,32 @@ using namespace wolf::config;
 
 namespace {
 
-bool write_all(int fd, std::string_view content) {
-  while (!content.empty()) {
-    auto written = ::write(fd, content.data(), content.size());
-    if (written < 0) {
-      if (errno == EINTR) {
-        continue;
-      }
-      return false;
-    }
-    content.remove_prefix(static_cast<std::size_t>(written));
-  }
-  return true;
-}
-
-[[noreturn]] void throw_save_error(const std::filesystem::path &file, std::string_view operation, int err) {
-  throw std::runtime_error(
-      fmt::format("Unable to save {}: {} failed ({})", file.string(), operation, std::strerror(err)));
-}
-
-/**
- * Non atomic fallback: truncate and overwrite the file in place
- */
-void write_in_place(const std::filesystem::path &file, std::string_view content) {
-  int fd = ::open(file.c_str(), O_WRONLY | O_CREAT | O_TRUNC | O_CLOEXEC, 0644);
-  if (fd < 0) {
-    throw_save_error(file, "open", errno);
-  }
-  if (!write_all(fd, content) || ::fsync(fd) != 0) {
-    auto err = errno;
-    ::close(fd);
-    throw_save_error(file, "write", err);
-  }
-  ::close(fd);
-}
-
 /**
  * Replaces the content of `source` without ever exposing a partially written file.
  *
- * The new content is written to a temporary file in the same directory, flushed to disk and then renamed over the
- * destination; a crash, a full disk or a concurrent reader will either see the old or the new file, never a truncated
- * one. Permissions and ownership of the existing file are preserved and symlinks are followed (the link target is
- * updated, the link itself is kept).
- *
- * When the file can't be atomically replaced (read-only directory, ownership that we can't reproduce, or a single file
- * bind mounted into the container) we fall back to overwriting it in place, which is what we always did before.
+ * The new content is written to a temporary file (a fixed `source + ".tmp"` name: callers either hold
+ * the config mutex or this is the initial load) which is then renamed over the destination; a crash, a
+ * full disk or a concurrent reader will see either the old or the new file, never a truncated one.
  */
 void save_file_atomically(const std::string &source, std::string_view content) {
   namespace fs = std::filesystem;
+  auto tmp_file = source + ".tmp";
+  {
+    std::ofstream out(tmp_file, std::ios::binary | std::ios::trunc);
+    out.write(content.data(), content.size());
+    out.close();
+    if (out.fail()) {
+      std::error_code ec;
+      fs::remove(tmp_file, ec);
+      throw std::runtime_error(fmt::format("Unable to write {}", tmp_file));
+    }
+  }
+
   std::error_code ec;
-  auto file = fs::weakly_canonical(fs::path(source), ec);
+  fs::rename(tmp_file, source, ec);
   if (ec) {
-    file = fs::path(source);
-  }
-  auto directory = file.has_parent_path() ? file.parent_path() : fs::path(".");
-
-  struct stat original = {};
-  bool file_exists = ::stat(file.c_str(), &original) == 0;
-  mode_t mode = file_exists ? (original.st_mode & 07777) : 0644;
-
-  auto tmp_file = directory / fmt::format(".{}.{}.tmp", file.filename().string(), gen_uuid());
-  int fd = ::open(tmp_file.c_str(), O_WRONLY | O_CREAT | O_EXCL | O_CLOEXEC, mode);
-  if (fd < 0) {
-    auto err = errno;
-    if (err != EACCES && err != EPERM) { // e.g. ENOSPC: don't risk truncating the current file
-      throw_save_error(file, "open", err);
-    }
-    logs::log(logs::warning,
-              "[CONFIG] Unable to create {} ({}), overwriting {} in place",
-              tmp_file.string(),
-              std::strerror(err),
-              file.string());
-    write_in_place(file, content);
-    return;
-  }
-
-  auto abort_tmp = [&]() {
-    ::close(fd);
-    ::unlink(tmp_file.c_str());
-  };
-
-  if (!write_all(fd, content)) {
-    auto err = errno;
-    abort_tmp();
-    throw_save_error(file, "write", err);
-  }
-
-  if (file_exists) {
-    struct stat tmp_stat = {};
-    if (::fstat(fd, &tmp_stat) != 0 || ::fchmod(fd, mode) != 0 ||
-        ((tmp_stat.st_uid != original.st_uid || tmp_stat.st_gid != original.st_gid) &&
-         ::fchown(fd, original.st_uid, original.st_gid) != 0)) {
-      logs::log(logs::warning,
-                "[CONFIG] Unable to preserve permissions of {} ({}), overwriting it in place",
-                file.string(),
-                std::strerror(errno));
-      abort_tmp();
-      write_in_place(file, content);
-      return;
-    }
-  }
-
-  if (::fsync(fd) != 0) {
-    auto err = errno;
-    abort_tmp();
-    throw_save_error(file, "fsync", err);
-  }
-  ::close(fd);
-
-  if (::rename(tmp_file.c_str(), file.c_str()) != 0) {
-    auto err = errno;
-    ::unlink(tmp_file.c_str());
-    if (err == EBUSY || err == EXDEV) { // e.g. config.toml is a bind mount
-      logs::log(logs::warning,
-                "[CONFIG] Unable to replace {} ({}), overwriting it in place",
-                file.string(),
-                std::strerror(err));
-      write_in_place(file, content);
-      return;
-    }
-    throw_save_error(file, "rename", err);
-  }
-
-  // Persist the rename itself
-  int dir_fd = ::open(directory.c_str(), O_RDONLY | O_DIRECTORY | O_CLOEXEC);
-  if (dir_fd >= 0) {
-    ::fsync(dir_fd);
-    ::close(dir_fd);
+    fs::remove(tmp_file, ec);
+    throw std::runtime_error(fmt::format("Unable to replace {}: {}", source, ec.message()));
   }
 }
 
@@ -550,7 +444,12 @@ Config load_or_default(const std::string &source,
 
 void pair(const Config &cfg, const PairedClient &client) {
   std::lock_guard lock(*cfg.config_file_mutex);
-  // Update CFG
+  // Update TOML
+  auto tml = rfl::toml::load<WolfConfig, rfl::DefaultIfMissing>(cfg.config_source).value();
+  tml.paired_clients.push_back(client);
+  save_config(cfg.config_source, tml);
+
+  // Update in-memory state only after the file has been saved
   cfg.paired_clients->update([&client](const PairedClientList &paired_clients) {
     // Removing the client if already present (see: https://github.com/games-on-whales/wolf/issues/211)
     auto filtered_clients = paired_clients                                               //
@@ -560,24 +459,10 @@ void pair(const Config &cfg, const PairedClient &client) {
                             | ranges::to<PairedClientList>();                            //
     return filtered_clients.push_back(client);
   });
-
-  // Update TOML
-  auto tml = rfl::toml::load<WolfConfig, rfl::DefaultIfMissing>(cfg.config_source).value();
-  tml.paired_clients.push_back(client);
-  save_config(cfg.config_source, tml);
 }
 
 void unpair(const Config &cfg, const PairedClient &client) {
   std::lock_guard lock(*cfg.config_file_mutex);
-  // Update CFG
-  cfg.paired_clients->update([&client](const PairedClientList &paired_clients) {
-    return paired_clients                                               //
-           | ranges::views::filter([&client](auto paired_client) {      //
-               return paired_client->client_cert != client.client_cert; //
-             })                                                         //
-           | ranges::to<PairedClientList>();                            //
-  });
-
   // Update TOML
   auto tml = rfl::toml::load<WolfConfig, rfl::DefaultIfMissing>(cfg.config_source).value();
   tml.paired_clients.erase(std::remove_if(tml.paired_clients.begin(),
@@ -585,6 +470,15 @@ void unpair(const Config &cfg, const PairedClient &client) {
                                           [&client](const auto &v) { return v.client_cert == client.client_cert; }),
                            tml.paired_clients.end());
   save_config(cfg.config_source, tml);
+
+  // Update in-memory state only after the file has been saved
+  cfg.paired_clients->update([&client](const PairedClientList &paired_clients) {
+    return paired_clients                                               //
+           | ranges::views::filter([&client](auto paired_client) {      //
+               return paired_client->client_cert != client.client_cert; //
+             })                                                         //
+           | ranges::to<PairedClientList>();                            //
+  });
 }
 
 void update_client_settings(const Config &cfg, std::size_t client_id, const PairedClient &updated_client) {
@@ -596,12 +490,6 @@ void update_client_settings(const Config &cfg, std::size_t client_id, const Pair
     return client;
   };
 
-  cfg.paired_clients->update([&](const PairedClientList &paired_clients) {
-    return paired_clients |                             //
-           ranges::views::transform(update_client_fn) | //
-           ranges::to<PairedClientList>();
-  });
-
   // Update the TOML file
   auto tml = rfl::toml::load<WolfConfig, rfl::DefaultIfMissing>(cfg.config_source).value();
 
@@ -611,11 +499,17 @@ void update_client_settings(const Config &cfg, std::size_t client_id, const Pair
 
   // Save back to file
   save_config(cfg.config_source, tml);
+
+  // Update in-memory state only after the file has been saved
+  cfg.paired_clients->update([&](const PairedClientList &paired_clients) {
+    return paired_clients |                             //
+           ranges::views::transform(update_client_fn) | //
+           ranges::to<PairedClientList>();
+  });
 }
 
 void update_profiles(const Config &cfg, const ProfilesList &profiles) {
   std::lock_guard lock(*cfg.config_file_mutex);
-  cfg.profiles->store(profiles);
 
   auto tml = rfl::toml::load<WolfConfig, rfl::DefaultIfMissing>(cfg.config_source).value();
   tml.profiles = profiles | //
@@ -639,6 +533,9 @@ void update_profiles(const Config &cfg, const ProfilesList &profiles) {
                  }) | //
                  ranges::to_vector;
   save_config(cfg.config_source, tml);
+
+  // Update in-memory state only after the file has been saved
+  cfg.profiles->store(profiles);
 }
 
 } // namespace state

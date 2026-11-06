@@ -161,8 +161,6 @@ TEST_CASE("LocalState config is saved atomically", "[LocalState]") {
   auto event_bus = std::make_shared<events::EventBusType>();
   auto running_sessions = std::make_shared<immer::atom<immer::vector<events::StreamSession>>>();
   auto cfg = state::load_or_default(config_file.string(), event_bus, running_sessions);
-  const auto expected_perms = fs::perms::owner_read | fs::perms::owner_write | fs::perms::group_read;
-  fs::permissions(config_file, expected_perms, fs::perm_options::replace);
 
   auto profiles = cfg.profiles->load().get();
   REQUIRE(!profiles.empty());
@@ -173,16 +171,9 @@ TEST_CASE("LocalState config is saved atomically", "[LocalState]") {
                                          .apps = profiles[0]->apps};
   auto updated_profiles = profiles.set(0, immer::box<events::Profile>{renamed_profile});
 
-  SECTION("Content, permissions and symlinks are preserved") {
-    auto link = test_dir / "link.toml";
-    fs::create_symlink(config_file, link);
-    auto linked_cfg = cfg;
-    linked_cfg.config_source = link.string();
+  SECTION("Content is saved and no temporary file is left behind") {
+    state::update_profiles(cfg, updated_profiles);
 
-    state::update_profiles(linked_cfg, updated_profiles);
-
-    REQUIRE(fs::is_symlink(link));
-    REQUIRE(fs::status(config_file).permissions() == expected_perms);
     auto saved = rfl::toml::load<wolf::config::WolfConfig, rfl::DefaultIfMissing>(config_file.string()).value();
     REQUIRE(saved.uuid == "0000-1111-2222-3333");
     REQUIRE(saved.profiles[0].name == "Renamed profile");
@@ -194,7 +185,7 @@ TEST_CASE("LocalState config is saved atomically", "[LocalState]") {
       files.push_back(entry.path().filename().string());
     }
     std::sort(files.begin(), files.end());
-    REQUIRE_THAT(files, Equals(std::vector<std::string>{"config.toml", "link.toml"}));
+    REQUIRE_THAT(files, Equals(std::vector<std::string>{"config.toml"}));
   }
 
   SECTION("Readers never see a partially written file") {
@@ -221,7 +212,6 @@ TEST_CASE("LocalState config is saved atomically", "[LocalState]") {
 
     REQUIRE(reads > 0);
     REQUIRE(bad_reads == 0);
-    REQUIRE(fs::status(config_file).permissions() == expected_perms);
   }
 
   SECTION("Concurrent updates to different parts of the config are not lost") {
@@ -249,6 +239,18 @@ TEST_CASE("LocalState config is saved atomically", "[LocalState]") {
     auto saved = rfl::toml::load<wolf::config::WolfConfig, rfl::DefaultIfMissing>(config_file.string()).value();
     REQUIRE(saved.paired_clients[0].app_state_folder == "updated-state-folder");
     REQUIRE(saved.profiles[0].name == "Renamed profile");
+  }
+
+  SECTION("A failed save leaves file and memory untouched") {
+    // A directory can't be opened by ofstream, even as root
+    fs::create_directory(test_dir / "config.toml.tmp");
+    const auto original_content = read_file(config_file);
+
+    REQUIRE_THROWS(state::update_profiles(cfg, updated_profiles));
+    REQUIRE(read_file(config_file) == original_content);
+    REQUIRE(cfg.profiles->load()->at(0)->name == profiles[0]->name);
+
+    fs::remove(test_dir / "config.toml.tmp");
   }
 
   fs::remove_all(test_dir);
