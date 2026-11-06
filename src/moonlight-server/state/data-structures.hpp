@@ -18,6 +18,7 @@
 #include <immer/vector.hpp>
 #include <moonlight/control.hpp>
 #include <moonlight/data-structures.hpp>
+#include <mutex>
 #include <openssl/x509.h>
 #include <optional>
 #include <state/serialised_config.hpp>
@@ -93,6 +94,11 @@ struct Config {
    * Profiles will be shown in WolfUI
    */
   std::shared_ptr<immer::atom<ProfilesList>> profiles;
+
+  /**
+   * Serialises the read-modify-write of `config_source` (shared by all the copies of this Config)
+   */
+  std::shared_ptr<std::mutex> config_file_mutex = std::make_shared<std::mutex>();
 };
 
 /**
