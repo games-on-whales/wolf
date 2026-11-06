@@ -549,6 +549,7 @@ Config load_or_default(const std::string &source,
 }
 
 void pair(const Config &cfg, const PairedClient &client) {
+  std::lock_guard lock(*cfg.config_file_mutex);
   // Update CFG
   cfg.paired_clients->update([&client](const PairedClientList &paired_clients) {
     // Removing the client if already present (see: https://github.com/games-on-whales/wolf/issues/211)
@@ -567,6 +568,7 @@ void pair(const Config &cfg, const PairedClient &client) {
 }
 
 void unpair(const Config &cfg, const PairedClient &client) {
+  std::lock_guard lock(*cfg.config_file_mutex);
   // Update CFG
   cfg.paired_clients->update([&client](const PairedClientList &paired_clients) {
     return paired_clients                                               //
@@ -586,7 +588,7 @@ void unpair(const Config &cfg, const PairedClient &client) {
 }
 
 void update_client_settings(const Config &cfg, std::size_t client_id, const PairedClient &updated_client) {
-
+  std::lock_guard lock(*cfg.config_file_mutex);
   auto update_client_fn = [&](immer::box<PairedClient> client) -> immer::box<PairedClient> {
     if (get_client_id(client) == client_id) {
       return immer::box<PairedClient>(updated_client);
@@ -612,6 +614,7 @@ void update_client_settings(const Config &cfg, std::size_t client_id, const Pair
 }
 
 void update_profiles(const Config &cfg, const ProfilesList &profiles) {
+  std::lock_guard lock(*cfg.config_file_mutex);
   cfg.profiles->store(profiles);
 
   auto tml = rfl::toml::load<WolfConfig, rfl::DefaultIfMissing>(cfg.config_source).value();

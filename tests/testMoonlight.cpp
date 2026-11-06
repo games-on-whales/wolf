@@ -224,6 +224,33 @@ TEST_CASE("LocalState config is saved atomically", "[LocalState]") {
     REQUIRE(fs::status(config_file).permissions() == expected_perms);
   }
 
+  SECTION("Concurrent updates to different parts of the config are not lost") {
+    auto clients = cfg.paired_clients->load().get();
+    REQUIRE(!clients.empty());
+    auto client_id = state::get_client_id(clients[0]);
+    auto updated_client = state::PairedClient{.client_cert = clients[0]->client_cert,
+                                              .app_state_folder = "updated-state-folder",
+                                              .settings = clients[0]->settings};
+
+    auto other_cfg = cfg; // Copies of Config must share the same lock
+    std::thread clients_writer([&]() {
+      for (int i = 0; i < 30; i++) {
+        state::update_client_settings(cfg, client_id, updated_client);
+      }
+    });
+    std::thread profiles_writer([&]() {
+      for (int i = 0; i < 30; i++) {
+        state::update_profiles(other_cfg, updated_profiles);
+      }
+    });
+    clients_writer.join();
+    profiles_writer.join();
+
+    auto saved = rfl::toml::load<wolf::config::WolfConfig, rfl::DefaultIfMissing>(config_file.string()).value();
+    REQUIRE(saved.paired_clients[0].app_state_folder == "updated-state-folder");
+    REQUIRE(saved.profiles[0].name == "Renamed profile");
+  }
+
   fs::remove_all(test_dir);
 }
 
