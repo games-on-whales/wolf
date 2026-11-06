@@ -289,6 +289,41 @@ TEST_CASE("APPs APIs", "[API]") {
   auto apps3 = rfl::json::read<AppListResponse>(response->second).value();
   REQUIRE(apps3.success);
   REQUIRE(apps3.apps.size() == 2);
+
+  SECTION("Large responses are sent intact") {
+    // The reply must be much bigger than the socket send buffer so that async_write can't complete in a single
+    // syscall: the remaining bytes are written later, after the function that built the reply has returned.
+    const auto large_pipeline = std::string(4 * 1024 * 1024, 'x');
+    auto large_app = rfl::Reflector<wolf::core::events::App>::ReflType{.title = "Large response",
+                                                                       .id = "large-response",
+                                                                       .support_hdr = false,
+                                                                       .h264_gst_pipeline = large_pipeline,
+                                                                       .hevc_gst_pipeline = "hevc",
+                                                                       .av1_gst_pipeline = "av1",
+                                                                       .render_node = "render",
+                                                                       .opus_gst_pipeline = "opus",
+                                                                       .start_virtual_compositor = false,
+                                                                       .runner = app.runner};
+    response = req(curl.get(), HTTPMethod::POST, "http://localhost/api/v1/apps/add", rfl::json::write(large_app));
+    REQUIRE(response);
+    REQUIRE_THAT(response->second, Equals("{\"success\":true}"));
+
+    for (int i = 0; i < 3; i++) {
+      response = req(curl.get(), HTTPMethod::GET, "http://localhost/api/v1/apps");
+      REQUIRE(response);
+      REQUIRE(response->first == 200);
+      auto large_apps = rfl::json::read<AppListResponse>(response->second);
+      REQUIRE(large_apps);
+      REQUIRE(large_apps.value().apps.size() == 3);
+      REQUIRE(large_apps.value().apps[2].h264_gst_pipeline == large_pipeline);
+    }
+
+    auto large_app_delete = AppDeleteRequest{.id = "large-response"};
+    response =
+        req(curl.get(), HTTPMethod::POST, "http://localhost/api/v1/apps/delete", rfl::json::write(large_app_delete));
+    REQUIRE(response);
+    REQUIRE_THAT(response->second, Equals("{\"success\":true}"));
+  }
 }
 
 TEST_CASE("Profile APIs", "[API]") {
