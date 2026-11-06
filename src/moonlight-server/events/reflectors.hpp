@@ -156,6 +156,8 @@ template <> struct Reflector<events::StreamSession> {
     std::optional<std::string> app_id;
     std::optional<std::string> client_id;
     std::optional<ClientSettings> client_settings;
+    // Optional on input to keep the existing sessions/add request compatible.
+    std::optional<std::size_t> generation;
   };
 
   static ReflType from(const events::StreamSession &v) {
@@ -169,7 +171,8 @@ template <> struct Reflector<events::StreamSession> {
             .audio_channel_count = v.audio_channel_count,
             .app_id = v.app->base.id,
             .client_id = std::to_string(v.session_id),
-            .client_settings = v.client_settings};
+            .client_settings = v.client_settings,
+            .generation = v.generation};
   }
 };
 

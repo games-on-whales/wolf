@@ -210,6 +210,7 @@ UnixSocketServer::UnixSocketServer(boost::asio::io_context &io_context,
           .summary = "Stop a stream session",
           .request_description = APIDescription{.json_schema = rfl::json::to_schema<StreamSessionStopRequest>()},
           .response_description = {{200, {.json_schema = rfl::json::to_schema<GenericSuccessResponse>()}},
+                                   {409, {.json_schema = rfl::json::to_schema<GenericErrorResponse>()}},
                                    {500, {.json_schema = rfl::json::to_schema<GenericErrorResponse>()}}},
           .handler = [this](auto req, auto socket) { endpoint_StreamSessionStop(req, socket); },
       });
