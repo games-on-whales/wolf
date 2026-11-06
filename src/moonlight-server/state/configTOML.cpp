@@ -5,6 +5,7 @@
 #include <gst/gstregistry.h>
 #include <platforms/hw.hpp>
 #include <range/v3/view.hpp>
+#include <regex>
 #include <rfl/toml.hpp>
 #include <state/config.hpp>
 
@@ -78,6 +79,23 @@ static bool is_available(const GPU_VENDOR &gpu_vendor, const GstEncoder &setting
         });
   }
   return false;
+}
+
+/**
+ * GstVA registers the elements of the first VA device without a device suffix (ex: `vapostproc`) and the elements of
+ * every other device with its render node in the name (ex: `varenderD129postproc`).
+ * Returns the name of the element bound to the given render node, falling back to the unsuffixed one.
+ */
+static std::string get_va_element_name(std::string_view element, std::string_view render_node) {
+  auto node_name = get_render_node_name(render_node);
+  if (!node_name.empty()) {
+    auto device_element = fmt::format("va{}{}", node_name, element);
+    if (auto factory = gst_element_factory_find(device_element.c_str())) {
+      gst_object_unref(factory);
+      return device_element;
+    }
+  }
+  return fmt::format("va{}", element);
 }
 
 std::optional<GstEncoder> get_encoder(std::string_view tech,
@@ -298,6 +316,7 @@ Config load_or_default(const std::string &source,
                                                  .sink = default_gst_audio_settings.default_sink};
 
   auto video_encoder = encoder_type(*h264_encoder);
+  auto va_postproc = get_va_element_name("postproc", default_gst_render_node);
   if (use_zero_copy) {
     switch (video_encoder) {
     case NVIDIA: {
@@ -306,8 +325,10 @@ Config load_or_default(const std::string &source,
     }
     case VAAPI:
     case QUICKSYNC: {
-      auto required_caps = gstreamer::get_dma_caps("vapostproc");
-      logs::log(logs::debug, "Required DMA formats for vapostproc: {}", required_caps);
+      // The DMA formats (and modifiers) are device specific: they have to come from the postproc bound to the
+      // selected render node, otherwise the producer caps won't intersect with what the compositor can export.
+      auto required_caps = gstreamer::get_dma_caps(va_postproc);
+      logs::log(logs::debug, "Required DMA formats for {}: {}", va_postproc, required_caps);
       auto gst_caps = required_caps | //
                       ranges::views::remove_if([](const std::string &cap) {
                         // TODO: HDR isn't supported by Wolf yet (so we remove P010 and AR30 format)
@@ -318,7 +339,8 @@ Config load_or_default(const std::string &source,
                       ranges::to<std::vector>();
       if (gst_caps.empty()) {
         logs::log(logs::warning,
-                  "Unable to find any compatible DMA formats for vapostproc, disabling zero copy pipeline.");
+                  "Unable to find any compatible DMA formats for {}, disabling zero copy pipeline.",
+                  va_postproc);
         use_zero_copy = false;
       } else {
         default_base_video.producer_buffer_caps =
@@ -358,21 +380,28 @@ Config load_or_default(const std::string &source,
   auto default_av1 = utils::get_optional(default_gst_encoder_settings, av1_encoder.value_or(GstEncoder{}).plugin_name)
                          .value_or(empty_enc);
 
-  auto h264_video_params = use_zero_copy
-                               ? h264_encoder->video_params_zero_copy.value_or(default_h264.video_params_zero_copy)
-                               : h264_encoder->video_params.value_or(default_h264.video_params);
+  // The default video params use `vapostproc`, which is bound to the first VA device; when encoding on a different
+  // device make sure that frames are processed (and allocated) on the same GPU as the encoder.
+  auto bind_va_postproc = [&va_postproc](const std::string &params) {
+    return std::regex_replace(params, std::regex(R"(\bvapostproc\b)"), va_postproc);
+  };
+
+  auto h264_video_params = bind_va_postproc(
+      use_zero_copy ? h264_encoder->video_params_zero_copy.value_or(default_h264.video_params_zero_copy)
+                    : h264_encoder->video_params.value_or(default_h264.video_params));
 
   std::string hevc_video_params;
   if (hevc_encoder) {
-    hevc_video_params = use_zero_copy
-                            ? hevc_encoder->video_params_zero_copy.value_or(default_hevc.video_params_zero_copy)
-                            : hevc_encoder->video_params.value_or(default_hevc.video_params);
+    hevc_video_params = bind_va_postproc(
+        use_zero_copy ? hevc_encoder->video_params_zero_copy.value_or(default_hevc.video_params_zero_copy)
+                      : hevc_encoder->video_params.value_or(default_hevc.video_params));
   }
 
   std::string av1_video_params;
   if (av1_encoder) {
-    av1_video_params = use_zero_copy ? av1_encoder->video_params_zero_copy.value_or(default_av1.video_params_zero_copy)
-                                     : av1_encoder->video_params.value_or(default_av1.video_params);
+    av1_video_params = bind_va_postproc(
+        use_zero_copy ? av1_encoder->video_params_zero_copy.value_or(default_av1.video_params_zero_copy)
+                      : av1_encoder->video_params.value_or(default_av1.video_params));
   }
 
   auto clients_atom = std::make_shared<immer::atom<PairedClientList>>(paired_clients);
