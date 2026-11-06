@@ -9,12 +9,17 @@
 
 using Catch::Matchers::Equals;
 
+#include <atomic>
 #include <crypto/crypto.hpp>
+#include <filesystem>
+#include <fstream>
 #include <moonlight/protocol.hpp>
 #include <range/v3/view.hpp>
 #include <rest/helpers.hpp>
+#include <rfl/toml.hpp>
 #include <state/config.hpp>
 #include <streaming/streaming.hpp>
+#include <thread>
 
 using namespace moonlight;
 using namespace state;
@@ -139,6 +144,87 @@ TEST_CASE("LocalState pairing information", "[LocalState]") {
     state::unpair(cfg, {another_cert});
     REQUIRE_THAT(cfg.paired_clients->load().get(), Catch::Matchers::SizeIs(0));
   }
+}
+
+static std::string read_file(const std::filesystem::path &path) {
+  std::ifstream in(path, std::ios::binary);
+  return {std::istreambuf_iterator<char>(in), std::istreambuf_iterator<char>()};
+}
+
+TEST_CASE("LocalState config is saved atomically", "[LocalState]") {
+  namespace fs = std::filesystem;
+  auto test_dir = fs::temp_directory_path() / ("wolf-config-" + state::gen_uuid());
+  fs::create_directories(test_dir);
+  auto config_file = test_dir / "config.toml";
+  fs::copy_file("config.test.toml", config_file);
+
+  auto event_bus = std::make_shared<events::EventBusType>();
+  auto running_sessions = std::make_shared<immer::atom<immer::vector<events::StreamSession>>>();
+  auto cfg = state::load_or_default(config_file.string(), event_bus, running_sessions);
+  const auto expected_perms = fs::perms::owner_read | fs::perms::owner_write | fs::perms::group_read;
+  fs::permissions(config_file, expected_perms, fs::perm_options::replace);
+
+  auto profiles = cfg.profiles->load().get();
+  REQUIRE(!profiles.empty());
+  auto renamed_profile = events::Profile{.id = profiles[0]->id,
+                                         .name = "Renamed profile",
+                                         .icon_png_path = profiles[0]->icon_png_path,
+                                         .pin = profiles[0]->pin,
+                                         .apps = profiles[0]->apps};
+  auto updated_profiles = profiles.set(0, immer::box<events::Profile>{renamed_profile});
+
+  SECTION("Content, permissions and symlinks are preserved") {
+    auto link = test_dir / "link.toml";
+    fs::create_symlink(config_file, link);
+    auto linked_cfg = cfg;
+    linked_cfg.config_source = link.string();
+
+    state::update_profiles(linked_cfg, updated_profiles);
+
+    REQUIRE(fs::is_symlink(link));
+    REQUIRE(fs::status(config_file).permissions() == expected_perms);
+    auto saved = rfl::toml::load<wolf::config::WolfConfig, rfl::DefaultIfMissing>(config_file.string()).value();
+    REQUIRE(saved.uuid == "0000-1111-2222-3333");
+    REQUIRE(saved.profiles[0].name == "Renamed profile");
+    REQUIRE(saved.profiles.size() == profiles.size());
+
+    // No temporary file left behind
+    auto files = std::vector<std::string>{};
+    for (const auto &entry : fs::directory_iterator(test_dir)) {
+      files.push_back(entry.path().filename().string());
+    }
+    std::sort(files.begin(), files.end());
+    REQUIRE_THAT(files, Equals(std::vector<std::string>{"config.toml", "link.toml"}));
+  }
+
+  SECTION("Readers never see a partially written file") {
+    state::update_profiles(cfg, updated_profiles);
+    const auto expected_content = read_file(config_file);
+    REQUIRE(!expected_content.empty());
+
+    std::atomic_bool writer_done = false;
+    std::atomic_int reads = 0;
+    std::atomic_int bad_reads = 0;
+    std::thread reader([&]() {
+      while (!writer_done) {
+        if (read_file(config_file) != expected_content) {
+          bad_reads++;
+        }
+        reads++;
+      }
+    });
+    for (int i = 0; i < 100; i++) {
+      state::update_profiles(cfg, updated_profiles);
+    }
+    writer_done = true;
+    reader.join();
+
+    REQUIRE(reads > 0);
+    REQUIRE(bad_reads == 0);
+    REQUIRE(fs::status(config_file).permissions() == expected_perms);
+  }
+
+  fs::remove_all(test_dir);
 }
 
 TEST_CASE("Mocked serverinfo", "[MoonlightProtocol]") {
