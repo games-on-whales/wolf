@@ -26,7 +26,7 @@ RUN <<_GSTREAMER_INSTALL
         ca-certificates git \
         flex x265-devel opus-devel nasm zxing-cpp-devel zbar-devel libdrm-devel libva-devel \
         libvpl-devel libunwind libcap \
-        libX11-devel libxcb-devel libXfixes-devel libXdamage-devel wayland-devel wayland-protocols-devel pulseaudio-libs-devel glib2-devel \
+        libX11-devel libxcb-devel libXfixes-devel libXdamage-devel libxkbcommon-devel libxkbcommon-x11-devel wayland-devel wayland-protocols-devel pulseaudio-libs-devel glib2-devel \
         openjpeg2-devel lcms2-devel cairo-devel cairo-gobject-devel libwebp librsvg2-devel libaom-devel \
         harfbuzz-devel pango-devel libsoup-devel libglvnd-devel mesa-libgbm-devel mesa-libEGL-devel \
         mesa-libGLU-devel freeglut-devel mesa-libGL-devel mesa-libGLES-devel libgudev-devel

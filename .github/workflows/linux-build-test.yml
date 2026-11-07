@@ -44,7 +44,7 @@ jobs:
         run: |
           sudo apt-get update -y
           sudo apt-get install -y \
-              libwayland-dev libwayland-server0 libinput-dev libxkbcommon-dev libgbm-dev \
+              libwayland-dev libwayland-server0 libinput-dev libxkbcommon-dev libxkbcommon-x11-dev libgbm-dev \
               libgstreamer1.0-dev libgstreamer-plugins-base1.0-dev \
               libgstreamer-plugins-bad1.0-dev libvulkan-dev
 
@@ -57,12 +57,11 @@ jobs:
       - name: Setup gst-wayland-display
         if: steps.cache-gst-wayland.outputs.cache-hit != 'true'
         run: |
-          # gst-wayland-display at this commit hard-requires gstreamer-vulkan-1.0 >= 1.28
-          # (unconditionally, not behind a cargo feature). Ubuntu 26.04's apt GStreamer
-          # (1.28.2) satisfies it; fail loudly if this ever regresses on a runner bump.
-          pkg-config --atleast-version=1.28 gstreamer-vulkan-1.0 || {
-            echo "::error::gstreamer-vulkan-1.0 >= 1.28 is required to build gst-wayland-display at $GST_WAYLAND_COMMIT"
-            pkg-config --modversion gstreamer-vulkan-1.0 || true
+          # Probe exactly like gstreamer-vulkan-sys's build script does: --libs --cflags
+          # walks the full Requires tree (e.g. Ubuntu's xkbcommon/xkbcommon-x11), while
+          # --atleast-version does not and can pass on a broken setup.
+          pkg-config --print-errors --libs --cflags 'gstreamer-vulkan-1.0 >= 1.28' > /dev/null || {
+            echo "::error::gstreamer-vulkan-1.0 >= 1.28 (with its full Requires tree) is required to build gst-wayland-display at $GST_WAYLAND_COMMIT"
             exit 1
           }
           git clone https://github.com/games-on-whales/gst-wayland-display
