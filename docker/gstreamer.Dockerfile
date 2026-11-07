@@ -84,6 +84,12 @@ RUN <<_GSTREAMER_INSTALL
         -Dtls=disabled \
         -Dgst-examples=disabled \
         -Dlibav=disabled \
+        -Dlibnice=disabled \
+        -Dges=disabled \
+        -Ddevtools=disabled \
+        -Dsharp=disabled \
+        -Dintrospection=disabled \
+        -Dnls=disabled \
         -Dtests=disabled \
         -Dexamples=disabled \
         -Ddoc=disabled \
