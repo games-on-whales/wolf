@@ -6,6 +6,7 @@
 #include <gst/cuda/gstcudaloader.h>
 #include <gst/cuda/gstcudautils.h>
 #include <helpers/logger.hpp>
+#include <optional>
 #include <sys/stat.h>
 #include <sys/sysmacros.h>
 #include <vector>
@@ -26,7 +27,7 @@ bool init() {
 namespace fs = std::filesystem;
 
 std::optional<std::string> getPciBusIdFromDri(const fs::path &driPath) {
-  struct stat st {};
+  struct stat st{};
   if (stat(driPath.c_str(), &st) != 0) {
     return std::nullopt;
   }
