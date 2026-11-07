@@ -105,6 +105,16 @@ TEST_CASE("AES gcm", "[Crypto]") {
 
   auto [encrypted2, tag2] = crypto::aes_encrypt_gcm(msg, key, iv, (int)iv.size(), false);
   REQUIRE(crypto::aes_decrypt_gcm(encrypted2, key, tag2, iv, iv.size(), false) == msg);
+
+  SECTION("Tampered tag is rejected") {
+    tag2[0] ^= 1;
+    REQUIRE_THROWS_AS(crypto::aes_decrypt_gcm(encrypted2, key, tag2, iv, iv.size(), false), std::runtime_error);
+  }
+
+  SECTION("Tampered ciphertext is rejected") {
+    encrypted2[0] ^= 1;
+    REQUIRE_THROWS_AS(crypto::aes_decrypt_gcm(encrypted2, key, tag2, iv, iv.size(), false), std::runtime_error);
+  }
 }
 
 TEST_CASE("AES cbc", "[Crypto]") {
@@ -114,6 +124,44 @@ TEST_CASE("AES cbc", "[Crypto]") {
 
   auto encrypted = crypto::aes_encrypt_cbc(msg, key, iv, true);
   REQUIRE(crypto::aes_decrypt_cbc(encrypted, key, iv, true) == msg);
+}
+
+TEST_CASE("OpenSSL failures throw", "[Crypto]") {
+  auto key = "0123456789012345"s;
+  auto msg = "a message to be sent!"s;
+  auto iv = "1234567890123456"s;
+
+  SECTION("CBC: wrong key fails the padding check") {
+    auto encrypted = crypto::aes_encrypt_cbc(msg, key, iv, true);
+    REQUIRE_THROWS_AS(crypto::aes_decrypt_cbc(encrypted, "5432109876543210"s, iv, true), std::runtime_error);
+  }
+
+  SECTION("ECB: unpadded ciphertext that isn't a whole number of blocks") {
+    REQUIRE_THROWS_AS(crypto::aes_decrypt_ecb("not a multiple of 16"s, key, iv, false), std::runtime_error);
+  }
+
+  SECTION("GCM: tampered tag") {
+    auto [encrypted, tag] = crypto::aes_encrypt_gcm(msg, key, iv, (int)iv.size(), false);
+    tag[0] ^= 0x01;
+    REQUIRE_THROWS_AS(crypto::aes_decrypt_gcm(encrypted, key, tag, iv, (int)iv.size(), false), std::runtime_error);
+  }
+
+  SECTION("Sign: unparseable private key") {
+    REQUIRE_THROWS_AS(crypto::sign(msg, "not a PEM key"), std::runtime_error);
+  }
+
+  SECTION("Verify: unparseable public key is a failed verification, not an exception") {
+    REQUIRE_FALSE(crypto::verify(msg, "a signature"s, "not a PEM key"));
+  }
+
+  SECTION("The message names the failing call") {
+    try {
+      crypto::aes_decrypt_ecb("not a multiple of 16"s, key, iv, false);
+      FAIL("expected a throw");
+    } catch (const std::runtime_error &e) {
+      REQUIRE_THAT(e.what(), Catch::Matchers::Equals("EVP_DecryptFinal_ex failed"));
+    }
+  }
 }
 
 TEST_CASE("OpenSSL sign", "[Crypto]") {

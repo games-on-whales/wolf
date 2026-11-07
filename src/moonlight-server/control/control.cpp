@@ -86,8 +86,13 @@ bool encrypt_and_send(std::string_view payload,
                       std::string_view aes_key,
                       immer::box<std::shared_ptr<ENetPeer>> connected_client) {
   if (auto enet_client = connected_client->get()) {
-    auto encrypted = control::encrypt_packet(aes_key, 0, payload); // TODO: seq?
-    return send_packet({(char *)encrypted.get(), encrypted->full_size()}, enet_client);
+    try {
+      auto encrypted = control::encrypt_packet(aes_key, 0, payload); // TODO: seq?
+      return send_packet({(char *)encrypted.get(), encrypted->full_size()}, enet_client);
+    } catch (const std::runtime_error &e) {
+      logs::log(logs::warning, "[ENET] Unable to encrypt outgoing packet: {}", e.what());
+      return false;
+    }
   } else {
     logs::log(logs::warning, "[ENET] Failed to send packet, client is not connected");
     return false;

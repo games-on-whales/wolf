@@ -124,8 +124,8 @@ static GstBuffer *encrypt_payload(const std::string &aes_key, const std::string 
   gst_buffer_map(inbuf, &info, GST_MAP_READ);
   std::string packet_content((char *)info.data, gst_buffer_get_size(inbuf));
 
-  auto encrypted = crypto::aes_encrypt_cbc(packet_content, aes_key, aes_iv, true);
-
   gst_buffer_unmap(inbuf, &info);
+
+  auto encrypted = crypto::aes_encrypt_cbc(packet_content, aes_key, aes_iv, true);
   return gst_buffer_new_and_fill(encrypted.size(), encrypted.c_str());
 }

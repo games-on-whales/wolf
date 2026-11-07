@@ -126,7 +126,14 @@ std::shared_ptr<boost::promise<XMLResult>> pair_phase1(const immer::box<state::A
   future_pin->get_future().then(
       [state, salt, client_cert_str, cache_key, future_result](boost::future<std::string> fut_pin) {
         auto server_pem = x509::get_cert_pem(state->host->server_cert);
-        auto result = moonlight::pair::get_server_cert(fut_pin.get(), salt, server_pem);
+        std::pair<XML, std::string> result;
+        try {
+          result = moonlight::pair::get_server_cert(fut_pin.get(), salt, server_pem);
+        } catch (const std::runtime_error &e) {
+          logs::log(logs::warning, "Pairing failed (phase 1): {}", e.what());
+          future_result->set_value({SimpleWeb::StatusCode::client_error_bad_request, fail_pair("Pairing failed")});
+          return;
+        }
 
         auto client_cert_parsed = crypto::hex_to_str(client_cert_str, true);
 
@@ -153,8 +160,14 @@ XMLResult pair_phase2(const immer::box<state::AppState> &state,
   client_cache.last_phase = state::PAIR_PHASE::CLIENTCHALLENGE;
 
   auto server_cert_signature = x509::get_cert_signature(state->host->server_cert);
-  auto [xml, server_secret_pair] =
-      moonlight::pair::send_server_challenge(client_cache.aes_key, client_challenge, server_cert_signature);
+  std::pair<XML, std::pair<std::string, std::string>> challenge;
+  try {
+    challenge = moonlight::pair::send_server_challenge(client_cache.aes_key, client_challenge, server_cert_signature);
+  } catch (const std::runtime_error &e) {
+    logs::log(logs::warning, "Pairing failed (phase 2): {}", e.what());
+    return {SimpleWeb::StatusCode::client_error_bad_request, fail_pair("Invalid client challenge")};
+  }
+  auto [xml, server_secret_pair] = challenge;
 
   auto [server_secret, server_challenge] = server_secret_pair;
   client_cache.server_secret = server_secret;
@@ -175,10 +188,17 @@ XMLResult pair_phase3(const immer::box<state::AppState> &state,
   }
   client_cache.last_phase = state::PAIR_PHASE::SERVERCHALLENGERESP;
 
-  auto [xml, client_hash] = moonlight::pair::get_client_hash(client_cache.aes_key,
-                                                             client_cache.server_secret.value(),
-                                                             server_challenge,
-                                                             x509::get_pkey_content(state->host->server_pkey));
+  std::pair<XML, std::string> hash_result;
+  try {
+    hash_result = moonlight::pair::get_client_hash(client_cache.aes_key,
+                                                   client_cache.server_secret.value(),
+                                                   server_challenge,
+                                                   x509::get_pkey_content(state->host->server_pkey));
+  } catch (const std::runtime_error &e) {
+    logs::log(logs::warning, "Pairing failed (phase 3): {}", e.what());
+    return {SimpleWeb::StatusCode::client_error_bad_request, fail_pair("Invalid server challenge response")};
+  }
+  auto [xml, client_hash] = hash_result;
   client_cache.client_hash = client_hash;
   state->pairing_cache->update([&](const immer::map<std::string, state::PairCache> &pairing_cache) {
     return pairing_cache.set(cache_key, client_cache);
