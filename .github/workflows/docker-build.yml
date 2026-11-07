@@ -21,7 +21,7 @@ concurrency:
 
 env:
   GPU_DRIVERS_VERSION: 2025.05
-  GSTREAMER_VERSION: 1.26.7
+  GSTREAMER_VERSION: 1.28.4
 
 jobs:
   buildx:

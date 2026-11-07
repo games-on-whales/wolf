@@ -1,4 +1,4 @@
-ARG BASE_IMAGE=ghcr.io/games-on-whales/gstreamer:1.26.7
+ARG BASE_IMAGE=ghcr.io/games-on-whales/gstreamer:1.28.4
 ########################################################
 FROM $BASE_IMAGE AS wolf-builder
 
@@ -25,6 +25,7 @@ RUN dnf install -y \
     libdrm-devel \
     pciutils-devel \
     glib2-devel mesa-libEGL-devel mesa-libGLES-devel libglvnd-devel \
+    vulkan-headers \
     && dnf clean all
 
 ## Install Rust in order to build our custom compositor
@@ -42,7 +43,7 @@ RUN <<_GST_WAYLAND_DISPLAY
 
     git clone https://github.com/games-on-whales/gst-wayland-display
     cd gst-wayland-display
-    git checkout 016b4fc
+    git checkout 0121934
     # Pinned because it can cause issues when RUST_VERSION isn't the absolute latest
     cargo install cargo-c@0.10.23 --locked
     cargo cinstall --features="cuda" --prefix=/usr/local/lib/x86_64-linux-gnu/ --libdir=/usr/local/lib/x86_64-linux-gnu/gstreamer-1.0
@@ -90,6 +91,7 @@ RUN dnf install -y \
 RUN dnf install -y \
     libwayland-server libinput libxkbcommon mesa-libgbm \
     libglvnd mesa-libGL mesa-libEGL mesa-libGLES xorg-x11-server-Xwayland hwdata \
+    vulkan-loader mesa-vulkan-drivers \
     && dnf clean all
 
 # Embedded PulseAudio: Wolf runs its own PulseAudio server inside this container
