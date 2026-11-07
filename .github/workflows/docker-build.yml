@@ -20,7 +20,7 @@ concurrency:
   cancel-in-progress: false
 
 env:
-  GPU_DRIVERS_VERSION: 2025.05
+  GPU_DRIVERS_VERSION: 2026.11
   GSTREAMER_VERSION: 1.28.4
 
 jobs:

@@ -14,10 +14,18 @@ FROM $BASE_IMAGE
 # Fedora's stock Mesa is built without the patent-encumbered H.264/HEVC VA-API
 # entrypoints, so we pull the same Mesa version rebuilt from RPM Fusion's
 # freeworld repo, which ships them (installs into /usr/lib64/dri-freeworld/).
+# The same restriction applies to Vulkan video encode: stock Mesa only exposes
+# the patent-free AV1 encode extension, so the Vulkan H.264/HEVC encoders never
+# register. mesa-vulkan-drivers-freeworld ships RADV/ANV ICDs with H.264/HEVC
+# (own icd.d jsons pointing at /usr/lib64/dri-freeworld/). It conflicts with the
+# stock mesa-vulkan-drivers package: downstream images must exclude the stock
+# one from every dnf install, or the weak deps of the mesa packages pull it
+# back in and break the build.
 ARG REQUIRED_PACKAGES="libva libva-utils \
                        intel-media-driver \
                        libvpl \
-                       mesa-va-drivers-freeworld"
+                       mesa-va-drivers-freeworld \
+                       mesa-vulkan-drivers-freeworld"
 
 RUN dnf install -y \
       https://mirrors.rpmfusion.org/free/fedora/rpmfusion-free-release-$(rpm -E %fedora).noarch.rpm \

@@ -1,4 +1,4 @@
-ARG BASE_IMAGE=ghcr.io/games-on-whales/gpu-drivers:2025.05
+ARG BASE_IMAGE=ghcr.io/games-on-whales/gpu-drivers:2026.11
 FROM $BASE_IMAGE AS builder
 
 # gst-wayland-display's patches/ chain must be applied to the GStreamer tree before
@@ -22,16 +22,20 @@ RUN <<_GSTREAMER_INSTALL
 
     # x265-devel comes from RPM Fusion free, enabled by the gpu-drivers base image
     DEV_PACKAGES=" \
-        gcc gcc-c++ ninja-build meson cmake ccache bison libatomic \
+        gcc gcc-c++ ninja-build meson cmake ccache bison libatomic glslang \
         ca-certificates git \
         flex x265-devel opus-devel nasm zxing-cpp-devel zbar-devel libdrm-devel libva-devel \
-        libvpl-devel libunwind libcap \
+        libvpl-devel libunwind libcap vulkan-loader-devel \
         libX11-devel libxcb-devel libXfixes-devel libXdamage-devel libxkbcommon-devel libxkbcommon-x11-devel wayland-devel wayland-protocols-devel pulseaudio-libs-devel glib2-devel \
         openjpeg2-devel lcms2-devel cairo-devel cairo-gobject-devel libwebp librsvg2-devel libaom-devel \
         harfbuzz-devel pango-devel libsoup-devel libglvnd-devel mesa-libgbm-devel mesa-libEGL-devel \
         mesa-libGLU-devel freeglut-devel mesa-libGL-devel mesa-libGLES-devel libgudev-devel
         "
-    dnf install -y $DEV_PACKAGES
+    # mesa-vulkan-drivers is excluded: the mesa packages recommend it as a weak
+    # dependency, it file-conflicts with mesa-vulkan-drivers-freeworld from the
+    # gpu-drivers base, and stock Mesa lacks the H.264/HEVC Vulkan encode
+    # extensions the encoders need.
+    dnf install -y --exclude=mesa-vulkan-drivers $DEV_PACKAGES
 
     # Build gstreamer with the games-on-whales patch chain
     git clone https://gitlab.freedesktop.org/gstreamer/gstreamer.git $SOURCE_PATH/gstreamer
