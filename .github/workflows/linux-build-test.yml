@@ -11,7 +11,8 @@ on:
       - "docker/**"
 
 env:
-  GST_WAYLAND_COMMIT: 0121934
+  # Quoted: 0121934 is all digits, YAML would otherwise coerce it to the integer 121934
+  GST_WAYLAND_COMMIT: "0121934"
   # Fork revision with the context-query forwarding needed by the Vulkan encode path
   GST_INTERPIPE_REV: 0c454917cb3cf4f2b2f2729f5f72a4dee072c7c9
 
