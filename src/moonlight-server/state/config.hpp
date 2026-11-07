@@ -41,12 +41,13 @@ void unpair(const Config &cfg, const PairedClient &client);
  */
 inline std::optional<PairedClient> get_client_via_ssl(const Config &cfg, x509::x509_ptr client_cert) {
   auto paired_clients = cfg.paired_clients->load();
+  auto allow_unknown_issuer = allow_unknown_issuer_certs();
   auto search_result = std::find_if(
       paired_clients->begin(),
       paired_clients->end(),
-      [&client_cert](const immer::box<PairedClient> &pair_client) {
+      [&client_cert, allow_unknown_issuer](const immer::box<PairedClient> &pair_client) {
         auto paired_cert = x509::cert_from_string(pair_client->client_cert);
-        auto verification_error = x509::verification_error(paired_cert, client_cert);
+        auto verification_error = x509::verification_error(paired_cert, client_cert, allow_unknown_issuer);
         if (verification_error) {
           logs::log(logs::trace, "X509 certificate verification error: {}", verification_error.value());
           return false;
