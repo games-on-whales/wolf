@@ -22,7 +22,8 @@ using namespace std::string_literals;
 TEST_CASE("Create PS5 pad with CONTROLLER_ARRIVAL", "[UHID]") {
   events::App app = {};
   auto session = events::StreamSession{.event_bus = std::make_shared<events::EventBusType>(),
-                                       .app = std::make_shared<events::App>(app)};
+                                       .app = std::make_shared<events::App>(app),
+                                       .session_id = 7};
   uint8_t controller_number = 1;
   auto c_pkt = pkts::CONTROLLER_ARRIVAL_PACKET{
       .controller_number = controller_number,
@@ -37,6 +38,9 @@ TEST_CASE("Create PS5 pad with CONTROLLER_ARRIVAL", "[UHID]") {
   std::vector<std::string> dev_nodes;
   dev_nodes = joypad->get_nodes();
   REQUIRE(session.joypads->load()->size() == 1);
+  auto *ps5 = dynamic_cast<inputtino::PS5Joypad *>(joypad.get());
+  REQUIRE(ps5);
+  REQUIRE_THAT(ps5->get_mac_address(), Equals(control::stable_joypad_mac(session.session_id, controller_number)));
   REQUIRE(dev_nodes.size() >= 4);
 
   // Search dev_nodes /dev/input/eventXX device and turn them into libevdev devices
