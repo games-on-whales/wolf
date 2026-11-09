@@ -428,3 +428,31 @@ TEST_CASE("uinput - paste UTF8", "[UINPUT]") {
     require_ev("KEY_LEFTCTRL", false);
   }
 }
+
+TEST_CASE("uinput - unplug joypads", "[UINPUT]") {
+  auto session = events::StreamSession{.event_bus = std::make_shared<events::EventBusType>(),
+                                       .app = std::make_shared<events::App>(events::App{}),
+                                       .session_id = 42};
+  for (uint8_t controller_number : {0, 1}) {
+    auto c_pkt = pkts::CONTROLLER_ARRIVAL_PACKET{.controller_number = controller_number,
+                                                 .controller_type = pkts::XBOX,
+                                                 .capabilities = pkts::ANALOG_TRIGGERS};
+    c_pkt.type = pkts::CONTROLLER_ARRIVAL;
+    control::handle_input(session, {}, &c_pkt);
+  }
+  REQUIRE(session.joypads->load()->size() == 2);
+
+  std::vector<events::UnplugDeviceEvent> unplugs;
+  auto observer = session.event_bus->register_handler<immer::box<events::UnplugDeviceEvent>>(
+      [&unplugs](const immer::box<events::UnplugDeviceEvent> &ev) { unplugs.push_back(ev.get()); });
+
+  control::unplug_joypad(session, 0);
+  control::unplug_joypad(session, 1);
+
+  REQUIRE(unplugs.size() == 2);
+  for (auto &unplug : unplugs) {
+    REQUIRE_THAT(unplug.session_id, Equals("42"));
+    REQUIRE_FALSE(unplug.udev_events.empty());
+  }
+  REQUIRE(session.joypads->load()->empty());
+}

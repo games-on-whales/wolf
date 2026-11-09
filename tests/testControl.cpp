@@ -3,8 +3,10 @@
 
 using Catch::Matchers::Equals;
 
+#include <control/control.hpp>
 #include <moonlight/control.hpp>
 using namespace moonlight::control;
+using namespace wolf::core;
 
 static std::string to_string(const ControlEncryptedPacket &packet) {
   return {(char *)&packet, packet.full_size()};
@@ -91,4 +93,24 @@ TEST_CASE("control joypad input packets") {
   REQUIRE(input_data->type == pkts::CONTROLLER_MULTI);
   REQUIRE(input_data->active_gamepad_mask == 1);
   REQUIRE(pressed_btns & pkts::CONTROLLER_BTN::A);
+}
+
+TEST_CASE("Current session", "[CONTROL]") {
+  auto running_sessions = std::make_shared<immer::atom<immer::vector<events::StreamSession>>>();
+  events::StreamSession session = {.enet_secret_payload = 1234, .session_id = 7};
+
+  SECTION("No running session") {
+    REQUIRE_FALSE(control::is_current_session(running_sessions, session));
+  }
+
+  running_sessions->update([&](const auto &sessions) { return sessions.push_back(session); });
+
+  SECTION("Same id and secret") {
+    REQUIRE(control::is_current_session(running_sessions, session));
+  }
+
+  SECTION("Same id, secret of an older connection") {
+    session.enet_secret_payload = 1;
+    REQUIRE_FALSE(control::is_current_session(running_sessions, session));
+  }
 }
