@@ -31,6 +31,14 @@ using namespace wolf::core;
 std::vector<std::map<std::string, std::string>>
 hidraw_events_first(std::vector<std::map<std::string, std::string>> udev_events);
 
+/**
+ * Returns the fake-udev command that announces one udev event inside a container.
+ * fake-udev puts a subsystem in the message header, "input" unless told otherwise, and libudev monitors drop
+ * messages whose header does not match the subsystem they listen to. The event's own SUBSYSTEM is passed on so
+ * that a consumer that listens to e.g. hidraw receives the event.
+ */
+std::string fake_udev_command(const std::map<std::string, std::string> &udev_ev);
+
 class RunDocker : public events::Runner {
 public:
   static RunDocker from_cfg(std::shared_ptr<events::EventBusType> ev_bus, const wolf::config::AppDocker &runner_cfg) {
