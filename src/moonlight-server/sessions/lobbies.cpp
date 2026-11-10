@@ -207,22 +207,32 @@ setup_lobbies_handlers(const immer::box<state::AppState> &app_state,
 
         // Migrate joypads BEFORE adding the session to connected_sessions, or the relayed unplug races the queued plug
         events::JoypadList joypads = session->joypads->load();
+        events::PlugDeviceEvent plug_ev{.session_id = lobby->id};
         for (auto [_joypad_nr, joypad] : joypads) {
-          events::PlugDeviceEvent plug_ev{.session_id = lobby->id};
+          events::PlugDeviceEvent joypad_ev{.session_id = lobby->id};
           std::visit(
-              [&plug_ev](auto &pad) {
-                plug_ev.udev_events = pad.get_udev_events();
-                plug_ev.udev_hw_db_entries = pad.get_udev_hw_db_entries();
+              [&joypad_ev](auto &pad) {
+                joypad_ev.udev_events = pad.get_udev_events();
+                joypad_ev.udev_hw_db_entries = pad.get_udev_hw_db_entries();
               },
               *joypad);
           // Unplug it from the current session's runner
           app_state->event_bus->fire_event(immer::box<events::UnplugDeviceEvent>{
               events::UnplugDeviceEvent{.session_id = std::to_string(session->session_id),
-                                        .udev_events = plug_ev.udev_events,
-                                        .udev_hw_db_entries = plug_ev.udev_hw_db_entries}});
+                                        .udev_events = joypad_ev.udev_events,
+                                        .udev_hw_db_entries = joypad_ev.udev_hw_db_entries}});
 
-          // Add it to the lobby runner's devices queue, addressed to the lobby id
-          // (same routing the PlugDeviceEvent relay performs for connected sessions)
+          plug_ev.udev_events.insert(plug_ev.udev_events.end(),
+                                     joypad_ev.udev_events.begin(),
+                                     joypad_ev.udev_events.end());
+          plug_ev.udev_hw_db_entries.insert(plug_ev.udev_hw_db_entries.end(),
+                                            joypad_ev.udev_hw_db_entries.begin(),
+                                            joypad_ev.udev_hw_db_entries.end());
+        }
+        if (!joypads.empty()) {
+          // Add all the joypads to the lobby runner's devices queue in one event, addressed to the lobby id
+          // (same routing the PlugDeviceEvent relay performs for connected sessions).
+          // The runner then creates every hidraw node before any input node.
           lobby->plugged_devices_queue->push(immer::box<events::PlugDeviceEvent>{plug_ev});
         }
         // TODO: hotplug pen_tablet

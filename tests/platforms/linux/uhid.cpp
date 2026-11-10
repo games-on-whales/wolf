@@ -5,6 +5,8 @@
 #include <platforms/input.hpp>
 #include <platforms/linux/uinput/uinput.hpp>
 #include <runners/docker.hpp>
+#include <sessions/handlers.hpp>
+#include <state/config.hpp>
 
 using Catch::Matchers::ContainsSubstring;
 using Catch::Matchers::EndsWith;
@@ -256,4 +258,59 @@ TEST_CASE("fake-udev command carries the subsystem of the event", "[UHID]") {
 
   REQUIRE_THAT(docker::fake_udev_command(udev_events.front()), EndsWith("--udev-subsystem hidraw"));
   REQUIRE_THAT(docker::fake_udev_command(udev_events.back()), EndsWith("--udev-subsystem input"));
+}
+
+TEST_CASE("Joining a lobby plugs all joypads in one event", "[UHID]") {
+  auto event_bus = std::make_shared<events::EventBusType>();
+  auto running_sessions = std::make_shared<immer::atom<immer::vector<events::StreamSession>>>();
+  auto config = immer::box<state::Config>(state::load_or_default("config.test.toml", event_bus, running_sessions));
+  auto app_state = immer::box<state::AppState>(state::AppState{
+      .config = config,
+      .pairing_cache = std::make_shared<immer::atom<immer::map<std::string, state::PairCache>>>(),
+      .pairing_atom = std::make_shared<immer::atom<immer::map<std::string, immer::box<events::PairSignal>>>>(),
+      .event_bus = event_bus,
+      .lobbies = std::make_shared<immer::atom<immer::vector<events::Lobby>>>(),
+      .running_sessions = running_sessions});
+
+  events::Lobby lobby{.id = "lobby-under-test",
+                      .name = "test_lobby",
+                      .started_by_profile_id = "test_profile",
+                      .multi_user = false,
+                      .stop_when_everyone_leaves = false};
+  app_state->lobbies->update([&](const immer::vector<events::Lobby> &lobbies) { return lobbies.push_back(lobby); });
+
+  // A session with an Xbox pad and a DualSense
+  auto session = events::StreamSession{.event_bus = event_bus,
+                                       .app = std::make_shared<events::App>(events::App{}),
+                                       .session_id = 1234};
+  for (auto [controller_number, type] : {std::pair{0, pkts::XBOX}, std::pair{1, pkts::PS}}) {
+    auto c_pkt = pkts::CONTROLLER_ARRIVAL_PACKET{.controller_number = (uint8_t)controller_number,
+                                                 .controller_type = type,
+                                                 .capabilities = pkts::ANALOG_TRIGGERS};
+    c_pkt.type = pkts::CONTROLLER_ARRIVAL;
+    control::handle_input(session, {}, &c_pkt);
+  }
+  std::this_thread::sleep_for(std::chrono::milliseconds(400));
+  REQUIRE(session.joypads->load()->size() == 2);
+  running_sessions->update([&](const auto &sessions) { return sessions.push_back(session); });
+
+  std::size_t expected_events = 0;
+  for (auto [_controller_number, joypad] : *session.joypads->load()) {
+    std::visit([&](auto &pad) { expected_events += pad.get_udev_events().size(); }, *joypad);
+  }
+
+  auto lobbies_handlers = sessions::setup_lobbies_handlers(app_state, "/tmp", {});
+  event_bus->fire_event(immer::box<events::JoinLobbyEvent>{
+      events::JoinLobbyEvent{.lobby_id = lobby.id, .moonlight_session_id = session.session_id}});
+
+  auto plug_ev = lobby.plugged_devices_queue->pop(std::chrono::milliseconds(100));
+  REQUIRE(plug_ev);
+  REQUIRE_FALSE(lobby.plugged_devices_queue->pop(std::chrono::milliseconds(100)));
+
+  auto plugged = docker::hidraw_events_first(plug_ev->get().udev_events);
+  REQUIRE(plugged.size() == expected_events);
+  REQUIRE_THAT(plugged.front()["SUBSYSTEM"], Equals("hidraw"));
+  for (auto &udev_ev : plugged | ranges::views::drop(1)) {
+    REQUIRE_THAT(udev_ev["DEVNAME"], StartsWith("/dev/input/"));
+  }
 }
