@@ -1,5 +1,7 @@
 #include <runners/docker.hpp>
 
+#include <algorithm>
+
 namespace wolf::core::docker {
 
 void create_udev_hw_files(std::filesystem::path base_hw_db_path,
@@ -29,6 +31,15 @@ static std::optional<std::string> get_device_major(std::string_view type) {
     }
   }
   return std::nullopt;
+}
+
+std::vector<std::map<std::string, std::string>>
+hidraw_events_first(std::vector<std::map<std::string, std::string>> udev_events) {
+  std::stable_partition(udev_events.begin(), udev_events.end(), [](const auto &udev_ev) {
+    auto subsystem = udev_ev.find("SUBSYSTEM");
+    return subsystem != udev_ev.end() && subsystem->second == "hidraw";
+  });
+  return udev_events;
 }
 
 void RunDocker::run(std::string_view session_id,
@@ -258,7 +269,7 @@ void RunDocker::run(std::string_view session_id,
             create_udev_hw_files(hw_db_path, device_ev->get().udev_hw_db_entries);
           }
 
-          for (auto udev_ev : device_ev->get().udev_events) {
+          for (auto udev_ev : hidraw_events_first(device_ev->get().udev_events)) {
             std::string cmd;
             std::string udev_msg = base64_encode(map_to_string(udev_ev));
             if (udev_ev.count("DEVNAME") == 0) {
