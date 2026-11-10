@@ -294,6 +294,17 @@ TEST_CASE("APPs APIs", "[API]") {
     // The reply must be much bigger than the socket send buffer so that async_write can't complete in a single
     // syscall: the remaining bytes are written later, after the function that built the reply has returned.
     const auto large_pipeline = std::string(4 * 1024 * 1024, 'x');
+
+    // The request/response bodies are logged at TRACE/DEBUG: keep these multi-MiB lines out of the test output
+    struct LoggingDisabled {
+      LoggingDisabled() {
+        boost::log::core::get()->set_logging_enabled(false);
+      }
+      ~LoggingDisabled() {
+        boost::log::core::get()->set_logging_enabled(true);
+      }
+    } logging_disabled;
+
     auto large_app = rfl::Reflector<wolf::core::events::App>::ReflType{.title = "Large response",
                                                                        .id = "large-response",
                                                                        .support_hdr = false,
