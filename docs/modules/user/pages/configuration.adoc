@@ -39,6 +39,10 @@ Wolf is configured via a TOML config file and some additional optional ENV varia
 |TRUE
 |Set to False in order to avoid force stop and removal of containers when the connection is closed
 
+|WOLF_UNPLUG_JOYPADS_ON_DISCONNECT
+|FALSE
+|Set to TRUE to unplug the virtual joypads whenever a Moonlight client disconnects. When the client resumes, its controllers are created again from scratch, so each physical controller gets a virtual pad of its own type even if Moonlight numbered them differently.
+
 |WOLF_WAYLAND_SOCKET_WAIT_TIMEOUT_MS
 |5000
 |The time in milliseconds to wait for the Wayland socket to appear before starting the stream runner

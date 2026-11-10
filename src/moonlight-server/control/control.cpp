@@ -2,6 +2,7 @@
 #include <control/control.hpp>
 #include <control/input_handler.hpp>
 #include <events/events.hpp>
+#include <helpers/utils.hpp>
 #include <immer/box.hpp>
 #include <state/sessions.hpp>
 #include <sys/socket.h>
@@ -127,6 +128,15 @@ std::optional<events::StreamSession> get_current_session(const enet_clients_map 
   return std::nullopt;
 }
 
+bool is_current_session(const state::SessionsAtoms &running_sessions, const events::StreamSession &session) {
+  for (const StreamSession &running : *running_sessions->load()) {
+    if (running.session_id == session.session_id && running.enet_secret_payload == session.enet_secret_payload) {
+      return true;
+    }
+  }
+  return false;
+}
+
 std::shared_ptr<ENetPeer> to_shared_ptr(ENetPeer *peer) {
   return std::shared_ptr<ENetPeer>(peer, [](auto _peer) {
     // DO NOTHING, we don't want to free peer, the lifecycle is dictated by enet
@@ -146,6 +156,24 @@ void run_control(int port,
   ENetEvent event;
 
   immer::atom<enet_clients_map> connected_clients;
+
+  const bool unplug_joypads_on_disconnect = utils::get_env("WOLF_UNPLUG_JOYPADS_ON_DISCONNECT", "FALSE") ==
+                                            std::string("TRUE");
+  if (unplug_joypads_on_disconnect) {
+    logs::log(logs::info, "[ENET] Virtual joypads will be unplugged when a client disconnects");
+  }
+
+  // The unplug has to happen before PauseStreamEvent: while the session is still connected to its lobby the unplug
+  // reaches the lobby's runner, and leaving the lobby then has no pads left to plug into Wolf UI.
+  // A peer that was replaced by a resumed connection must not unplug the pads of the new one.
+  auto unplug_joypads = [&running_sessions, unplug_joypads_on_disconnect](StreamSession &session) {
+    if (unplug_joypads_on_disconnect && is_current_session(running_sessions, session)) {
+      auto joypads = session.joypads->load();
+      for (const auto &joypad : *joypads) {
+        unplug_joypad(session, joypad.first);
+      }
+    }
+  };
 
   auto stop_ev = event_bus->register_handler<immer::box<StopStreamEvent>>(
       [&connected_clients](const immer::box<StopStreamEvent> &ev) {
@@ -180,6 +208,7 @@ void run_control(int port,
         case ENET_EVENT_TYPE_DISCONNECT:
           logs::log(logs::debug, "[ENET] disconnected client: {}:{}", client_ip, client_port);
           connected_clients.update([peer = event.peer](const enet_clients_map &m) { return m.erase(peer); });
+          unplug_joypads(client_session.value());
           event_bus->fire_event(
               immer::box<PauseStreamEvent>(PauseStreamEvent{.session_id = client_session->session_id}));
           break;
@@ -208,6 +237,7 @@ void run_control(int port,
                         crypto::str_to_hex(decrypted));
 
               if (sub_type == TERMINATION) {
+                unplug_joypads(client_session.value());
                 event_bus->fire_event(
                     immer::box<PauseStreamEvent>(PauseStreamEvent{.session_id = client_session->session_id}));
               } else if (sub_type == INPUT_DATA) {

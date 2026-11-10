@@ -38,6 +38,12 @@ void controller_arrival(const CONTROLLER_ARRIVAL_PACKET &pkt,
                         events::StreamSession &session,
                         immer::box<std::shared_ptr<ENetPeer>> connected_client);
 
+/**
+ * Unplugs the virtual joypad from wherever it is plugged (the session's runner, or the lobby via the unplug
+ * relay) and drops Wolf's reference so that the device is destroyed.
+ */
+void unplug_joypad(events::StreamSession &session, int controller_number);
+
 void controller_multi(const CONTROLLER_MULTI_PACKET &pkt,
                       events::StreamSession &session,
                       immer::box<std::shared_ptr<ENetPeer>> connected_client);
