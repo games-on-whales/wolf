@@ -8,10 +8,13 @@
 #include <fmt/core.h>
 #include <helpers/logger.hpp>
 #include <helpers/utils.hpp>
+#include <map>
 #include <platforms/hw.hpp>
 #include <range/v3/view.hpp>
 #include <state/data-structures.hpp>
+#include <string>
 #include <utility>
+#include <vector>
 
 namespace wolf::core::docker {
 
@@ -19,6 +22,14 @@ using namespace std::chrono_literals;
 using namespace ranges::views;
 using namespace utils;
 using namespace wolf::core;
+
+/**
+ * Returns the udev events of a device with its hidraw events first. The other events keep their order.
+ * Apps that read a pad through its hidraw node (e.g. SDL with HIDAPI) have to find that node when the pad's
+ * input nodes appear, so the runner creates and announces it first.
+ */
+std::vector<std::map<std::string, std::string>>
+hidraw_events_first(std::vector<std::map<std::string, std::string>> udev_events);
 
 class RunDocker : public events::Runner {
 public:
