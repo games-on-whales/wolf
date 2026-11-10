@@ -7,6 +7,7 @@
 #include <runners/docker.hpp>
 
 using Catch::Matchers::ContainsSubstring;
+using Catch::Matchers::EndsWith;
 using Catch::Matchers::Equals;
 using Catch::Matchers::StartsWith;
 
@@ -237,4 +238,22 @@ TEST_CASE("Plug a PS5 pad with its hidraw node before its input nodes", "[UHID]"
   REQUIRE(plugged.size() == udev_events.size());
   REQUIRE_THAT(plugged.front()["SUBSYSTEM"], Equals("hidraw"));
   REQUIRE_THAT(plugged.front()["DEVNAME"], StartsWith("/dev/hidraw"));
+}
+
+TEST_CASE("fake-udev command carries the subsystem of the event", "[UHID]") {
+  events::App app = {};
+  auto session = events::StreamSession{.event_bus = std::make_shared<events::EventBusType>(),
+                                       .app = std::make_shared<events::App>(app)};
+  auto c_pkt = pkts::CONTROLLER_ARRIVAL_PACKET{.controller_number = 0,
+                                               .controller_type = pkts::PS,
+                                               .capabilities = pkts::ANALOG_TRIGGERS | pkts::RUMBLE | pkts::TOUCHPAD};
+  c_pkt.type = pkts::CONTROLLER_ARRIVAL;
+  control::handle_input(session, {}, &c_pkt);
+  std::this_thread::sleep_for(std::chrono::milliseconds(400));
+
+  auto udev_events =
+      docker::hidraw_events_first(std::get<PS5Joypad>(*session.joypads->load()->at(0)).get_udev_events());
+
+  REQUIRE_THAT(docker::fake_udev_command(udev_events.front()), EndsWith("--udev-subsystem hidraw"));
+  REQUIRE_THAT(docker::fake_udev_command(udev_events.back()), EndsWith("--udev-subsystem input"));
 }

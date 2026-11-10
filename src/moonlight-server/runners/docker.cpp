@@ -42,6 +42,14 @@ hidraw_events_first(std::vector<std::map<std::string, std::string>> udev_events)
   return udev_events;
 }
 
+std::string fake_udev_command(const std::map<std::string, std::string> &udev_ev) {
+  auto cmd = fmt::format("fake-udev -m {}", base64_encode(map_to_string(udev_ev)));
+  if (auto subsystem = udev_ev.find("SUBSYSTEM"); subsystem != udev_ev.end()) {
+    cmd += fmt::format(" --udev-subsystem {}", subsystem->second);
+  }
+  return cmd;
+}
+
 void RunDocker::run(std::string_view session_id,
                     std::string_view app_state_folder,
                     std::string_view host_xdg_runtime_dir,
@@ -247,12 +255,11 @@ void RunDocker::run(std::string_view session_id,
 
             for (auto udev_ev : ev->udev_events) {
               udev_ev["ACTION"] = "remove";
-              std::string udev_msg = base64_encode(map_to_string(udev_ev));
               std::string cmd;
               if (udev_ev.count("DEVNAME") == 0) {
-                cmd = fmt::format("fake-udev -m {}", udev_msg);
+                cmd = fake_udev_command(udev_ev);
               } else {
-                cmd = fmt::format("fake-udev -m {} && rm {}", udev_msg, udev_ev["DEVNAME"]);
+                cmd = fmt::format("{} && rm {}", fake_udev_command(udev_ev), udev_ev["DEVNAME"]);
               }
               logs::log(logs::debug, "[DOCKER] Executing command: {}", cmd);
               docker_api.exec(container_id, {"/bin/bash", "-c", cmd}, "root");
@@ -271,16 +278,15 @@ void RunDocker::run(std::string_view session_id,
 
           for (auto udev_ev : hidraw_events_first(device_ev->get().udev_events)) {
             std::string cmd;
-            std::string udev_msg = base64_encode(map_to_string(udev_ev));
             if (udev_ev.count("DEVNAME") == 0) {
-              cmd = fmt::format("fake-udev -m {}", udev_msg);
+              cmd = fake_udev_command(udev_ev);
             } else {
-              cmd = fmt::format("mkdir -p /dev/input && mknod {} c {} {} && chmod 777 {} && fake-udev -m {}",
+              cmd = fmt::format("mkdir -p /dev/input && mknod {} c {} {} && chmod 777 {} && {}",
                                 udev_ev["DEVNAME"],
                                 udev_ev["MAJOR"],
                                 udev_ev["MINOR"],
                                 udev_ev["DEVNAME"],
-                                udev_msg);
+                                fake_udev_command(udev_ev));
             }
             logs::log(logs::debug, "[DOCKER] Executing command: {}", cmd);
             docker_api.exec(container_id, {"/bin/bash", "-c", cmd}, "root");
