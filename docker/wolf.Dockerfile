@@ -46,7 +46,7 @@ RUN <<_GST_WAYLAND_DISPLAY
 
     git clone https://github.com/games-on-whales/gst-wayland-display
     cd gst-wayland-display
-    git checkout 0121934
+    git checkout 0979e01
     # Pinned because it can cause issues when RUST_VERSION isn't the absolute latest
     cargo install cargo-c@0.10.23 --locked
     cargo cinstall --features="cuda" --prefix=/usr/local/lib/x86_64-linux-gnu/ --libdir=/usr/local/lib/x86_64-linux-gnu/gstreamer-1.0

@@ -5,7 +5,7 @@ FROM $BASE_IMAGE AS builder
 # building: it adds the vulkanh265enc / vulkanav1enc elements and the multi-session
 # fixes the Vulkan encode path needs.
 ARG GSTREAMER_VERSION=1.28.4
-ARG GST_WAYLAND_COMMIT=0121934
+ARG GST_WAYLAND_COMMIT=0979e01
 ARG GST_INTERPIPE_REV=0c454917cb3cf4f2b2f2729f5f72a4dee072c7c9
 # Vulkan headers >= 1.4.317 are needed for the vulkan-video encode plugin; with older
 # ones the encoders are silently compiled out (GST_VULKAN_HAVE_VIDEO_EXTENSIONS stays
