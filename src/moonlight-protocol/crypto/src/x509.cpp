@@ -53,14 +53,16 @@ x509_ptr generate_x509(pkey_ptr pkey) {
   /* Set the public key for our certificate. */
   X509_set_pubkey(x509, pkey.get());
 
-  /* We want to copy the subject name to the issuer name. */
-  X509_NAME *name = X509_get_subject_name(x509);
+  /* The subject and the issuer are the same name (OpenSSL 4 returns the certificate's own names as const). */
+  X509_NAME *name = X509_NAME_new();
 
   /* Set the country code and common name. */
   X509_NAME_add_entry_by_txt(name, "C", MBSTRING_ASC, (unsigned char *)"IT", -1, -1, 0);
   X509_NAME_add_entry_by_txt(name, "O", MBSTRING_ASC, (unsigned char *)"GamesOnWhales", -1, -1, 0);
   X509_NAME_add_entry_by_txt(name, "CN", MBSTRING_ASC, (unsigned char *)"localhost", -1, -1, 0);
+  X509_set_subject_name(x509, name);
   X509_set_issuer_name(x509, name);
+  X509_NAME_free(name);
 
   /* Actually sign the certificate with our key. */
   if (!X509_sign(x509, pkey.get(), EVP_sha256())) {
@@ -152,7 +154,7 @@ std::string get_cert_signature(x509_ptr cert) {
   const ASN1_BIT_STRING *asn1 = nullptr;
   X509_get0_signature(&asn1, nullptr, cert.get());
 
-  return {(const char *)asn1->data, (std::size_t)asn1->length};
+  return {(const char *)ASN1_STRING_get0_data(asn1), (std::size_t)ASN1_STRING_length(asn1)};
 }
 
 std::string get_cert_pem(x509_ptr cert) {
