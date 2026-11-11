@@ -14,15 +14,24 @@ FROM $BASE_IMAGE
 # Fedora's stock Mesa is built without the patent-encumbered H.264/HEVC VA-API
 # entrypoints, so we pull the same Mesa version rebuilt from RPM Fusion's
 # freeworld repo, which ships them (installs into /usr/lib64/dri-freeworld/).
+# The same restriction applies to Vulkan video encode: stock Mesa only exposes
+# the patent-free AV1 encode extension, so the Vulkan H.264/HEVC encoders never
+# register. mesa-vulkan-drivers-freeworld ships RADV/ANV ICDs with H.264/HEVC.
+# --allowerasing: the floating base-app image ships the stock Vulkan ICDs, which
+# file-conflict with freeworld. The explicit .x86_64 arch stops dnf from
+# "resolving" that conflict by installing the useless i686 freeworld build
+# alongside stock. Downstream images must keep excluding the stock package: the
+# mesa packages recommend it as a weak dependency.
 ARG REQUIRED_PACKAGES="libva libva-utils \
                        intel-media-driver \
                        libvpl \
-                       mesa-va-drivers-freeworld"
+                       mesa-va-drivers-freeworld \
+                       mesa-vulkan-drivers-freeworld.x86_64"
 
 RUN dnf install -y \
       https://mirrors.rpmfusion.org/free/fedora/rpmfusion-free-release-$(rpm -E %fedora).noarch.rpm \
       https://mirrors.rpmfusion.org/nonfree/fedora/rpmfusion-nonfree-release-$(rpm -E %fedora).noarch.rpm && \
-    dnf install -y $REQUIRED_PACKAGES && \
+    dnf install -y --allowerasing $REQUIRED_PACKAGES && \
     dnf clean all
 
 # libmfx is not available in Fedora so we build from sources (see: https://github.com/games-on-whales/wolf/issues/221)

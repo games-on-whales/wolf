@@ -11,7 +11,10 @@ on:
       - "docker/**"
 
 env:
-  GST_WAYLAND_COMMIT: 016b4fc
+  # Quoted to be safe against YAML octal coercion of all-digit SHAs
+  GST_WAYLAND_COMMIT: "0979e01"
+  # Fork revision with the context-query forwarding needed by the Vulkan encode path
+  GST_INTERPIPE_REV: 0c454917cb3cf4f2b2f2729f5f72a4dee072c7c9
 
 jobs:
   # Build the Rust-based libgstwaylanddisplay for both architectures
@@ -41,8 +44,9 @@ jobs:
         run: |
           sudo apt-get update -y
           sudo apt-get install -y \
-              libwayland-dev libwayland-server0 libinput-dev libxkbcommon-dev libgbm-dev \
-              libgstreamer1.0-dev libgstreamer-plugins-base1.0-dev
+              libwayland-dev libwayland-server0 libinput-dev libxkbcommon-dev libxkbcommon-x11-dev libgbm-dev \
+              libgstreamer1.0-dev libgstreamer-plugins-base1.0-dev \
+              libgstreamer-plugins-bad1.0-dev libvulkan-dev
 
       - name: Setup Rust
         if: steps.cache-gst-wayland.outputs.cache-hit != 'true'
@@ -53,6 +57,13 @@ jobs:
       - name: Setup gst-wayland-display
         if: steps.cache-gst-wayland.outputs.cache-hit != 'true'
         run: |
+          # Probe exactly like gstreamer-vulkan-sys's build script does: --libs --cflags
+          # walks the full Requires tree (e.g. Ubuntu's xkbcommon/xkbcommon-x11), while
+          # --atleast-version does not and can pass on a broken setup.
+          pkg-config --print-errors --libs --cflags 'gstreamer-vulkan-1.0 >= 1.28' > /dev/null || {
+            echo "::error::gstreamer-vulkan-1.0 >= 1.28 (with its full Requires tree) is required to build gst-wayland-display at $GST_WAYLAND_COMMIT"
+            exit 1
+          }
           git clone https://github.com/games-on-whales/gst-wayland-display
           cd gst-wayland-display
           git checkout ${{ env.GST_WAYLAND_COMMIT }}
@@ -154,8 +165,9 @@ jobs:
               libicu-dev \
               libboost-locale-dev libboost-thread-dev libboost-filesystem-dev libboost-log-dev libboost-stacktrace-dev libboost-container-dev libboost-json-dev \
               libssl-dev \
-              libgstreamer1.0-dev libgstreamer-plugins-base1.0-dev \
+              libgstreamer1.0-dev libgstreamer-plugins-base1.0-dev libgstreamer-plugins-bad1.0-dev \
               libwayland-dev libwayland-server0 wayland-protocols libinput-dev libxkbcommon-dev libgbm-dev \
+              libvulkan1 \
               libcurl4-openssl-dev \
               libpulse-dev \
               libevdev-dev \
@@ -172,8 +184,10 @@ jobs:
 
       - name: Setup gst-interpipe
         run: |
-          git clone https://github.com/games-on-whales/gst-interpipe.git
+          git init gst-interpipe
           cd gst-interpipe
+          git fetch --depth 1 https://github.com/games-on-whales/gst-interpipe.git ${{ env.GST_INTERPIPE_REV }}
+          git checkout FETCH_HEAD
           mkdir build
           meson build -Denable-gtk-doc=false --prefix ${{runner.workspace}}/libgstwaylanddisplay
           meson install -C build

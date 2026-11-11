@@ -1,8 +1,11 @@
-ARG BASE_IMAGE=ghcr.io/games-on-whales/gstreamer:1.26.7
+ARG BASE_IMAGE=ghcr.io/games-on-whales/gstreamer:1.28.4
 ########################################################
 FROM $BASE_IMAGE AS wolf-builder
 
-RUN dnf install -y \
+# Wolf build dependencies (mesa-vulkan-drivers excluded: the mesa packages
+# recommend the stock Vulkan ICDs as a weak dependency, which file-conflict
+# with mesa-vulkan-drivers-freeworld from the gpu-drivers base image)
+RUN dnf install -y --exclude=mesa-vulkan-drivers \
     curl \
     ca-certificates \
     ninja-build \
@@ -25,6 +28,7 @@ RUN dnf install -y \
     libdrm-devel \
     pciutils-devel \
     glib2-devel mesa-libEGL-devel mesa-libGLES-devel libglvnd-devel \
+    vulkan-headers \
     && dnf clean all
 
 ## Install Rust in order to build our custom compositor
@@ -42,7 +46,7 @@ RUN <<_GST_WAYLAND_DISPLAY
 
     git clone https://github.com/games-on-whales/gst-wayland-display
     cd gst-wayland-display
-    git checkout 016b4fc
+    git checkout 0979e01
     # Pinned because it can cause issues when RUST_VERSION isn't the absolute latest
     cargo install cargo-c@0.10.23 --locked
     cargo cinstall --features="cuda" --prefix=/usr/local/lib/x86_64-linux-gnu/ --libdir=/usr/local/lib/x86_64-linux-gnu/gstreamer-1.0
@@ -86,10 +90,14 @@ RUN dnf install -y \
     libunwind \
     && dnf clean all
 
-# gst-plugin-wayland runtime dependencies
-RUN dnf install -y \
+# gst-plugin-wayland runtime dependencies. The Vulkan ICDs (RADV/ANV with
+# H.264/HEVC encode) come from mesa-vulkan-drivers-freeworld in the gpu-drivers
+# base image; only the loader is needed here, and the stock drivers must stay
+# excluded (weak dep of the mesa packages, conflicts with freeworld).
+RUN dnf install -y --exclude=mesa-vulkan-drivers \
     libwayland-server libinput libxkbcommon mesa-libgbm \
     libglvnd mesa-libGL mesa-libEGL mesa-libGLES xorg-x11-server-Xwayland hwdata \
+    vulkan-loader \
     && dnf clean all
 
 # Embedded PulseAudio: Wolf runs its own PulseAudio server inside this container

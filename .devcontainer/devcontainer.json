@@ -5,7 +5,7 @@
     "dockerfile": "../docker/wolf.Dockerfile",
     "target": "wolf-builder",
     "args": {
-      "BASE_IMAGE": "ghcr.io/games-on-whales/gstreamer:1.26.7"
+      "BASE_IMAGE": "ghcr.io/games-on-whales/gstreamer:1.28.4"
     }
   },
   "postStartCommand": "bash $(pwd)/.devcontainer/dev-setup.sh",

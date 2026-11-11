@@ -37,6 +37,11 @@ static Encoder encoder_type(const GstEncoder &settings) {
   case (utils::hash("vaapi")):
   case (utils::hash("va")):
     return VAAPI;
+  case (utils::hash("vulkan")):
+    // Vendor-agnostic: the Vulkan elements register only when a device with the
+    // matching VK_KHR_VIDEO_ENCODE_* extension is present (see gstvulkan.c's plugin
+    // init), so the regular element-availability check below is enough.
+    return VULKAN;
   case (utils::hash("qsv")):
     return QUICKSYNC;
   case (utils::hash("applemedia")):
@@ -217,8 +222,8 @@ Config load_or_default(const std::string &source,
   // First check the version of the config file
   auto base_cfg = rfl::toml::load<BaseConfig, rfl::DefaultIfMissing>(source).value();
   auto version = base_cfg.config_version.value_or(0);
-  if (version <= 6) {
-    logs::log(logs::warning, "Found old config file (v{}), migrating to v7", version);
+  if (version <= 7) {
+    logs::log(logs::warning, "Found old config file (v{}), migrating to v8", version);
     auto backup = source + ".v" + std::to_string(version) + ".old";
     std::filesystem::rename(source, backup);
     auto old_cfg = toml::parse_file(backup);
@@ -243,7 +248,7 @@ Config load_or_default(const std::string &source,
     }
     out_file << new_cfg;
     out_file.close();
-    logs::log(logs::debug, "Migrated config from v{} to v7", version);
+    logs::log(logs::debug, "Migrated config from v{} to v8", version);
   }
 
   // Will throw if the config is invalid
@@ -273,6 +278,23 @@ Config load_or_default(const std::string &source,
     use_zero_copy = false;
   }
 
+  /* The Vulkan encoders only have a zero-copy path in Wolf: waylanddisplaysrc does the
+   * scaling and the RGBA to NV12 conversion, so there is no conversion segment to fall
+   * back to. Without zero copy, drop them so CUDA/VA take over. */
+  if (!use_zero_copy) {
+    logs::log(logs::info, "Zero copy disabled: skipping the Vulkan encoders");
+    auto without_vulkan = [](std::vector<GstEncoder> encoders) {
+      encoders.erase(std::remove_if(encoders.begin(),
+                                    encoders.end(),
+                                    [](const GstEncoder &encoder) { return encoder_type(encoder) == VULKAN; }),
+                     encoders.end());
+      return encoders;
+    };
+    default_gst_video_settings.h264_encoders = without_vulkan(default_gst_video_settings.h264_encoders);
+    default_gst_video_settings.hevc_encoders = without_vulkan(default_gst_video_settings.hevc_encoders);
+    default_gst_video_settings.av1_encoders = without_vulkan(default_gst_video_settings.av1_encoders);
+  }
+
   /* Automatically pick the best encoders */
   auto h264_encoder = get_encoder("h264", default_gst_render_node, default_gst_video_settings.h264_encoders, vendor);
   if (!h264_encoder) {
@@ -282,6 +304,21 @@ Config load_or_default(const std::string &source,
   }
   auto hevc_encoder = get_encoder("h265", default_gst_render_node, default_gst_video_settings.hevc_encoders, vendor);
   auto av1_encoder = get_encoder("av1", default_gst_render_node, default_gst_video_settings.av1_encoders, vendor);
+
+  /* The producer buffer caps are shared by every codec and follow the H264 encoder:
+   * when it feeds Vulkan images to the encoders, every other codec must encode those
+   * too (no other encoder family consumes memory:VulkanImage). Rather than building a
+   * broken pipeline, disable the mismatching codecs; clients fall back to H264/HEVC. */
+  if (encoder_type(*h264_encoder) == VULKAN) {
+    if (hevc_encoder && encoder_type(*hevc_encoder) != VULKAN) {
+      logs::log(logs::warning, "Disabling HEVC: the H264 encoder uses Vulkan images, the HEVC encoder does not");
+      hevc_encoder.reset();
+    }
+    if (av1_encoder && encoder_type(*av1_encoder) != VULKAN) {
+      logs::log(logs::warning, "Disabling AV1: the H264 encoder uses Vulkan images, the AV1 encoder does not");
+      av1_encoder.reset();
+    }
+  }
 
   /* Get paired clients */
   auto paired_clients =
@@ -302,6 +339,10 @@ Config load_or_default(const std::string &source,
     switch (video_encoder) {
     case NVIDIA: {
       default_base_video.producer_buffer_caps = "video/x-raw(memory:CUDAMemory)";
+      break;
+    }
+    case VULKAN: {
+      default_base_video.producer_buffer_caps = "video/x-raw(memory:VulkanImage),format=NV12";
       break;
     }
     case VAAPI:

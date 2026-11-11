@@ -58,7 +58,9 @@ Hardware/environment-dependent tests are gated by CMake options so CI can skip w
 `TEST_SDL`. CI runs a g++/clang matrix with `BUILD_SHARED_LIBS` both ON and OFF — keep both working.
 
 C++ is auto-formatted with clang-format (`.clang-format`, 120 col) and enforced in CI; run
-`clang-format -i` on changed files before committing. `.clang-tidy` is also present.
+`clang-format -i` on changed files before committing. CI lints with **clang-format 18**
+(`llvm@18` on Homebrew: `/opt/homebrew/opt/llvm@18/bin/clang-format`); newer versions
+can reformat differently and fail the lint. `.clang-tidy` is also present.
 
 ## Architecture
 
