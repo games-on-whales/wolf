@@ -381,7 +381,7 @@ void UnixSocketServer::endpoint_StreamSessionHandleInput(const HTTPRequest &req,
       auto hex_pkt = input_request.value().input_packet_hex.get();
       auto pkt_parsed = crypto::hex_to_str(hex_pkt);
       control::INPUT_PKT *input_pkt = reinterpret_cast<control::INPUT_PKT *>(pkt_parsed.data());
-      control::handle_input(session.value(), {}, input_pkt);
+      control::handle_input(session.value(), {}, input_pkt, pkt_parsed.size());
 
       send_http(socket, 200, rfl::json::write(GenericSuccessResponse{.success = true}));
     } else {
