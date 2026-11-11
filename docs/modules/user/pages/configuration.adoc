@@ -323,6 +323,8 @@ The available joypad types are:
 * `auto` (default)
 * `xbox`
 * `nintendo`
+* `joycon_left`: a single left Joy-Con
+* `joycon_right`: a single right Joy-Con
 * `ps`
 
 ==== Auto-detection: UNKNOWN clients with motion get a DualSense
@@ -345,9 +347,10 @@ motion_controller_override = "PS" # motion-capable clients get a DualSense
 
 ==== uhid and uinput joypads
 
-When `/dev/uhid` is available to Wolf, the PlayStation pad is a full virtual DualSense (gyro, touchpad, LED, adaptive triggers).
-Without it, Wolf falls back to a basic uinput DualSense with just buttons and sticks, and logs a warning when that happens.
-Xbox and Nintendo pads are uinput pads either way.
+When `/dev/uhid` is available to Wolf, the PlayStation pad is a full virtual DualSense (gyro, touchpad, LED, adaptive triggers)
+and the Nintendo pads are full Switch Pro controllers or Joy-Cons (gyro, accelerometer, rumble).
+Without it, Wolf falls back to basic uinput pads with just buttons and sticks, and logs a warning when that happens.
+Xbox pads are uinput pads either way.
 
 An app can opt out of the uhid pad, for example a game that doesn't handle the full DualSense well:
 

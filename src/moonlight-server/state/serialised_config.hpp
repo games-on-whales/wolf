@@ -10,6 +10,8 @@ enum class ControllerType {
   XBOX,
   PS,
   NINTENDO,
+  JOYCON_LEFT,
+  JOYCON_RIGHT,
   AUTO
 };
 

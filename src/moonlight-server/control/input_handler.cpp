@@ -122,6 +122,12 @@ std::shared_ptr<events::JoypadTypes> create_new_joypad(const events::StreamSessi
   case wolf::config::ControllerType::NINTENDO:
     kind = inputtino::Joypad::TYPE::NINTENDO;
     break;
+  case wolf::config::ControllerType::JOYCON_LEFT:
+    kind = inputtino::Joypad::TYPE::JOYCON_LEFT;
+    break;
+  case wolf::config::ControllerType::JOYCON_RIGHT:
+    kind = inputtino::Joypad::TYPE::JOYCON_RIGHT;
+    break;
   case wolf::config::ControllerType::AUTO:
   case wolf::config::ControllerType::XBOX:
   default:
@@ -130,9 +136,15 @@ std::shared_ptr<events::JoypadTypes> create_new_joypad(const events::StreamSessi
   }
 
   auto def = inputtino::Joypad::default_definition(kind);
-  if (kind == inputtino::Joypad::TYPE::PS) {
+  const bool is_nintendo = kind == inputtino::Joypad::TYPE::NINTENDO || kind == inputtino::Joypad::TYPE::JOYCON_LEFT ||
+                           kind == inputtino::Joypad::TYPE::JOYCON_RIGHT;
+  if (kind == inputtino::Joypad::TYPE::PS || is_nintendo) {
     def.device_uniq = stable_joypad_mac(session.session_id, controller_number);
-    logs::log(logs::debug, "[INPUT] PS joypad for controller {} uses MAC {}", controller_number, def.device_uniq);
+    logs::log(logs::debug, "[INPUT] joypad for controller {} uses MAC {}", controller_number, def.device_uniq);
+  }
+  if (is_nintendo) {
+    // hid-nintendo only binds Bluetooth devices
+    def.device_phys = "bluetooth";
   }
 
   // Pick the rich uhid backend when the host exposes /dev/uhid and the app allows
@@ -149,29 +161,34 @@ std::shared_ptr<events::JoypadTypes> create_new_joypad(const events::StreamSessi
     return {};
   }
   new_pad = std::move(*created);
-  const bool is_uhid = dynamic_cast<inputtino::PS5Joypad *>(new_pad.get()) != nullptr;
+  const bool is_uhid = dynamic_cast<inputtino::PS5Joypad *>(new_pad.get()) != nullptr ||
+                       dynamic_cast<inputtino::SwitchJoypad *>(new_pad.get()) != nullptr;
   logs::log(logs::info,
             "Created joypad for controller {} (type {}, backend {})",
             controller_number,
             (int)final_type,
             is_uhid ? "uhid" : "uinput");
 
-  // The DualSense is the only pad with a richer uhid backend: tell the user when they get the basic one instead.
-  if (kind == inputtino::Joypad::TYPE::PS && !is_uhid) {
+  // The DualSense and the Nintendo pads have a richer uhid backend: tell the user when they get the basic one instead.
+  if (kind != inputtino::Joypad::TYPE::XBOX && !is_uhid) {
+    const auto pad_name = kind == inputtino::Joypad::TYPE::PS ? "DualSense" : "Nintendo pad";
     if (!app_allows_uhid) {
-      logs::log(logs::info, "Controller {} is a basic uinput DualSense, the app has use_uhid = false", controller_number);
+      logs::log(logs::info, "Controller {} is a basic uinput {}, the app has use_uhid = false", controller_number, pad_name);
     } else if (!inputtino::is_uhid_supported()) {
       logs::log(logs::warning,
-                "Controller {} is a basic uinput DualSense without gyro, touchpad, LED and adaptive triggers: "
+                "Controller {} is a basic uinput {} without motion and the other uhid-only features: "
                 "/dev/uhid is not accessible, pass it to the Wolf container (see the quickstart)",
-                controller_number);
+                controller_number,
+                pad_name);
     } else {
       logs::log(logs::warning,
-                "Controller {} is a basic uinput DualSense without gyro, touchpad, LED and adaptive triggers: "
+                "Controller {} is a basic uinput {} without motion and the other uhid-only features: "
                 "creating the uhid pad failed, see the inputtino message above",
-                controller_number);
+                controller_number,
+                pad_name);
     }
   }
+
 
   new_pad->set_on_rumble(on_rumble_fn);
   new_pad->set_on_led(on_led_fn);                         // no-op unless this is a DualSense
