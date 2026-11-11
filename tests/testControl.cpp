@@ -144,7 +144,7 @@ TEST_CASE("control joypad input packets") {
 /**
  * Feeds handle_input a heap buffer of exactly `len` bytes, so that under ASan any read past it is reported
  */
-static void handle_truncated(pkts::INPUT_TYPE type, std::size_t len, std::uint32_t data_size = 0) {
+static bool handle_sized(pkts::INPUT_TYPE type, std::size_t len, std::uint32_t data_size = 0) {
   std::vector<char> buf(len);
   pkts::INPUT_PKT header{.packet_type = pkts::INPUT_DATA,
                          .packet_len = boost::endian::native_to_little(static_cast<unsigned short>(len - 4)),
@@ -152,8 +152,13 @@ static void handle_truncated(pkts::INPUT_TYPE type, std::size_t len, std::uint32
                          .type = type};
   std::memcpy(buf.data(), &header, std::min(len, sizeof(header)));
   auto session = wolf::core::events::StreamSession{};
-  control::handle_input(session, {}, reinterpret_cast<pkts::INPUT_PKT *>(buf.data()), buf.size());
+  auto handled = control::handle_input(session, {}, reinterpret_cast<pkts::INPUT_PKT *>(buf.data()), buf.size());
   REQUIRE(session.joypads->load()->size() == 0);
+  return handled;
+}
+
+static void handle_truncated(pkts::INPUT_TYPE type, std::size_t len, std::uint32_t data_size = 0) {
+  REQUIRE_FALSE(handle_sized(type, len, data_size));
 }
 
 TEST_CASE("control input packets shorter than their type are dropped", "[CONTROL]") {
@@ -161,8 +166,23 @@ TEST_CASE("control input packets shorter than their type are dropped", "[CONTROL
     for (std::size_t len = 0; len < sizeof(pkts::INPUT_PKT); len++) {
       std::vector<char> buf(len);
       auto session = wolf::core::events::StreamSession{};
-      control::handle_input(session, {}, reinterpret_cast<pkts::INPUT_PKT *>(buf.data()), buf.size());
+      REQUIRE_FALSE(control::handle_input(session, {}, reinterpret_cast<pkts::INPUT_PKT *>(buf.data()), buf.size()));
     }
+  }
+
+  SECTION("Packets of exactly their type's size are handled") {
+    // The session has no devices, so nothing is created or sent: only the size check decides
+    REQUIRE(handle_sized(pkts::MOUSE_MOVE_REL, sizeof(pkts::MOUSE_MOVE_REL_PACKET)));
+    REQUIRE(handle_sized(pkts::MOUSE_MOVE_ABS, sizeof(pkts::MOUSE_MOVE_ABS_PACKET)));
+    REQUIRE(handle_sized(pkts::MOUSE_BUTTON_PRESS, sizeof(pkts::MOUSE_BUTTON_PACKET)));
+    REQUIRE(handle_sized(pkts::MOUSE_SCROLL, sizeof(pkts::MOUSE_SCROLL_PACKET)));
+    REQUIRE(handle_sized(pkts::MOUSE_HSCROLL, sizeof(pkts::MOUSE_HSCROLL_PACKET)));
+    REQUIRE(handle_sized(pkts::KEY_PRESS, sizeof(pkts::KEYBOARD_PACKET)));
+    auto header = sizeof(pkts::INPUT_PKT);
+    REQUIRE(handle_sized(pkts::UTF8_TEXT, header + 4, 4 + 4)); // 4 bytes of text
+    REQUIRE(handle_sized(pkts::UTF8_TEXT,
+                         header + pkts::UTF8_TEXT_MAX_LEN,
+                         4 + pkts::UTF8_TEXT_MAX_LEN)); // the most allowed
   }
 
   auto check_type = [](pkts::INPUT_TYPE type, std::size_t full_size) {
@@ -221,4 +241,3 @@ TEST_CASE("control input packets shorter than their type are dropped", "[CONTROL
     handle_truncated(pkts::UTF8_TEXT, header + 64, 4 + 64);    // longer than UTF8_TEXT_MAX_LEN
   }
 }
-

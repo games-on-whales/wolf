@@ -790,58 +790,64 @@ template <typename T> static const T *as_packet(const INPUT_PKT *pkt, std::size_
   return static_cast<const T *>(pkt);
 }
 
-void handle_input(events::StreamSession &session,
+bool handle_input(events::StreamSession &session,
                   immer::box<std::shared_ptr<ENetPeer>> connected_client,
                   const INPUT_PKT *pkt,
                   std::size_t pkt_len) {
   if (pkt_len < sizeof(INPUT_PKT)) {
     logs::log(logs::warning, "[INPUT] Dropping input packet: {} bytes received, {} needed", pkt_len, sizeof(INPUT_PKT));
-    return;
+    return false;
   }
   switch (pkt->type) {
   case MOUSE_MOVE_REL: {
     logs::log(logs::trace, "[INPUT] Received input of type: MOUSE_MOVE_REL");
     if (auto move_pkt = as_packet<MOUSE_MOVE_REL_PACKET>(pkt, pkt_len)) {
       mouse_move_rel(*move_pkt, session);
+      return true;
     }
-    break;
+    return false;
   }
   case MOUSE_MOVE_ABS: {
     logs::log(logs::trace, "[INPUT] Received input of type: MOUSE_MOVE_ABS");
     if (auto move_pkt = as_packet<MOUSE_MOVE_ABS_PACKET>(pkt, pkt_len)) {
       mouse_move_abs(*move_pkt, session);
+      return true;
     }
-    break;
+    return false;
   }
   case MOUSE_BUTTON_PRESS:
   case MOUSE_BUTTON_RELEASE: {
     logs::log(logs::trace, "[INPUT] Received input of type: MOUSE_BUTTON_PACKET");
     if (auto btn_pkt = as_packet<MOUSE_BUTTON_PACKET>(pkt, pkt_len)) {
       mouse_button(*btn_pkt, session);
+      return true;
     }
-    break;
+    return false;
   }
   case MOUSE_SCROLL: {
     logs::log(logs::trace, "[INPUT] Received input of type: MOUSE_SCROLL_PACKET");
     if (auto scroll_pkt = as_packet<MOUSE_SCROLL_PACKET>(pkt, pkt_len)) {
       mouse_scroll(*scroll_pkt, session);
+      return true;
     }
-    break;
+    return false;
   }
   case MOUSE_HSCROLL: {
     logs::log(logs::trace, "[INPUT] Received input of type: MOUSE_HSCROLL_PACKET");
     if (auto scroll_pkt = as_packet<MOUSE_HSCROLL_PACKET>(pkt, pkt_len)) {
       mouse_h_scroll(*scroll_pkt, session);
+      return true;
     }
-    break;
+    return false;
   }
   case KEY_PRESS:
   case KEY_RELEASE: {
     logs::log(logs::trace, "[INPUT] Received input of type: KEYBOARD_PACKET");
     if (auto key_pkt = as_packet<KEYBOARD_PACKET>(pkt, pkt_len)) {
       keyboard_key(*key_pkt, session);
+      return true;
     }
-    break;
+    return false;
   }
   case UTF8_TEXT: {
     logs::log(logs::trace, "[INPUT] Received input of type: UTF8_TEXT");
@@ -850,66 +856,76 @@ void handle_input(events::StreamSession &session,
     if (data_size < sizeof(pkt->type) || data_size - sizeof(pkt->type) > pkt_len - sizeof(INPUT_PKT) ||
         data_size - sizeof(pkt->type) > UTF8_TEXT_MAX_LEN) {
       logs::log(logs::warning,
-                "[INPUT] Dropping UTF8_TEXT packet: data_size {} doesn't fit in {} bytes received",
+                "[INPUT] Dropping UTF8_TEXT packet: data_size {} doesn't fit in {} bytes received or exceeds {} bytes "
+                "of text",
                 data_size,
-                pkt_len);
-      break;
+                pkt_len,
+                UTF8_TEXT_MAX_LEN);
+      return false;
     }
     utf8_text(*static_cast<const UTF8_TEXT_PACKET *>(pkt), session);
-    break;
+    return true;
   }
   case TOUCH: {
     logs::log(logs::trace, "[INPUT] Received input of type: TOUCH");
     if (auto touch_pkt = as_packet<TOUCH_PACKET>(pkt, pkt_len)) {
       touch(*touch_pkt, session);
+      return true;
     }
-    break;
+    return false;
   }
   case PEN: {
     logs::log(logs::trace, "[INPUT] Received input of type: PEN");
     if (auto pen_pkt = as_packet<PEN_PACKET>(pkt, pkt_len)) {
       pen(*pen_pkt, session);
+      return true;
     }
-    break;
+    return false;
   }
   case CONTROLLER_ARRIVAL: {
     logs::log(logs::trace, "[INPUT] Received input of type: CONTROLLER_ARRIVAL");
     if (auto new_controller = as_packet<CONTROLLER_ARRIVAL_PACKET>(pkt, pkt_len)) {
       controller_arrival(*new_controller, session, connected_client);
+      return true;
     }
-    break;
+    return false;
   }
   case CONTROLLER_MULTI: {
     logs::log(logs::trace, "[INPUT] Received input of type: CONTROLLER_MULTI");
     if (auto controller_pkt = as_packet<CONTROLLER_MULTI_PACKET>(pkt, pkt_len)) {
       controller_multi(*controller_pkt, session, connected_client);
+      return true;
     }
-    break;
+    return false;
   }
   case CONTROLLER_TOUCH: {
     logs::log(logs::trace, "[INPUT] Received input of type: CONTROLLER_TOUCH");
     if (auto touch_pkt = as_packet<CONTROLLER_TOUCH_PACKET>(pkt, pkt_len)) {
       controller_touch(*touch_pkt, session);
+      return true;
     }
-    break;
+    return false;
   }
   case CONTROLLER_MOTION: {
     logs::log(logs::trace, "[INPUT] Received input of type: CONTROLLER_MOTION");
     if (auto motion_pkt = as_packet<CONTROLLER_MOTION_PACKET>(pkt, pkt_len)) {
       controller_motion(*motion_pkt, session);
+      return true;
     }
-    break;
+    return false;
   }
   case CONTROLLER_BATTERY: {
     logs::log(logs::trace, "[INPUT] Received input of type: CONTROLLER_BATTERY");
     if (auto battery_pkt = as_packet<CONTROLLER_BATTERY_PACKET>(pkt, pkt_len)) {
       controller_battery(*battery_pkt, session);
+      return true;
     }
-    break;
+    return false;
   }
   case HAPTICS:
     logs::log(logs::trace, "[INPUT] Received input of type: HAPTICS");
-    break;
+    return true;
   }
+  return false;
 }
 } // namespace control

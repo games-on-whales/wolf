@@ -12,8 +12,9 @@ using namespace wolf::core;
 /**
  * Dispatches a raw input packet of pkt_len bytes; packets shorter than their type requires are dropped.
  * Side effect: session devices might be updated when hotplugging
+ * @return false when the packet was dropped (too short, or of an unknown type)
  */
-void handle_input(events::StreamSession &session,
+bool handle_input(events::StreamSession &session,
                   immer::box<std::shared_ptr<ENetPeer>> connected_client,
                   const INPUT_PKT *pkt,
                   std::size_t pkt_len);
