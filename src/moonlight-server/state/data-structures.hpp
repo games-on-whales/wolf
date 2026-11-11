@@ -59,6 +59,15 @@ inline int get_port(STANDARD_PORTS_MAPPING port) {
   return -1;
 }
 
+/**
+ * WOLF_ALLOW_UNKNOWN_ISSUER_CERTS=TRUE brings back the old moonlight-embedded workaround: a client cert naming an
+ * issuer that isn't one of the paired certs is accepted. Such a cert matches every paired cert whose subject isn't that
+ * issuer, so ANY client passes as a paired one without its key: only for trusted networks, off by default.
+ */
+inline bool allow_unknown_issuer_certs() {
+  return utils::get_env("WOLF_ALLOW_UNKNOWN_ISSUER_CERTS", "") == std::string("TRUE");
+}
+
 using PairedClientList = immer::vector<immer::box<wolf::config::PairedClient>>;
 using ProfilesList = immer::vector<immer::box<events::Profile>>;
 
