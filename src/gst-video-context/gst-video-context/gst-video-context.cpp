@@ -6,6 +6,7 @@
 #include <gst/cuda/gstcudaloader.h>
 #include <gst/cuda/gstcudautils.h>
 #include <helpers/logger.hpp>
+#include <optional>
 #include <sys/stat.h>
 #include <sys/sysmacros.h>
 #include <vector>
