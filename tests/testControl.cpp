@@ -115,6 +115,16 @@ TEST_CASE("Control decrypt reads only the received packet", "CONTROL") {
     encrypted->header.length = boost::endian::native_to_little<std::uint16_t>(sizeof(std::uint32_t) + GCM_TAG_SIZE - 1);
     REQUIRE_FALSE(encrypted->fits_in(size));
   }
+
+  SECTION("Payloads too short for their own ControlPacket header are rejected") {
+    // They'd decrypt to fewer bytes than the ControlPacket type that is read from them
+    for (auto short_payload : {std::string_view{}, std::string_view{"\x01", 1}, std::string_view{"\x01\x02\x03", 3}}) {
+      auto encrypted = encrypt_packet(aes_key, 0, short_payload);
+      REQUIRE_FALSE(encrypted->fits_in(encrypted->full_size()));
+    }
+    auto smallest = encrypt_packet(aes_key, 0, std::string_view{"\x01\x02\x03\x04", 4});
+    REQUIRE(smallest->fits_in(smallest->full_size()));
+  }
 }
 
 TEST_CASE("control joypad input packets") {
