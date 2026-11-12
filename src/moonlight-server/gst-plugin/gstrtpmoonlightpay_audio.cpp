@@ -140,6 +140,7 @@ static void gst_rtp_moonlight_pay_audio_init(gst_rtp_moonlight_pay_audio *rtpmoo
   rtpmoonlightpay_audio->cur_seq_number = 0;
 
   rtpmoonlightpay_audio->encrypt = true;
+  rtpmoonlightpay_audio->encrypt_failed = false;
 
   rtpmoonlightpay_audio->packet_duration = 5;
   rtpmoonlightpay_audio->packets_buffer = new unsigned char *[AUDIO_TOTAL_SHARDS];

@@ -387,6 +387,18 @@ struct ControlEncryptedPacket {
   [[nodiscard]] size_t full_size() const {
     return boost::endian::little_to_native(this->header.length) + sizeof(ControlPacket);
   }
+
+  /**
+   * The packet comes straight from the client: check that a received buffer of `received_size` bytes
+   * holds the header, seq and GCM tag, an encrypted payload big enough for its own ControlPacket header,
+   * and every payload byte the header claims (same minimum as moonlight-common-c's ControlStream.c).
+   * Call this before encrypted_msg() or decrypt_packet(), which trust header.length.
+   */
+  [[nodiscard]] bool fits_in(size_t received_size) const {
+    constexpr size_t min_length = sizeof(seq) + GCM_TAG_SIZE + sizeof(ControlPacket);
+    return received_size >= sizeof(ControlPacket) + min_length &&
+           boost::endian::little_to_native(this->header.length) >= min_length && full_size() <= received_size;
+  }
 };
 
 /**
@@ -399,7 +411,7 @@ static std::string decrypt_packet(const ControlEncryptedPacket &packet_data, std
 
   return crypto::aes_decrypt_gcm(packet_data.encrypted_msg(),
                                  crypto::hex_to_str(gcm_key.data(), true),
-                                 packet_data.gcm_tag,
+                                 {packet_data.gcm_tag, GCM_TAG_SIZE},
                                  {(char *)iv_data.data(), iv_data.size()},
                                  GCM_TAG_SIZE);
 }

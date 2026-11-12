@@ -14,6 +14,7 @@ using Catch::Matchers::Equals;
 #include <filesystem>
 #include <fstream>
 #include <moonlight/protocol.hpp>
+#include <openssl/x509.h>
 #include <range/v3/view.hpp>
 #include <rest/helpers.hpp>
 #include <rfl/toml.hpp>
@@ -254,6 +255,65 @@ TEST_CASE("LocalState config is saved atomically", "[LocalState]") {
   }
 
   fs::remove_all(test_dir);
+}
+
+/**
+ * A cert that names an issuer Wolf doesn't have, signed by a key of the client's choosing: it proves nothing.
+ */
+static x509::x509_ptr cert_with_unknown_issuer() {
+  auto pkey = x509::generate_key();
+  auto cert = x509::x509_ptr(X509_new(), X509_free);
+  ASN1_INTEGER_set(X509_get_serialNumber(cert.get()), 1);
+  X509_set_version(cert.get(), 2);
+  X509_gmtime_adj(X509_get_notBefore(cert.get()), 0);
+  X509_gmtime_adj(X509_get_notAfter(cert.get()), 3600);
+  X509_set_pubkey(cert.get(), pkey.get());
+  X509_NAME_add_entry_by_txt(X509_get_subject_name(cert.get()),
+                             "CN",
+                             MBSTRING_ASC,
+                             (unsigned char *)"client",
+                             -1,
+                             -1,
+                             0);
+  auto issuer = X509_NAME_new();
+  X509_NAME_add_entry_by_txt(issuer, "CN", MBSTRING_ASC, (unsigned char *)"Unknown CA", -1, -1, 0);
+  X509_set_issuer_name(cert.get(), issuer);
+  X509_NAME_free(issuer);
+  X509_sign(cert.get(), pkey.get(), EVP_sha256());
+  return cert;
+}
+
+TEST_CASE("Client certs naming an unknown issuer aren't paired", "[LocalState]") {
+  auto paired = x509::generate_x509(x509::generate_key());
+
+  SECTION("The paired cert itself passes") {
+    REQUIRE_FALSE(x509::verification_error(paired, paired).has_value());
+  }
+
+  SECTION("Another self-signed cert is refused") {
+    auto other = x509::generate_x509(x509::generate_key());
+    REQUIRE(x509::verification_error(paired, other).has_value());
+  }
+
+  SECTION("A cert naming an unknown issuer is refused by default") {
+    auto forged = cert_with_unknown_issuer();
+    auto error = x509::verification_error(paired, forged);
+    REQUIRE(error.has_value());
+    REQUIRE_THAT(error.value(), Equals("unable to get local issuer certificate"));
+  }
+
+  SECTION("...and accepted only with the moonlight-embedded workaround on") {
+    REQUIRE_FALSE(x509::verification_error(paired, cert_with_unknown_issuer(), true).has_value());
+  }
+
+  SECTION("...also through the HTTPS servers' paired-client lookup") {
+    auto clients = std::make_shared<immer::atom<state::PairedClientList>>();
+    clients->update(
+        [&paired](auto list) { return list.push_back(PairedClient{.client_cert = x509::get_cert_pem(paired)}); });
+    auto cfg = state::Config{.config_source = "config.test.toml", .paired_clients = clients};
+    REQUIRE(state::get_client_via_ssl(cfg, paired).has_value());
+    REQUIRE_FALSE(state::get_client_via_ssl(cfg, cert_with_unknown_issuer()).has_value());
+  }
 }
 
 TEST_CASE("Mocked serverinfo", "[MoonlightProtocol]") {
@@ -576,6 +636,31 @@ TEST_CASE("HTTP Pairing", "[MoonlightProtocol]") {
     // Calling phase 4 before phase 3
     auto phase_4 = endpoints::pair_phase4(client_cache, moonlight_data.client_pairing_secret);
     REQUIRE(phase_4.status == SimpleWeb::StatusCode::client_error_bad_request);
+  }
+
+  SECTION("Malformed challenges are rejected") {
+    auto phase_1 = endpoints::pair_phase1(app_state,
+                                          "0.0.0.0",
+                                          "1.1.1.1",
+                                          moonlight_data.client_cert_base64,
+                                          moonlight_data.salt,
+                                          cache_key);
+    REQUIRE(phase_1->get_future().get().status == SimpleWeb::StatusCode::success_ok);
+    auto client_cache = *(app_state->pairing_cache->load().get().find(cache_key));
+
+    // 15 bytes: not a whole AES block, so the unpadded ECB decrypt fails
+    auto bad_challenge = std::string("0102030405060708090a0b0c0d0e0f");
+    auto bad_phase_2 = endpoints::pair_phase2(app_state, client_cache, bad_challenge, cache_key);
+    REQUIRE(bad_phase_2.status == SimpleWeb::StatusCode::client_error_bad_request);
+    REQUIRE(bad_phase_2.xml.get<int>("root.paired") == 0);
+
+    client_cache.last_phase = state::PAIR_PHASE::GETSERVERCERT;
+    REQUIRE(endpoints::pair_phase2(app_state, client_cache, moonlight_data.client_challenge, cache_key).status ==
+            SimpleWeb::StatusCode::success_ok);
+
+    auto bad_phase_3 = endpoints::pair_phase3(app_state, client_cache, bad_challenge, cache_key);
+    REQUIRE(bad_phase_3.status == SimpleWeb::StatusCode::client_error_bad_request);
+    REQUIRE(bad_phase_3.xml.get<int>("root.paired") == 0);
   }
 
   SECTION("Testing null params") {

@@ -697,6 +697,14 @@ These are the default values, if you want to assign custom ports you can set the
 
 ====
 
+[WARNING]
+====
+Older Wolf versions accepted any client certificate that named an issuer Wolf didn't know, as a
+workaround for some moonlight-embedded builds. Such a certificate passes as an already paired client,
+so any client on the network could use Wolf without pairing. This is now off; set
+`WOLF_ALLOW_UNKNOWN_ISSUER_CERTS=TRUE` to bring it back, only on a network you trust.
+====
+
 [TIP]
 ====
 Apps run as UID/GID `1000:1000` by default. Newly paired clients inherit this,

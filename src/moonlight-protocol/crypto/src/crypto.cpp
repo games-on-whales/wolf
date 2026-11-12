@@ -12,12 +12,16 @@ namespace crypto {
 std::string sha256(std::string_view str) {
   unsigned char md_value[EVP_MAX_MD_SIZE];
   unsigned int md_len;
-  auto mdctx = EVP_MD_CTX_new();
+  signature::EVP_MD_CTX_ptr mdctx(EVP_MD_CTX_new(), ::EVP_MD_CTX_free);
+  if (!mdctx)
+    handle_openssl_error("EVP_MD_CTX_new failed");
 
-  EVP_DigestInit_ex(mdctx, EVP_sha256(), nullptr);
-  EVP_DigestUpdate(mdctx, str.data(), str.size());
-  EVP_DigestFinal_ex(mdctx, md_value, &md_len);
-  EVP_MD_CTX_free(mdctx);
+  if (EVP_DigestInit_ex(mdctx.get(), EVP_sha256(), nullptr) != 1)
+    handle_openssl_error("EVP_DigestInit_ex failed");
+  if (EVP_DigestUpdate(mdctx.get(), str.data(), str.size()) != 1)
+    handle_openssl_error("EVP_DigestUpdate failed");
+  if (EVP_DigestFinal_ex(mdctx.get(), md_value, &md_len) != 1)
+    handle_openssl_error("EVP_DigestFinal_ex failed");
 
   std::stringstream ss;
   for (int i = 0; i < md_len; ++i) {
@@ -167,11 +171,13 @@ std::string sign(std::string_view msg, std::string_view private_key) {
 }
 
 bool verify(std::string_view msg, std::string_view signature, std::string_view public_key) {
-  auto p_key = signature::create_key(public_key, false);
-  if (!p_key) {
+  // An unparseable or unusable public key can't have produced a valid signature
+  try {
+    auto p_key = signature::create_key(public_key, false);
+    return signature::verify(msg, signature, p_key.get(), EVP_sha256());
+  } catch (const std::runtime_error &) {
     return false;
   }
-  return signature::verify(msg, signature, p_key.get(), EVP_sha256());
 }
 
 } // namespace crypto

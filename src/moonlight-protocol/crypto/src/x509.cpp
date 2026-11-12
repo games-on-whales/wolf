@@ -53,14 +53,18 @@ x509_ptr generate_x509(pkey_ptr pkey) {
   /* Set the public key for our certificate. */
   X509_set_pubkey(x509, pkey.get());
 
-  /* We want to copy the subject name to the issuer name. */
-  X509_NAME *name = X509_get_subject_name(x509);
+  /* Build the subject name from scratch and use it for both subject and issuer
+   * (self-signed). A fresh X509_NAME instead of editing the certificate's subject in
+   * place: OpenSSL 4.0 returns a const name from X509_get_subject_name(). */
+  X509_NAME *name = X509_NAME_new();
 
   /* Set the country code and common name. */
   X509_NAME_add_entry_by_txt(name, "C", MBSTRING_ASC, (unsigned char *)"IT", -1, -1, 0);
   X509_NAME_add_entry_by_txt(name, "O", MBSTRING_ASC, (unsigned char *)"GamesOnWhales", -1, -1, 0);
   X509_NAME_add_entry_by_txt(name, "CN", MBSTRING_ASC, (unsigned char *)"localhost", -1, -1, 0);
+  X509_set_subject_name(x509, name);
   X509_set_issuer_name(x509, name);
+  X509_NAME_free(name);
 
   /* Actually sign the certificate with our key. */
   if (!X509_sign(x509, pkey.get(), EVP_sha256())) {
@@ -152,7 +156,9 @@ std::string get_cert_signature(x509_ptr cert) {
   const ASN1_BIT_STRING *asn1 = nullptr;
   X509_get0_signature(&asn1, nullptr, cert.get());
 
-  return {(const char *)asn1->data, (std::size_t)asn1->length};
+  /* ASN1_STRING accessors instead of reading the struct fields directly:
+   * the ASN1 types are opaque in OpenSSL 4.0. */
+  return {(const char *)ASN1_STRING_get0_data(asn1), (std::size_t)ASN1_STRING_length(asn1)};
 }
 
 std::string get_cert_pem(x509_ptr cert) {
@@ -205,11 +211,6 @@ static int openssl_verify_cb(int ok, X509_STORE_CTX *ctx) {
   int err_code = X509_STORE_CTX_get_error(ctx);
 
   switch (err_code) {
-  // TODO: Checking for X509_V_ERR_UNABLE_TO_GET_ISSUER_CERT_LOCALLY is a temporary workaround to get
-  // moonlight-embedded to work on the raspberry pi
-  case X509_V_ERR_UNABLE_TO_GET_ISSUER_CERT_LOCALLY:
-    return 1;
-
   // Expired or not-yet-valid certificates are fine. Sometimes Moonlight is running on embedded devices
   // that don't have accurate clocks (or haven't yet synchronized by the time Moonlight first runs).
   // This behavior also matches what GeForce Experience does.
@@ -223,16 +224,28 @@ static int openssl_verify_cb(int ok, X509_STORE_CTX *ctx) {
 }
 
 /**
+ * Also accepts a cert whose issuer isn't in the store: a workaround for moonlight-embedded on the raspberry pi.
+ * It accepts ANY such cert, whatever its key, as the paired one: never the default.
+ */
+static int openssl_verify_unknown_issuer_cb(int ok, X509_STORE_CTX *ctx) {
+  if (X509_STORE_CTX_get_error(ctx) == X509_V_ERR_UNABLE_TO_GET_ISSUER_CERT_LOCALLY) {
+    return 1;
+  }
+  return openssl_verify_cb(ok, ctx);
+}
+
+/**
  * @brief: adapted from Sunshine
  */
-std::optional<std::string> verification_error(x509_ptr paired_cert, x509_ptr untrusted_cert) {
+std::optional<std::string>
+verification_error(x509_ptr paired_cert, x509_ptr untrusted_cert, bool allow_unknown_issuer) {
   auto x509_store{X509_STORE_new()};
   X509_STORE_add_cert(x509_store, paired_cert.get());
 
   auto _cert_ctx{X509_STORE_CTX_new()};
 
   X509_STORE_CTX_init(_cert_ctx, x509_store, untrusted_cert.get(), nullptr);
-  X509_STORE_CTX_set_verify_cb(_cert_ctx, openssl_verify_cb);
+  X509_STORE_CTX_set_verify_cb(_cert_ctx, allow_unknown_issuer ? openssl_verify_unknown_issuer_cb : openssl_verify_cb);
 
   // We don't care to validate the entire chain for the purposes of client auth.
   // Some versions of clients forked from Moonlight Embedded produce client certs

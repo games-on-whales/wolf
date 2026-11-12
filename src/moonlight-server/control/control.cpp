@@ -86,8 +86,13 @@ bool encrypt_and_send(std::string_view payload,
                       std::string_view aes_key,
                       immer::box<std::shared_ptr<ENetPeer>> connected_client) {
   if (auto enet_client = connected_client->get()) {
-    auto encrypted = control::encrypt_packet(aes_key, 0, payload); // TODO: seq?
-    return send_packet({(char *)encrypted.get(), encrypted->full_size()}, enet_client);
+    try {
+      auto encrypted = control::encrypt_packet(aes_key, 0, payload); // TODO: seq?
+      return send_packet({(char *)encrypted.get(), encrypted->full_size()}, enet_client);
+    } catch (const std::runtime_error &e) {
+      logs::log(logs::warning, "[ENET] Unable to encrypt outgoing packet: {}", e.what());
+      return false;
+    }
   } else {
     logs::log(logs::warning, "[ENET] Failed to send packet, client is not connected");
     return false;
@@ -181,6 +186,11 @@ void run_control(int port,
         case ENET_EVENT_TYPE_RECEIVE:
           enet_packet packet = {event.packet, enet_packet_destroy};
 
+          if (packet->dataLength < sizeof(ControlPacket)) {
+            logs::log(logs::warning, "[ENET] Dropping {} byte packet, too short for a header", packet->dataLength);
+            break;
+          }
+
           auto type = ((ControlPacket *)packet->data)->type;
 
           logs::log(logs::trace,
@@ -194,6 +204,13 @@ void run_control(int port,
           if (type == ENCRYPTED) {
             try {
               auto enc_pkt = (ControlEncryptedPacket *)(packet->data);
+              if (!enc_pkt->fits_in(packet->dataLength)) {
+                logs::log(logs::warning,
+                          "[ENET] Dropping {} byte encrypted packet, its header claims {} bytes",
+                          packet->dataLength,
+                          enc_pkt->full_size());
+                break;
+              }
               auto decrypted = decrypt_packet(*enc_pkt, client_session->aes_key);
               auto sub_type = ((ControlPacket *)decrypted.data())->type;
 

@@ -40,7 +40,7 @@ gst-inspect-1.0 x264enc >/dev/null 2>&1 || fail "x264enc element not found"
 
 echo "==> 6. HW encoder plugin files present (elements need a GPU to register)"
 GST_PLUGINS_DIR=/usr/local/lib64/gstreamer-1.0
-for plugin in libgstnvcodec.so libgstvaapi.so libgstmsdk.so; do
+for plugin in libgstnvcodec.so libgstva.so libgstmsdk.so; do
   [ -e "$GST_PLUGINS_DIR/$plugin" ] || fail "$plugin missing from $GST_PLUGINS_DIR"
 done
 

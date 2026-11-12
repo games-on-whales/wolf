@@ -188,6 +188,11 @@ void run() {
   auto p_cert_file = utils::get_env("WOLF_PRIVATE_CERT_FILE", "cert.pem");
   auto local_state = initialize(config_file, p_key_file, p_cert_file);
 
+  if (state::allow_unknown_issuer_certs()) {
+    logs::log(logs::warning,
+              "WOLF_ALLOW_UNKNOWN_ISSUER_CERTS=TRUE: any client cert naming an unknown issuer passes as paired");
+  }
+
   // HTTP APIs
   std::thread([local_state]() {
     HttpServer server = HttpServer();
