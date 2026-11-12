@@ -9,13 +9,18 @@
 
 using Catch::Matchers::Equals;
 
+#include <atomic>
 #include <crypto/crypto.hpp>
+#include <filesystem>
+#include <fstream>
 #include <moonlight/protocol.hpp>
 #include <openssl/x509.h>
 #include <range/v3/view.hpp>
 #include <rest/helpers.hpp>
+#include <rfl/toml.hpp>
 #include <state/config.hpp>
 #include <streaming/streaming.hpp>
+#include <thread>
 
 using namespace moonlight;
 using namespace state;
@@ -140,6 +145,116 @@ TEST_CASE("LocalState pairing information", "[LocalState]") {
     state::unpair(cfg, {another_cert});
     REQUIRE_THAT(cfg.paired_clients->load().get(), Catch::Matchers::SizeIs(0));
   }
+}
+
+static std::string read_file(const std::filesystem::path &path) {
+  std::ifstream in(path, std::ios::binary);
+  return {std::istreambuf_iterator<char>(in), std::istreambuf_iterator<char>()};
+}
+
+TEST_CASE("LocalState config is saved atomically", "[LocalState]") {
+  namespace fs = std::filesystem;
+  auto test_dir = fs::temp_directory_path() / ("wolf-config-" + state::gen_uuid());
+  fs::create_directories(test_dir);
+  auto config_file = test_dir / "config.toml";
+  fs::copy_file("config.test.toml", config_file);
+
+  auto event_bus = std::make_shared<events::EventBusType>();
+  auto running_sessions = std::make_shared<immer::atom<immer::vector<events::StreamSession>>>();
+  auto cfg = state::load_or_default(config_file.string(), event_bus, running_sessions);
+
+  auto profiles = cfg.profiles->load().get();
+  REQUIRE(!profiles.empty());
+  auto renamed_profile = events::Profile{.id = profiles[0]->id,
+                                         .name = "Renamed profile",
+                                         .icon_png_path = profiles[0]->icon_png_path,
+                                         .pin = profiles[0]->pin,
+                                         .apps = profiles[0]->apps};
+  auto updated_profiles = profiles.set(0, immer::box<events::Profile>{renamed_profile});
+
+  SECTION("Content is saved and no temporary file is left behind") {
+    state::update_profiles(cfg, updated_profiles);
+
+    auto saved = rfl::toml::load<wolf::config::WolfConfig, rfl::DefaultIfMissing>(config_file.string()).value();
+    REQUIRE(saved.uuid == "0000-1111-2222-3333");
+    REQUIRE(saved.profiles[0].name == "Renamed profile");
+    REQUIRE(saved.profiles.size() == profiles.size());
+
+    // No temporary file left behind
+    auto files = std::vector<std::string>{};
+    for (const auto &entry : fs::directory_iterator(test_dir)) {
+      files.push_back(entry.path().filename().string());
+    }
+    std::sort(files.begin(), files.end());
+    REQUIRE_THAT(files, Equals(std::vector<std::string>{"config.toml"}));
+  }
+
+  SECTION("Readers never see a partially written file") {
+    state::update_profiles(cfg, updated_profiles);
+    const auto expected_content = read_file(config_file);
+    REQUIRE(!expected_content.empty());
+
+    std::atomic_bool writer_done = false;
+    std::atomic_int reads = 0;
+    std::atomic_int bad_reads = 0;
+    std::thread reader([&]() {
+      while (!writer_done) {
+        if (read_file(config_file) != expected_content) {
+          bad_reads++;
+        }
+        reads++;
+      }
+    });
+    for (int i = 0; i < 100; i++) {
+      state::update_profiles(cfg, updated_profiles);
+    }
+    writer_done = true;
+    reader.join();
+
+    REQUIRE(reads > 0);
+    REQUIRE(bad_reads == 0);
+  }
+
+  SECTION("Concurrent updates to different parts of the config are not lost") {
+    auto clients = cfg.paired_clients->load().get();
+    REQUIRE(!clients.empty());
+    auto client_id = state::get_client_id(clients[0]);
+    auto updated_client = state::PairedClient{.client_cert = clients[0]->client_cert,
+                                              .app_state_folder = "updated-state-folder",
+                                              .settings = clients[0]->settings};
+
+    auto other_cfg = cfg; // Copies of Config must share the same lock
+    std::thread clients_writer([&]() {
+      for (int i = 0; i < 30; i++) {
+        state::update_client_settings(cfg, client_id, updated_client);
+      }
+    });
+    std::thread profiles_writer([&]() {
+      for (int i = 0; i < 30; i++) {
+        state::update_profiles(other_cfg, updated_profiles);
+      }
+    });
+    clients_writer.join();
+    profiles_writer.join();
+
+    auto saved = rfl::toml::load<wolf::config::WolfConfig, rfl::DefaultIfMissing>(config_file.string()).value();
+    REQUIRE(saved.paired_clients[0].app_state_folder == "updated-state-folder");
+    REQUIRE(saved.profiles[0].name == "Renamed profile");
+  }
+
+  SECTION("A failed save leaves file and memory untouched") {
+    // A directory can't be opened by ofstream, even as root
+    fs::create_directory(test_dir / "config.toml.tmp");
+    const auto original_content = read_file(config_file);
+
+    REQUIRE_THROWS(state::update_profiles(cfg, updated_profiles));
+    REQUIRE(read_file(config_file) == original_content);
+    REQUIRE(cfg.profiles->load()->at(0)->name == profiles[0]->name);
+
+    fs::remove(test_dir / "config.toml.tmp");
+  }
+
+  fs::remove_all(test_dir);
 }
 
 /**
