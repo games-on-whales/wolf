@@ -354,7 +354,14 @@ void UnixSocketServer::endpoint_StreamSessionStop(const HTTPRequest &req, std::s
   if (session) {
     auto sessions = state_->app_state->running_sessions->load();
     auto session_id = std::stoul(session.value().session_id);
-    if (state::get_session_by_id(sessions.get(), session_id)) {
+    if (auto current = state::get_session_by_id(sessions.get(), session_id)) {
+      if (session.value().expected_generation &&
+          (*session.value().expected_generation == 0 || *session.value().expected_generation != current->generation)) {
+        // The caller asked to stop a specific execution but the session was relaunched since;
+        // refuse instead of killing the new one.
+        send_http(socket, 409, rfl::json::write(GenericErrorResponse{.error = "Session generation changed"}));
+        return;
+      }
       this->state_->app_state->event_bus->fire_event(
           immer::box<events::StopStreamEvent>(events::StopStreamEvent{.session_id = session_id}));
       auto res = GenericSuccessResponse{.success = true};

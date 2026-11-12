@@ -161,7 +161,7 @@ setup_moonlight_handlers(const immer::box<state::AppState> &app_state,
         }
 
         // TODO: timeout? What if the wayland display is never ready?
-        auto w_display_ready = on_ready->get_future().then([session, runtime_dir](auto fut) {
+        auto w_display_ready = on_ready->get_future().then([session, runtime_dir, app_state](auto fut) {
           streaming::WaylandDisplayReady ready = fut.get();
 
           auto wl_state = virtual_display::create_wayland_display(ready.wayland_plugin, ready.wayland_socket_name);
@@ -177,8 +177,12 @@ setup_moonlight_handlers(const immer::box<state::AppState> &app_state,
             logs::log(logs::error,
                       "[STREAM_SESSION] Wayland socket {} was not ready, aborting runner startup",
                       ready.wayland_socket_name);
-            session->event_bus->fire_event(
-                immer::box<events::StopStreamEvent>(events::StopStreamEvent{.session_id = session->session_id}));
+            if (state::is_current_execution(app_state->running_sessions->load(),
+                                            session->session_id,
+                                            session->generation)) {
+              session->event_bus->fire_event(
+                  immer::box<events::StopStreamEvent>(events::StopStreamEvent{.session_id = session->session_id}));
+            }
             return;
           }
 
@@ -228,8 +232,13 @@ setup_moonlight_handlers(const immer::box<state::AppState> &app_state,
           if (run_session->stop_stream_when_over) {
             run_session->stream_session->wayland_display->store(nullptr);
 
-            app_state->event_bus->fire_event(immer::box<events::StopStreamEvent>(
-                events::StopStreamEvent{.session_id = run_session->stream_session->session_id}));
+            // A stale runner must not take down a newer execution of the same client.
+            if (state::is_current_execution(app_state->running_sessions->load(),
+                                            run_session->stream_session->session_id,
+                                            run_session->stream_session->generation)) {
+              app_state->event_bus->fire_event(immer::box<events::StopStreamEvent>(
+                  events::StopStreamEvent{.session_id = run_session->stream_session->session_id}));
+            }
           }
         }).detach();
       }));

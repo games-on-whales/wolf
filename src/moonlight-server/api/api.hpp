@@ -110,6 +110,7 @@ struct StreamSessionPauseRequest {
 
 struct StreamSessionStopRequest {
   std::string session_id;
+  std::optional<std::size_t> expected_generation; // size_t: serialised as an opaque string
 };
 
 struct StreamSessionHandleInputRequest {
