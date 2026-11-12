@@ -1,5 +1,6 @@
 #include "platforms/hw.hpp"
 
+#include <atomic>
 #include <chrono>
 #include <control/control.hpp>
 #include <core/batched_send.hpp>
@@ -73,6 +74,79 @@ static GstBusSyncReply bus_sync_handler(GstBus *bus, GstMessage *msg, gpointer d
     need_context_handler(bus, msg, data);
   }
   return GST_BUS_PASS;
+}
+
+/**
+ * gst-interpipe pushes the very same GstBuffer (and GstMemory objects) to every listener.
+ * When more than one consumer pipeline listens to the same producer (e.g. multiple sessions in a lobby),
+ * VA elements (vapostproc, ...) each import the DMABuf into their own VADisplay and cache the resulting
+ * VASurface as qdata on the GstMemory. Since that memory is shared, a second consumer's import can replace
+ * (and destroy) the surface another consumer is still using. This is the suspected cause of the crash in
+ * vaEndPicture when a second client joins a lobby with the zero-copy pipeline (see #364).
+ *
+ * To avoid this we re-wrap each DMABuf memory into a new GstMemory (gst_memory_share: same fd, no pixel copy)
+ * so that every consumer pipeline gets its own memory objects to attach per-pipeline data to.
+ */
+static GstPadProbeReturn unshare_dmabuf_probe(GstPad * /* pad */, GstPadProbeInfo *info, gpointer /* user_data */) {
+  auto buffer = GST_PAD_PROBE_INFO_BUFFER(info);
+  if (!buffer) {
+    return GST_PAD_PROBE_OK;
+  }
+
+  auto n_mem = gst_buffer_n_memory(buffer);
+  if (n_mem == 0 || !gst_memory_is_type(gst_buffer_peek_memory(buffer, 0), "dmabuf")) {
+    return GST_PAD_PROBE_OK;
+  }
+
+  auto new_buffer = gst_buffer_new();
+  for (guint i = 0; i < n_mem; i++) {
+    auto mem = gst_buffer_peek_memory(buffer, i);
+    auto shared = gst_memory_share(mem, 0, static_cast<gssize>(gst_memory_get_sizes(mem, nullptr, nullptr)));
+    if (!shared) {
+      // Shouldn't happen for DMABuf memory; fall back to the original (shared) buffer rather than dropping frames
+      static std::atomic_flag warned = ATOMIC_FLAG_INIT;
+      if (!warned.test_and_set()) {
+        logs::log(logs::warning,
+                  "[GSTREAMER] Unable to re-wrap DMABuf memory, passing the shared buffer through. "
+                  "Sharing a producer between multiple sessions might be unstable");
+      }
+      gst_buffer_unref(new_buffer);
+      return GST_PAD_PROBE_OK;
+    }
+    gst_buffer_append_memory(new_buffer, shared);
+  }
+  // Copy flags, timestamps and metas (GstVideoMeta carries strides/offsets for the DMABuf planes)
+  if (!gst_buffer_copy_into(
+          new_buffer,
+          buffer,
+          static_cast<GstBufferCopyFlags>(GST_BUFFER_COPY_FLAGS | GST_BUFFER_COPY_TIMESTAMPS | GST_BUFFER_COPY_META),
+          0,
+          -1)) {
+    gst_buffer_unref(new_buffer);
+    return GST_PAD_PROBE_OK;
+  }
+
+  gst_buffer_unref(buffer);
+  GST_PAD_PROBE_INFO_DATA(info) = new_buffer;
+  return GST_PAD_PROBE_OK;
+}
+
+static void add_unshare_dmabuf_probe(GstElement *pipeline, const std::string &interpipesrc_name) {
+  bool installed = false;
+  if (auto src = gst_bin_get_by_name(GST_BIN(pipeline), interpipesrc_name.c_str())) {
+    if (auto pad = gst_element_get_static_pad(src, "src")) {
+      installed = gst_pad_add_probe(pad, GST_PAD_PROBE_TYPE_BUFFER, unshare_dmabuf_probe, nullptr, nullptr) != 0;
+      gst_object_unref(pad);
+    }
+    gst_object_unref(src);
+  }
+
+  if (!installed) {
+    logs::log(logs::warning,
+              "[GSTREAMER] Unable to add DMABuf probe on {}, "
+              "sharing a producer between multiple sessions might be unstable",
+              interpipesrc_name);
+  }
 }
 
 std::pair<std::string, std::string> get_color_params(immer::box<events::VideoSession> video_session) {
@@ -420,6 +494,8 @@ void start_streaming_video(immer::box<events::VideoSession> video_session,
       configure_appsink(app_sink_el, udp_sink.get());
       gst_object_unref(app_sink_el);
     }
+
+    add_unshare_dmabuf_probe(pipeline.get(), fmt::format("interpipesrc_{}_video", video_session->session_id));
 
     auto bus = gst_pipeline_get_bus(GST_PIPELINE(pipeline.get()));
     gst_bus_set_sync_handler(bus, bus_sync_handler, ctx_data_ptr.get(), nullptr);
