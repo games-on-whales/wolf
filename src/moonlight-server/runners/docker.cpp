@@ -147,14 +147,18 @@ void RunDocker::run(std::string_view session_id,
   // unfortunately hidraw devices use dynamically assigned major numbers rather than static ones
   // so we'll get the major number from reading `/proc/devices` for `hidraw` and `input`
   // and set the right entries in `DeviceCgroupRules`
-  {
+  // Rootless Podman does not support DeviceCgroupRules.
+  // Device access is handled separately through the container device configuration.
+  if (getenv("WOLF_DISABLE_DEVICE_CGROUP_RULES") == nullptr) {
     auto hidraw_major = get_device_major("hidraw");
     auto input_major = get_device_major("input");
+
     if (hidraw_major && input_major) {
       logs::log(logs::debug,
                 "[DOCKER] Setting DeviceCgroupRules for hidraw:{} and input:{}",
                 *hidraw_major,
                 *input_major);
+
       auto parsed_json = utils::parse_json(final_json_opts).as_object();
       if (auto host_config_ptr = parsed_json.if_contains("HostConfig")) {
         auto host_config = host_config_ptr->as_object();
@@ -176,6 +180,8 @@ void RunDocker::run(std::string_view session_id,
     } else {
       logs::log(logs::warning, "[DOCKER] Failed to get major numbers for hidraw and input");
     }
+  } else {
+    logs::log(logs::info, "[DOCKER] Skipping DeviceCgroupRules");
   }
 
   logs::log(logs::debug, "[DOCKER] Container options: {}", final_json_opts);
@@ -264,7 +270,7 @@ void RunDocker::run(std::string_view session_id,
             if (udev_ev.count("DEVNAME") == 0) {
               cmd = fmt::format("fake-udev -m {}", udev_msg);
             } else {
-              cmd = fmt::format("mkdir -p /dev/input && mknod {} c {} {} && chmod 777 {} && fake-udev -m {}",
+              cmd = fmt::format("mkdir -p /dev/input && (mknod {} c {} {} || true) && (chmod 777 {} || true) && fake-udev -m {}",
                                 udev_ev["DEVNAME"],
                                 udev_ev["MAJOR"],
                                 udev_ev["MINOR"],
