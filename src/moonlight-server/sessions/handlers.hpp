@@ -29,6 +29,13 @@ setup_moonlight_handlers(const immer::box<state::AppState> &app_state,
 immer::vector<immer::box<events::EventBusHandlers>>
 setup_paused_session_handlers(const immer::box<state::AppState> &app_state, std::chrono::milliseconds timeout);
 
+/**
+ * Stops a lobby that stays empty for longer than `timeout` after a session leaves it.
+ * A zero timeout registers no handlers.
+ */
+immer::vector<immer::box<events::EventBusHandlers>>
+setup_empty_lobby_handlers(const immer::box<state::AppState> &app_state, std::chrono::milliseconds timeout);
+
 immer::vector<immer::box<events::EventBusHandlers>>
 setup_lobbies_handlers(const immer::box<state::AppState> &app_state,
                        const std::string &runtime_dir,

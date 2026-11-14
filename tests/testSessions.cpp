@@ -156,3 +156,78 @@ TEST_CASE("Paused sessions are stopped after a timeout", "[Sessions]") {
     REQUIRE(stops.load() == 0);
   }
 }
+
+TEST_CASE("Empty lobbies are stopped after a timeout", "[Sessions]") {
+  const std::size_t session_id = 1234;
+  auto app_state = make_app_state(session_id);
+  auto event_bus = app_state->event_bus;
+
+  // A persistent lobby with one connected Moonlight session, added straight to state (no compositor).
+  const std::string lobby_id = "lobby-under-test";
+  events::Lobby lobby{.id = lobby_id,
+                      .name = "test_lobby",
+                      .started_by_profile_id = "test_profile",
+                      .multi_user = false,
+                      .stop_when_everyone_leaves = false};
+  lobby.connected_sessions->update([&](const immer::vector<immer::box<std::string>> &connected) {
+    return connected.push_back(immer::box<std::string>{std::to_string(session_id)});
+  });
+  app_state->lobbies->update([&](const immer::vector<events::Lobby> &lobbies) { return lobbies.push_back(lobby); });
+
+  auto lobbies_handlers = sessions::setup_lobbies_handlers(app_state, utils::get_env("XDG_RUNTIME_DIR", "/tmp/"), {});
+
+  std::atomic<int> stops = 0;
+  std::atomic<std::chrono::steady_clock::time_point> stopped_at{};
+  auto observer = event_bus->register_handler<immer::box<events::StopLobbyEvent>>(
+      [&stops, &stopped_at, lobby_id](const immer::box<events::StopLobbyEvent> &ev) {
+        if (ev->lobby_id == lobby_id) {
+          stopped_at = std::chrono::steady_clock::now();
+          stops++;
+        }
+      });
+
+  auto leave = [&]() {
+    auto ev = events::LeaveLobbyEvent{.lobby_id = lobby_id, .moonlight_session_id = session_id};
+    event_bus->fire_event(immer::box<events::LeaveLobbyEvent>(ev));
+  };
+  auto join = [&]() {
+    auto ev = events::JoinLobbyEvent{.lobby_id = lobby_id, .moonlight_session_id = session_id};
+    event_bus->fire_event(immer::box<events::JoinLobbyEvent>(ev));
+  };
+
+  SECTION("Leave, then StopLobby once the timeout has passed") {
+    auto handlers = sessions::setup_empty_lobby_handlers(app_state, TEST_TIMEOUT);
+    leave();
+    REQUIRE(stops.load() == 0);
+    REQUIRE(wait_for([&]() { return stops.load() == 1 && app_state->lobbies->load()->empty(); }));
+  }
+
+  SECTION("Joining again before the timeout keeps the lobby") {
+    auto handlers = sessions::setup_empty_lobby_handlers(app_state, TEST_TIMEOUT);
+    leave();
+    join();
+    std::this_thread::sleep_for(TEST_TIMEOUT * 4);
+    REQUIRE(stops.load() == 0);
+    REQUIRE(app_state->lobbies->load()->size() == 1);
+  }
+
+  SECTION("Leaving again after a join restarts the timeout") {
+    auto timeout = TEST_TIMEOUT * 4;
+    auto handlers = sessions::setup_empty_lobby_handlers(app_state, timeout);
+    leave();
+    join();
+    std::this_thread::sleep_for(timeout / 2);
+    auto left_again = std::chrono::steady_clock::now();
+    leave();
+    REQUIRE(wait_for([&]() { return stops.load() == 1; }));
+    REQUIRE(stopped_at.load() - left_again >= timeout);
+  }
+
+  SECTION("A zero timeout arms nothing") {
+    auto handlers = sessions::setup_empty_lobby_handlers(app_state, 0ms);
+    REQUIRE(handlers.empty());
+    leave();
+    std::this_thread::sleep_for(TEST_TIMEOUT * 4);
+    REQUIRE(stops.load() == 0);
+  }
+}
