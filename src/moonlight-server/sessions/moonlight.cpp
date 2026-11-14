@@ -46,6 +46,65 @@ immer::box<RTPPingType> wait_for_ping(std::shared_ptr<events::EventBusType> ev_b
 }
 
 immer::vector<immer::box<events::EventBusHandlers>>
+setup_paused_session_handlers(const immer::box<state::AppState> &app_state, std::chrono::milliseconds timeout) {
+  immer::vector_transient<immer::box<events::EventBusHandlers>> handlers;
+  if (timeout.count() <= 0) {
+    return handlers.persistent();
+  }
+
+  auto event_bus = app_state->event_bus;
+  auto running_sessions = app_state->running_sessions;
+  // session_id -> epoch of the Pause that armed the pending check
+  auto paused_sessions = std::make_shared<immer::atom<immer::map<std::size_t, std::uint64_t>>>();
+  auto next_epoch = std::make_shared<std::atomic<std::uint64_t>>(0);
+
+  handlers.push_back(event_bus->register_handler<immer::box<events::PauseStreamEvent>>(
+      [=](const immer::box<events::PauseStreamEvent> &ev) {
+        auto session_id = ev->session_id;
+        // A peer that disconnects after its Stop still fires Pause, once the session is gone
+        if (!state::get_session_by_id(running_sessions->load(), session_id)) {
+          return;
+        }
+        auto epoch = ++(*next_epoch);
+        paused_sessions->update(
+            [=](const auto map) { return map.count(session_id) ? map : map.set(session_id, epoch); });
+
+        // Already paused: the check armed by the first Pause stands
+        auto paused = paused_sessions->load();
+        auto armed = paused->find(session_id);
+        if (!armed || *armed != epoch) {
+          return;
+        }
+
+        std::thread([=]() {
+          std::this_thread::sleep_for(timeout);
+          auto latest = paused_sessions->load();
+          auto current = latest->find(session_id);
+          if (current && *current == epoch) {
+            logs::log(logs::info,
+                      "[STREAM_SESSION] Session {} paused for {}ms, stopping it",
+                      session_id,
+                      timeout.count());
+            event_bus->fire_event(
+                immer::box<events::StopStreamEvent>(events::StopStreamEvent{.session_id = session_id}));
+          }
+        }).detach();
+      }));
+
+  handlers.push_back(event_bus->register_handler<immer::box<events::ResumeStreamEvent>>(
+      [=](const immer::box<events::ResumeStreamEvent> &ev) {
+        paused_sessions->update([=](const auto map) { return map.erase(ev->session_id); });
+      }));
+
+  handlers.push_back(event_bus->register_handler<immer::box<events::StopStreamEvent>>(
+      [=](const immer::box<events::StopStreamEvent> &ev) {
+        paused_sessions->update([=](const auto map) { return map.erase(ev->session_id); });
+      }));
+
+  return handlers.persistent();
+}
+
+immer::vector<immer::box<events::EventBusHandlers>>
 setup_moonlight_handlers(const immer::box<state::AppState> &app_state,
                          const std::string &runtime_dir,
                          const std::optional<AudioServer> &audio_server) {
@@ -272,6 +331,11 @@ setup_moonlight_handlers(const immer::box<state::AppState> &app_state,
                                            server_name);
         }).detach();
       }));
+
+  auto paused_timeout = get_opt_in_timeout("WOLF_PAUSED_SESSION_TIMEOUT_MS");
+  for (const auto &handler : setup_paused_session_handlers(app_state, paused_timeout)) {
+    handlers.push_back(handler);
+  }
 
   return handlers.persistent();
 }
