@@ -6,6 +6,7 @@
 #include <helpers/tsqueue.hpp>
 #include <helpers/utils.hpp>
 #include <rfl/toml.hpp>
+#include <sessions/common.hpp>
 #include <sessions/handlers.hpp>
 #include <state/config.hpp>
 
@@ -805,4 +806,22 @@ TEST_CASE("SSE APIs", "[API]") {
   REQUIRE(event.has_value());
   REQUIRE_THAT(event->event, Equals("wolf::core::events::IDRRequestEvent"));
   REQUIRE_THAT(event->data, Equals("{\"session_id\":\"42\"}"));
+}
+
+TEST_CASE("Wayland socket wait", "[Sessions]") {
+  // CTest sets WOLF_SKIP_WAYLAND_SOCKET_WAIT for the whole suite, which would make this test vacuous
+  const char *saved = std::getenv("WOLF_SKIP_WAYLAND_SOCKET_WAIT");
+  std::string saved_value = saved ? saved : "";
+  ::unsetenv("WOLF_SKIP_WAYLAND_SOCKET_WAIT");
+
+  auto runtime_dir = std::filesystem::temp_directory_path().string();
+  auto timeout = std::chrono::milliseconds(100);
+
+  // Apps without a compositor have no socket to wait for
+  REQUIRE(wolf::core::sessions::wait_for_wayland_socket(runtime_dir, "", timeout));
+  REQUIRE_FALSE(wolf::core::sessions::wait_for_wayland_socket(runtime_dir, "no-such-socket", timeout));
+
+  if (saved) {
+    ::setenv("WOLF_SKIP_WAYLAND_SOCKET_WAIT", saved_value.c_str(), 1);
+  }
 }
