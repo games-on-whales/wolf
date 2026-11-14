@@ -47,6 +47,10 @@ Wolf is configured via a TOML config file and some additional optional ENV varia
 |0
 |Stop a session, and its app container, once it has stayed paused for this many milliseconds. A session pauses when the Moonlight client disconnects without quitting the app, for example when the client device goes to sleep. `0` keeps paused sessions until they are stopped by hand
 
+|WOLF_EMPTY_LOBBY_TIMEOUT_MS
+|0
+|Stop a lobby, and its app container, once it has stayed empty for this many milliseconds after its last session left. This also stops lobbies created with `stop_when_everyone_leaves` set to false. `0` keeps empty lobbies until they are stopped by hand
+
 |WOLF_DOCKER_SOCKET
 |/var/run/docker.sock
 |The full path to the docker socket, doesn't support tcp (yet)
