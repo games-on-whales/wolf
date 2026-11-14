@@ -1,6 +1,9 @@
 #pragma once
 #include <boost/endian.hpp>
+#include <algorithm>
 #include <cmath>
+#include <cstdint>
+#include <limits>
 #include <gst-plugin/gstrtpmoonlightpay_video.hpp>
 #include <gst-plugin/utils.hpp>
 #include <helpers/logger.hpp>
@@ -18,7 +21,11 @@ struct VideoRTPHeaders {
 #pragma pack(push, 1)
 struct VideoShortHeader {
   uint8_t header_type; // Always 0x01 for short headers
-  uint8_t unknown[2];
+
+  // Host processing latency of the frame in 1/10 ms units (Sunshine extension),
+  // zero when unknown. Read by Moonlight clients that identify the host as Sunshine.
+  boost::endian::little_uint16_at frame_processing_latency;
+
   // Currently known values:
   // 1 = Normal P-frame
   // 2 = IDR-frame
@@ -33,6 +40,21 @@ struct VideoShortHeader {
   uint8_t unknown2[2];
 };
 #pragma pack(pop)
+
+/**
+ * Converts the time a frame spent in the host pipeline into the 1/10 ms units of the video header.
+ * Both times are running times of the same pipeline clock.
+ * Returns 0 (unknown) when either time is missing or the frame is stamped in the future,
+ * and saturates at the largest value the field can carry.
+ */
+static inline uint16_t host_processing_latency(GstClockTime frame_running_time, GstClockTime now_running_time) {
+  if (!GST_CLOCK_TIME_IS_VALID(frame_running_time) || !GST_CLOCK_TIME_IS_VALID(now_running_time) ||
+      now_running_time < frame_running_time) {
+    return 0;
+  }
+  const uint64_t duration_us = (now_running_time - frame_running_time) / GST_USECOND;
+  return static_cast<uint16_t>(std::min<uint64_t>((duration_us + 50) / 100, std::numeric_limits<uint16_t>::max()));
+}
 
 /**
  * Creates an RTP header and returns a GstBuffer to it
@@ -79,7 +101,9 @@ create_rtp_header(const gst_rtp_moonlight_pay_video &rtpmoonlightpay, int packet
   return buf;
 }
 
-static GstBuffer *prepend_video_header(const gst_rtp_moonlight_pay_video &rtpmoonlightpay, GstBuffer *inbuf) {
+static GstBuffer *prepend_video_header(const gst_rtp_moonlight_pay_video &rtpmoonlightpay,
+                                       GstBuffer *inbuf,
+                                       uint16_t frame_processing_latency = 0) {
   constexpr auto video_payload_header_size = 8;
   auto in_buf_size = gst_buffer_get_size(inbuf);
   GstBuffer *video_header = gst_buffer_new_and_fill(video_payload_header_size, 0x00);
@@ -96,6 +120,7 @@ static GstBuffer *prepend_video_header(const gst_rtp_moonlight_pay_video &rtpmoo
   /* set headers */
   auto packet = (VideoShortHeader *)info.data;
   packet->header_type = 0x01;
+  packet->frame_processing_latency = frame_processing_latency;
   packet->frame_type = is_key ? 0x02 : 0x01;
   packet->last_payload_len = (in_buf_size + video_payload_header_size) %
                              (rtpmoonlightpay.payload_size - sizeof(moonlight::NV_VIDEO_PACKET));
@@ -323,8 +348,9 @@ static GstBufferList *generate_fec_multi_blocks(gst_rtp_moonlight_pay_video *rtp
  *
  * @return a list of buffers, each element representing a single RTP packet
  */
-static GstBufferList *split_into_rtp(gst_rtp_moonlight_pay_video *rtpmoonlightpay, GstBuffer *inbuf) {
-  auto full_payload_buf = prepend_video_header(*rtpmoonlightpay, inbuf);
+static GstBufferList *
+split_into_rtp(gst_rtp_moonlight_pay_video *rtpmoonlightpay, GstBuffer *inbuf, uint16_t frame_processing_latency = 0) {
+  auto full_payload_buf = prepend_video_header(*rtpmoonlightpay, inbuf, frame_processing_latency);
 
   GstBufferList *rtp_packets = generate_rtp_packets(*rtpmoonlightpay, full_payload_buf);
 
