@@ -343,6 +343,66 @@ TEST_CASE_METHOD(GStreamerTestsFixture, "Create RTP VIDEO packets", "[GSTPlugin]
   gst_buffer_unref(video_payload);
 }
 
+TEST_CASE("Host processing latency units", "[GSTPlugin]") {
+  using gst_moonlight_video::host_processing_latency;
+
+  SECTION("1/10 ms units, rounded to nearest") {
+    REQUIRE(host_processing_latency(1 * GST_SECOND, 1 * GST_SECOND + 5 * GST_MSECOND) == 50);
+    REQUIRE(host_processing_latency(0, 12 * GST_MSECOND + 340 * GST_USECOND) == 123);
+    REQUIRE(host_processing_latency(0, 49 * GST_USECOND) == 0);
+    REQUIRE(host_processing_latency(0, 50 * GST_USECOND) == 1);
+    REQUIRE(host_processing_latency(0, 149 * GST_USECOND) == 1);
+    REQUIRE(host_processing_latency(0, 150 * GST_USECOND) == 2);
+  }
+
+  SECTION("Saturates at the field width") {
+    REQUIRE(host_processing_latency(0, 6553 * GST_MSECOND + 500 * GST_USECOND) == 65535);
+    REQUIRE(host_processing_latency(0, 10 * GST_SECOND) == 65535);
+  }
+
+  SECTION("Unknown is zero") {
+    REQUIRE(host_processing_latency(GST_CLOCK_TIME_NONE, 1 * GST_SECOND) == 0);
+    REQUIRE(host_processing_latency(1 * GST_SECOND, GST_CLOCK_TIME_NONE) == 0);
+    REQUIRE(host_processing_latency(2 * GST_SECOND, 1 * GST_SECOND) == 0);
+  }
+}
+
+TEST_CASE_METHOD(GStreamerTestsFixture, "Host processing latency in the video header", "[GSTPlugin]") {
+  auto rtpmoonlightpay = (gst_rtp_moonlight_pay_video *)g_object_new(gst_TYPE_rtp_moonlight_pay_video, nullptr);
+  auto payload = gst_buffer_new_and_fill(10, "$A PAYLOAD");
+
+  SECTION("Written little endian into bytes 1 and 2") {
+    auto video_payload = gst_moonlight_video::prepend_video_header(*rtpmoonlightpay, payload, 0x1234);
+    auto content = gst_buffer_copy_content(video_payload);
+    REQUIRE(content[0] == 0x01);
+    REQUIRE(content[1] == 0x34);
+    REQUIRE(content[2] == 0x12);
+    gst_buffer_unref(video_payload);
+  }
+
+  SECTION("Defaults to zero") {
+    auto video_payload = gst_moonlight_video::prepend_video_header(*rtpmoonlightpay, payload);
+    auto content = gst_buffer_copy_content(video_payload);
+    REQUIRE(content[1] == 0x00);
+    REQUIRE(content[2] == 0x00);
+    gst_buffer_unref(video_payload);
+  }
+
+  SECTION("Survives packetization") {
+    rtpmoonlightpay->payload_size = 1392;
+    rtpmoonlightpay->fec_percentage = 0;
+    auto rtp_packets = gst_moonlight_video::split_into_rtp(rtpmoonlightpay, payload, 4242);
+    auto first_packet = gst_buffer_copy_content(gst_buffer_list_get(rtp_packets, 0));
+    auto short_header = reinterpret_cast<gst_moonlight_video::VideoShortHeader *>(
+        first_packet.data() + sizeof(gst_moonlight_video::VideoRTPHeaders));
+    REQUIRE(short_header->frame_processing_latency == 4242);
+    gst_buffer_list_unref(rtp_packets);
+  }
+
+  g_object_unref(rtpmoonlightpay);
+  gst_buffer_unref(payload);
+}
+
 /*
  * AUDIO
  */
