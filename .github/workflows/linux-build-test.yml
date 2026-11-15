@@ -12,7 +12,7 @@ on:
 
 env:
   # Quoted to be safe against YAML octal coercion of all-digit SHAs
-  GST_WAYLAND_COMMIT: "0979e01"
+  GST_WAYLAND_COMMIT: "fda835d"
   # Fork revision with the context-query forwarding needed by the Vulkan encode path
   GST_INTERPIPE_REV: 0c454917cb3cf4f2b2f2729f5f72a4dee072c7c9
 

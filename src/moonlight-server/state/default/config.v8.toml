@@ -508,9 +508,15 @@ video/x-h264, profile=high, stream-format=byte-stream\
 
 ##############
 # AV1 encoders
-# Note: no Vulkan AV1 entry yet, vulkanav1enc rate-control=cbr segfaults on RADV;
-# see https://github.com/games-on-whales/gst-wayland-display/issues/84
 ###
+[[gstreamer.video.av1_encoders]]
+plugin_name = "vulkan"
+check_elements = ["vulkanav1enc"]
+encoder_pipeline = """
+vulkanav1enc rate-control=cbr bitrate={bitrate} min-qp=20 idr-period=1024 num-ref-frames=1 !
+av1parse !
+video/x-av1, stream-format=obu-stream, alignment=frame, profile=main\
+"""
 [[gstreamer.video.av1_encoders]]
 plugin_name = "nvcodec"
 check_elements = ["nvav1enc", "cudaconvertscale", "cudaupload"]
