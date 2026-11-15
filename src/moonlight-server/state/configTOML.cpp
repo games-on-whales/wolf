@@ -179,10 +179,9 @@ parse_apps(const std::vector<BaseApp> &apps,
          * videoconvertscale + vulkanupload, which allocates the joint multi-planar
          * NV12 image with VIDEO_ENCODE_SRC usage the Vulkan encoders require. An
          * explicit per-app video_params override still wins. */
-        auto bridge_needed =
-            !app.start_virtual_compositor.value_or(true) && !vulkan_software_bridge.empty();
-        auto app_video_params = app_video_settings.video_params.value_or(
-            bridge_needed ? vulkan_software_bridge : h264_video_params);
+        auto bridge_needed = !app.start_virtual_compositor.value_or(true) && !vulkan_software_bridge.empty();
+        auto app_video_params =
+            app_video_settings.video_params.value_or(bridge_needed ? vulkan_software_bridge : h264_video_params);
 
         auto h264_gst_pipeline = fmt::format(
             "{} !\n{} !\n{} !\n{}", //
@@ -195,8 +194,8 @@ parse_apps(const std::vector<BaseApp> &apps,
             default_video_settings.hevc_encoder.has_value()
                 ? fmt::format("{} !\n{} !\n{} !\n{}", //
                               app_video_settings.source.value_or(default_video_settings.source.value()),
-                              app_video_settings.video_params.value_or(
-                                  bridge_needed ? vulkan_software_bridge : hevc_video_params),
+                              app_video_settings.video_params.value_or(bridge_needed ? vulkan_software_bridge
+                                                                                     : hevc_video_params),
                               app_video_settings.hevc_encoder.value_or(default_video_settings.hevc_encoder.value()),
                               app_video_settings.sink.value_or(default_video_settings.sink.value()))
                 : "";
@@ -205,8 +204,8 @@ parse_apps(const std::vector<BaseApp> &apps,
             default_video_settings.av1_encoder.has_value()
                 ? fmt::format("{} !\n{} !\n{} !\n{}", //
                               app_video_settings.source.value_or(default_video_settings.source.value()),
-                              app_video_settings.video_params.value_or(
-                                  bridge_needed ? vulkan_software_bridge : av1_video_params),
+                              app_video_settings.video_params.value_or(bridge_needed ? vulkan_software_bridge
+                                                                                     : av1_video_params),
                               app_video_settings.av1_encoder.value_or(default_video_settings.av1_encoder.value()),
                               app_video_settings.sink.value_or(default_video_settings.sink.value()))
                 : "";
@@ -449,21 +448,22 @@ Config load_or_default(const std::string &source,
   /* Get profiles, for each app defined will merge with default settings */
   auto profiles = cfg.profiles | //
                   ranges::views::transform([&](const Profile &profile) {
-                    return events::Profile{.id = profile.id,
-                                           .name = profile.name.value_or(""),
-                                           .icon_png_path = profile.icon_png_path.value_or(""),
-                                           .pin = profile.pin,
-                                           .apps = parse_apps(profile.apps,
-                                                              default_app_render_node,
-                                                              default_gst_render_node,
-                                                              default_base_video,
-                                                              h264_video_params,
-                                                              hevc_video_params,
-                                                              av1_video_params,
-                                                              encoder_type(*h264_encoder) == VULKAN ? VULKAN_SOFTWARE_BRIDGE : "",
-                                                              default_base_audio,
-                                                              running_sessions,
-                                                              ev_bus)};
+                    return events::Profile{
+                        .id = profile.id,
+                        .name = profile.name.value_or(""),
+                        .icon_png_path = profile.icon_png_path.value_or(""),
+                        .pin = profile.pin,
+                        .apps = parse_apps(profile.apps,
+                                           default_app_render_node,
+                                           default_gst_render_node,
+                                           default_base_video,
+                                           h264_video_params,
+                                           hevc_video_params,
+                                           av1_video_params,
+                                           encoder_type(*h264_encoder) == VULKAN ? VULKAN_SOFTWARE_BRIDGE : "",
+                                           default_base_audio,
+                                           running_sessions,
+                                           ev_bus)};
                   }) |
                   ranges::to<ProfilesList>();
   auto profiles_atom = std::make_shared<immer::atom<ProfilesList>>(profiles);
