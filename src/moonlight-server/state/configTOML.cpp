@@ -131,6 +131,19 @@ std::string generate_app_id(const BaseApp &app) {
   return std::to_string(abs((int32_t)hash));
 }
 
+/* Video params for apps that don't run the virtual compositor while the Vulkan
+ * encoders are selected: their zero-copy params are bare caps over
+ * memory:VulkanImage, which a CPU-generated source can neither parse next to
+ * its own caps filter nor negotiate from system memory. videoconvertscale
+ * adapts the format and the session resolution in the raw domain and
+ * vulkanupload allocates the joint multi-planar NV12 image with
+ * VIDEO_ENCODE_SRC usage the Vulkan encoders require (it honors their
+ * allocation query). The {width}/{height} placeholders are substituted at
+ * session time together with the rest of the pipeline. */
+static const std::string VULKAN_SOFTWARE_BRIDGE =
+    "videoconvertscale !\nvulkanupload !\n"
+    "video/x-raw(memory:VulkanImage), format=NV12, width={width}, height={height}, pixel-aspect-ratio=1/1";
+
 std::shared_ptr<immer::atom<immer::vector<immer::box<events::App>>>>
 parse_apps(const std::vector<BaseApp> &apps,
            const std::string &default_app_render_node,
@@ -139,6 +152,7 @@ parse_apps(const std::vector<BaseApp> &apps,
            const std::string &h264_video_params,
            const std::string &hevc_video_params,
            const std::string &av1_video_params,
+           const std::string &vulkan_software_bridge,
            const BaseAppAudioOverride &default_audio_settings,
            SessionsAtoms running_sessions,
            const std::shared_ptr<events::EventBusType> &ev_bus) {
@@ -158,10 +172,22 @@ parse_apps(const std::vector<BaseApp> &apps,
         auto app_video_settings = app.video.value_or(default_video_settings);
         auto app_audio_settings = app.audio.value_or(default_audio_settings);
 
+        /* Apps that don't run the virtual compositor feed their own (CPU generated)
+         * frames into the encoder. The Vulkan zero-copy params are bare caps over
+         * memory:VulkanImage, which such a source can neither parse next to its own
+         * caps filter nor negotiate from system memory: bridge them with
+         * videoconvertscale + vulkanupload, which allocates the joint multi-planar
+         * NV12 image with VIDEO_ENCODE_SRC usage the Vulkan encoders require. An
+         * explicit per-app video_params override still wins. */
+        auto bridge_needed =
+            !app.start_virtual_compositor.value_or(true) && !vulkan_software_bridge.empty();
+        auto app_video_params = app_video_settings.video_params.value_or(
+            bridge_needed ? vulkan_software_bridge : h264_video_params);
+
         auto h264_gst_pipeline = fmt::format(
             "{} !\n{} !\n{} !\n{}", //
             app_video_settings.source.value_or(default_video_settings.source.value()),
-            app_video_settings.video_params.value_or(h264_video_params),
+            app_video_params,
             app_video_settings.h264_encoder.value_or(default_video_settings.h264_encoder.value()),
             app_video_settings.sink.value_or(default_video_settings.sink.value()));
 
@@ -169,7 +195,8 @@ parse_apps(const std::vector<BaseApp> &apps,
             default_video_settings.hevc_encoder.has_value()
                 ? fmt::format("{} !\n{} !\n{} !\n{}", //
                               app_video_settings.source.value_or(default_video_settings.source.value()),
-                              app_video_settings.video_params.value_or(hevc_video_params),
+                              app_video_settings.video_params.value_or(
+                                  bridge_needed ? vulkan_software_bridge : hevc_video_params),
                               app_video_settings.hevc_encoder.value_or(default_video_settings.hevc_encoder.value()),
                               app_video_settings.sink.value_or(default_video_settings.sink.value()))
                 : "";
@@ -178,7 +205,8 @@ parse_apps(const std::vector<BaseApp> &apps,
             default_video_settings.av1_encoder.has_value()
                 ? fmt::format("{} !\n{} !\n{} !\n{}", //
                               app_video_settings.source.value_or(default_video_settings.source.value()),
-                              app_video_settings.video_params.value_or(av1_video_params),
+                              app_video_settings.video_params.value_or(
+                                  bridge_needed ? vulkan_software_bridge : av1_video_params),
                               app_video_settings.av1_encoder.value_or(default_video_settings.av1_encoder.value()),
                               app_video_settings.sink.value_or(default_video_settings.sink.value()))
                 : "";
@@ -432,6 +460,7 @@ Config load_or_default(const std::string &source,
                                                               h264_video_params,
                                                               hevc_video_params,
                                                               av1_video_params,
+                                                              encoder_type(*h264_encoder) == VULKAN ? VULKAN_SOFTWARE_BRIDGE : "",
                                                               default_base_audio,
                                                               running_sessions,
                                                               ev_bus)};
