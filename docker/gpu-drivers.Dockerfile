@@ -11,11 +11,16 @@ FROM $BASE_IMAGE
 #   equivalent to Ubuntu's intel-media-va-driver-non-free. Installs into
 #   /usr/lib64/dri-nonfree/, which libva probes with higher priority.
 # libvpl (dispatcher + oneVPL GPU runtime for QSV) comes from the main repos.
+# libva-intel-driver (RPM Fusion free) is the legacy i965 driver, the only one
+# that supports pre-Broadwell iGPUs (e.g. Haswell HD 4600). libva tries iHD
+# first and only falls back to i965 when iHD fails to initialise, so newer
+# GPUs are unaffected.
 # Fedora's stock Mesa is built without the patent-encumbered H.264/HEVC VA-API
 # entrypoints, so we pull the same Mesa version rebuilt from RPM Fusion's
 # freeworld repo, which ships them (installs into /usr/lib64/dri-freeworld/).
 ARG REQUIRED_PACKAGES="libva libva-utils \
                        intel-media-driver \
+                       libva-intel-driver \
                        libvpl \
                        mesa-va-drivers-freeworld"
 

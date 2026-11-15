@@ -153,6 +153,11 @@ ENV GST_GL_API=gles2 \
     PGID=0 \
     UNAME="root"
 
+# GStreamer's va plugin only registers encoders on allow-listed drivers (iHD, Mesa).
+# This also exposes vah264enc on the legacy i965 driver (pre-Broadwell Intel iGPUs);
+# the image ships no other VA driver that this affects.
+ENV GST_VA_ALL_DRIVERS=1
+
 # Setting up XDG_RUNTIME_DIR this will automatically create a volume when starting the container
 VOLUME /run/user/wolf/
 ENV XDG_RUNTIME_DIR=/run/user/wolf
