@@ -58,14 +58,32 @@ setup_moonlight_handlers(const immer::box<state::AppState> &app_state,
   auto plugged_devices_queue = std::make_shared<immer::atom<session_devices>>();
 
   handlers.push_back(app_state->event_bus->register_handler<immer::box<events::StopStreamEvent>>(
-      [&app_state, plugged_devices_queue](const immer::box<events::StopStreamEvent> &ev) {
+      [&app_state, plugged_devices_queue, audio_server](const immer::box<events::StopStreamEvent> &ev) {
         // Remove session from app state so that HTTP/S applist gets updated
         // This should effectively destroy the virtual Wayland session since it holds the last reference
-        app_state->running_sessions->update([&ev](const immer::vector<events::StreamSession> &ses_v) {
+        std::vector<std::shared_ptr<audio::VSink>> sinks;
+        app_state->running_sessions->update([&ev, &sinks](const immer::vector<events::StreamSession> &ses_v) {
+          sinks.clear(); // in case the atom runs the update more than once
+          for (const auto &session : ses_v) {
+            if (session.session_id == ev->session_id) {
+              sinks.push_back(session.audio_sink->load());
+            }
+          }
           return state::remove_session(ses_v, {.session_id = ev->session_id});
         });
 
         plugged_devices_queue->update([=](const auto map) { return map.erase(std::to_string(ev->session_id)); });
+
+        // The virtual sink belongs to the session, not to one of its runners: several can share it (API
+        // runners/start), and the first one to exit must not take the others' audio away.
+        if (audio_server && audio_server->server) {
+          for (const auto &sink : sinks) {
+            if (sink) {
+              logs::log(logs::debug, "[STREAM_SESSION] Remove virtual audio sink");
+              audio::delete_virtual_sink(audio_server->server, sink);
+            }
+          }
+        }
       }));
 
   handlers.push_back(app_state->event_bus->register_handler<immer::box<events::PlugDeviceEvent>>(
@@ -217,7 +235,7 @@ setup_moonlight_handlers(const immer::box<state::AppState> &app_state,
                       },
                   .wayland_display = run_session->stream_session->wayland_display->load(),
                   .audio_server = audio_server,
-                  .audio_sink = run_session->stream_session->audio_sink->load(),
+                  .audio_sink = nullptr, // the session removes its sink when it stops, see StopStreamEvent
                   .host = app_state->host,
                   .app_local_state_folder = run_session->stream_session->app_local_state_folder,
                   .app_host_state_folder = run_session->stream_session->app_host_state_folder,

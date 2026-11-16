@@ -472,6 +472,8 @@ void resume(const std::shared_ptr<typename SimpleWeb::Server<SimpleWeb::HTTPS>::
         create_run_session(request->parse_query_string(), client_ip, current_client, state, *old_session->app);
     // Carry over the old session display handle
     new_session->wayland_display = std::move(old_session->wayland_display);
+    // ...and its audio sink, removed when the session stops
+    new_session->audio_sink = old_session->audio_sink;
     // Carry over the old session devices, they'll be already plugged into the container
     new_session->mouse = std::move(old_session->mouse);
     new_session->keyboard = std::move(old_session->keyboard);

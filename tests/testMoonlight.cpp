@@ -9,11 +9,16 @@
 
 using Catch::Matchers::Equals;
 
+#include <client_https.hpp>
 #include <crypto/crypto.hpp>
+#include <filesystem>
+#include <future>
 #include <moonlight/protocol.hpp>
 #include <openssl/x509.h>
 #include <range/v3/view.hpp>
 #include <rest/helpers.hpp>
+#include <runners/process.hpp>
+#include <sessions/handlers.hpp>
 #include <state/config.hpp>
 #include <streaming/streaming.hpp>
 
@@ -642,4 +647,142 @@ TEST_CASE("Multiple users", "[HTTP]") {
 
   REQUIRE(session4->video_stream_port == 48100);
   REQUIRE(session4->audio_stream_port == 48200);
+}
+
+TEST_CASE("HTTPS /resume carries the session's audio sink over to the new instance", "[MoonlightProtocol]") {
+  // Certificates for the HTTPS server and the (already paired) client
+  char dir_template[] = "/tmp/wolf-resume-XXXXXX";
+  REQUIRE(mkdtemp(dir_template));
+  std::string dir = dir_template;
+  auto server_key = x509::generate_key();
+  REQUIRE(x509::write_to_disk(server_key, dir + "/server.key", x509::generate_x509(server_key), dir + "/server.crt"));
+  auto client_key = x509::generate_key();
+  auto client_cert = x509::generate_x509(client_key);
+  REQUIRE(x509::write_to_disk(client_key, dir + "/client.key", client_cert, dir + "/client.crt"));
+
+  auto app_state = immer::box<state::AppState>(state::AppState{
+      .config = state::Config{.paired_clients = std::make_shared<immer::atom<state::PairedClientList>>()},
+      .host = {},
+      .pairing_cache = std::make_shared<immer::atom<immer::map<std::string, state::PairCache>>>(),
+      .event_bus = std::make_shared<events::EventBusType>(),
+      .running_sessions = std::make_shared<immer::atom<immer::vector<events::StreamSession>>>()});
+  auto client = state::PairedClient{.client_cert = x509::get_cert_pem(client_cert), .app_state_folder = "test"};
+  auto app = events::App{.base = moonlight::App{.title = "test_app"}};
+
+  auto old_session =
+      endpoints::https::create_run_session({{"rikey", "1234"}, {"rikeyid", "1"}}, "127.0.0.1", client, app_state, app);
+  REQUIRE(old_session);
+  auto sink = std::make_shared<audio::VSink>();
+  old_session->audio_sink->store(sink);
+  app_state->running_sessions->store(immer::vector{*old_session});
+
+  HttpsServer server(dir + "/server.crt", dir + "/server.key");
+  server.config.address = "127.0.0.1";
+  server.config.port = 0;
+  server.resource["^/resume$"]["GET"] = [&](auto resp, auto req) {
+    endpoints::https::resume(resp, req, client, app_state);
+  };
+  std::promise<unsigned short> bound_port;
+  std::thread server_thread([&] { server.start([&](unsigned short port) { bound_port.set_value(port); }); });
+  auto stop_server = std::shared_ptr<void>(nullptr, [&](void *) {
+    server.stop();
+    server_thread.join();
+    std::filesystem::remove_all(dir);
+  });
+  SimpleWeb::Client<SimpleWeb::HTTPS> https_client("127.0.0.1:" + std::to_string(bound_port.get_future().get()),
+                                                   false,
+                                                   dir + "/client.crt",
+                                                   dir + "/client.key");
+  https_client.config.timeout = 5;
+  auto response = https_client.request("GET", "/resume?rikey=5678&rikeyid=2");
+  REQUIRE_THAT(response->status_code, Equals("200 OK"));
+
+  auto sessions = app_state->running_sessions->load();
+  REQUIRE(sessions->size() == 1);
+  auto resumed = sessions->front();
+  REQUIRE(resumed.aes_key != old_session->aes_key); // a new stream instance...
+  REQUIRE(resumed.session_id == old_session->session_id);
+  // ...that keeps the sink: it's removed when the session stops, so a resumed session that lost it would leak it
+  REQUIRE(resumed.audio_sink->load() == sink);
+}
+
+TEST_CASE("Stopping a session removes its virtual audio sink", "[MoonlightProtocol]") {
+  auto app_state = immer::box<state::AppState>(state::AppState{
+      .config = state::Config{.paired_clients = std::make_shared<immer::atom<state::PairedClientList>>()},
+      .host = {},
+      .pairing_cache = std::make_shared<immer::atom<immer::map<std::string, state::PairCache>>>(),
+      .event_bus = std::make_shared<events::EventBusType>(),
+      .running_sessions = std::make_shared<immer::atom<immer::vector<events::StreamSession>>>()});
+  auto client = state::PairedClient{.app_state_folder = "test"};
+  auto app = events::App{.base = moonlight::App{.title = "test_app"}};
+
+  auto stopping =
+      endpoints::https::create_run_session({{"rikey", "1234"}, {"rikeyid", "1"}}, "127.0.0.1", client, app_state, app);
+  REQUIRE(stopping);
+  auto stopping_sink = std::make_shared<audio::VSink>();
+  stopping->audio_sink->store(stopping_sink);
+  auto other = *stopping;
+  other.session_id = stopping->session_id + 1;
+  other.audio_sink = std::make_shared<immer::atom<std::shared_ptr<audio::VSink>>>();
+  auto other_sink = std::make_shared<audio::VSink>();
+  other.audio_sink->store(other_sink);
+  app_state->running_sessions->store(immer::vector{*stopping, other});
+
+  // No PulseAudio in CI: a server whose connection failed drops every operation, but delete_virtual_sink() still
+  // marks the sink as deleted before queueing the unload.
+  auto audio_server = std::optional<wolf::core::sessions::AudioServer>(wolf::core::sessions::AudioServer{
+      .server = wolf::core::audio::connect("unix:/nonexistent/wolf-test-pulse-socket")});
+  REQUIRE_FALSE(wolf::core::audio::connected(audio_server->server));
+  auto handlers = wolf::core::sessions::setup_moonlight_handlers(app_state, "/tmp", audio_server);
+
+  app_state->event_bus->fire_event(
+      immer::box<events::StopStreamEvent>(events::StopStreamEvent{.session_id = stopping->session_id}));
+
+  auto sessions = app_state->running_sessions->load();
+  REQUIRE(sessions->size() == 1);
+  REQUIRE(sessions->front().session_id == other.session_id);
+  REQUIRE(stopping_sink->deleted.load());
+  REQUIRE_FALSE(other_sink->deleted.load()); // only the stopping session's sink goes
+}
+
+TEST_CASE("A runner exiting leaves its session's virtual audio sink alone", "[MoonlightProtocol]") {
+  setenv("WOLF_SKIP_WAYLAND_SOCKET_WAIT", "1", 1); // no compositor: start_virtual_compositor is false
+  auto app_state = immer::box<state::AppState>(state::AppState{
+      .config = state::Config{.paired_clients = std::make_shared<immer::atom<state::PairedClientList>>()},
+      .host = {},
+      .pairing_cache = std::make_shared<immer::atom<immer::map<std::string, state::PairCache>>>(),
+      .event_bus = std::make_shared<events::EventBusType>(),
+      .running_sessions = std::make_shared<immer::atom<immer::vector<events::StreamSession>>>()});
+  auto client = state::PairedClient{.app_state_folder = "test"};
+  // start_audio_server is off so no audio producer thread outlives the test; the sink is stored by hand instead
+  auto app = events::App{.base = moonlight::App{.title = "test_app"},
+                         .start_virtual_compositor = false,
+                         .start_audio_server = false,
+                         .runner = std::make_shared<process::RunProcess>(app_state->event_bus, "true")};
+  auto session =
+      endpoints::https::create_run_session({{"rikey", "1234"}, {"rikeyid", "1"}}, "127.0.0.1", client, app_state, app);
+  REQUIRE(session);
+  auto sink = std::make_shared<audio::VSink>();
+  session->audio_sink->store(sink);
+
+  // Same bogus server as above: every PulseAudio operation is dropped, the deleted flag is still set.
+  auto audio_server = std::optional<wolf::core::sessions::AudioServer>(wolf::core::sessions::AudioServer{
+      .server = wolf::core::audio::connect("unix:/nonexistent/wolf-test-pulse-socket")});
+  auto handlers = wolf::core::sessions::setup_moonlight_handlers(app_state, "/tmp", audio_server);
+
+  // The session is left out of running_sessions, so the StopStreamEvent fired when the runner is over removes no
+  // sink: only the runner itself could. That event comes after start_runner() returns, so it's what we wait on.
+  auto runner_over = std::make_shared<std::promise<void>>();
+  auto on_stop = app_state->event_bus->register_handler<immer::box<events::StopStreamEvent>>(
+      [runner_over, fired = std::make_shared<std::atomic<bool>>(false), id = session->session_id](
+          const immer::box<events::StopStreamEvent> &ev) {
+        if (ev->session_id == id && !fired->exchange(true)) {
+          runner_over->set_value();
+        }
+      });
+
+  app_state->event_bus->fire_event(immer::box<events::StreamSession>(*session));
+  REQUIRE(runner_over->get_future().wait_for(std::chrono::seconds(30)) == std::future_status::ready);
+  // Several runners can share the session's sink: the session removes it when it stops, never a runner
+  REQUIRE_FALSE(sink->deleted.load());
 }
