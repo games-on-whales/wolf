@@ -46,6 +46,7 @@ done
 
 echo "==> 7. VA-API driver files present (encoding still needs a GPU)"
 [ -e /usr/lib64/dri-nonfree/iHD_drv_video.so ] || fail "Intel non-free iHD VA driver missing (intel-media-driver not installed?)"
+[ -e /usr/lib64/dri/i965_drv_video.so ] || fail "Intel legacy i965 VA driver missing (libva-intel-driver not installed?)"
 [ -e /usr/lib64/dri-freeworld/radeonsi_drv_video.so ] || fail "AMD freeworld VA driver missing (mesa-va-drivers-freeworld not installed?)"
 
 echo "==> 8. Embedded PulseAudio + supervisord present"
