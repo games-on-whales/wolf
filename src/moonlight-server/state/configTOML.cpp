@@ -7,6 +7,7 @@
 #include <range/v3/view.hpp>
 #include <rfl/toml.hpp>
 #include <state/config.hpp>
+#include <vulkan-probe.hpp>
 
 namespace state {
 
@@ -38,9 +39,6 @@ static Encoder encoder_type(const GstEncoder &settings) {
   case (utils::hash("va")):
     return VAAPI;
   case (utils::hash("vulkan")):
-    // Vendor-agnostic: the Vulkan elements register only when a device with the
-    // matching VK_KHR_VIDEO_ENCODE_* extension is present (see gstvulkan.c's plugin
-    // init), so the regular element-availability check below is enough.
     return VULKAN;
   case (utils::hash("qsv")):
     return QUICKSYNC;
@@ -55,17 +53,30 @@ static Encoder encoder_type(const GstEncoder &settings) {
   return UNKNOWN;
 }
 
-static bool is_available(const GPU_VENDOR &gpu_vendor, const GstEncoder &settings) {
+static bool is_available(const GPU_VENDOR &gpu_vendor,
+                         std::string_view encoder_node,
+                         std::string_view tech,
+                         const GstEncoder &settings) {
   if (auto plugin = gst_registry_find_plugin(gst_registry_get(), settings.plugin_name.c_str())) {
     gst_object_unref(plugin);
     return std::all_of(
         settings.check_elements.begin(),
         settings.check_elements.end(),
-        [settings, gpu_vendor](const auto &el_name) {
+        [settings, gpu_vendor, &encoder_node, tech](const auto &el_name) {
+          auto encoder_vendor = encoder_type(settings);
+          // The Vulkan elements register when ANY device in the system can encode the
+          // codec, so on multi-GPU hosts they must be checked against the selected GPU
+          // or they get picked for a GPU that cannot encode (e.g. no AV1 encode).
+          if (encoder_vendor == VULKAN && !vulkan_probe::supports_video_encode(encoder_node, tech)) {
+            logs::log(logs::debug,
+                      "Skipping VULKAN {} encoder: the GPU behind {} cannot encode it",
+                      tech,
+                      encoder_node);
+            return false;
+          }
           // Is the selected GPU vendor compatible with the encoder?
           // (Particularly useful when using multiple GPUs, e.g. nvcodec might be available but user
           // wants to encode using the Intel GPU)
-          auto encoder_vendor = encoder_type(settings);
           if (encoder_vendor == NVIDIA && gpu_vendor != GPU_VENDOR::NVIDIA) {
             logs::log(logs::debug, "Skipping NVIDIA encoder, not a NVIDIA GPU ({})", (int)gpu_vendor);
           } else if (encoder_vendor == VAAPI && (gpu_vendor != GPU_VENDOR::INTEL && gpu_vendor != GPU_VENDOR::AMD)) {
@@ -89,7 +100,7 @@ std::optional<GstEncoder> get_encoder(std::string_view tech,
                                       std::string_view encoder_node,
                                       const std::vector<GstEncoder> &encoders,
                                       const GPU_VENDOR &vendor) {
-  auto default_is_available = std::bind(is_available, vendor, std::placeholders::_1);
+  auto default_is_available = std::bind(is_available, vendor, encoder_node, tech, std::placeholders::_1);
   auto encoder = std::find_if(encoders.begin(), encoders.end(), default_is_available);
   if (encoder != std::end(encoders)) {
     auto encoder_node_name = get_render_node_name(encoder_node);
@@ -101,7 +112,7 @@ std::optional<GstEncoder> get_encoder(std::string_view tech,
                                          .video_params_zero_copy = encoder->video_params_zero_copy,
                                          .encoder_pipeline = encoder->encoder_pipeline};
       logs::log(logs::debug, "Checking if {} is available", possible_vaapi_plugin);
-      if (is_available(vendor, possible_encoder)) {
+      if (is_available(vendor, encoder_node, tech, possible_encoder)) {
         possible_encoder.encoder_pipeline = std::regex_replace(possible_encoder.encoder_pipeline,
                                                                std::regex(fmt::format("va{}enc", tech)),
                                                                possible_vaapi_plugin);

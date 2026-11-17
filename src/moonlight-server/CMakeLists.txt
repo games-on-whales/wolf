@@ -123,6 +123,7 @@ target_link_libraries(
         wolf::helpers
         wolf::core
         gst-video::context
+        wolf::vulkan-probe
         cpptrace::cpptrace
         ${Boost_LIBRARIES}
         ${CMAKE_DL_LIBS}
