@@ -30,17 +30,41 @@ TEST_CASE("Wayland virtual inputs", "[WAYLAND]") {
   auto wd = w_connect(display_name);
   auto w_objects = w_get_state(wd);
 
-  w_display_create_window(*w_objects);
-  wl_display_roundtrip(wd.get());
-
+  // Bind the pointer and the keyboard before any window exists: the compositor
+  // resolves pointer and keyboard focus when a toplevel maps (a synthetic
+  // zero-delta motion for the pointer), and a client binding its seat's
+  // pointers afterwards loses those events to the map race. Real clients
+  // recover (the first real motion re-emits the pointer enter), but asserting
+  // on the racy order makes the test flip with compositor timing; binding
+  // first makes the sequence below deterministic.
   auto mouse_events_q = w_get_mouse_queue(*w_objects);
   auto kb_events_q = w_get_keyboard_queue(*w_objects);
+  wl_display_roundtrip(wd.get());
+
+  w_display_create_window(*w_objects);
   wl_display_roundtrip(wd.get());
 
   { // simulate the window being displayed
     std::this_thread::sleep_for(std::chrono::milliseconds(1000 / FPS));
     commit_frame(w_objects.get());
     wl_display_roundtrip(wd.get());
+  }
+
+  { // When the window is first shown, the compositor sends us an initial
+    // pointer enter event, a zero-distance move, and a frame event.
+    auto m_ev = mouse_events_q->pop();
+    REQUIRE(m_ev.has_value());
+    REQUIRE(m_ev.value().type == MouseEventType::ENTER);
+
+    m_ev = mouse_events_q->pop();
+    REQUIRE(m_ev.has_value());
+    REQUIRE(m_ev.value().type == MouseEventType::MOTION);
+    REQUIRE(m_ev.value().x == 0);
+    REQUIRE(m_ev.value().y == 0);
+
+    m_ev = mouse_events_q->pop();
+    REQUIRE(m_ev.has_value());
+    REQUIRE(m_ev.value().type == MouseEventType::FRAME);
   }
 
   { // First move the mouse, this way our virtual window will get into focus
