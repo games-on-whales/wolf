@@ -4,6 +4,7 @@
 ** xref:user:wolf-ui.adoc[]
 ** xref:user:troubleshooting.adoc[]
 ** xref:user:environment-considerations.adoc[]
+** xref:user:rootless.adoc[]
 ** xref:user:gstreamer.adoc[]
 
 ** xref:apps:index.adoc[]

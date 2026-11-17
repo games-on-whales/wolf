@@ -24,6 +24,11 @@ By adding the https://docs.docker.com/engine/reference/commandline/run/#device-c
 docker exec -it <App_Container> sh -c "mknod /dev/input/<device name> c <major>:<minor>"
 ....
 
+[NOTE]
+====
+A rootless Podman cannot do this: it rejects device cgroup rules and `mknod` fails in a user namespace. Wolf bind mounts the device nodes into a per-session directory instead, see xref:user:rootless.adoc[].
+====
+
 == If a tree falls in the forest, does it make a sound?
 
 We've mounted the right device into the right container, still, no application is picking it up footnote:[Some application might react to the new device if it's using `inotify`, unfortunately, this is not the default behaviour in most apps/games].

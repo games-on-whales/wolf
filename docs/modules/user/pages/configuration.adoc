@@ -47,6 +47,10 @@ Wolf is configured via a TOML config file and some additional optional ENV varia
 |/var/run/docker.sock
 |The full path to the docker socket, doesn't support tcp (yet)
 
+|WOLF_ROOTLESS
+|FALSE
+|Set to `TRUE` when the docker socket is a rootless Podman one; see xref:rootless.adoc[]
+
 |WOLF_ALLOW_UNKNOWN_ISSUER_CERTS
 |FALSE
 |Set to `TRUE` to accept client certificates that name an issuer Wolf doesn't know (an old moonlight-embedded workaround). Any client can then pass as a paired one: only use it on a trusted network

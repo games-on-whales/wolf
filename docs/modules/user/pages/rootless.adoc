@@ -1,0 +1,165 @@
+= Rootless Podman
+
+Wolf can run under a rootless Podman: both Wolf and the apps it starts run as an unprivileged host user, no root service is involved.
+It is opt-in and changes nothing for a rootful setup.
+
+Set `WOLF_ROOTLESS=TRUE` on the Wolf container, and either mount the rootless Podman socket at `/var/run/docker.sock` or set `WOLF_DOCKER_SOCKET` to its path.
+When set, Wolf adapts how it creates app containers:
+
+* `DeviceCgroupRules` are removed (rootless Podman rejects them), including the ones from a profile's `base_create_json`.
+* `label=disable` is added to `SecurityOpt` unless the profile already sets a `label=` option. Input devices are host files and SELinux denies a confined container access to them, so these containers are not SELinux-confined.
+* Devices are not created with `mknod` inside the container (not possible in a user namespace). Each session gets a private directory `input/<session id>` in the app's own state folder (next to its `udev` directory), mounted at `/dev/input`, and Wolf bind mounts the host's device node into it when a device is plugged.
+Only the containers that share that directory see the node, so two clients never see each other's controllers.
+
+== Host prerequisites
+
+User and Podman::
+* `loginctl enable-linger <user>`, so the user's services survive logout.
+* `/etc/subuid` and `/etc/subgid` entries for the user.
+* `systemctl --user enable --now podman.socket`.
+* After changing user namespace related configuration run `podman system migrate`.
+
+Kernel modules and udev rules::
+* Install https://github.com/games-on-whales/wolf/blob/stable/85-wolf.rules[`85-wolf.rules`] like for a rootful setup, and load `uinput`; see xref:troubleshooting.adoc#_permission_error_when_using_uhid[uhid permissions].
+* Load `uhid` at boot with `echo uhid | sudo tee /etc/modules-load.d/uhid.conf`; rootless Wolf cannot load kernel modules. This has not been tested across a reboot.
+* Give Wolf access to `/dev/uinput` and `/dev/uhid` and the apps access to the virtual devices, see below.
+
+Shared state folder::
+The state folder (`/etc/wolf` in Wolf) must be a shared mount in the rootless user namespace, otherwise the bound nodes never reach the app containers.
+Run the `ExecStartPre` below on every start.
+
+== Access for Wolf
+
+Wolf opens `/dev/uinput` and `/dev/uhid` as container root, which maps to the rootless user, and the image's entrypoint drops the supplementary groups, so the `input` group does not help.
+The host nodes must be owned by the rootless user. Save this as `/etc/udev/rules.d/87-wolf-rootless.rules`, with `<user>` replaced by the rootless user, so that it applies after `85-wolf.rules`:
+
+[source]
+....
+KERNEL=="uinput", SUBSYSTEM=="misc", OWNER="<user>"
+KERNEL=="uhid", SUBSYSTEM=="misc", OWNER="<user>"
+....
+
+Apply it with:
+
+[source,bash]
+....
+sudo udevadm control --reload
+sudo udevadm trigger --name-match=uinput --name-match=uhid
+....
+
+Without it Wolf logs `Failed to create <type> joypad: Permission denied`, with `<type>` the controller being created.
+
+== Access for the app user
+
+Apps run as `PUID` (default 1000), not as root, and the kernel nodes are `root:input` `0660`.
+The `input` group does not reach the app user, because the container entrypoint drops privileges and resets the groups.
+The host must make the virtual devices accessible to the user that the container's `PUID` maps to. Pick one rule and save it as `/etc/udev/rules.d/86-wolf-rootless.rules`.
+
+Recommended, hand the nodes to the mapped user::
++
+The container UID `PUID` maps to the host UID `<first subuid of the user> + PUID - 1` (see `/etc/subuid`). With the first subuid `100000` and the default `PUID` of 1000 that is `100999`.
++
+[source]
+....
+SUBSYSTEM=="input", KERNEL=="event*|js*|mouse*", ATTRS{name}=="Wolf *virtual*", RUN+="/usr/bin/chown 100999 $devnode"
+KERNEL=="hidraw*", ATTRS{uevent}=="*HID_NAME=Wolf *virtual*", RUN+="/usr/bin/chown 100999 $devnode"
+....
++
+Run this as the user that runs Wolf to compute the mapped UID from `/etc/subuid` and write the rules above with it (set `PUID` first if it is not 1000):
++
+[source,bash]
+....
+U=$(( $(awk -F: -v u="$(id -un)" '$1==u{print $2; exit}' /etc/subuid) + ${PUID:-1000} - 1 )); sudo tee /etc/udev/rules.d/86-wolf-rootless.rules <<EOF
+SUBSYSTEM=="input", KERNEL=="event*|js*|mouse*", ATTRS{name}=="Wolf *virtual*", RUN+="/usr/bin/chown $U \$devnode"
+KERNEL=="hidraw*", ATTRS{uevent}=="*HID_NAME=Wolf *virtual*", RUN+="/usr/bin/chown $U \$devnode"
+EOF
+....
++
+The owner of the nodes becomes the mapped user, the group stays `input`.
+The rule covers one `PUID`. Running clients with different values of `PUID` is untested; the simpler rule below does not depend on it.
+
+Simpler, open the nodes to everyone::
++
+[source]
+....
+SUBSYSTEM=="input",  ATTR{name}=="Wolf *virtual*",  MODE="0666"
+SUBSYSTEMS=="input", ATTRS{name}=="Wolf *virtual*", MODE="0666"
+KERNEL=="hidraw*",   ATTRS{uevent}=="*HID_NAME=Wolf *virtual*", MODE="0666"
+....
++
+[WARNING]
+====
+Any process on the host can then read and inject input on every virtual controller, keyboard and mouse of every session. A rootful setup confines each node to one container.
+====
+
+Reload with `udevadm control --reload`; the rules apply to devices created afterwards.
+GPU render nodes (`/dev/dri/renderD*`) must be mode `0666` (the default on the hosts tested) because Wolf does not carry the host's `render` group.
+Where udev leaves them `0660`, add `KERNEL=="renderD*", SUBSYSTEM=="drm", MODE="0666"` to `87-wolf-rootless.rules` and run `sudo udevadm trigger --name-match=/dev/dri/renderD128` for each node.
+
+== Wolf container
+
+Save as `~/.config/containers/systemd/wolf.container` and run `systemctl --user daemon-reload && systemctl --user start wolf`.
+
+[source,ini]
+....
+[Unit]
+Description=Wolf
+
+[Container]
+ContainerName=wolf
+Image=ghcr.io/games-on-whales/wolf:stable
+Network=host
+PodmanArgs=--ipc=host
+SecurityLabelDisable=true
+AddCapability=SYS_ADMIN
+AddDevice=/dev/dri
+AddDevice=/dev/uinput
+AddDevice=/dev/uhid
+Volume=/dev:/dev:rw
+Volume=/run/udev:/run/udev:rw
+Volume=%h/wolf:/etc/wolf:rshared
+Volume=%t/wolf:/var/run/wolf
+Volume=%t/podman/podman.sock:/var/run/docker.sock
+Environment=WOLF_ROOTLESS=TRUE
+Environment=WOLF_SOCKET_PATH=/var/run/wolf/wolf.sock
+
+[Service]
+ExecStartPre=/usr/bin/mkdir -p %h/wolf %t/wolf
+ExecStartPre=/usr/bin/podman unshare sh -c 'findmnt -n -o PROPAGATION -M "$$1" | grep -q shared || { mount --bind "$$1" "$$1" && mount --make-rshared "$$1"; }' _ %h/wolf
+
+[Install]
+WantedBy=default.target
+....
+
+Differences from the rootful quickstart: no `--device-cgroup-rule`, `SYS_ADMIN` (Wolf calls `mount`), the rootless socket path and the `rshared` state volume.
+`WOLF_SOCKET_PATH` and the `%t/wolf` volume put the API socket at `/run/user/<uid>/wolf/wolf.sock` on the host; without them the image default keeps it in an anonymous volume the host cannot reach.
+`%h/wolf` is the persistent state folder: it holds the configuration and the per-session input directories, so keep it across restarts.
+The `ExecStartPre` makes the state folder shared in the rootless user namespace; it is idempotent and has to run again whenever Podman's pause process restarts.
+
+== GPUs
+
+AMD: `/dev/dri` is passed to the apps as usual. Intel is expected to work the same way but is untested.
+
+NVIDIA (tested with CDI): the toolkit runtime that Wolf selects by default is not expected to work rootless. Generate a CDI spec (`nvidia-ctk cdi generate --output=/etc/cdi/nvidia.yaml`, readable by the user), use `AddDevice=nvidia.com/gpu=all` in the Wolf container in place of `AddDevice=/dev/dri`, and request it in the profile; Wolf then leaves the GPU request alone:
+
+[source,toml]
+....
+base_create_json = '''
+{
+  "HostConfig": {
+    "IpcMode": "host",
+    "DeviceRequests": [{"Driver": "cdi", "DeviceIDs": ["nvidia.com/gpu=all"]}]
+  }
+}
+'''
+....
+
+== Limits
+
+* `WOLF_ROOTLESS` is not detected automatically, set it for a rootless socket.
+* Sample profiles that set `DeviceCgroupRules` are expected to work unchanged, the key is dropped at runtime.
+* The DualSense `hidraw` device is bound next to the other nodes and linked as `/dev/hidrawN` inside the app; applications that insist on a real node there may not find it.
+* Applications that watch `/dev/input` with inotify instead of listening for udev events may not see hotplugged devices.
+* An app container that shares the host's network namespace does not receive the fake udev events: broadcasting a uevent there from a user namespace fails with `EPERM`, it needs `CAP_NET_ADMIN` in the host's network namespace.
+* If controllers are missing in the app, check that `findmnt -o PROPAGATION /etc/wolf` shows `shared` in Wolf and run the `ExecStartPre` again.
+* Wolf sets the app container's `OomScoreAdj` to its own value unless the profile sets one, because a lower value breaks `exec` under a rootless user manager.

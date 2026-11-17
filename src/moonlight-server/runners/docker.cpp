@@ -40,6 +40,8 @@ void RunDocker::run(std::string_view session_id,
                     const immer::map<std::string, std::string> &env_variables,
                     std::string_view render_node) {
 
+  const bool rootless = is_rootless();
+
   std::vector<std::string> full_env;
   full_env.insert(full_env.end(), this->container.env.begin(), this->container.env.end());
   for (const auto &env_var : env_variables) {
@@ -57,7 +59,8 @@ void RunDocker::run(std::string_view session_id,
   std::vector<MountPoint> mounts;
   mounts.insert(mounts.end(), this->container.mounts.begin(), this->container.mounts.end());
   for (const auto &path : paths) {
-    mounts.insert(mounts.end(), MountPoint{.source = path.first, .destination = path.second, .mode = "rw"});
+    auto mode = rootless && path.second == ROOTLESS_INPUT_MOUNT ? "rslave" : "rw";
+    mounts.insert(mounts.end(), MountPoint{.source = path.first, .destination = path.second, .mode = mode});
   }
 
   // Fake udev
@@ -147,7 +150,7 @@ void RunDocker::run(std::string_view session_id,
   // unfortunately hidraw devices use dynamically assigned major numbers rather than static ones
   // so we'll get the major number from reading `/proc/devices` for `hidraw` and `input`
   // and set the right entries in `DeviceCgroupRules`
-  {
+  if (!rootless) {
     auto hidraw_major = get_device_major("hidraw");
     auto input_major = get_device_major("input");
     if (hidraw_major && input_major) {
@@ -176,6 +179,14 @@ void RunDocker::run(std::string_view session_id,
     } else {
       logs::log(logs::warning, "[DOCKER] Failed to get major numbers for hidraw and input");
     }
+  }
+
+  auto input_dir = std::filesystem::path(app_state_folder) / "input" / session_id;
+  std::shared_ptr<InputBinds> input_binds;
+  if (rootless) {
+    final_json_opts = apply_rootless_hostconfig(final_json_opts, own_oom_score_adj());
+    input_binds = std::make_shared<InputBinds>();
+    prepare_input_dir(input_dir);
   }
 
   logs::log(logs::debug, "[DOCKER] Container options: {}", final_json_opts);
@@ -223,7 +234,8 @@ void RunDocker::run(std::string_view session_id,
         });
 
     auto unplug_device_handler = this->ev_bus->register_handler<immer::box<events::UnplugDeviceEvent>>(
-        [session_id, container_id, hw_db_path, this](const immer::box<events::UnplugDeviceEvent> &ev) {
+        [session_id, container_id, hw_db_path, rootless, input_dir, input_binds, this](
+            const immer::box<events::UnplugDeviceEvent> &ev) {
           if (ev->session_id == session_id) {
             logs::log(logs::debug, "[DOCKER] Received UnplugDeviceEvent for session: {}", ev->session_id);
             for (const auto &[filename, content] : ev->udev_hw_db_entries) {
@@ -238,13 +250,20 @@ void RunDocker::run(std::string_view session_id,
               udev_ev["ACTION"] = "remove";
               std::string udev_msg = base64_encode(map_to_string(udev_ev));
               std::string cmd;
+              std::optional<InputBindPlan> plan;
               if (udev_ev.count("DEVNAME") == 0) {
                 cmd = fmt::format("fake-udev -m {}", udev_msg);
+              } else if (rootless) {
+                plan = plan_input_bind(input_dir, udev_ev["DEVNAME"]);
+                cmd = plan ? unplug_command(udev_msg, *plan) : fmt::format("fake-udev -m {}", udev_msg);
               } else {
                 cmd = fmt::format("fake-udev -m {} && rm {}", udev_msg, udev_ev["DEVNAME"]);
               }
               logs::log(logs::debug, "[DOCKER] Executing command: {}", cmd);
               docker_api.exec(container_id, {"/bin/bash", "-c", cmd}, "root");
+              if (plan) {
+                input_binds->unplug(*plan);
+              }
             }
           }
         });
@@ -263,6 +282,16 @@ void RunDocker::run(std::string_view session_id,
             std::string udev_msg = base64_encode(map_to_string(udev_ev));
             if (udev_ev.count("DEVNAME") == 0) {
               cmd = fmt::format("fake-udev -m {}", udev_msg);
+            } else if (rootless) {
+              auto plan = plan_input_bind(input_dir, udev_ev["DEVNAME"]);
+              if (!plan) {
+                logs::log(logs::warning, "[DOCKER] Ignoring unsupported device node: {}", udev_ev["DEVNAME"]);
+                continue;
+              }
+              if (!input_binds->plug(*plan)) {
+                continue;
+              }
+              cmd = plug_command(udev_msg, *plan);
             } else {
               cmd = fmt::format("mkdir -p /dev/input && mknod {} c {} {} && chmod 777 {} && fake-udev -m {}",
                                 udev_ev["DEVNAME"],
@@ -303,6 +332,12 @@ void RunDocker::run(std::string_view session_id,
       std::filesystem::remove_all(udev_base_path);
     } catch (const std::filesystem::filesystem_error &e) {
       logs::log(logs::warning, "Failed to remove udev base path: {}", e.what());
+    }
+
+    if (rootless) {
+      input_binds->release_all();
+      std::error_code ec;
+      std::filesystem::remove_all(input_dir, ec);
     }
   }
 }

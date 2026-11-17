@@ -472,7 +472,7 @@ Podman Quadlets::
 +
 --
 
-The easiest way to run Wolf is to use a `rootful` service, this isn't a strict requirement; if you give access to the `/dev/dri` devices, `/etc/wolf` and install the required udev rules everything should work.
+The easiest way to run Wolf is to use a `rootful` service, this isn't a strict requirement; if you give access to the `/dev/dri` devices, `/etc/wolf` and install the required udev rules everything should work. A rootless Podman needs a different setup, see xref:rootless.adoc[].
 
 Place your `wolf.container` file (populated with either the Nvidia or Intel/AMD examples below) in `/etc/containers/systemd`, then run `sudo systemctl daemon-reload` and `sudo systemctl start wolf.service` to start Wolf.
 

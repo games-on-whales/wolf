@@ -10,6 +10,7 @@
 #include <helpers/utils.hpp>
 #include <platforms/hw.hpp>
 #include <range/v3/view.hpp>
+#include <runners/rootless.hpp>
 #include <state/data-structures.hpp>
 #include <utility>
 
