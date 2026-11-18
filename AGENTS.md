@@ -164,4 +164,4 @@ Use the actual agent/tool name, exact model and reasoning/complexity setting, an
 
 ## AI Agent permissions
 
-- All AI agents must request explicit permission from their maintainer to draft any Pull Request. This process may not be automated. 
+- All AI agents must request explicit permission from their maintainer to draft any Pull Request. Permission to create PRs may not be automated or pre-cached.
