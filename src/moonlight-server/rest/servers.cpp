@@ -38,6 +38,15 @@ void startServer(HttpServer *server, const immer::box<state::AppState> state, in
   server->resource["^/pin/$"]["GET"] = [](auto resp, auto req) { resp->write(pin_html); };
   server->resource["^/pin/$"]["POST"] = [pairing_atom](auto resp, auto req) {
     try {
+      // The pin form posts a small JSON object. Boost's JSON parser recurses once per
+      // nesting level, so an unbounded body of '[' can overflow the stack before the
+      // secret is checked. Check the received size, which also covers chunked bodies.
+      constexpr std::size_t max_pin_body = 4096;
+      if (req->content.size() > max_pin_body) {
+        *resp << "HTTP/1.1 413 Payload Too Large\r\nContent-Length: 0\r\n\r\n";
+        return;
+      }
+
       bt::ptree pt;
 
       read_json(req->content, pt);
