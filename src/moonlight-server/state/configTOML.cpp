@@ -1,11 +1,13 @@
 #include <events/events.hpp>
 #include <events/reflectors.hpp>
+#include <filesystem>
 #include <fstream>
 #include <gst/gstelementfactory.h>
 #include <gst/gstregistry.h>
 #include <platforms/hw.hpp>
 #include <range/v3/view.hpp>
 #include <rfl/toml.hpp>
+#include <sstream>
 #include <state/config.hpp>
 
 namespace state {
@@ -20,6 +22,43 @@ constexpr char const *default_toml =
 
 using namespace std::literals;
 using namespace wolf::config;
+
+namespace {
+
+/**
+ * Replaces the content of `source` without ever exposing a partially written file.
+ *
+ * The new content is written to a temporary file (a fixed `source + ".tmp"` name: callers either hold
+ * the config mutex or this is the initial load) which is then renamed over the destination; a crash, a
+ * full disk or a concurrent reader will see either the old or the new file, never a truncated one.
+ */
+void save_file_atomically(const std::string &source, std::string_view content) {
+  namespace fs = std::filesystem;
+  auto tmp_file = source + ".tmp";
+  {
+    std::ofstream out(tmp_file, std::ios::binary | std::ios::trunc);
+    out.write(content.data(), content.size());
+    out.close();
+    if (out.fail()) {
+      std::error_code ec;
+      fs::remove(tmp_file, ec);
+      throw std::runtime_error(fmt::format("Unable to write {}", tmp_file));
+    }
+  }
+
+  std::error_code ec;
+  fs::rename(tmp_file, source, ec);
+  if (ec) {
+    fs::remove(tmp_file, ec);
+    throw std::runtime_error(fmt::format("Unable to replace {}: {}", source, ec.message()));
+  }
+}
+
+void save_config(const std::string &source, const WolfConfig &cfg) {
+  save_file_atomically(source, rfl::toml::write(cfg));
+}
+
+} // namespace
 
 void create_default(const std::string &source) {
   std::ofstream out_file;
@@ -236,13 +275,9 @@ Config load_or_default(const std::string &source,
           toml::array{*moonlight_profile,
                       toml::table({{"id", "user"}, {"name", "User"}, {"apps", old_cfg.at("apps")}})});
     }
-    std::ofstream out_file;
-    out_file.open(source);
-    if (!out_file.is_open()) {
-      throw std::runtime_error("Failed to open config file for writing");
-    }
-    out_file << new_cfg;
-    out_file.close();
+    std::ostringstream new_cfg_str;
+    new_cfg_str << new_cfg;
+    save_file_atomically(source, new_cfg_str.str());
     logs::log(logs::debug, "Migrated config from v{} to v7", version);
   }
 
@@ -408,7 +443,13 @@ Config load_or_default(const std::string &source,
 }
 
 void pair(const Config &cfg, const PairedClient &client) {
-  // Update CFG
+  std::lock_guard lock(*cfg.config_file_mutex);
+  // Update TOML
+  auto tml = rfl::toml::load<WolfConfig, rfl::DefaultIfMissing>(cfg.config_source).value();
+  tml.paired_clients.push_back(client);
+  save_config(cfg.config_source, tml);
+
+  // Update in-memory state only after the file has been saved
   cfg.paired_clients->update([&client](const PairedClientList &paired_clients) {
     // Removing the client if already present (see: https://github.com/games-on-whales/wolf/issues/211)
     auto filtered_clients = paired_clients                                               //
@@ -418,15 +459,19 @@ void pair(const Config &cfg, const PairedClient &client) {
                             | ranges::to<PairedClientList>();                            //
     return filtered_clients.push_back(client);
   });
-
-  // Update TOML
-  auto tml = rfl::toml::load<WolfConfig, rfl::DefaultIfMissing>(cfg.config_source).value();
-  tml.paired_clients.push_back(client);
-  rfl::toml::save(cfg.config_source, tml);
 }
 
 void unpair(const Config &cfg, const PairedClient &client) {
-  // Update CFG
+  std::lock_guard lock(*cfg.config_file_mutex);
+  // Update TOML
+  auto tml = rfl::toml::load<WolfConfig, rfl::DefaultIfMissing>(cfg.config_source).value();
+  tml.paired_clients.erase(std::remove_if(tml.paired_clients.begin(),
+                                          tml.paired_clients.end(),
+                                          [&client](const auto &v) { return v.client_cert == client.client_cert; }),
+                           tml.paired_clients.end());
+  save_config(cfg.config_source, tml);
+
+  // Update in-memory state only after the file has been saved
   cfg.paired_clients->update([&client](const PairedClientList &paired_clients) {
     return paired_clients                                               //
            | ranges::views::filter([&client](auto paired_client) {      //
@@ -434,30 +479,16 @@ void unpair(const Config &cfg, const PairedClient &client) {
              })                                                         //
            | ranges::to<PairedClientList>();                            //
   });
-
-  // Update TOML
-  auto tml = rfl::toml::load<WolfConfig, rfl::DefaultIfMissing>(cfg.config_source).value();
-  tml.paired_clients.erase(std::remove_if(tml.paired_clients.begin(),
-                                          tml.paired_clients.end(),
-                                          [&client](const auto &v) { return v.client_cert == client.client_cert; }),
-                           tml.paired_clients.end());
-  rfl::toml::save(cfg.config_source, tml);
 }
 
 void update_client_settings(const Config &cfg, std::size_t client_id, const PairedClient &updated_client) {
-
+  std::lock_guard lock(*cfg.config_file_mutex);
   auto update_client_fn = [&](immer::box<PairedClient> client) -> immer::box<PairedClient> {
     if (get_client_id(client) == client_id) {
       return immer::box<PairedClient>(updated_client);
     }
     return client;
   };
-
-  cfg.paired_clients->update([&](const PairedClientList &paired_clients) {
-    return paired_clients |                             //
-           ranges::views::transform(update_client_fn) | //
-           ranges::to<PairedClientList>();
-  });
 
   // Update the TOML file
   auto tml = rfl::toml::load<WolfConfig, rfl::DefaultIfMissing>(cfg.config_source).value();
@@ -467,11 +498,18 @@ void update_client_settings(const Config &cfg, std::size_t client_id, const Pair
                        ranges::to<std::vector<PairedClient>>();
 
   // Save back to file
-  rfl::toml::save(cfg.config_source, tml);
+  save_config(cfg.config_source, tml);
+
+  // Update in-memory state only after the file has been saved
+  cfg.paired_clients->update([&](const PairedClientList &paired_clients) {
+    return paired_clients |                             //
+           ranges::views::transform(update_client_fn) | //
+           ranges::to<PairedClientList>();
+  });
 }
 
 void update_profiles(const Config &cfg, const ProfilesList &profiles) {
-  cfg.profiles->store(profiles);
+  std::lock_guard lock(*cfg.config_file_mutex);
 
   auto tml = rfl::toml::load<WolfConfig, rfl::DefaultIfMissing>(cfg.config_source).value();
   tml.profiles = profiles | //
@@ -494,7 +532,10 @@ void update_profiles(const Config &cfg, const ProfilesList &profiles) {
                    };
                  }) | //
                  ranges::to_vector;
-  rfl::toml::save(cfg.config_source, tml);
+  save_config(cfg.config_source, tml);
+
+  // Update in-memory state only after the file has been saved
+  cfg.profiles->store(profiles);
 }
 
 } // namespace state
