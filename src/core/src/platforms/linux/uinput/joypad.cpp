@@ -3,6 +3,27 @@
 
 namespace wolf::core::input {
 
+/**
+ * One udev DB entry per node (eventN *and* jsN): libudev consumers that enumerate devices at startup
+ * (e.g. Chromium's GamepadService) only pick up js nodes carrying ID_INPUT_JOYSTICK in /run/udev/data.
+ */
+static std::vector<std::pair<std::string, std::vector<std::string>>>
+joystick_hw_db_entries(const std::vector<std::string> &nodes) {
+  std::vector<std::pair<std::string, std::vector<std::string>>> result;
+  for (const auto &devnode : nodes) {
+    result.push_back({gen_udev_hw_db_filename(devnode),
+                      {"E:ID_INPUT=1",
+                       "E:ID_INPUT_JOYSTICK=1",
+                       "E:ID_BUS=usb",
+                       "G:seat",
+                       "G:uaccess",
+                       "Q:seat",
+                       "Q:uaccess",
+                       "V:1"}});
+  }
+  return result;
+}
+
 std::vector<std::map<std::string, std::string>> XboxOneJoypad::get_udev_events() const {
   std::vector<std::map<std::string, std::string>> events;
 
@@ -24,20 +45,10 @@ std::vector<std::map<std::string, std::string>> XboxOneJoypad::get_udev_events()
 }
 
 std::vector<std::pair<std::string, std::vector<std::string>>> XboxOneJoypad::get_udev_hw_db_entries() const {
-  std::vector<std::pair<std::string, std::vector<std::string>>> result;
-
   if (_state->joy.get()) {
-    result.push_back({gen_udev_hw_db_filename(_state->joy),
-                      {"E:ID_INPUT=1",
-                       "E:ID_INPUT_JOYSTICK=1",
-                       "E:ID_BUS=usb",
-                       "G:seat",
-                       "G:uaccess",
-                       "Q:seat",
-                       "Q:uaccess",
-                       "V:1"}});
+    return joystick_hw_db_entries(this->get_nodes());
   }
-  return result;
+  return {};
 }
 
 std::vector<std::map<std::string, std::string>> SwitchJoypad::get_udev_events() const {
@@ -61,20 +72,10 @@ std::vector<std::map<std::string, std::string>> SwitchJoypad::get_udev_events() 
 }
 
 std::vector<std::pair<std::string, std::vector<std::string>>> SwitchJoypad::get_udev_hw_db_entries() const {
-  std::vector<std::pair<std::string, std::vector<std::string>>> result;
-
   if (_state->joy.get()) {
-    result.push_back({gen_udev_hw_db_filename(_state->joy),
-                      {"E:ID_INPUT=1",
-                       "E:ID_INPUT_JOYSTICK=1",
-                       "E:ID_BUS=usb",
-                       "G:seat",
-                       "G:uaccess",
-                       "Q:seat",
-                       "Q:uaccess",
-                       "V:1"}});
+    return joystick_hw_db_entries(this->get_nodes());
   }
-  return result;
+  return {};
 }
 
 std::vector<std::map<std::string, std::string>> PS5Joypad::get_udev_events() const {
