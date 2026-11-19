@@ -1,0 +1,106 @@
+va: import DMA buffers as DRM_PRIME when the driver doesn't support DRM_PRIME_2
+
+The i965 driver only supports DRM_PRIME import: with DRM_PRIME_2 it returns
+an empty surface without error (black screen with zero copy).
+See https://github.com/games-on-whales/wolf/pull/585
+
+diff --git a/subprojects/gst-plugins-bad/gst-libs/gst/va/vasurfaceimage.c b/subprojects/gst-plugins-bad/gst-libs/gst/va/vasurfaceimage.c
+index 326e637..1a3106d 100644
+--- a/subprojects/gst-plugins-bad/gst-libs/gst/va/vasurfaceimage.c
++++ b/subprojects/gst-plugins-bad/gst-libs/gst/va/vasurfaceimage.c
+@@ -63,6 +63,47 @@ _rt_format_is_rgb (guint rt_format)
+   return FALSE;
+ }
+ 
++/* Some drivers (i965) don't support DRM_PRIME_2 import and return an empty
++ * surface instead of an error. Check what the driver advertises, once per
++ * display. */
++static gboolean
++va_supports_drm_prime_2 (GstVaDisplay * display)
++{
++  GQuark quark = g_quark_from_static_string ("GstVaSupportsDrmPrime2");
++  VADisplay dpy = gst_va_display_get_va_dpy (display);
++  VASurfaceAttrib *attrs;
++  VAConfigID config;
++  guint i, num_attrs = 0;
++  gboolean supported = TRUE;
++  gpointer cached;
++
++  cached = g_object_get_qdata (G_OBJECT (display), quark);
++  if (cached)
++    return GPOINTER_TO_INT (cached) == 2;
++
++  if (vaCreateConfig (dpy, VAProfileNone, VAEntrypointVideoProc, NULL, 0,
++          &config) == VA_STATUS_SUCCESS) {
++    if (vaQuerySurfaceAttributes (dpy, config, NULL,
++            &num_attrs) == VA_STATUS_SUCCESS && num_attrs > 0) {
++      attrs = g_new (VASurfaceAttrib, num_attrs);
++      if (vaQuerySurfaceAttributes (dpy, config, attrs,
++              &num_attrs) == VA_STATUS_SUCCESS) {
++        for (i = 0; i < num_attrs; i++) {
++          if (attrs[i].type == VASurfaceAttribMemoryType)
++            supported = (attrs[i].value.value.i &
++                VA_SURFACE_ATTRIB_MEM_TYPE_DRM_PRIME_2) != 0;
++        }
++      }
++      g_free (attrs);
++    }
++    vaDestroyConfig (dpy, config);
++  }
++
++  g_object_set_qdata (G_OBJECT (display), quark,
++      GINT_TO_POINTER (supported ? 2 : 1));
++  return supported;
++}
++
+ gboolean
+ va_create_surfaces (GstVaDisplay * display, guint rt_format, guint fourcc,
+     guint width, guint height, gint usage_hint, guint64 * modifiers,
+@@ -98,8 +139,9 @@ va_create_surfaces (GstVaDisplay * display, guint rt_format, guint fourcc,
+     .pixel_format = fourcc,
+   };
+   /* *INDENT-ON* */
++  uintptr_t fd;
+   VAStatus status;
+-  guint num_attrs = 2;
++  guint plane, num_attrs = 2;
+ 
+   g_return_val_if_fail (num_surfaces > 0, FALSE);
+   /* must have modifiers when num_modifiers > 0 */
+@@ -116,7 +158,35 @@ va_create_surfaces (GstVaDisplay * display, guint rt_format, guint fourcc,
+     /* *INDENT-ON* */
+   }
+ 
+-  if (desc && desc->num_objects > 0) {
++  if (desc && desc->num_objects > 0 && !va_supports_drm_prime_2 (display)) {
++    /* without DRM_PRIME_2, only a single linear buffer can be imported, as
++     * DRM_PRIME */
++    if (desc->num_objects != 1 || desc->num_layers != 1
++        || desc->layers[0].offset[0] != 0
++        || desc->objects[0].drm_format_modifier != DRM_FORMAT_MOD_LINEAR) {
++      GST_ERROR ("The driver doesn't support DRM_PRIME_2 import and the "
++          "buffer can't be imported as DRM_PRIME");
++      return FALSE;
++    }
++    fd = desc->objects[0].fd;
++    extbuf.data_size = desc->objects[0].size;
++    extbuf.num_planes = desc->layers[0].num_planes;
++    for (plane = 0; plane < extbuf.num_planes; plane++) {
++      extbuf.pitches[plane] = desc->layers[0].pitch[plane];
++      extbuf.offsets[plane] = desc->layers[0].offset[plane];
++    }
++    extbuf.buffers = &fd;
++    extbuf.num_buffers = 1;
++    attrs[1].value.value.i = VA_SURFACE_ATTRIB_MEM_TYPE_DRM_PRIME;
++    /* *INDENT-OFF* */
++    attrs[num_attrs++] = (VASurfaceAttrib) {
++      .type = VASurfaceAttribExternalBufferDescriptor,
++      .flags = VA_SURFACE_ATTRIB_SETTABLE,
++      .value.type = VAGenericValueTypePointer,
++      .value.value.p = &extbuf,
++    };
++    /* *INDENT-ON* */
++  } else if (desc && desc->num_objects > 0) {
+     /* *INDENT-OFF* */
+     attrs[num_attrs++] = (VASurfaceAttrib) {
+       .type = VASurfaceAttribExternalBufferDescriptor,

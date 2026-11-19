@@ -6,6 +6,7 @@ ENV GSTREAMER_VERSION=$GSTREAMER_VERSION
 
 ENV SOURCE_PATH=/sources/
 WORKDIR $SOURCE_PATH
+COPY gstreamer-va-i965-drm-prime.patch $SOURCE_PATH/
 
 RUN <<_GSTREAMER_INSTALL
     #!/bin/bash
@@ -29,6 +30,12 @@ RUN <<_GSTREAMER_INSTALL
     cd ${SOURCE_PATH}/gstreamer
     git checkout $GSTREAMER_VERSION
     git submodule update --recursive --remote
+    # i965 (Intel iGPUs older than Broadwell) can't import DMA buffers as
+    # DRM_PRIME_2 and returns an empty surface, see the patch and
+    # https://github.com/games-on-whales/wolf/pull/585
+    # If it doesn't apply after a GStreamer bump, check whether it's still
+    # needed instead of just fixing the conflict.
+    git apply $SOURCE_PATH/gstreamer-va-i965-drm-prime.patch
     # see the list of possible options here: https://gitlab.freedesktop.org/gstreamer/gstreamer/-/blob/main/meson_options.txt
     meson setup \
         --buildtype=release \

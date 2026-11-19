@@ -2,3 +2,4 @@
 *
 
 !startup.sh
+!gstreamer-va-i965-drm-prime.patch

@@ -11,6 +11,11 @@ If it's the very first time that you are running an app, and you can only see a 
 
 If this persists or Moonlight kicks you out of the streaming session then you should probably take a look at the Wolf logs to gather more informations.
 
+=== Older Intel iGPUs (i965 driver)
+
+Intel iGPUs older than Broadwell use the `i965` VA-API driver, which needs a patched GStreamer for zero copy (included in the Wolf Docker image).
+If you build Wolf yourself against an unpatched GStreamer, set `WOLF_USE_ZERO_COPY=FALSE`.
+
 === Vulkan errors in App
 
 Example log line:
