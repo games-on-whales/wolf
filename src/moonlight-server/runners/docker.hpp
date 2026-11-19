@@ -8,10 +8,13 @@
 #include <fmt/core.h>
 #include <helpers/logger.hpp>
 #include <helpers/utils.hpp>
+#include <map>
 #include <platforms/hw.hpp>
 #include <range/v3/view.hpp>
 #include <state/data-structures.hpp>
+#include <string>
 #include <utility>
+#include <vector>
 
 namespace wolf::core::docker {
 
@@ -19,6 +22,22 @@ using namespace std::chrono_literals;
 using namespace ranges::views;
 using namespace utils;
 using namespace wolf::core;
+
+/**
+ * Returns the udev events of a device with its hidraw events first. The other events keep their order.
+ * Apps that read a pad through its hidraw node (e.g. SDL with HIDAPI) have to find that node when the pad's
+ * input nodes appear, so the runner creates and announces it first.
+ */
+std::vector<std::map<std::string, std::string>>
+hidraw_events_first(std::vector<std::map<std::string, std::string>> udev_events);
+
+/**
+ * Returns the fake-udev command that announces one udev event inside a container.
+ * fake-udev puts a subsystem in the message header, "input" unless told otherwise, and libudev monitors drop
+ * messages whose header does not match the subsystem they listen to. The event's own SUBSYSTEM is passed on so
+ * that a consumer that listens to e.g. hidraw receives the event.
+ */
+std::string fake_udev_command(const std::map<std::string, std::string> &udev_ev);
 
 class RunDocker : public events::Runner {
 public:
