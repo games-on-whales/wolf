@@ -1,6 +1,7 @@
 #include <immer/array_transient.hpp>
 #include <immer/map_transient.hpp>
 #include <platforms/hw.hpp>
+#include <runners/rootless.hpp>
 #include <sessions/common.hpp>
 #include <sessions/handlers.hpp>
 
@@ -70,6 +71,11 @@ void start_runner(std::shared_ptr<events::Runner> runner,
   mounted_paths.push_back(
       {std::filesystem::path(args->host->host_base_state_folder) / "fake-udev", "/usr/bin/fake-udev"});
   mounted_paths.push_back({std::filesystem::path(args->app_host_state_folder) / "udev", "/run/udev/"});
+
+  if (docker::is_rootless()) {
+    mounted_paths.push_back({std::filesystem::path(args->app_host_state_folder) / "input" / args->session_id,
+                             std::string(docker::ROOTLESS_INPUT_MOUNT)});
+  }
 
   /* Finally run the app, this will stop here until over */
   runner->run(args->session_id,

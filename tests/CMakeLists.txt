@@ -21,6 +21,7 @@ set(SRC_LIST
         testGSTPlugin.cpp
         testMoonlight.cpp
         testRTSP.cpp
+        testRootless.cpp
         testWolfAPI.cpp
         testBatchedSend.cpp)
 

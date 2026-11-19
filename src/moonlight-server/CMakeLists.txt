@@ -152,6 +152,7 @@ if (UNIX AND NOT APPLE)
     target_link_libraries_system(wolf_runner PRIVATE ICU::uc)
 
     list(APPEND SRC_LIST platforms/input_linux.cpp)
+    list(APPEND SRC_LIST platforms/mount_linux.cpp)
     pkg_check_modules(LIBDRM IMPORTED_TARGET libdrm)
     pkg_check_modules(LIBPCI IMPORTED_TARGET libpci)
 
@@ -168,6 +169,7 @@ if (UNIX AND NOT APPLE)
         list(APPEND SRC_LIST platforms/hw_unknown.cpp)
     endif ()
 else ()
+    list(APPEND SRC_LIST platforms/mount_unknown.cpp)
     list(APPEND SRC_LIST platforms/hw_unknown.cpp)
 endif ()
 
