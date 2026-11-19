@@ -14,6 +14,16 @@ constexpr char const *pin_html =
 
     ;
 
+/**
+ * @brief Largest amount of data buffered for a single REST request.
+ *
+ * The biggest legitimate request is the HTTP pairing handshake, which carries the client
+ * certificate base64 encoded in the query string (about 2 kB). The only request body Wolf
+ * reads is the /pin/ form, a small JSON object. 64 KiB leaves plenty of headroom while
+ * stopping oversized payloads from being buffered and handed to the handlers.
+ */
+constexpr std::size_t max_request_streambuf_size = 64 * 1024;
+
 namespace bt = boost::property_tree;
 using namespace wolf::core;
 
@@ -24,6 +34,7 @@ using namespace wolf::core;
 void startServer(HttpServer *server, const immer::box<state::AppState> state, int port) {
   server->config.port = port;
   server->config.address = "0.0.0.0";
+  server->config.max_request_streambuf_size = max_request_streambuf_size;
   server->default_resource["GET"] = endpoints::not_found<SimpleWeb::HTTP>;
   server->default_resource["POST"] = endpoints::not_found<SimpleWeb::HTTP>;
 
@@ -38,6 +49,16 @@ void startServer(HttpServer *server, const immer::box<state::AppState> state, in
   server->resource["^/pin/$"]["GET"] = [](auto resp, auto req) { resp->write(pin_html); };
   server->resource["^/pin/$"]["POST"] = [pairing_atom](auto resp, auto req) {
     try {
+      // The pin form posts a small JSON object. Boost's JSON parser recurses once per
+      // nesting level, so an unbounded body of '[' can overflow the stack before the
+      // secret is checked. Check the received size, which also covers chunked bodies;
+      // this stays useful as it is much tighter than the server-wide streambuf limit.
+      constexpr std::size_t max_pin_body = 4096;
+      if (req->content.size() > max_pin_body) {
+        *resp << "HTTP/1.1 413 Payload Too Large\r\nContent-Length: 0\r\n\r\n";
+        return;
+      }
+
       bt::ptree pt;
 
       read_json(req->content, pt);
@@ -118,6 +139,7 @@ void reply_unauthorized(const std::shared_ptr<typename SimpleWeb::ServerBase<Sim
 void startServer(HttpsServer *server, const immer::box<state::AppState> state, int port) {
   server->config.port = port;
   server->config.address = "0.0.0.0";
+  server->config.max_request_streambuf_size = max_request_streambuf_size;
   server->default_resource["GET"] = endpoints::not_found<SimpleWeb::HTTPS>;
   server->default_resource["POST"] = endpoints::not_found<SimpleWeb::HTTPS>;
 
