@@ -2,7 +2,7 @@
 
 namespace vulkan_probe {
 
-bool supports_video_encode(const std::string &render_node, const std::string &codec) {
+bool supports_video_encode(std::string_view render_node, std::string_view codec) {
   return false;
 }
 

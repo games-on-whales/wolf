@@ -167,7 +167,7 @@ jobs:
               libssl-dev \
               libgstreamer1.0-dev libgstreamer-plugins-base1.0-dev libgstreamer-plugins-bad1.0-dev \
               libwayland-dev libwayland-server0 wayland-protocols libinput-dev libxkbcommon-dev libgbm-dev \
-              libvulkan1 \
+              libvulkan-dev \
               libcurl4-openssl-dev \
               libpulse-dev \
               libevdev-dev \
