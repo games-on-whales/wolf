@@ -643,3 +643,158 @@ TEST_CASE("Multiple users", "[HTTP]") {
   REQUIRE(session4->video_stream_port == 48100);
   REQUIRE(session4->audio_stream_port == 48200);
 }
+
+namespace {
+/// Bind to an ephemeral port and hand it out, so test servers never clash with a running Wolf instance.
+unsigned short free_tcp_port() {
+  boost::asio::io_context io;
+  boost::asio::ip::tcp::acceptor probe(io, {boost::asio::ip::tcp::v4(), 0});
+  return probe.local_endpoint().port();
+}
+
+struct RawReply {
+  std::string data;
+  /// True when the peer closed (or reset) the connection before the read timeout expired.
+  bool connection_closed = false;
+};
+
+/**
+ * Send an already serialised HTTP request and collect the reply. Reading stops when the response
+ * headers are complete, the connection is closed, or the timeout expires, whichever comes first.
+ */
+RawReply send_raw_request(unsigned short port, const std::string &request, std::chrono::milliseconds timeout) {
+  boost::asio::io_context io;
+  boost::asio::ip::tcp::socket socket(io);
+  boost::system::error_code ec;
+  socket.connect({boost::asio::ip::make_address("127.0.0.1"), port}, ec);
+  if (ec)
+    throw std::runtime_error("could not connect to the test HTTP server: " + ec.message());
+
+  boost::asio::write(socket, boost::asio::buffer(request), ec);
+  if (ec && ec != boost::asio::error::broken_pipe && ec != boost::asio::error::connection_reset)
+    throw std::runtime_error("could not send the test request: " + ec.message());
+
+  socket.non_blocking(true);
+  RawReply reply;
+  char buffer[4096];
+  auto deadline = std::chrono::steady_clock::now() + timeout;
+  while (std::chrono::steady_clock::now() < deadline) {
+    auto received = socket.read_some(boost::asio::buffer(buffer), ec);
+    if (!ec) {
+      reply.data.append(buffer, received);
+      if (reply.data.find("\r\n\r\n") != std::string::npos)
+        break; // response headers are complete
+      continue;
+    }
+    if (ec == boost::asio::error::would_block || ec == boost::asio::error::try_again) {
+      std::this_thread::sleep_for(std::chrono::milliseconds(5));
+      continue;
+    }
+    reply.connection_closed = true;
+    break;
+  }
+  socket.close(ec);
+  return reply;
+}
+} // namespace
+
+TEST_CASE("REST request body limits", "[HTTP]") {
+  // Simple-Web-Server buffers the whole request body before the resource handler runs. The REST
+  // servers must cap that buffer so an oversized body is refused while it is being read.
+  constexpr std::size_t expected_cap = 64 * 1024;
+
+  immer::box<state::AppState> app_state = {state::AppState{
+      .pairing_cache = std::make_shared<immer::atom<immer::map<std::string, state::PairCache>>>(),
+      .pairing_atom = std::make_shared<immer::atom<immer::map<std::string, immer::box<events::PairSignal>>>>(),
+      .event_bus = std::make_shared<events::EventBusType>()}};
+
+  auto port = free_tcp_port();
+  HttpServer server;
+  std::thread server_thread([&server, app_state, port]() { HTTPServers::startServer(&server, app_state, port); });
+
+  auto stop_server = [&server, &server_thread]() {
+    server.stop();
+    if (server_thread.joinable())
+      server_thread.join();
+  };
+
+  auto accepting = false;
+  for (auto attempt = 0; attempt < 100 && !accepting; ++attempt) {
+    boost::asio::io_context io;
+    boost::asio::ip::tcp::socket probe(io);
+    boost::system::error_code ec;
+    probe.connect({boost::asio::ip::make_address("127.0.0.1"), port}, ec);
+    accepting = !ec;
+    if (!accepting)
+      std::this_thread::sleep_for(std::chrono::milliseconds(20));
+  }
+  if (!accepting) {
+    stop_server();
+    FAIL("the test HTTP server did not start");
+  }
+
+  try {
+    SECTION("The HTTP server caps the request stream buffer") {
+      REQUIRE(server.config.max_request_streambuf_size == expected_cap);
+    }
+
+    SECTION("A normal /pin/ body is accepted") {
+      auto pin_promise = std::make_shared<boost::promise<std::string>>();
+      app_state->pairing_atom->update([pin_promise](auto pairing_map) {
+        return pairing_map.set(
+            "0123456789ABCDEF",
+            immer::box<events::PairSignal>{
+                events::PairSignal{.client_ip = "127.0.0.1", .host_ip = "127.0.0.1", .user_pin = pin_promise}});
+      });
+
+      std::string body = R"({"pin":"7284","secret":"0123456789ABCDEF"})";
+      auto reply = send_raw_request(port,
+                                    "POST /pin/ HTTP/1.1\r\nHost: localhost\r\nContent-Type: application/json\r\n"
+                                    "Content-Length: " +
+                                        std::to_string(body.size()) + "\r\n\r\n" + body,
+                                    std::chrono::milliseconds(2000));
+      REQUIRE_THAT(reply.data, Catch::Matchers::StartsWith("HTTP/1.1 200"));
+      REQUIRE(pin_promise->get_future().get() == "7284");
+    }
+
+    SECTION("A body above the pin limit is rejected by the handler") {
+      // Bigger than the 4096-byte /pin/ check but still below the server-wide cap, so it reaches
+      // the handler and gets an explicit 413 response.
+      auto body = std::string(5000, '[');
+      auto reply = send_raw_request(port,
+                                    "POST /pin/ HTTP/1.1\r\nHost: localhost\r\nContent-Type: application/json\r\n"
+                                    "Content-Length: " +
+                                        std::to_string(body.size()) + "\r\n\r\n" + body,
+                                    std::chrono::milliseconds(2000));
+      REQUIRE_THAT(reply.data, Catch::Matchers::StartsWith("HTTP/1.1 413"));
+    }
+
+    SECTION("A declared body above the cap is refused while reading") {
+      // The declared length is way over the cap but only part of the body is sent: the server must
+      // answer (or drop the connection) without waiting for the remaining bytes.
+      auto partial_body = std::string(8192, '[');
+      auto reply = send_raw_request(port,
+                                    "POST /pin/ HTTP/1.1\r\nHost: localhost\r\nContent-Type: application/json\r\n"
+                                    "Content-Length: 1000000\r\n\r\n" +
+                                        partial_body,
+                                    std::chrono::milliseconds(2000));
+      INFO("received: " << reply.data);
+      REQUIRE((reply.connection_closed || reply.data.rfind("HTTP/1.1 413", 0) == 0));
+    }
+
+    SECTION("A chunked body above the cap is refused while reading") {
+      // Same idea for a chunked transfer: the chunk size alone already exceeds the cap.
+      auto reply = send_raw_request(port,
+                                    "POST /pin/ HTTP/1.1\r\nHost: localhost\r\nContent-Type: application/json\r\n"
+                                    "Transfer-Encoding: chunked\r\n\r\n11170\r\n" +
+                                        std::string(1024, '['),
+                                    std::chrono::milliseconds(2000));
+      INFO("received: " << reply.data);
+      REQUIRE((reply.connection_closed || reply.data.rfind("HTTP/1.1 413", 0) == 0));
+    }
+  } catch (...) {
+    stop_server();
+    throw;
+  }
+  stop_server();
+}
