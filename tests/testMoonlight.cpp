@@ -81,6 +81,44 @@ TEST_CASE("LocalState load TOML", "[LocalState]") {
   }
 }
 
+TEST_CASE("Vulkan software bridge for non-compositor apps", "[LocalState]") {
+  auto event_bus = std::make_shared<events::EventBusType>();
+  auto running_sessions = std::make_shared<immer::atom<immer::vector<events::StreamSession>>>();
+  auto state = state::load_or_default("config.vulkan.test.toml", event_bus, running_sessions);
+
+  auto moonlight_profile = state::get_moonlight_profile(state);
+  REQUIRE(moonlight_profile);
+  immer::vector<immer::box<events::App>> apps = moonlight_profile.value()->apps->load();
+  REQUIRE_THAT(apps, Catch::Matchers::SizeIs(2));
+
+  auto compositor_app = apps.at(0); // Firefox: default source, runs the compositor
+  // Without a GPU the vendor is unknown, zero copy is disabled and the fake
+  // Vulkan entry is filtered out: nothing to test here.
+  if (compositor_app->h264_gst_pipeline.find("vulkan_h264_pipeline") == std::string::npos) {
+    SKIP("no GPU detected: the Vulkan encoder is filtered out without zero copy");
+  }
+
+  // Compositor apps keep the bare Vulkan zero-copy params
+  REQUIRE_THAT(compositor_app->h264_gst_pipeline,
+               Equals(fmt::format("{} !\nvulkan_zero_copy !\nvulkan_h264_pipeline !\nvideo_sink",
+                                  "interpipesrc name=interpipesrc_{}_video")));
+
+  // The non-compositor app gets the software bridge instead of the bare caps.
+  // Plain concatenation: fmt::format does not process braces in arguments.
+  auto software_app = apps.at(1); // Test ball: custom source, no compositor
+  auto expected_software_pipeline = std::string("override DEFAULT SOURCE !\n") +
+                                    "videoconvertscale !\nvulkanupload !\n"
+                                    "video/x-raw(memory:VulkanImage), format=NV12, width={width}, "
+                                    "height={height}, pixel-aspect-ratio=1/1" +
+                                    " !\nvulkan_h264_pipeline !\nvideo_sink";
+  REQUIRE_THAT(software_app->h264_gst_pipeline, Equals(expected_software_pipeline));
+
+  // Family consistency: the fake software HEVC/AV1 encoders cannot consume
+  // Vulkan images and are disabled when the H264 encoder is Vulkan
+  REQUIRE(software_app->hevc_gst_pipeline.empty());
+  REQUIRE(software_app->av1_gst_pipeline.empty());
+}
+
 TEST_CASE("LocalState pairing information", "[LocalState]") {
   auto event_bus = std::make_shared<events::EventBusType>();
   auto clients_atom = std::make_shared<immer::atom<state::PairedClientList>>();

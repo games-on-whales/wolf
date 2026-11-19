@@ -164,6 +164,20 @@ setup_moonlight_handlers(const immer::box<state::AppState> &app_state,
         auto w_display_ready = on_ready->get_future().then([session, runtime_dir](auto fut) {
           streaming::WaylandDisplayReady ready = fut.get();
 
+          /* Apps that don't run the virtual compositor (start_virtual_compositor =
+           * false, e.g. Test ball) resolve on_ready with an empty socket name and
+           * run their virtual input on the uinput devices created at startup:
+           * there is no wayland display to connect to and no socket to wait for,
+           * so start the runner right away instead of aborting after the timeout. */
+          if (ready.wayland_socket_name.empty()) {
+            logs::log(logs::debug, "[STREAM_SESSION] Start runner (no virtual compositor)");
+            session->event_bus->fire_event(immer::box<events::StartRunner>(
+                events::StartRunner{.stop_stream_when_over = true,
+                                    .runner = session->app->runner,
+                                    .stream_session = std::make_shared<events::StreamSession>(*session)}));
+            return;
+          }
+
           auto wl_state = virtual_display::create_wayland_display(ready.wayland_plugin, ready.wayland_socket_name);
           // Set the wayland display
           session->wayland_display->store(wl_state);

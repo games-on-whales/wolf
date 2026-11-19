@@ -74,6 +74,7 @@ using ProfilesList = immer::vector<immer::box<events::Profile>>;
 enum Encoder {
   NVIDIA,
   VAAPI,
+  VULKAN,
   QUICKSYNC,
   SOFTWARE,
   APPLE,
