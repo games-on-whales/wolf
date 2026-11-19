@@ -135,6 +135,14 @@ inline void init() {
   gst_init(nullptr, nullptr);
   logs::log(logs::info, "Gstreamer version: {}", get_gst_version());
 
+  // The vulkan plugin opens a Vulkan instance when it loads, and GStreamer loads a plugin the first time one of its
+  // elements is created. For the Vulkan elements that is inside the first session that uses them, where the loader's
+  // first ICD scan overlaps the compositor thread's first EGL initialisation and the NVIDIA driver segfaults.
+  // Loading the plugin here, before any session thread exists, keeps the two apart.
+  if (auto vulkan = gst_plugin_load_by_name("vulkan")) {
+    gst_object_unref(vulkan);
+  }
+
   gst_element_register(nullptr, "rtpmoonlightpay_video", GST_RANK_PRIMARY, gst_TYPE_rtp_moonlight_pay_video);
   gst_element_register(nullptr, "rtpmoonlightpay_audio", GST_RANK_PRIMARY, gst_TYPE_rtp_moonlight_pay_audio);
 
