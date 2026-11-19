@@ -100,16 +100,19 @@ setup_moonlight_handlers(const immer::box<state::AppState> &app_state,
           logs::log(logs::debug, "[STREAM_SESSION] Create wayland compositor");
 
           // Start Gstreamer producer pipeline
-          std::thread([session, on_ready, gst_context = app_state->gst_context]() {
-            streaming::start_video_producer(std::to_string(session->session_id),
-                                            session->app->video_producer_buffer_caps,
-                                            session->app->render_node,
-                                            {.width = session->display_mode.width,
-                                             .height = session->display_mode.height,
-                                             .refreshRate = session->display_mode.refreshRate},
-                                            gst_context,
-                                            on_ready,
-                                            session->event_bus);
+          const bool use_hdr = session->hdr_requested && !session->app->hdr_producer_buffer_caps.empty();
+          std::thread([session, on_ready, use_hdr, gst_context = app_state->gst_context]() {
+            streaming::start_video_producer(
+                std::to_string(session->session_id),
+                use_hdr ? session->app->hdr_producer_buffer_caps : session->app->video_producer_buffer_caps,
+                session->app->render_node,
+                {.width = session->display_mode.width,
+                 .height = session->display_mode.height,
+                 .refreshRate = session->display_mode.refreshRate},
+                gst_context,
+                on_ready,
+                session->event_bus,
+                use_hdr);
           }).detach();
         } else {
           // Create virtual devices

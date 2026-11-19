@@ -36,7 +36,8 @@ void start_video_producer(const std::string &session_id,
                           const wolf::core::virtual_display::DisplayMode &display_mode,
                           std::shared_ptr<immer::atom<gst_video_context::gst_context_ptr>> video_context,
                           std::shared_ptr<boost::promise<WaylandDisplayReady>> on_ready,
-                          std::shared_ptr<events::EventBusType> event_bus);
+                          std::shared_ptr<events::EventBusType> event_bus,
+                          bool hdr = false);
 
 void start_audio_producer(const std::string &session_id,
                           const std::shared_ptr<events::EventBusType> &event_bus,
