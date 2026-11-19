@@ -58,6 +58,10 @@ template <> struct Reflector<events::App> {
     bool start_virtual_compositor;
     bool start_audio_server;
     Reflector<events::Runner>::ReflType runner;
+
+    // Set both for an app added through the API to stream HDR
+    std::optional<std::string> hdr_producer_buffer_caps;
+    std::optional<std::string> hdr_hevc_gst_pipeline;
   };
 
   static ReflType from(const events::App &v) {
@@ -72,7 +76,9 @@ template <> struct Reflector<events::App> {
             .opus_gst_pipeline = v.opus_gst_pipeline,
             .start_virtual_compositor = v.start_virtual_compositor,
             .start_audio_server = v.start_audio_server,
-            .runner = v.runner->serialize()};
+            .runner = v.runner->serialize(),
+            .hdr_producer_buffer_caps = v.hdr_producer_buffer_caps,
+            .hdr_hevc_gst_pipeline = v.hdr_hevc_gst_pipeline};
   }
 
   static events::App to(const ReflType &app, const std::shared_ptr<events::EventBusType> &ev_bus) {
@@ -87,6 +93,8 @@ template <> struct Reflector<events::App> {
         .start_virtual_compositor = app.start_virtual_compositor,
         .start_audio_server = app.start_audio_server,
         .runner = runner,
+        .hdr_producer_buffer_caps = app.hdr_producer_buffer_caps.value_or(""),
+        .hdr_hevc_gst_pipeline = app.hdr_hevc_gst_pipeline.value_or(""),
     };
   }
 };

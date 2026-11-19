@@ -261,7 +261,9 @@ TEST_CASE("APPs APIs", "[API]") {
                                         .mounts = {"/tmp:/tmp"},
                                         .env = {"LOG_LEVEL=1234"},
                                         .devices = {"/dev/input:/dev/input"},
-                                        .ports = {"8080:8080"}}};
+                                        .ports = {"8080:8080"}},
+      .hdr_producer_buffer_caps = "hdr-caps",
+      .hdr_hevc_gst_pipeline = "hdr-hevc"};
   response = req(curl.get(), HTTPMethod::POST, "http://localhost/api/v1/apps/add", rfl::json::write(app));
   REQUIRE(response);
   REQUIRE_THAT(response->second, Equals("{\"success\":true}"));
@@ -277,6 +279,10 @@ TEST_CASE("APPs APIs", "[API]") {
   REQUIRE(moonlight_profile);
   immer::vector<immer::box<events::App>> wolf_apps = moonlight_profile.value()->apps->load();
   REQUIRE(wolf_apps.at(2)->base.title == "Test app");
+  // The HDR pipeline fields survive the API round trip, both ways
+  REQUIRE(wolf_apps.at(2)->hdr_producer_buffer_caps == "hdr-caps");
+  REQUIRE(wolf_apps.at(2)->hdr_hevc_gst_pipeline == "hdr-hevc");
+  REQUIRE(apps2.apps[2].hdr_hevc_gst_pipeline.value_or("") == "hdr-hevc");
 
   // Test that we can remove an app
   auto app_delete = AppDeleteRequest{.id = "test"};
