@@ -413,6 +413,7 @@ auto create_run_session(const SimpleWeb::CaseInsensitiveMultimap &headers,
                                             get_header(headers, "rikeyid").value());
 
   base_session->ip = client_ip;
+  base_session->hdr_requested = get_header(headers, "hdrMode").value_or("0") == "1";
   return std::move(base_session);
 }
 

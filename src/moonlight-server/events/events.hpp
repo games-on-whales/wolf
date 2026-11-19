@@ -75,6 +75,10 @@ struct App {
   bool start_virtual_compositor;
   bool start_audio_server;
   std::shared_ptr<Runner> runner;
+
+  // Empty when the encoder cannot do HEVC Main10
+  std::string hdr_producer_buffer_caps;
+  std::string hdr_hevc_gst_pipeline;
 };
 
 struct Profile {
@@ -259,6 +263,7 @@ struct VideoSession {
 
   ColorRange color_range;
   ColorSpace color_space;
+  bool hdr_requested = false;
 
   std::string client_ip;
   std::array<char, 16> rtp_secret_payload;
@@ -428,6 +433,9 @@ struct StreamSession {
    * So we send out a fake unique IP for each session in order to identify the session back in the RTSP thread.
    */
   std::string rtsp_fake_ip;
+
+  // The client asked for HDR in the launch request (hdrMode=1)
+  bool hdr_requested = false;
 
   // client info
   std::size_t session_id;

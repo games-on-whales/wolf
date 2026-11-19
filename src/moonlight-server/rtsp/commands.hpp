@@ -172,6 +172,23 @@ announce(const RTSP_PACKET &req, const events::StreamSession &session) {
   bool video_format_hevc = args["x-nv-vqos[0].bitStreamFormat"].value_or(0) == 1;
   bool video_format_av1 = args["x-nv-vqos[0].bitStreamFormat"].value_or(0) == 2;
   auto csc = args["x-nv-video[0].encoderCscMode"].value_or(0);
+  auto color_space = events::ColorSpace(csc >> 1);
+
+  // HDR10: the client asks with dynamicRangeMode=1 (and sent hdrMode=1 at launch, which is what
+  // started the P010 producer). Only HEVC Main10 is wired up; Wolf has no HDR pipeline otherwise.
+  bool hdr_requested = args["x-nv-video[0].dynamicRangeMode"].value_or(0) == 1;
+  if (hdr_requested && !(video_format_hevc && session.hdr_requested && !session.app->hdr_hevc_gst_pipeline.empty())) {
+    logs::log(logs::warning,
+              "[RTSP] Ignoring HDR request: hevc={} launch_hdr={} hdr_pipeline={}",
+              video_format_hevc,
+              session.hdr_requested,
+              !session.app->hdr_hevc_gst_pipeline.empty());
+    hdr_requested = false;
+  }
+  if (hdr_requested) {
+    logs::log(logs::info, "[RTSP] HDR10 requested, selecting the HEVC Main10 pipeline");
+    color_space = events::ColorSpace::BT2020;
+  }
 
   // Video session
   moonlight::DisplayMode display = {.width = args["x-nv-video[0].clientViewportWd"].value(),
@@ -186,7 +203,7 @@ announce(const RTSP_PACKET &req, const events::StreamSession &session) {
     gst_pipeline = session.app->av1_gst_pipeline;
   } else if (video_format_hevc) {
     logs::log(logs::debug, "[RTSP] Moonlight requested video format HEVC");
-    gst_pipeline = session.app->hevc_gst_pipeline;
+    gst_pipeline = hdr_requested ? session.app->hdr_hevc_gst_pipeline : session.app->hevc_gst_pipeline;
   } else {
     logs::log(logs::debug, "[RTSP] Moonlight requested video format H264");
     gst_pipeline = session.app->h264_gst_pipeline;
@@ -237,7 +254,8 @@ announce(const RTSP_PACKET &req, const events::StreamSession &session) {
       .slices_per_frame = args["x-nv-video[0].videoEncoderSlicesPerFrame"].value_or(1),
 
       .color_range = (csc & 0x1) ? events::ColorRange::JPEG : events::ColorRange::MPEG,
-      .color_space = events::ColorSpace(csc >> 1),
+      .color_space = color_space,
+      .hdr_requested = hdr_requested,
 
       .client_ip = session.ip,
       .rtp_secret_payload = session.rtp_secret_payload,
