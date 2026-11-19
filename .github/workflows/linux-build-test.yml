@@ -166,7 +166,7 @@ jobs:
               libboost-locale-dev libboost-thread-dev libboost-filesystem-dev libboost-log-dev libboost-stacktrace-dev libboost-container-dev libboost-json-dev \
               libssl-dev \
               libgstreamer1.0-dev libgstreamer-plugins-base1.0-dev libgstreamer-plugins-bad1.0-dev \
-              libwayland-dev libwayland-server0 wayland-protocols libinput-dev libxkbcommon-dev libgbm-dev \
+              libwayland-dev libwayland-server0 wayland-protocols libinput-dev libxkbcommon-dev libxkbcommon-x11-dev libgbm-dev \
               libvulkan-dev \
               libcurl4-openssl-dev \
               libpulse-dev \

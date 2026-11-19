@@ -4,10 +4,13 @@ add_library(wolf::vulkan-probe ALIAS vulkan-probe)
 set(SRC_LIST)
 
 find_package(PkgConfig)
-pkg_check_modules(GST_VULKAN gstreamer-vulkan-1.0)
-if (GST_VULKAN_FOUND)
+# The IMPORTED_TARGET probe resolves the full Requires tree (--libs --cflags): Ubuntu's
+# gstreamer-vulkan-1.0 needs xkbcommon-x11 among others, and a version-only probe
+# (--exists) passes on a setup where the libraries cannot be resolved.
+pkg_check_modules(GST_VULKAN IMPORTED_TARGET gstreamer-vulkan-1.0)
+
+if (TARGET PkgConfig::GST_VULKAN)
     message(STATUS "Found GStreamer Vulkan: ${GST_VULKAN_VERSION}")
-    pkg_check_modules(GST_VULKAN REQUIRED IMPORTED_TARGET gstreamer-vulkan-1.0)
     list(APPEND SRC_LIST vulkan-probe.cpp)
 else ()
     message(STATUS "GStreamer Vulkan not found, building without Vulkan capability probing")
@@ -17,7 +20,7 @@ endif ()
 target_include_directories(vulkan-probe PUBLIC .)
 target_sources(vulkan-probe PUBLIC vulkan-probe.hpp PRIVATE ${SRC_LIST})
 
-if (GST_VULKAN_FOUND)
+if (TARGET PkgConfig::GST_VULKAN)
     target_link_libraries(vulkan-probe PUBLIC PkgConfig::GST_VULKAN wolf::core)
 else ()
     target_link_libraries(vulkan-probe PUBLIC wolf::core)
