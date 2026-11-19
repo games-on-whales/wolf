@@ -155,6 +155,16 @@ static const std::string VULKAN_SOFTWARE_BRIDGE =
     "videoconvertscale !\nvulkanupload !\n"
     "video/x-raw(memory:VulkanImage), format=NV12, width={width}, height={height}, pixel-aspect-ratio=1/1";
 
+/* HDR10: the producer is waylanddisplaysrc vulkan=true hdr=true, whose only HDR output is
+ * P010 in memory:VulkanImage tagged BT.2100 PQ. */
+static const std::string HDR_PRODUCER_BUFFER_CAPS = "video/x-raw(memory:VulkanImage),format=P010_10LE";
+static const std::string HDR_VULKAN_PARAMS =
+    "video/x-raw(memory:VulkanImage), format=P010_10LE, width={width}, height={height}, pixel-aspect-ratio=1/1";
+/* There is no CUDA P010 PQ producer: bring the Vulkan image to system memory, then to CUDA. */
+static const std::string HDR_NVIDIA_PARAMS =
+    "vulkandownload !\ncudaupload !\ncudaconvertscale !\n"
+    "video/x-raw(memory:CUDAMemory), format=P010_10LE, width={width}, height={height}, pixel-aspect-ratio=1/1";
+
 std::shared_ptr<immer::atom<immer::vector<immer::box<events::App>>>>
 parse_apps(const std::vector<BaseApp> &apps,
            const std::string &default_app_render_node,
@@ -165,6 +175,8 @@ parse_apps(const std::vector<BaseApp> &apps,
            const std::string &av1_video_params,
            const std::string &vulkan_software_bridge,
            bool support_hdr,
+           const std::string &hdr_hevc_params,
+           const std::string &hdr_hevc_encoder,
            const BaseAppAudioOverride &default_audio_settings,
            SessionsAtoms running_sessions,
            const std::shared_ptr<events::EventBusType> &ev_bus) {
@@ -212,6 +224,15 @@ parse_apps(const std::vector<BaseApp> &apps,
                               app_video_settings.sink.value_or(default_video_settings.sink.value()))
                 : "";
 
+        auto hdr_hevc_gst_pipeline =
+            support_hdr && app.start_virtual_compositor.value_or(true)
+                ? fmt::format("{} !\n{} !\n{} !\n{}", //
+                              app_video_settings.source.value_or(default_video_settings.source.value()),
+                              hdr_hevc_params,
+                              hdr_hevc_encoder,
+                              app_video_settings.sink.value_or(default_video_settings.sink.value()))
+                : "";
+
         auto av1_gst_pipeline =
             default_video_settings.av1_encoder.has_value()
                 ? fmt::format("{} !\n{} !\n{} !\n{}", //
@@ -243,7 +264,9 @@ parse_apps(const std::vector<BaseApp> &apps,
                         .opus_gst_pipeline = opus_gst_pipeline,
                         .start_virtual_compositor = app.start_virtual_compositor.value_or(true),
                         .start_audio_server = app.start_audio_server.value_or(true),
-                        .runner = get_runner(app.runner, ev_bus)}};
+                        .runner = get_runner(app.runner, ev_bus),
+                        .hdr_producer_buffer_caps = hdr_hevc_gst_pipeline.empty() ? "" : HDR_PRODUCER_BUFFER_CAPS,
+                        .hdr_hevc_gst_pipeline = hdr_hevc_gst_pipeline}};
       }) |                                                  //
       ranges::to<immer::vector<immer::box<events::App>>>(); //
 
@@ -458,6 +481,18 @@ Config load_or_default(const std::string &source,
   // HDR10 needs HEVC Main10: only the Vulkan (AMD) and NVENC (NVIDIA) HEVC encoders are wired up for it
   bool support_hdr = hevc_encoder && (encoder_type(*hevc_encoder) == VULKAN || encoder_type(*hevc_encoder) == NVIDIA);
 
+  std::string hdr_hevc_params;
+  std::string hdr_hevc_encoder;
+  if (support_hdr) {
+    hdr_hevc_params = encoder_type(*hevc_encoder) == VULKAN ? HDR_VULKAN_PARAMS : HDR_NVIDIA_PARAMS;
+    hdr_hevc_encoder = hevc_encoder->encoder_pipeline;
+    // Main-10 profile caps after the parser
+    auto pos = hdr_hevc_encoder.find("profile=main,");
+    if (pos != std::string::npos) {
+      hdr_hevc_encoder.replace(pos, std::string("profile=main,").size(), "profile=main-10,");
+    }
+  }
+
   auto clients_atom = std::make_shared<immer::atom<PairedClientList>>(paired_clients);
 
   /* Get profiles, for each app defined will merge with default settings */
@@ -477,6 +512,8 @@ Config load_or_default(const std::string &source,
                                            av1_video_params,
                                            encoder_type(*h264_encoder) == VULKAN ? VULKAN_SOFTWARE_BRIDGE : "",
                                            support_hdr,
+                                           hdr_hevc_params,
+                                           hdr_hevc_encoder,
                                            default_base_audio,
                                            running_sessions,
                                            ev_bus)};
