@@ -346,16 +346,19 @@ void UnixSocketServer::sse_keepalive(const boost::system::error_code &e) {
 }
 
 void UnixSocketServer::sse_broadcast(const std::string &payload) {
+  // async_write() returns immediately: the buffer must outlive the call, it's released by the last completion handler
+  auto shared_payload = std::make_shared<const std::string>(payload);
   for (auto &socket : state_->sockets) {
-    boost::asio::async_write(socket->socket,
-                             boost::asio::buffer(payload),
-                             [this, socket](const boost::system::error_code &ec, std::size_t /*length*/) {
-                               if (ec) {
-                                 logs::log(logs::debug, "[API] Error sending event: {}", ec.message());
-                                 close(*socket);
-                                 cleanup_sockets();
-                               }
-                             });
+    boost::asio::async_write(
+        socket->socket,
+        boost::asio::buffer(*shared_payload),
+        [this, socket, shared_payload](const boost::system::error_code &ec, std::size_t /*length*/) {
+          if (ec) {
+            logs::log(logs::debug, "[API] Error sending event: {}", ec.message());
+            close(*socket);
+            cleanup_sockets();
+          }
+        });
   }
 }
 
@@ -383,9 +386,11 @@ void UnixSocketServer::send_http(std::shared_ptr<UnixSocket> socket,
 }
 
 void UnixSocketServer::send_data(std::shared_ptr<UnixSocket> socket, std::string_view data) {
+  // async_write() returns immediately and `data` is usually a temporary: keep our own copy alive until it completes
+  auto owned_data = std::make_shared<const std::string>(data);
   boost::asio::async_write(socket->socket,
-                           boost::asio::buffer(data),
-                           [this, socket](const boost::system::error_code &ec, std::size_t /*length*/) {
+                           boost::asio::buffer(*owned_data),
+                           [this, socket, owned_data](const boost::system::error_code &ec, std::size_t /*length*/) {
                              if (ec) {
                                logs::log(logs::error, "[API] Error sending data: {}", ec.message());
                                close(*socket);
