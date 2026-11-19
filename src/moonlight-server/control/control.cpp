@@ -224,7 +224,7 @@ void run_control(int port,
                     immer::box<PauseStreamEvent>(PauseStreamEvent{.session_id = client_session->session_id}));
               } else if (sub_type == INPUT_DATA) {
                 immer::box<std::shared_ptr<ENetPeer>> enet_client = {to_shared_ptr(event.peer)};
-                handle_input(client_session.value(), enet_client, (INPUT_PKT *)decrypted.data());
+                handle_input(client_session.value(), enet_client, (INPUT_PKT *)decrypted.data(), decrypted.size());
               } else if (sub_type == IDR_FRAME) {
                 auto ev = IDRRequestEvent{.session_id = client_session->session_id};
                 event_bus->fire_event(immer::box<IDRRequestEvent>{ev});
