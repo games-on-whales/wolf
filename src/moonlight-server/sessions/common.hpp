@@ -43,6 +43,11 @@ inline std::chrono::milliseconds get_wayland_socket_wait_timeout() {
 inline bool wait_for_wayland_socket(std::string_view runtime_dir,
                                     const std::string &socket_name,
                                     std::chrono::milliseconds timeout = get_wayland_socket_wait_timeout()) {
+  if (socket_name.empty()) {
+    logs::log(logs::debug, "No Wayland socket to wait for, the app has no compositor");
+    return true;
+  }
+
   if (auto skip_wait = utils::get_env("WOLF_SKIP_WAYLAND_SOCKET_WAIT")) {
     if (std::string_view(skip_wait) == "TRUE" || std::string_view(skip_wait) == "1") {
       return true;
