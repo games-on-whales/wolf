@@ -153,13 +153,10 @@ static x509::x509_ptr cert_with_unknown_issuer() {
   X509_gmtime_adj(X509_get_notBefore(cert.get()), 0);
   X509_gmtime_adj(X509_get_notAfter(cert.get()), 3600);
   X509_set_pubkey(cert.get(), pkey.get());
-  X509_NAME_add_entry_by_txt(X509_get_subject_name(cert.get()),
-                             "CN",
-                             MBSTRING_ASC,
-                             (unsigned char *)"client",
-                             -1,
-                             -1,
-                             0);
+  auto subject = X509_NAME_new();
+  X509_NAME_add_entry_by_txt(subject, "CN", MBSTRING_ASC, (unsigned char *)"client", -1, -1, 0);
+  X509_set_subject_name(cert.get(), subject);
+  X509_NAME_free(subject);
   auto issuer = X509_NAME_new();
   X509_NAME_add_entry_by_txt(issuer, "CN", MBSTRING_ASC, (unsigned char *)"Unknown CA", -1, -1, 0);
   X509_set_issuer_name(cert.get(), issuer);
