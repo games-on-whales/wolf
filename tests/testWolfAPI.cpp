@@ -8,6 +8,7 @@
 #include <rfl/toml.hpp>
 #include <sessions/handlers.hpp>
 #include <state/config.hpp>
+#include <state/sessions.hpp>
 
 using Catch::Matchers::ContainsSubstring;
 using Catch::Matchers::Equals;
@@ -422,6 +423,25 @@ TEST_CASE("Sessions APIs", "[API]") {
   auto sessions2 = rfl::json::read<StreamSessionListResponse>(response->second).value();
   REQUIRE(sessions2.success);
   REQUIRE(sessions2.sessions.size() == 1);
+  // Each execution gets a server-assigned generation, exposed as an opaque string.
+  REQUIRE(sessions2.sessions[0].generation.has_value());
+  const auto generation = *sessions2.sessions[0].generation;
+  REQUIRE(generation > 0);
+  REQUIRE_THAT(response->second, ContainsSubstring("\"generation\":\"" + std::to_string(generation) + "\""));
+
+  // A stop addressed to another execution of the same client must not stop this one.
+  auto stale_stop =
+      StreamSessionStopRequest{.session_id = "10594003729173467913", .expected_generation = generation + 1};
+  const auto stale_body = rfl::json::write(stale_stop);
+  REQUIRE_THAT(stale_body, ContainsSubstring("\"expected_generation\":\""));
+  response = req(curl.get(), HTTPMethod::POST, "http://localhost/api/v1/sessions/stop", stale_body);
+  REQUIRE(response);
+  REQUIRE(response->first == 409);
+  response = req(curl.get(), HTTPMethod::GET, "http://localhost/api/v1/sessions");
+  REQUIRE(response);
+  auto still_running = rfl::json::read<StreamSessionListResponse>(response->second).value();
+  REQUIRE(still_running.sessions.size() == 1);
+  REQUIRE(still_running.sessions[0].generation == generation);
 
   // TODO: breaks Github CI
   // // Test that we can send input to a session
@@ -441,11 +461,37 @@ TEST_CASE("Sessions APIs", "[API]") {
   REQUIRE(response);
   REQUIRE_THAT(response->second, Equals("{\"success\":true}"));
 
-  // Test that we can stop a session
-  auto stop_request = StreamSessionStopRequest{.session_id = "10594003729173467913"};
+  // Test that we can stop a session when the generation still matches
+  auto stop_request = StreamSessionStopRequest{.session_id = "10594003729173467913", .expected_generation = generation};
   response = req(curl.get(), HTTPMethod::POST, "http://localhost/api/v1/sessions/stop", rfl::json::write(stop_request));
   REQUIRE(response);
   REQUIRE_THAT(response->second, Equals("{\"success\":true}"));
+
+  // A stop without expected_generation keeps the old behavior (stops whatever is running)
+  auto compat_stop = StreamSessionStopRequest{.session_id = "10594003729173467913"};
+  response = req(curl.get(), HTTPMethod::POST, "http://localhost/api/v1/sessions/stop", rfl::json::write(compat_stop));
+  REQUIRE(response);
+  REQUIRE_THAT(response->second, Equals("{\"success\":true}"));
+}
+
+// Runner end and resume: the generation identifies one execution of a paired client.
+TEST_CASE("Runner end only stops its own execution", "[API]") {
+  events::StreamSession a{};
+  a.session_id = 1234;
+  a.generation = 1;
+  REQUIRE(state::is_current_execution(immer::vector<events::StreamSession>{a}, a.session_id, 1));
+
+  auto b = a;
+  b.generation = 2;
+  REQUIRE_FALSE(state::is_current_execution(immer::vector<events::StreamSession>{b}, a.session_id, 1));
+  REQUIRE(state::is_current_execution(immer::vector<events::StreamSession>{b}, a.session_id, 2));
+
+  auto c = b;
+  c.generation = 99;
+  state::carry_execution(b, c);
+  REQUIRE(c.generation == 2);
+  REQUIRE(state::is_current_execution(immer::vector<events::StreamSession>{c}, a.session_id, 2));
+  REQUIRE_FALSE(state::is_current_execution(immer::vector<events::StreamSession>{}, a.session_id, 2));
 }
 
 TEST_CASE("Session APIs without app_id or client_id", "[API]") {
