@@ -11,40 +11,6 @@ namespace wolf::core::sessions {
 
 using session_devices = immer::map<std::string /* session_id */, std::shared_ptr<events::devices_atom_queue>>;
 
-/**
- * Will stop the execution until an event of type RTPPingType is triggered
- * and the signature is matching the input `sess`.
- * Returns the RTPPingType event
- */
-template <typename RTPPingType>
-immer::box<RTPPingType> wait_for_ping(std::shared_ptr<events::EventBusType> ev_bus, const auto &sess) {
-  auto ping_promise = std::make_shared<std::promise<RTPPingType>>();
-  auto ping_future = ping_promise->get_future();
-  auto resolved = std::make_shared<std::atomic_bool>(false);
-
-  auto handler = ev_bus->register_handler<immer::box<RTPPingType>>(
-      [sess, ping_promise, resolved](const immer::box<RTPPingType> &ping_ev) {
-        // Check if this ping is for our session
-        if (sess->rtp_secret_payload == ping_ev->payload || // Secret payload matching
-            (!ping_ev->payload.has_value() && ping_ev->client_ip == sess->client_ip &&
-             ping_ev->client_port == sess->port)) { // Legacy IP+port matching when no payload has been passed
-          bool expected = false;
-          if (resolved->compare_exchange_strong(expected, true, std::memory_order_acq_rel)) {
-            // Resolve the promise with the ping event data
-            ping_promise->set_value(*ping_ev);
-          }
-        }
-      });
-
-  // Wait for the promise to be fulfilled
-  auto ping_ev = ping_future.get();
-
-  // Unregister the handler since we only need it once
-  handler.unregister();
-
-  return ping_ev;
-}
-
 immer::vector<immer::box<events::EventBusHandlers>>
 setup_moonlight_handlers(const immer::box<state::AppState> &app_state,
                          const std::string &runtime_dir,
@@ -240,14 +206,18 @@ setup_moonlight_handlers(const immer::box<state::AppState> &app_state,
         // Start a thread that will wait for the RTP ping event
         std::thread([sess, ev_bus, gst_context]() {
           auto ping_ev = wait_for_ping<events::RTPVideoPingEvent>(ev_bus, sess);
+          if (!ping_ev) {
+            logs::log(logs::warning, "Session {} stopped or timed out waiting for the video ping", sess->session_id);
+            return;
+          }
 
           // Start streaming
           streaming::start_streaming_video(sess,
                                            ev_bus,
-                                           ping_ev->client_ip,
-                                           ping_ev->client_port,
+                                           (*ping_ev)->client_ip,
+                                           (*ping_ev)->client_port,
                                            gst_context,
-                                           ping_ev->video_socket.get());
+                                           (*ping_ev)->video_socket.get());
         }).detach();
       }));
 
@@ -256,6 +226,10 @@ setup_moonlight_handlers(const immer::box<state::AppState> &app_state,
         // Start a thread that will wait for the RTP ping event
         std::thread([sess, ev_bus, audio_server]() {
           auto ping_ev = wait_for_ping<events::RTPAudioPingEvent>(ev_bus, sess);
+          if (!ping_ev) {
+            logs::log(logs::warning, "Session {} stopped or timed out waiting for the audio ping", sess->session_id);
+            return;
+          }
 
           // Start streaming
           auto audio_server_name = audio_server ? audio::get_server_name(audio_server->server)
@@ -265,9 +239,9 @@ setup_moonlight_handlers(const immer::box<state::AppState> &app_state,
 
           streaming::start_streaming_audio(sess,
                                            ev_bus,
-                                           ping_ev->client_ip,
-                                           ping_ev->client_port,
-                                           ping_ev->audio_socket.get(),
+                                           (*ping_ev)->client_ip,
+                                           (*ping_ev)->client_port,
+                                           (*ping_ev)->audio_socket.get(),
                                            sink_name,
                                            server_name);
         }).detach();
