@@ -915,6 +915,9 @@
               }
             ]
           },
+          "video_producer_buffer_caps": {
+            "type": "string"
+          },
           "h264_gst_pipeline": {
             "type": "string"
           },
@@ -951,6 +954,7 @@
           "title",
           "id",
           "support_hdr",
+          "video_producer_buffer_caps",
           "h264_gst_pipeline",
           "hevc_gst_pipeline",
           "av1_gst_pipeline",
