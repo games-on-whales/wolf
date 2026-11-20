@@ -77,7 +77,8 @@ void serverinfo(const std::shared_ptr<typename SimpleWeb::Server<T>::Response> &
                                    host->display_modes,
                                    is_https,
                                    cfg->support_hevc,
-                                   cfg->support_av1);
+                                   cfg->support_av1,
+                                   cfg->support_hdr);
 
   send_xml<T>(response, SimpleWeb::StatusCode::success_ok, xml);
 }
@@ -412,6 +413,7 @@ auto create_run_session(const SimpleWeb::CaseInsensitiveMultimap &headers,
                                             get_header(headers, "rikeyid").value());
 
   base_session->ip = client_ip;
+  base_session->hdr_requested = get_header(headers, "hdrMode").value_or("0") == "1";
   return std::move(base_session);
 }
 

@@ -22,7 +22,8 @@ XML serverinfo(bool isServerBusy,
                const immer::array<DisplayMode> &display_modes,
                int pair_status,
                bool support_hevc,
-               bool support_av1) {
+               bool support_av1,
+               bool support_hdr) {
   XML resp;
 
   resp.put("root.<xmlattr>.status_code", 200);
@@ -37,6 +38,9 @@ XML serverinfo(bool isServerBusy,
   if (support_hevc) {
     max_luma_pixels = 1869449984;
     codec_support |= VIDEO_FORMAT_H265;
+    if (support_hdr) {
+      codec_support |= VIDEO_FORMAT_H265_MAIN10;
+    }
   }
   if (support_av1) {
     codec_support |= VIDEO_FORMAT_AV1_MAIN8;

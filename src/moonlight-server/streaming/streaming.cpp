@@ -98,21 +98,36 @@ void start_video_producer(const std::string &session_id,
                           const wolf::core::virtual_display::DisplayMode &display_mode,
                           std::shared_ptr<immer::atom<gst_video_context::gst_context_ptr>> video_context,
                           std::shared_ptr<boost::promise<WaylandDisplayReady>> on_ready,
-                          std::shared_ptr<events::EventBusType> event_bus) {
+                          std::shared_ptr<events::EventBusType> event_bus,
+                          bool hdr) {
   // Vulkan images come from the source's own converter: it has to be opted in with
   // vulkan=true, after which it offers NV12 (and P010) as memory:VulkanImage on the
   // render node's GstVulkanDevice, shared with the encoders through the gst context.
   auto vulkan_src_prop = buffer_format.find("VulkanImage") != std::string::npos ? " vulkan=true" : "";
-  auto pipeline = fmt::format("waylanddisplaysrc name=wolf_wayland_source render_node={render_node}{vulkan_src_prop} ! "
-                              "{buffer_format}, width={width}, height={height}, framerate={fps}/1 ! \n"    //
-                              "interpipesink sync=true async=false name={session_id}_video max-buffers=1", //
-                              fmt::arg("buffer_format", buffer_format),
-                              fmt::arg("vulkan_src_prop", vulkan_src_prop),
-                              fmt::arg("render_node", render_node),
-                              fmt::arg("session_id", session_id),
-                              fmt::arg("width", display_mode.width),
-                              fmt::arg("height", display_mode.height),
-                              fmt::arg("fps", display_mode.refreshRate));
+  // HDR10: per-element properties from gst-wayland-display#37. The source tags the P010 caps
+  // BT.2100 PQ and the Vulkan HEVC encoder writes the VUI and SEI.
+  // dynamic-hdr plus stable-color-transport advertise wp_color_manager_v1 and keep the PQ tag from the
+  // first frame: a PQ client panics under static hdr=true alone.
+  // PLACEHOLDER: mastering-display-info and content-light-level are fixed 1000 nit values (BT.2020
+  // primaries, D65 white, max 1000 nit, min 0.0001 nit, MaxCLL 1000, MaxFALL 400), not read from any display or
+  // from the app. mastering-display-info is R:G:B:white in 0.00002 units then max:min in 0.0001 nit.
+  // Replace with real metadata once a source for it exists; control.hpp carries the same placeholder.
+  auto hdr_src_prop = hdr ? " hdr=true dynamic-hdr=true stable-color-transport=true"
+                            " mastering-display-info=35400:14600:8500:39850:6550:2300:15635:16450:10000000:1"
+                            " content-light-level=1000:400"
+                          : "";
+  auto pipeline = fmt::format(
+      "waylanddisplaysrc name=wolf_wayland_source render_node={render_node}{vulkan_src_prop}{hdr_src_prop} ! "
+      "{buffer_format}, width={width}, height={height}, framerate={fps}/1 ! \n"    //
+      "interpipesink sync=true async=false name={session_id}_video max-buffers=1", //
+      fmt::arg("buffer_format", buffer_format),
+      fmt::arg("vulkan_src_prop", vulkan_src_prop),
+      fmt::arg("hdr_src_prop", hdr_src_prop),
+      fmt::arg("render_node", render_node),
+      fmt::arg("session_id", session_id),
+      fmt::arg("width", display_mode.width),
+      fmt::arg("height", display_mode.height),
+      fmt::arg("fps", display_mode.refreshRate));
   logs::log(logs::debug, "[GSTREAMER] Starting video producer: {}", pipeline);
   auto bus_data_ptr =
       std::make_shared<GstBusData>(GstBusData{.on_ready = std::move(on_ready), .wayland_plugin = nullptr});

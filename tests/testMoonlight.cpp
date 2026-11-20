@@ -185,6 +185,23 @@ TEST_CASE("Mocked serverinfo", "[MoonlightProtocol]") {
   auto cfg = state::load_or_default("config.test.toml", event_bus, running_sessions);
   immer::array<DisplayMode> displayModes = {{1920, 1080, 60}, {1024, 768, 30}};
 
+  SECTION("server_info advertises HEVC Main10 when HDR is supported") {
+    auto result = serverinfo(false,
+                             0,
+                             0,
+                             1,
+                             cfg.uuid,
+                             cfg.hostname,
+                             "AA:BB:CC:DD",
+                             "192.168.99.1",
+                             displayModes,
+                             false,
+                             true,
+                             false,
+                             true);
+    REQUIRE(result.get<int>("root.ServerCodecModeSupport") == (0x0001 | 0x0100 | 0x0200));
+  }
+
   SECTION("server_info conforms with the expected HEVC response") {
     auto result = serverinfo(false,
                              0,
