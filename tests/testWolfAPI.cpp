@@ -264,6 +264,21 @@ TEST_CASE("APPs APIs", "[API]") {
                                         .ports = {"8080:8080"}},
       .hdr_producer_buffer_caps = "hdr-caps",
       .hdr_hevc_gst_pipeline = "hdr-hevc"};
+  // Neither HDR field has a default: a request without one is rejected and nothing is added
+  for (const std::string field : {"hdr_producer_buffer_caps", "hdr_hevc_gst_pipeline"}) {
+    auto body = rfl::json::write(app);
+    auto value_at = body.find(",\"" + field + "\":\"");
+    REQUIRE(value_at != std::string::npos);
+    body.erase(value_at, body.find('"', body.find(':', value_at) + 2) + 1 - value_at);
+    response = req(curl.get(), HTTPMethod::POST, "http://localhost/api/v1/apps/add", body);
+    REQUIRE(response);
+    REQUIRE(response->first == 500);
+    REQUIRE_THAT(response->second, ContainsSubstring(field));
+  }
+  response = req(curl.get(), HTTPMethod::GET, "http://localhost/api/v1/apps");
+  REQUIRE(response);
+  REQUIRE(rfl::json::read<AppListResponse>(response->second).value().apps.size() == 2);
+
   response = req(curl.get(), HTTPMethod::POST, "http://localhost/api/v1/apps/add", rfl::json::write(app));
   REQUIRE(response);
   REQUIRE_THAT(response->second, Equals("{\"success\":true}"));
@@ -282,7 +297,8 @@ TEST_CASE("APPs APIs", "[API]") {
   // The HDR pipeline fields survive the API round trip, both ways
   REQUIRE(wolf_apps.at(2)->hdr_producer_buffer_caps == "hdr-caps");
   REQUIRE(wolf_apps.at(2)->hdr_hevc_gst_pipeline == "hdr-hevc");
-  REQUIRE(apps2.apps[2].hdr_hevc_gst_pipeline.value_or("") == "hdr-hevc");
+  REQUIRE_THAT(apps2.apps[2].hdr_producer_buffer_caps, Equals("hdr-caps"));
+  REQUIRE_THAT(apps2.apps[2].hdr_hevc_gst_pipeline, Equals("hdr-hevc"));
 
   // Test that we can remove an app
   auto app_delete = AppDeleteRequest{.id = "test"};

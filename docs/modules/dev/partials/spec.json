@@ -945,6 +945,12 @@
                 "$ref": "#/components/schemas/wolf__config__AppDocker__tagged"
               }
             ]
+          },
+          "hdr_producer_buffer_caps": {
+            "type": "string"
+          },
+          "hdr_hevc_gst_pipeline": {
+            "type": "string"
           }
         },
         "required": [
@@ -958,7 +964,9 @@
           "opus_gst_pipeline",
           "start_virtual_compositor",
           "start_audio_server",
-          "runner"
+          "runner",
+          "hdr_producer_buffer_caps",
+          "hdr_hevc_gst_pipeline"
         ]
       },
       "rfl__Reflector_wolf__core__events__Lobby___ReflType": {
