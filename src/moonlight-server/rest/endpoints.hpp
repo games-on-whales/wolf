@@ -388,6 +388,14 @@ void appasset(const std::shared_ptr<typename SimpleWeb::Server<SimpleWeb::HTTPS>
   }
 }
 
+static std::optional<std::string> control_key_from(const SimpleWeb::CaseInsensitiveMultimap &headers) {
+  const auto key = get_header(headers, "rikey");
+  if (!key || key->size() != 32 || key->find_first_not_of("0123456789abcdefABCDEF") != std::string::npos) {
+    return std::nullopt;
+  }
+  return crypto::hex_to_str(*key, true);
+}
+
 auto create_run_session(const SimpleWeb::CaseInsensitiveMultimap &headers,
                         const std::string &client_ip,
                         const state::PairedClient &current_client,
@@ -448,11 +456,20 @@ void launch(const std::shared_ptr<typename SimpleWeb::Server<SimpleWeb::HTTPS>::
     return;
   }
 
+  if (!control_key_from(headers)) {
+    return server_error<SimpleWeb::HTTPS>(response);
+  }
+
   auto client_ip = get_client_ip<SimpleWeb::HTTPS>(request);
-  auto new_session = create_run_session(request->parse_query_string(), client_ip, current_client, state, app.value());
+  auto new_session = create_run_session(headers, client_ip, current_client, state, app.value());
+  const auto updated = state->running_sessions->update([&](const auto &sessions) {
+    return state::get_session_by_id(sessions, new_session->session_id) ? sessions : sessions.push_back(*new_session);
+  });
+  const auto published = state::get_session_by_id(*updated, new_session->session_id);
+  if (!published || published->control_encryption != new_session->control_encryption) {
+    return server_error<SimpleWeb::HTTPS>(response);
+  }
   state->event_bus->fire_event(immer::box<events::StreamSession>(*new_session));
-  state->running_sessions->update(
-      [new_session](const immer::vector<events::StreamSession> &ses_v) { return ses_v.push_back(*new_session); });
 
   auto rtsp_ip = get_rtsp_ip_string(get_host_ip<SimpleWeb::HTTPS>(request, state), *new_session);
   auto xml = moonlight::launch_success(rtsp_ip, std::to_string(get_port(state::RTSP_SETUP_PORT)));
@@ -468,8 +485,33 @@ void resume(const std::shared_ptr<typename SimpleWeb::Server<SimpleWeb::HTTPS>::
   auto client_ip = get_client_ip<SimpleWeb::HTTPS>(request);
   auto old_session = state::get_session_by_client(state->running_sessions->load(), current_client);
   if (old_session) {
-    auto new_session =
-        create_run_session(request->parse_query_string(), client_ip, current_client, state, *old_session->app);
+    const auto headers = request->parse_query_string();
+    const auto control_key = control_key_from(headers);
+    if (!control_key) {
+      return server_error<SimpleWeb::HTTPS>(response);
+    }
+    // The management API can supply keys with separators. Compare the key
+    // bytes AES-128-GCM actually uses, regardless of how they were spelled.
+    const auto old_key = old_session->aes_key.empty()
+                             ? std::string{}
+                             : crypto::hex_to_str(old_session->aes_key, true).substr(0, control_key->size());
+    const bool same_key = *control_key == old_key;
+    const bool reused_key = same_key || old_session->previous_control_keys.count(*control_key);
+    if (reused_key &&
+        (!same_key || old_session->control_encryption->mode() != moonlight::control::ControlMode::legacy)) {
+      logs::log(logs::warning, "[HTTPS] Refusing reused control key during resume");
+      return server_error<SimpleWeb::HTTPS>(response);
+    }
+
+    auto new_session = create_run_session(headers, client_ip, current_client, state, *old_session->app);
+    new_session->previous_control_keys = old_session->previous_control_keys;
+    if (!same_key && old_key.size() == control_key->size()) {
+      new_session->previous_control_keys = new_session->previous_control_keys.insert(old_key);
+    }
+    if (reused_key) {
+      // A legacy client can repeat its legacy key, but cannot switch that key to V2.
+      new_session->control_encryption = std::make_shared<moonlight::control::ControlEncryption>(false);
+    }
     // Carry over the old session display handle
     new_session->wayland_display = std::move(old_session->wayland_display);
     // Carry over the old session devices, they'll be already plugged into the container
@@ -479,9 +521,17 @@ void resume(const std::shared_ptr<typename SimpleWeb::Server<SimpleWeb::HTTPS>::
     new_session->pen_tablet = std::move(old_session->pen_tablet);
     new_session->touch_screen = std::move(old_session->touch_screen);
 
-    state->running_sessions->update([&old_session, new_session](const immer::vector<events::StreamSession> ses_v) {
-      return state::remove_session(ses_v, old_session.value()).push_back(*new_session);
+    const auto updated = state->running_sessions->update([&](const auto &sessions) {
+      const auto current = state::get_session_by_id(sessions, old_session->session_id);
+      if (!current || current->control_encryption != old_session->control_encryption) {
+        return sessions;
+      }
+      return state::remove_session(sessions, *current).push_back(*new_session);
     });
+    const auto published = state::get_session_by_id(*updated, new_session->session_id);
+    if (!published || published->control_encryption != new_session->control_encryption) {
+      return server_error<SimpleWeb::HTTPS>(response);
+    }
 
     auto rtsp_ip = get_rtsp_ip_string(get_host_ip<SimpleWeb::HTTPS>(request, state), *new_session);
     auto xml = moonlight::launch_resume(rtsp_ip, std::to_string(get_port(state::RTSP_SETUP_PORT)));

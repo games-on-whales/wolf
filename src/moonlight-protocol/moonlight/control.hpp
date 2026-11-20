@@ -1,4 +1,5 @@
 #pragma once
+#include "control-encryption.hpp"
 #include <array>
 #include <boost/endian/conversion.hpp>
 #include <core/input.hpp>
@@ -405,29 +406,29 @@ struct ControlEncryptedPacket {
  * Given a received packet will decrypt the payload inside it.
  * This includes checking that the AES GCM TAG is valid and not tampered
  */
-static std::string decrypt_packet(const ControlEncryptedPacket &packet_data, std::string_view gcm_key) {
-  std::array<std::uint8_t, GCM_TAG_SIZE> iv_data = {0};
-  iv_data[0] = boost::endian::little_to_native(packet_data.seq);
-
+static std::string decrypt_packet(const ControlEncryptedPacket &packet_data,
+                                  std::string_view gcm_key,
+                                  ControlMode mode = ControlMode::legacy,
+                                  ControlOrigin origin = ControlOrigin::client) {
+  const auto nonce = control_nonce(boost::endian::little_to_native(packet_data.seq), mode, origin);
   return crypto::aes_decrypt_gcm(packet_data.encrypted_msg(),
-                                 crypto::hex_to_str(gcm_key.data(), true),
+                                 crypto::hex_to_str(gcm_key, true),
                                  {packet_data.gcm_tag, GCM_TAG_SIZE},
-                                 {(char *)iv_data.data(), iv_data.size()},
-                                 GCM_TAG_SIZE);
+                                 nonce.view(),
+                                 nonce.length);
 }
 
 /**
  * Turns a payload into a properly formatted control encrypted packet
  */
-static std::unique_ptr<ControlEncryptedPacket>
-encrypt_packet(std::string_view gcm_key, std::uint32_t seq, std::string_view payload) {
-  std::array<std::uint8_t, GCM_TAG_SIZE> iv_data = {0};
-  iv_data[0] = boost::endian::native_to_little(seq);
-
-  auto [encrypted_str, gcm_tag] = crypto::aes_encrypt_gcm(payload,
-                                                          crypto::hex_to_str(gcm_key.data(), true),
-                                                          {(char *)iv_data.data(), iv_data.size()},
-                                                          GCM_TAG_SIZE);
+static std::unique_ptr<ControlEncryptedPacket> encrypt_packet(std::string_view gcm_key,
+                                                              std::uint32_t seq,
+                                                              std::string_view payload,
+                                                              ControlMode mode = ControlMode::legacy,
+                                                              ControlOrigin origin = ControlOrigin::host) {
+  const auto nonce = control_nonce(seq, mode, origin);
+  auto [encrypted_str, gcm_tag] =
+      crypto::aes_encrypt_gcm(payload, crypto::hex_to_str(gcm_key, true), nonce.view(), nonce.length);
 
   std::uint16_t size = sizeof(seq) + GCM_TAG_SIZE + encrypted_str.length();
   ControlEncryptedPacket encrypted_pkt = {

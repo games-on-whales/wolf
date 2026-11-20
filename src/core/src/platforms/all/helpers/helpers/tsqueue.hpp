@@ -32,6 +32,16 @@ public:
     m_cond.notify_all();
   }
 
+  bool try_push(T item, std::size_t capacity) {
+    std::unique_lock<std::mutex> lock(m_mutex);
+    if (m_queue.size() >= capacity) {
+      return false;
+    }
+    m_queue.push(std::move(item));
+    m_cond.notify_one();
+    return true;
+  }
+
   /**
    * Pops an element off the queue
    * @param timeout it'll wait up until this time for an element to be available

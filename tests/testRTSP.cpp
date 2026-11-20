@@ -308,13 +308,14 @@ TEST_CASE("Commands (Payload matching)", "[RTSP]") {
                        REQUIRE(response);
                        REQUIRE(response.value().response.status_code == 200);
                        REQUIRE(response.value().seq_number == 2);
-                       REQUIRE(response.value().payloads.size() == 5);
+                       REQUIRE(response.value().payloads.size() == 6);
                        REQUIRE_THAT(response.value().payloads[0].first, Equals("sprop-parameter-sets"));
                        REQUIRE_THAT(response.value().payloads[0].second, Equals("AAAAAU"));
                        REQUIRE_THAT(response.value().payloads[1].second, Equals("fmtp:97 surround-params=21101"));
                        REQUIRE_THAT(response.value().payloads[2].second, Equals("fmtp:97 surround-params=642014235"));
                        REQUIRE_THAT(response.value().payloads[3].second, Equals("fmtp:97 surround-params=85301467235"));
                        REQUIRE_THAT(response.value().payloads[4].second, Equals("x-ss-general.featureFlags: 3"));
+                       REQUIRE_THAT(response.value().payloads[5].second, Equals("x-ss-general.encryptionSupported: 1"));
                      });
   }
 
@@ -426,6 +427,7 @@ TEST_CASE("Commands (Payload matching)", "[RTSP]") {
                        REQUIRE(response.value().response.status_code == 200);
                        REQUIRE(response.value().seq_number == 6);
                      });
+    REQUIRE(state->load().get()[0].control_encryption->mode() == moonlight::control::ControlMode::legacy);
   }
 
   SECTION("Non valid payload") {
@@ -494,13 +496,14 @@ TEST_CASE("Commands (IP Matching)", "[RTSP]") {
                        REQUIRE(response);
                        REQUIRE(response.value().response.status_code == 200);
                        REQUIRE(response.value().seq_number == 2);
-                       REQUIRE(response.value().payloads.size() == 5);
+                       REQUIRE(response.value().payloads.size() == 6);
                        REQUIRE_THAT(response.value().payloads[0].first, Equals("sprop-parameter-sets"));
                        REQUIRE_THAT(response.value().payloads[0].second, Equals("AAAAAU"));
                        REQUIRE_THAT(response.value().payloads[1].second, Equals("fmtp:97 surround-params=21101"));
                        REQUIRE_THAT(response.value().payloads[2].second, Equals("fmtp:97 surround-params=642014235"));
                        REQUIRE_THAT(response.value().payloads[3].second, Equals("fmtp:97 surround-params=85301467235"));
                        REQUIRE_THAT(response.value().payloads[4].second, Equals("x-ss-general.featureFlags: 3"));
+                       REQUIRE_THAT(response.value().payloads[5].second, Equals("x-ss-general.encryptionSupported: 1"));
                      });
   }
 
@@ -568,7 +571,7 @@ TEST_CASE("Commands (IP Matching)", "[RTSP]") {
                      "Host: 0.0.0.0\n"
                      "Session:  DEADBEEFCAFE\n"
                      "Content-type: application/sdp\n"
-                     "Content-length: 1308"
+                     "Content-length: 1344"
                      "\r\n\r\n" // start of payload
                      "v=0\n"
                      "o=android 0 14 IN IPv4 0.0.0.0\n"
@@ -589,6 +592,7 @@ TEST_CASE("Commands (IP Matching)", "[RTSP]") {
                      "a=x-nv-vqos[0].qosTrafficType:0 \n"
                      "a=x-nv-aqos.qosTrafficType:0 \n"
                      "a=x-nv-general.featureFlags:167 \n"
+                     "a=x-ss-general.encryptionEnabled:1 \n"
                      "a=x-nv-general.useReliableUdp:13 \n"
                      "a=x-nv-vqos[0].fec.minRequiredFecPackets:2 \n"
                      "a=x-nv-vqos[0].drc.enable:0 \n"
@@ -612,6 +616,7 @@ TEST_CASE("Commands (IP Matching)", "[RTSP]") {
                        REQUIRE(response.value().response.status_code == 200);
                        REQUIRE(response.value().seq_number == 6);
                      });
+    REQUIRE(state->load().get()[0].control_encryption->mode() == moonlight::control::ControlMode::v2);
   }
 
   SECTION("Non valid payload") {
