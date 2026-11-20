@@ -23,12 +23,6 @@ void run_control(int port,
 
 using enet_clients_map = immer::map<ENetPeer *, immer::box<events::StreamSession>>;
 
-std::shared_ptr<ENetPeer> to_shared_ptr(ENetPeer *peer);
-
-bool encrypt_and_send(std::string_view payload,
-                      std::string_view aes_key,
-                      immer::box<std::shared_ptr<ENetPeer>> connected_client);
-
 bool init();
 
 } // namespace control

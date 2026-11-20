@@ -106,6 +106,8 @@ describe(const RTSP_PACKET &req, const events::StreamSession &session) {
   payloads.push_back(
       {"a", fmt::format("x-ss-general.featureFlags: {}", FS_PEN_TOUCH_EVENTS | FS_CONTROLLER_TOUCH_EVENTS)});
 
+  payloads.push_back({"a", fmt::format("x-ss-general.encryptionSupported: {}", moonlight::control::CONTROL_V2_FLAG)});
+
   return ok_msg(req.seq_number, {}, payloads);
 }
 
@@ -242,6 +244,10 @@ announce(const RTSP_PACKET &req, const events::StreamSession &session) {
       .client_ip = session.ip,
       .rtp_secret_payload = session.rtp_secret_payload,
   };
+  const auto control_flags = args["x-ss-general.encryptionEnabled"].value_or(0);
+  if (!session.control_encryption->negotiate(control_flags)) {
+    return error_msg(400, "CONTROL ENCRYPTION ALREADY SELECTED", req.seq_number);
+  }
   session.event_bus->fire_event(immer::box<events::VideoSession>(video));
 
   // Audio session

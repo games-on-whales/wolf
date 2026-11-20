@@ -14,6 +14,7 @@
 #include <immer/atom.hpp>
 #include <immer/box.hpp>
 #include <immer/map.hpp>
+#include <immer/set.hpp>
 #include <immer/vector.hpp>
 #include <moonlight/control.hpp>
 #include <moonlight/data-structures.hpp>
@@ -446,6 +447,15 @@ struct StreamSession {
 
   std::shared_ptr<immer::atom<std::shared_ptr<audio::VSink>>> audio_sink =
       std::make_shared<immer::atom<std::shared_ptr<audio::VSink>>>();
+
+  // Keys retired within this stream, stored as the bytes used by AES-GCM.
+  // aes_key holds the current key.
+  immer::set<std::string> previous_control_keys;
+
+  // Shared across snapshots of this launch or resume. A replacement ENet
+  // connection receives a new object even if legacy mode reuses its key.
+  std::shared_ptr<moonlight::control::ControlEncryption> control_encryption =
+      std::make_shared<moonlight::control::ControlEncryption>();
 
   // virtual devices
   std::shared_ptr<std::optional<MouseTypes>> mouse = std::make_shared<std::optional<MouseTypes>>();

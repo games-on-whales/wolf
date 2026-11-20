@@ -1,20 +1,20 @@
 #pragma once
 
-#include <control/control.hpp>
 #include <events/events.hpp>
+#include <functional>
 #include <moonlight/control.hpp>
+#include <string>
 
 namespace control {
 
 using namespace moonlight::control::pkts;
 using namespace wolf::core;
+using ControlFeedback = std::function<void(std::string)>;
 
 /**
  * Side effect: session devices might be updated when hotplugging
  */
-void handle_input(events::StreamSession &session,
-                  immer::box<std::shared_ptr<ENetPeer>> connected_client,
-                  INPUT_PKT *pkt);
+void handle_input(events::StreamSession &session, const ControlFeedback &feedback, INPUT_PKT *pkt);
 
 void mouse_move_rel(const MOUSE_MOVE_REL_PACKET &pkt, events::StreamSession &session);
 
@@ -36,11 +36,11 @@ void pen(const PEN_PACKET &pkt, events::StreamSession &session);
 
 void controller_arrival(const CONTROLLER_ARRIVAL_PACKET &pkt,
                         events::StreamSession &session,
-                        immer::box<std::shared_ptr<ENetPeer>> connected_client);
+                        const ControlFeedback &feedback);
 
 void controller_multi(const CONTROLLER_MULTI_PACKET &pkt,
                       events::StreamSession &session,
-                      immer::box<std::shared_ptr<ENetPeer>> connected_client);
+                      const ControlFeedback &feedback);
 
 void controller_touch(const CONTROLLER_TOUCH_PACKET &pkt, events::StreamSession &session);
 
