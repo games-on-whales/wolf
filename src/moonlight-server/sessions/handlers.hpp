@@ -1,5 +1,6 @@
 #pragma once
 
+#include <chrono>
 #include <core/audio.hpp>
 #include <core/docker.hpp>
 #include <events/events.hpp>
@@ -20,6 +21,20 @@ immer::vector<immer::box<events::EventBusHandlers>>
 setup_moonlight_handlers(const immer::box<state::AppState> &app_state,
                          const std::string &runtime_dir,
                          const std::optional<AudioServer> &audio_server);
+
+/**
+ * Stops a session that stays paused for longer than `timeout`.
+ * A zero timeout registers no handlers.
+ */
+immer::vector<immer::box<events::EventBusHandlers>>
+setup_paused_session_handlers(const immer::box<state::AppState> &app_state, std::chrono::milliseconds timeout);
+
+/**
+ * Stops a lobby that stays empty for longer than `timeout` after a session leaves it.
+ * A zero timeout registers no handlers.
+ */
+immer::vector<immer::box<events::EventBusHandlers>>
+setup_empty_lobby_handlers(const immer::box<state::AppState> &app_state, std::chrono::milliseconds timeout);
 
 immer::vector<immer::box<events::EventBusHandlers>>
 setup_lobbies_handlers(const immer::box<state::AppState> &app_state,

@@ -40,6 +40,27 @@ inline std::chrono::milliseconds get_wayland_socket_wait_timeout() {
   return DEFAULT_WAYLAND_SOCKET_WAIT_TIMEOUT;
 }
 
+/**
+ * Reads an opt-in timeout in milliseconds from `env_var`.
+ * Unset, negative or invalid values return 0, which means disabled.
+ */
+inline std::chrono::milliseconds get_opt_in_timeout(const char *env_var) {
+  auto timeout_ms = utils::get_env(env_var);
+  if (timeout_ms) {
+    try {
+      auto parsed = std::stoll(timeout_ms);
+      if (parsed >= 0) {
+        return std::chrono::milliseconds(parsed);
+      }
+      logs::log(logs::warning, "Ignoring negative {}={}, leaving it disabled", env_var, timeout_ms);
+    } catch (const std::exception &) {
+      logs::log(logs::warning, "Ignoring invalid {}={}, leaving it disabled", env_var, timeout_ms);
+    }
+  }
+
+  return std::chrono::milliseconds(0);
+}
+
 inline bool wait_for_wayland_socket(std::string_view runtime_dir,
                                     const std::string &socket_name,
                                     std::chrono::milliseconds timeout = get_wayland_socket_wait_timeout()) {
