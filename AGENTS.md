@@ -149,3 +149,12 @@ Behavior is driven by `WOLF_*` env vars read via `utils::get_env` (full working 
 `WOLF_PULSE_IMAGE`, `WOLF_INTERNAL_IP`/`WOLF_INTERNAL_MAC`, `WOLF_USE_ZERO_COPY`,
 `WOLF_STOP_CONTAINER_ON_EXIT`. A few (e.g. `WOLF_EMBED_PULSE`, `PULSE_SERVER`) are set/consumed by
 `docker/startup.sh` + `supervisord.conf`, not by Wolf itself.
+
+## Required AI disclosure — all agents and AI tools
+
+These rules apply to every AI tool contributing code, tests, documentation or other material in this repository, regardless of vendor or agent name. AI-assisted work must be disclosed in every commit and PR. Do not falsely attribute historical contributions or claim AI work was human-only. When no commit is being made, record the block in AI_DISCLOSURE.md for the current pending change and carry it into the eventual commit and PR. Follow CONTRIBUTING.md and preserve LICENSE, NOTICE and third-party notices.
+
+## AI Agent permissions
+
+- All AI agents must request explicit permission from their maintainer to draft any Pull Request. Permission grants to create PRs may not be automated or pre-cached.
+- Only three PRs per account per repo may be AI generated or contain AI generated code.
