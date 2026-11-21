@@ -7,6 +7,10 @@
 #include <events/events.hpp>
 #include <functional>
 #include <helpers/logger.hpp>
+#include <optional>
+#include <string>
+#include <string_view>
+#include <system_error>
 #include <runners/docker.hpp>
 #include <runners/process.hpp>
 #include <state/data-structures.hpp>
@@ -197,4 +201,32 @@ void update_profiles(const Config &cfg, const ProfilesList &profiles);
  * Side effects: will save back the configuration to disk
  */
 void update_profiles(const Config &cfg, const std::function<ProfilesList(const ProfilesList &)> &update_fn);
+
+/**
+ * Filesystem operations used when saving the config file, injectable so tests can
+ * simulate bind-mount rename failures and faulty writes without privileges.
+ */
+namespace detail {
+
+struct AtomicSaveOps {
+  /** Renames `from` over `to`, returning an empty error_code on success. */
+  std::function<std::error_code(const std::string &, const std::string &)> rename_file;
+  /** Truncates `file` and writes the whole content, returning false on failure (possibly after a partial write). */
+  std::function<bool(const std::string &, std::string_view)> write_in_place;
+  /** Returns the full content of the file, or std::nullopt when it cannot be opened or read. */
+  std::function<std::optional<std::string>(const std::string &)> read_file;
+};
+
+/** The operations above backed by the real filesystem. */
+AtomicSaveOps real_atomic_save_ops();
+
+/**
+ * Writes the content to `source` via a temporary file renamed over it, falling back to an
+ * in-place write (restoring the previous content on failure) when the rename reports
+ * EBUSY/EXDEV, as happens for a single bind-mounted file.
+ */
+void save_file_atomically(const std::string &source, std::string_view content, const AtomicSaveOps &ops);
+void save_file_atomically(const std::string &source, std::string_view content);
+
+} // namespace detail
 } // namespace state

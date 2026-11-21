@@ -15,11 +15,13 @@ using Catch::Matchers::Equals;
 #include <fstream>
 #include <moonlight/protocol.hpp>
 #include <openssl/x509.h>
+#include <optional>
 #include <range/v3/view.hpp>
 #include <rest/helpers.hpp>
 #include <rfl/toml.hpp>
 #include <state/config.hpp>
 #include <streaming/streaming.hpp>
+#include <system_error>
 #include <thread>
 
 using namespace moonlight;
@@ -335,6 +337,134 @@ TEST_CASE("LocalState config is saved atomically", "[LocalState]") {
     REQUIRE(cfg.profiles->load()->at(0)->name == profiles[0]->name);
 
     fs::remove(test_dir / "config.toml.tmp");
+  }
+
+  fs::remove_all(test_dir);
+}
+
+TEST_CASE("LocalState config fallback when rename is unavailable", "[LocalState]") {
+  namespace fs = std::filesystem;
+  auto test_dir = fs::temp_directory_path() / ("wolf-config-fallback-" + state::gen_uuid());
+  fs::create_directories(test_dir);
+  auto config_file = test_dir / "config.toml";
+  const auto tmp_file = fs::path(config_file.string() + ".tmp");
+  const std::string original_content = "original config\n";
+  const std::string new_content = "updated config with more content\n";
+  {
+    std::ofstream out(config_file, std::ios::binary | std::ios::trunc);
+    out << original_content;
+  }
+
+  SECTION("EBUSY falls back to writing in place") {
+    auto ops = state::detail::real_atomic_save_ops();
+    ops.rename_file = [](const std::string &, const std::string &) {
+      return std::make_error_code(std::errc::device_or_resource_busy);
+    };
+
+    state::detail::save_file_atomically(config_file.string(), new_content, ops);
+
+    REQUIRE(read_file(config_file) == new_content);
+    REQUIRE_FALSE(fs::exists(tmp_file));
+  }
+
+  SECTION("EXDEV falls back to writing in place") {
+    auto ops = state::detail::real_atomic_save_ops();
+    ops.rename_file = [](const std::string &, const std::string &) {
+      return std::make_error_code(std::errc::cross_device_link);
+    };
+
+    state::detail::save_file_atomically(config_file.string(), new_content, ops);
+
+    REQUIRE(read_file(config_file) == new_content);
+    REQUIRE_FALSE(fs::exists(tmp_file));
+  }
+
+  SECTION("An unreadable source is left untouched") {
+    auto ops = state::detail::real_atomic_save_ops();
+    ops.rename_file = [](const std::string &, const std::string &) {
+      return std::make_error_code(std::errc::device_or_resource_busy);
+    };
+    ops.read_file = [](const std::string &) -> std::optional<std::string> { return std::nullopt; };
+    int write_calls = 0;
+    ops.write_in_place = [&write_calls](const std::string &, std::string_view) {
+      write_calls++;
+      return true;
+    };
+
+    REQUIRE_THROWS(state::detail::save_file_atomically(config_file.string(), new_content, ops));
+    REQUIRE(write_calls == 0);
+    REQUIRE(read_file(config_file) == original_content);
+    REQUIRE(read_file(tmp_file) == new_content);
+  }
+
+  SECTION("A source that vanishes before the fallback is not recreated") {
+    auto ops = state::detail::real_atomic_save_ops();
+    ops.rename_file = [&config_file](const std::string &, const std::string &) {
+      std::error_code remove_ec;
+      fs::remove(config_file, remove_ec);
+      return std::make_error_code(std::errc::device_or_resource_busy);
+    };
+
+    REQUIRE_THROWS(state::detail::save_file_atomically(config_file.string(), new_content, ops));
+    REQUIRE_FALSE(fs::exists(config_file));
+    REQUIRE(read_file(tmp_file) == new_content);
+  }
+
+  SECTION("A partial in-place write restores the previous content") {
+    auto ops = state::detail::real_atomic_save_ops();
+    ops.rename_file = [](const std::string &, const std::string &) {
+      return std::make_error_code(std::errc::device_or_resource_busy);
+    };
+    int write_calls = 0;
+    ops.write_in_place = [&write_calls](const std::string &file, std::string_view content) {
+      write_calls++;
+      std::ofstream out(file, std::ios::binary | std::ios::trunc);
+      auto written = write_calls == 1 ? content.substr(0, 3) : content;
+      out.write(written.data(), static_cast<std::streamsize>(written.size()));
+      out.close();
+      return write_calls > 1;
+    };
+
+    REQUIRE_THROWS(state::detail::save_file_atomically(config_file.string(), new_content, ops));
+    REQUIRE(write_calls == 2);
+    REQUIRE(read_file(config_file) == original_content);
+    REQUIRE(read_file(tmp_file) == new_content);
+  }
+
+  SECTION("A failed restoration keeps the new content in the temporary file") {
+    auto ops = state::detail::real_atomic_save_ops();
+    ops.rename_file = [](const std::string &, const std::string &) {
+      return std::make_error_code(std::errc::cross_device_link);
+    };
+    int write_calls = 0;
+    ops.write_in_place = [&write_calls](const std::string &file, std::string_view) {
+      write_calls++;
+      std::ofstream out(file, std::ios::binary | std::ios::trunc);
+      out << "partial";
+      out.close();
+      return false;
+    };
+
+    REQUIRE_THROWS(state::detail::save_file_atomically(config_file.string(), new_content, ops));
+    REQUIRE(write_calls == 2);
+    REQUIRE(read_file(tmp_file) == new_content);
+  }
+
+  SECTION("Other rename errors do not fall back to writing in place") {
+    auto ops = state::detail::real_atomic_save_ops();
+    ops.rename_file = [](const std::string &, const std::string &) {
+      return std::make_error_code(std::errc::permission_denied);
+    };
+    int write_calls = 0;
+    ops.write_in_place = [&write_calls](const std::string &, std::string_view) {
+      write_calls++;
+      return true;
+    };
+
+    REQUIRE_THROWS(state::detail::save_file_atomically(config_file.string(), new_content, ops));
+    REQUIRE(write_calls == 0);
+    REQUIRE(read_file(config_file) == original_content);
+    REQUIRE_FALSE(fs::exists(tmp_file));
   }
 
   fs::remove_all(test_dir);

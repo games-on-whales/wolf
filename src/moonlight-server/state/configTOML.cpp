@@ -42,7 +42,41 @@ bool write_in_place(const std::string &file, std::string_view content) {
   return !out.fail();
 }
 
-void save_file_atomically(const std::string &source, std::string_view content) {
+std::optional<std::string> read_file_content(const std::string &file) {
+  std::ifstream in(file, std::ios::binary);
+  if (!in) {
+    return std::nullopt;
+  }
+  std::string content{std::istreambuf_iterator<char>(in), std::istreambuf_iterator<char>()};
+  if (in.bad()) {
+    return std::nullopt;
+  }
+  return content;
+}
+
+void save_config(const std::string &source, const WolfConfig &cfg) {
+  detail::save_file_atomically(source, rfl::toml::write(cfg));
+}
+
+} // namespace
+
+namespace detail {
+
+AtomicSaveOps real_atomic_save_ops() {
+  AtomicSaveOps ops;
+  ops.rename_file = [](const std::string &from, const std::string &to) {
+    std::error_code ec;
+    std::filesystem::rename(from, to, ec);
+    return ec;
+  };
+  ops.write_in_place = [](const std::string &file, std::string_view content) {
+    return write_in_place(file, content);
+  };
+  ops.read_file = [](const std::string &file) { return read_file_content(file); };
+  return ops;
+}
+
+void save_file_atomically(const std::string &source, std::string_view content, const AtomicSaveOps &ops) {
   namespace fs = std::filesystem;
   auto tmp_file = source + ".tmp";
   {
@@ -56,8 +90,7 @@ void save_file_atomically(const std::string &source, std::string_view content) {
     }
   }
 
-  std::error_code ec;
-  fs::rename(tmp_file, source, ec);
+  std::error_code ec = ops.rename_file(tmp_file, source);
   if (ec) {
     std::error_code remove_ec;
     if (ec == std::errc::device_or_resource_busy || ec == std::errc::cross_device_link) {
@@ -67,15 +100,14 @@ void save_file_atomically(const std::string &source, std::string_view content) {
                 source,
                 ec.message());
       // Keep the previous content to restore it if the in-place write fails; the complete new content
-      // stays in tmp_file until the in-place write succeeds.
-      std::ifstream in(source, std::ios::binary);
-      std::string previous{std::istreambuf_iterator<char>(in), std::istreambuf_iterator<char>()};
-      if (in.bad()) {
+      // stays in tmp_file until the in-place write succeeds. A source that cannot be read is left
+      // untouched: without a valid backup there is nothing safe to restore after a failed write.
+      auto previous = ops.read_file(source);
+      if (!previous) {
         throw std::runtime_error(fmt::format("Unable to read {}, new content kept in {}", source, tmp_file));
       }
-      in.close();
-      if (!write_in_place(source, content)) {
-        write_in_place(source, previous);
+      if (!ops.write_in_place(source, content)) {
+        ops.write_in_place(source, *previous);
         throw std::runtime_error(fmt::format("Unable to write {}, new content kept in {}", source, tmp_file));
       }
       fs::remove(tmp_file, remove_ec);
@@ -86,11 +118,11 @@ void save_file_atomically(const std::string &source, std::string_view content) {
   }
 }
 
-void save_config(const std::string &source, const WolfConfig &cfg) {
-  save_file_atomically(source, rfl::toml::write(cfg));
+void save_file_atomically(const std::string &source, std::string_view content) {
+  save_file_atomically(source, content, real_atomic_save_ops());
 }
 
-} // namespace
+} // namespace detail
 
 void create_default(const std::string &source) {
   std::ofstream out_file;
@@ -309,7 +341,7 @@ Config load_or_default(const std::string &source,
     }
     std::ostringstream new_cfg_str;
     new_cfg_str << new_cfg;
-    save_file_atomically(source, new_cfg_str.str());
+    detail::save_file_atomically(source, new_cfg_str.str());
     logs::log(logs::debug, "Migrated config from v{} to v7", version);
   }
 
