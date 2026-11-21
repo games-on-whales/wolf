@@ -31,6 +31,9 @@ namespace {
  * The new content is written to a temporary file (a fixed `source + ".tmp"` name: callers either hold
  * the config mutex or this is the initial load) which is then renamed over the destination; a crash, a
  * full disk or a concurrent reader will see either the old or the new file, never a truncated one.
+ *
+ * When `source` is a bind-mount point (a single bind-mounted file) rename can't replace it, so the
+ * content is written in place instead. The config mutex serialises writers, so those writes can't interleave.
  */
 void save_file_atomically(const std::string &source, std::string_view content) {
   namespace fs = std::filesystem;
@@ -40,8 +43,8 @@ void save_file_atomically(const std::string &source, std::string_view content) {
     out.write(content.data(), content.size());
     out.close();
     if (out.fail()) {
-      std::error_code ec;
-      fs::remove(tmp_file, ec);
+      std::error_code remove_ec;
+      fs::remove(tmp_file, remove_ec);
       throw std::runtime_error(fmt::format("Unable to write {}", tmp_file));
     }
   }
@@ -49,7 +52,23 @@ void save_file_atomically(const std::string &source, std::string_view content) {
   std::error_code ec;
   fs::rename(tmp_file, source, ec);
   if (ec) {
-    fs::remove(tmp_file, ec);
+    std::error_code remove_ec;
+    if (ec == std::errc::device_or_resource_busy || ec == std::errc::cross_device_link) {
+      logs::log(logs::warning,
+                "[CONFIG] Unable to atomically replace {} ({}), it is probably bind-mounted as a single file: "
+                "writing it in place",
+                source,
+                ec.message());
+      fs::remove(tmp_file, remove_ec);
+      std::ofstream out(source, std::ios::binary | std::ios::trunc);
+      out.write(content.data(), content.size());
+      out.close();
+      if (out.fail()) {
+        throw std::runtime_error(fmt::format("Unable to write {}", source));
+      }
+      return;
+    }
+    fs::remove(tmp_file, remove_ec);
     throw std::runtime_error(fmt::format("Unable to replace {}: {}", source, ec.message()));
   }
 }
@@ -481,8 +500,21 @@ void unpair(const Config &cfg, const PairedClient &client) {
   });
 }
 
-void update_client_settings(const Config &cfg, std::size_t client_id, const PairedClient &updated_client) {
+bool update_client_settings(const Config &cfg,
+                            std::size_t client_id,
+                            const std::function<PairedClient(const PairedClient &)> &update_fn) {
   std::lock_guard lock(*cfg.config_file_mutex);
+
+  auto paired_clients = cfg.paired_clients->load();
+  auto found =
+      std::find_if(paired_clients->begin(), paired_clients->end(), [client_id](const immer::box<PairedClient> &client) {
+        return get_client_id(*client) == client_id;
+      });
+  if (found == paired_clients->end()) {
+    return false;
+  }
+
+  auto updated_client = update_fn(**found);
   auto update_client_fn = [&](immer::box<PairedClient> client) -> immer::box<PairedClient> {
     if (get_client_id(client) == client_id) {
       return immer::box<PairedClient>(updated_client);
@@ -506,13 +538,22 @@ void update_client_settings(const Config &cfg, std::size_t client_id, const Pair
            ranges::views::transform(update_client_fn) | //
            ranges::to<PairedClientList>();
   });
+
+  return true;
 }
 
-void update_profiles(const Config &cfg, const ProfilesList &profiles) {
+void update_client_settings(const Config &cfg, std::size_t client_id, const PairedClient &updated_client) {
+  update_client_settings(cfg, client_id, [&updated_client](const PairedClient &) { return updated_client; });
+}
+
+void update_profiles(const Config &cfg, const std::function<ProfilesList(const ProfilesList &)> &update_fn) {
   std::lock_guard lock(*cfg.config_file_mutex);
 
+  auto current_profiles = cfg.profiles->load().get();
+  auto new_profiles = update_fn(current_profiles);
+
   auto tml = rfl::toml::load<WolfConfig, rfl::DefaultIfMissing>(cfg.config_source).value();
-  tml.profiles = profiles | //
+  tml.profiles = new_profiles | //
                  ranges::views::transform([](const immer::box<events::Profile> &p) {
                    return Profile{
                        .id = p->id,
@@ -535,7 +576,11 @@ void update_profiles(const Config &cfg, const ProfilesList &profiles) {
   save_config(cfg.config_source, tml);
 
   // Update in-memory state only after the file has been saved
-  cfg.profiles->store(profiles);
+  cfg.profiles->store(new_profiles);
+}
+
+void update_profiles(const Config &cfg, const ProfilesList &profiles) {
+  update_profiles(cfg, [&profiles](const ProfilesList &) { return profiles; });
 }
 
 } // namespace state

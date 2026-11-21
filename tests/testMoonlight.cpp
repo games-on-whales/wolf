@@ -242,6 +242,89 @@ TEST_CASE("LocalState config is saved atomically", "[LocalState]") {
     REQUIRE(saved.profiles[0].name == "Renamed profile");
   }
 
+  SECTION("Concurrent updates to the same section are not lost") {
+    auto clients = cfg.paired_clients->load().get();
+    REQUIRE(!clients.empty());
+    auto client_id = state::get_client_id(clients[0]);
+
+    constexpr int profile_threads_count = 4;
+    constexpr int updates_per_thread = 10;
+
+    std::vector<std::thread> profile_writers;
+    for (int t = 0; t < profile_threads_count; t++) {
+      profile_writers.emplace_back([&cfg, t]() {
+        for (int i = 0; i < updates_per_thread; i++) {
+          state::update_profiles(cfg, [t, i](const state::ProfilesList &ps) {
+            auto new_profile = events::Profile{
+                .id = fmt::format("t{}-{}", t, i),
+                .name = fmt::format("Thread {} update {}", t, i),
+                .icon_png_path = "",
+                .pin = std::nullopt,
+                .apps = std::make_shared<immer::atom<immer::vector<immer::box<events::App>>>>()};
+            return ps.push_back(immer::box<events::Profile>{new_profile});
+          });
+        }
+      });
+    }
+
+    std::thread uid_writer([&]() {
+      for (int i = 0; i < updates_per_thread; i++) {
+        state::update_client_settings(cfg, client_id, [](const state::PairedClient &current_client) {
+          auto updated = current_client;
+          updated.settings.run_uid = 1234;
+          return updated;
+        });
+      }
+    });
+    std::thread gid_writer([&]() {
+      for (int i = 0; i < updates_per_thread; i++) {
+        state::update_client_settings(cfg, client_id, [](const state::PairedClient &current_client) {
+          auto updated = current_client;
+          updated.settings.run_gid = 4321;
+          return updated;
+        });
+      }
+    });
+
+    for (auto &writer : profile_writers) {
+      writer.join();
+    }
+    uid_writer.join();
+    gid_writer.join();
+
+    const auto expected_profiles = profiles.size() + profile_threads_count * updates_per_thread;
+    REQUIRE(cfg.profiles->load()->size() == expected_profiles);
+
+    auto saved = rfl::toml::load<wolf::config::WolfConfig, rfl::DefaultIfMissing>(config_file.string()).value();
+    REQUIRE(saved.profiles.size() == expected_profiles);
+
+    auto saved_client = std::find_if(saved.paired_clients.begin(), saved.paired_clients.end(), [&](const auto &client) {
+      return client.client_cert == clients[0]->client_cert;
+    });
+    REQUIRE(saved_client != saved.paired_clients.end());
+    REQUIRE(saved_client->settings.run_uid == 1234);
+    REQUIRE(saved_client->settings.run_gid == 4321);
+
+    auto in_memory_client = state::get_client_by_id(cfg, std::to_string(client_id));
+    REQUIRE(in_memory_client.has_value());
+    REQUIRE(in_memory_client->settings.run_uid == 1234);
+    REQUIRE(in_memory_client->settings.run_gid == 4321);
+  }
+
+  SECTION("update_client_settings reports a missing client") {
+    const auto original_content = read_file(config_file);
+    auto missing_id = std::hash<std::string>{}("a client that is not paired");
+
+    auto found = state::update_client_settings(cfg, missing_id, [](const state::PairedClient &current_client) {
+      auto updated = current_client;
+      updated.settings.run_uid = 1234;
+      return updated;
+    });
+
+    REQUIRE_FALSE(found);
+    REQUIRE(read_file(config_file) == original_content);
+  }
+
   SECTION("A failed save leaves file and memory untouched") {
     // A directory can't be opened by ofstream, even as root
     fs::create_directory(test_dir / "config.toml.tmp");

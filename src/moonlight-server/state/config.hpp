@@ -5,6 +5,7 @@
 #include <boost/uuid/uuid_io.hpp>         // streaming operators etc.
 #include <crypto/crypto.hpp>
 #include <events/events.hpp>
+#include <functional>
 #include <helpers/logger.hpp>
 #include <runners/docker.hpp>
 #include <runners/process.hpp>
@@ -175,8 +176,25 @@ std::optional<PairedClient> get_client_by_id(const Config &cfg, const std::strin
 void update_client_settings(const Config &cfg, std::size_t client_id, const PairedClient &updated_client);
 
 /**
+ * Atomically replaces the client client_id with update_fn(current client).
+ * update_fn runs while holding config_file_mutex, so concurrent updates are never lost.
+ * Returns false (and changes nothing) when the client is not found.
+ * Side effects: will save back the configuration to disk
+ */
+bool update_client_settings(const Config &cfg,
+                            std::size_t client_id,
+                            const std::function<PairedClient(const PairedClient &)> &update_fn);
+
+/**
  * Replaces the currently loaded profiles
  * Side effects: will save back the configuration to disk
  */
 void update_profiles(const Config &cfg, const ProfilesList &profiles);
+
+/**
+ * Atomically replaces the profiles with update_fn(current profiles).
+ * update_fn runs while holding config_file_mutex, so concurrent updates are never lost.
+ * Side effects: will save back the configuration to disk
+ */
+void update_profiles(const Config &cfg, const std::function<ProfilesList(const ProfilesList &)> &update_fn);
 } // namespace state
