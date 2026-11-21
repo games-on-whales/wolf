@@ -35,6 +35,13 @@ namespace {
  * When `source` is a bind-mount point (a single bind-mounted file) rename can't replace it, so the
  * content is written in place instead. The config mutex serialises writers, so those writes can't interleave.
  */
+bool write_in_place(const std::string &file, std::string_view content) {
+  std::ofstream out(file, std::ios::binary | std::ios::trunc);
+  out.write(content.data(), content.size());
+  out.close();
+  return !out.fail();
+}
+
 void save_file_atomically(const std::string &source, std::string_view content) {
   namespace fs = std::filesystem;
   auto tmp_file = source + ".tmp";
@@ -59,13 +66,19 @@ void save_file_atomically(const std::string &source, std::string_view content) {
                 "writing it in place",
                 source,
                 ec.message());
-      fs::remove(tmp_file, remove_ec);
-      std::ofstream out(source, std::ios::binary | std::ios::trunc);
-      out.write(content.data(), content.size());
-      out.close();
-      if (out.fail()) {
-        throw std::runtime_error(fmt::format("Unable to write {}", source));
+      // Keep the previous content to restore it if the in-place write fails; the complete new content
+      // stays in tmp_file until the in-place write succeeds.
+      std::ifstream in(source, std::ios::binary);
+      std::string previous{std::istreambuf_iterator<char>(in), std::istreambuf_iterator<char>()};
+      if (in.bad()) {
+        throw std::runtime_error(fmt::format("Unable to read {}, new content kept in {}", source, tmp_file));
       }
+      in.close();
+      if (!write_in_place(source, content)) {
+        write_in_place(source, previous);
+        throw std::runtime_error(fmt::format("Unable to write {}, new content kept in {}", source, tmp_file));
+      }
+      fs::remove(tmp_file, remove_ec);
       return;
     }
     fs::remove(tmp_file, remove_ec);
