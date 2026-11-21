@@ -16,12 +16,12 @@ When a new virtual device is created, we have to "mount" it inside the right run
 
 Normally, Docker assigns devices available to a container at creation time.
 Fortunately, it supports a more permissive rule that allows to access a wider range of devices based on the device https://www.oreilly.com/library/view/linux-device-drivers/0596000081/ch03s02.html[major:minor].
-By adding the https://docs.docker.com/engine/reference/commandline/run/#device-cgroup-rule[--device-cgroup-rule] we can then call `mknod` footnote:[This obviously requires also the `MKNOD` capability to be enabled (`--cap-add MKNOD`)] from inside the container in order to mount the virtual devices on-demand from the outside.
+By adding the https://docs.docker.com/engine/reference/commandline/run/#device-cgroup-rule[--device-cgroup-rule] we can then call `mknod` footnote:[Wolf runs this `mknod` as a privileged `docker exec`, so the app container itself doesn't need the `MKNOD` capability: Wolf drops it from every non-privileged app container.] from inside the container in order to mount the virtual devices on-demand from the outside.
 
 .Example Docker command issued by Wolf
 [source,bash]
 ....
-docker exec -it <App_Container> sh -c "mknod /dev/input/<device name> c <major>:<minor>"
+docker exec --privileged -it <App_Container> sh -c "mknod /dev/input/<device name> c <major>:<minor>"
 ....
 
 == If a tree falls in the forest, does it make a sound?

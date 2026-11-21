@@ -621,3 +621,34 @@ TEST_CASE("Docker 29.1.5 fail to parse", "[DOCKER]") {
   REQUIRE(parsed_container.ports[0].public_port == 22);
   REQUIRE(parsed_container.ports[0].type == docker::TCP);
 }
+
+TEST_CASE("App containers don't get CAP_MKNOD", "[DOCKER_JSON]") {
+  auto host_config = [](std::string_view create_json) {
+    return utils::parse_json(docker::drop_mknod_capability(create_json)).at("HostConfig").as_object();
+  };
+
+  SECTION("MKNOD is removed from CapAdd and dropped") {
+    auto hc = host_config(R"({"HostConfig": {"CapAdd": ["SYS_ADMIN", "MKNOD", "cap_mknod"], "IpcMode": "host"}})");
+    REQUIRE(hc.at("CapAdd").as_array() == boost::json::array{"SYS_ADMIN"});
+    REQUIRE(hc.at("CapDrop").as_array() == boost::json::array{"MKNOD"});
+    REQUIRE(hc.at("IpcMode").as_string() == "host");
+  }
+
+  SECTION("An existing CapDrop is kept, without duplicates") {
+    auto hc = host_config(R"({"HostConfig": {"CapDrop": ["NET_RAW"]}})");
+    REQUIRE(hc.at("CapDrop").as_array() == boost::json::array{"NET_RAW", "MKNOD"});
+    hc = host_config(R"({"HostConfig": {"CapDrop": ["CAP_MKNOD"]}})");
+    REQUIRE(hc.at("CapDrop").as_array() == boost::json::array{"CAP_MKNOD"});
+  }
+
+  SECTION("A missing HostConfig is created") {
+    auto hc = host_config(R"({"Env": ["A=B"]})");
+    REQUIRE(hc.at("CapDrop").as_array() == boost::json::array{"MKNOD"});
+  }
+
+  SECTION("Privileged containers are left alone") {
+    auto hc = host_config(R"({"HostConfig": {"Privileged": true, "CapAdd": ["MKNOD"]}})");
+    REQUIRE(hc.at("CapAdd").as_array() == boost::json::array{"MKNOD"});
+    REQUIRE(!hc.contains("CapDrop"));
+  }
+}

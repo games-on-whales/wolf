@@ -164,7 +164,14 @@ public:
                   std::string_view registry_auth,
                   const std::function<void(const DockerProgressEvent &)> &progress_fn) const;
 
-  bool exec(std::string_view id, const std::vector<std::string_view> &command, std::string_view user = "root") const;
+  /**
+   * Run a command in a running container.
+   * `privileged` runs it with every capability, whatever the container was granted.
+   */
+  bool exec(std::string_view id,
+            const std::vector<std::string_view> &command,
+            std::string_view user = "root",
+            bool privileged = false) const;
 
   /**
    * Get the container logs

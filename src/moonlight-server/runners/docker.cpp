@@ -31,6 +31,41 @@ static std::optional<std::string> get_device_major(std::string_view type) {
   return std::nullopt;
 }
 
+std::string drop_mknod_capability(std::string_view create_json) {
+  auto parsed_json = utils::parse_json(create_json).as_object();
+  json::object host_config;
+  if (auto host_config_ptr = parsed_json.if_contains("HostConfig"); host_config_ptr && host_config_ptr->is_object()) {
+    host_config = host_config_ptr->as_object();
+  }
+  if (auto privileged = host_config.if_contains("Privileged");
+      privileged && privileged->is_bool() && privileged->as_bool()) {
+    return std::string(create_json);
+  }
+
+  auto is_mknod = [](const json::value &cap) {
+    if (!cap.is_string()) {
+      return false;
+    }
+    auto name = utils::to_lower(cap.as_string());
+    return name == "mknod" || name == "cap_mknod";
+  };
+  if (auto cap_add = host_config.if_contains("CapAdd"); cap_add && cap_add->is_array()) {
+    auto &caps = cap_add->as_array();
+    caps.erase(std::remove_if(caps.begin(), caps.end(), is_mknod), caps.end());
+  }
+  auto cap_drop = host_config.if_contains("CapDrop");
+  if (!cap_drop || !cap_drop->is_array()) {
+    host_config["CapDrop"] = json::array{};
+    cap_drop = host_config.if_contains("CapDrop");
+  }
+  if (std::none_of(cap_drop->as_array().begin(), cap_drop->as_array().end(), is_mknod)) {
+    cap_drop->as_array().emplace_back("MKNOD");
+  }
+
+  parsed_json["HostConfig"] = host_config;
+  return boost::json::serialize(parsed_json);
+}
+
 void RunDocker::run(std::string_view session_id,
                     std::string_view app_state_folder,
                     std::string_view host_xdg_runtime_dir,
@@ -178,6 +213,11 @@ void RunDocker::run(std::string_view session_id,
     }
   }
 
+  // Device nodes are created by the privileged exec in the plug handler below, so the app never needs CAP_MKNOD.
+  // Combined with the rules above it would let a root process in the app create and open any input or hidraw device,
+  // including other sessions' and the host's.
+  final_json_opts = drop_mknod_capability(final_json_opts);
+
   logs::log(logs::debug, "[DOCKER] Container options: {}", final_json_opts);
 
   Container new_container = {.id = "",
@@ -272,7 +312,7 @@ void RunDocker::run(std::string_view session_id,
                                 udev_msg);
             }
             logs::log(logs::debug, "[DOCKER] Executing command: {}", cmd);
-            docker_api.exec(container_id, {"/bin/bash", "-c", cmd}, "root");
+            docker_api.exec(container_id, {"/bin/bash", "-c", cmd}, "root", true);
           }
         }
       }

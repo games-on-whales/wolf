@@ -21,7 +21,7 @@ icon_png_path = "https://raw.githubusercontent.com/games-on-whales/wolf-ui/refs/
 base_create_json = '''{
       "HostConfig": {
         "IpcMode": "host",
-        "CapAdd": ["NET_RAW", "MKNOD", "NET_ADMIN", "SYS_ADMIN", "SYS_NICE"],
+        "CapAdd": ["NET_RAW", "NET_ADMIN", "SYS_ADMIN", "SYS_NICE"],
         "Privileged": false,
         "DeviceCgroupRules": ["c 13:* rmw", "c 244:* rmw"]
       }
@@ -88,7 +88,7 @@ base_create_json = """
   "HostConfig": {
     "IpcMode": "host",
     "Privileged": false,
-    "CapAdd": ["NET_RAW", "MKNOD", "NET_ADMIN"],
+    "CapAdd": ["NET_RAW", "NET_ADMIN"],
     "DeviceCgroupRules": ["c 13:* rmw", "c 244:* rmw"]
   }
 }
@@ -115,7 +115,7 @@ base_create_json = """
 {
   "HostConfig": {
     "IpcMode": "host",
-    "CapAdd": ["NET_RAW", "MKNOD", "NET_ADMIN", "SYS_ADMIN", "SYS_NICE"],
+    "CapAdd": ["NET_RAW", "NET_ADMIN", "SYS_ADMIN", "SYS_NICE"],
     "Privileged": false,
     "DeviceCgroupRules": ["c 13:* rmw", "c 244:* rmw"]
   }
@@ -144,7 +144,7 @@ base_create_json = """
 {
   "HostConfig": {
     "IpcMode": "host",
-    "CapAdd": ["SYS_ADMIN", "SYS_NICE", "SYS_PTRACE", "NET_RAW", "MKNOD", "NET_ADMIN"],
+    "CapAdd": ["SYS_ADMIN", "SYS_NICE", "SYS_PTRACE", "NET_RAW", "NET_ADMIN"],
     "SecurityOpt": ["seccomp=unconfined", "apparmor=unconfined"],
     "Ulimits": [{"Name":"nofile", "Hard":10240, "Soft":10240}],
     "Privileged": false,
@@ -174,7 +174,7 @@ base_create_json = """
 {
   "HostConfig": {
     "IpcMode": "host",
-    "CapAdd": ["NET_RAW", "MKNOD", "NET_ADMIN", "SYS_ADMIN", "SYS_NICE"],
+    "CapAdd": ["NET_RAW", "NET_ADMIN", "SYS_ADMIN", "SYS_NICE"],
     "Privileged": false,
     "DeviceCgroupRules": ["c 13:* rmw", "c 244:* rmw"]
   }
@@ -202,7 +202,7 @@ base_create_json = """
 {
   "HostConfig": {
     "IpcMode": "host",
-    "CapAdd": ["SYS_ADMIN", "SYS_NICE", "SYS_PTRACE", "NET_RAW", "MKNOD", "NET_ADMIN"],
+    "CapAdd": ["SYS_ADMIN", "SYS_NICE", "SYS_PTRACE", "NET_RAW", "NET_ADMIN"],
     "SecurityOpt": ["seccomp=unconfined", "apparmor=unconfined"],
     "Ulimits": [{"Name":"nofile", "Hard":524288, "Soft":524288}],
     "Privileged": false,
@@ -232,7 +232,7 @@ base_create_json = """
 {
   "HostConfig": {
     "IpcMode": "host",
-    "CapAdd": ["NET_RAW", "MKNOD", "NET_ADMIN", "SYS_ADMIN", "SYS_NICE"],
+    "CapAdd": ["NET_RAW", "NET_ADMIN", "SYS_ADMIN", "SYS_NICE"],
     "Privileged": false,
     "DeviceCgroupRules": ["c 13:* rmw", "c 244:* rmw"]
   }
@@ -257,7 +257,7 @@ base_create_json = """
   "HostConfig": {
     "IpcMode": "host",
     "Privileged": false,
-    "CapAdd": ["SYS_ADMIN", "SYS_NICE", "SYS_PTRACE", "NET_RAW", "MKNOD", "NET_ADMIN"],
+    "CapAdd": ["SYS_ADMIN", "SYS_NICE", "SYS_PTRACE", "NET_RAW", "NET_ADMIN"],
     "SecurityOpt": ["seccomp=unconfined", "apparmor=unconfined"],
     "DeviceCgroupRules": ["c 13:* rmw", "c 244:* rmw"]
   }
@@ -282,7 +282,7 @@ base_create_json = """
   "HostConfig": {
     "IpcMode": "host",
     "Privileged": false,
-    "CapAdd": ["NET_RAW", "MKNOD", "NET_ADMIN"],
+    "CapAdd": ["NET_RAW", "NET_ADMIN"],
     "DeviceCgroupRules": ["c 13:* rmw", "c 244:* rmw"]
   }
 }
@@ -306,7 +306,7 @@ base_create_json = """
   "HostConfig": {
     "IpcMode": "host",
     "Privileged": false,
-    "CapAdd": ["NET_RAW", "MKNOD", "NET_ADMIN"],
+    "CapAdd": ["NET_RAW", "NET_ADMIN"],
     "DeviceCgroupRules": ["c 13:* rmw", "c 244:* rmw"]
   }
 }

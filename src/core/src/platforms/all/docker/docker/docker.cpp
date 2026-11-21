@@ -471,12 +471,16 @@ DockerAPI::get_logs(std::string_view id, bool get_stdout, bool get_stderr, int s
   return "";
 }
 
-bool DockerAPI::exec(std::string_view id, const std::vector<std::string_view> &command, std::string_view user) const {
+bool DockerAPI::exec(std::string_view id,
+                     const std::vector<std::string_view> &command,
+                     std::string_view user,
+                     bool privileged) const {
   if (auto conn = docker_connect(socket_path)) {
     auto api_url = fmt::format("http://localhost/{}/containers/{}/exec", docker_api_version, id);
     auto post_params = json::object{
         {"Cmd", json::value_from(command)},
         {"User", user},
+        {"Privileged", privileged},
         {"AttachStdin", false},
         {"AttachStdout", true},
         {"AttachStderr", true},
