@@ -8,12 +8,12 @@
 #include <functional>
 #include <helpers/logger.hpp>
 #include <optional>
-#include <string>
-#include <string_view>
-#include <system_error>
 #include <runners/docker.hpp>
 #include <runners/process.hpp>
 #include <state/data-structures.hpp>
+#include <string>
+#include <string_view>
+#include <system_error>
 
 namespace state {
 

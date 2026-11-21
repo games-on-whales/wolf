@@ -69,9 +69,7 @@ AtomicSaveOps real_atomic_save_ops() {
     std::filesystem::rename(from, to, ec);
     return ec;
   };
-  ops.write_in_place = [](const std::string &file, std::string_view content) {
-    return write_in_place(file, content);
-  };
+  ops.write_in_place = [](const std::string &file, std::string_view content) { return write_in_place(file, content); };
   ops.read_file = [](const std::string &file) { return read_file_content(file); };
   return ops;
 }
