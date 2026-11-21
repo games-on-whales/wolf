@@ -20,6 +20,13 @@ using namespace ranges::views;
 using namespace utils;
 using namespace wolf::core;
 
+/**
+ * Removes CAP_MKNOD from an app container's create JSON (CapAdd) and drops it explicitly (CapDrop), since Docker
+ * grants it by default. Wolf creates the device nodes itself through a privileged exec. Privileged containers are left
+ * unchanged.
+ */
+std::string drop_mknod_capability(std::string_view create_json);
+
 class RunDocker : public events::Runner {
 public:
   static RunDocker from_cfg(std::shared_ptr<events::EventBusType> ev_bus, const wolf::config::AppDocker &runner_cfg) {
