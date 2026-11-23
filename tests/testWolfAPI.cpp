@@ -461,6 +461,14 @@ TEST_CASE("Sessions APIs", "[API]") {
   REQUIRE(response);
   REQUIRE_THAT(response->second, Equals("{\"success\":true}"));
 
+  // An expected_generation that isn't a decimal string is a client error, and doesn't stop the session
+  for (const std::string invalid : {"42", "\"\"", "\"abc\""}) {
+    auto body = "{\"session_id\":\"10594003729173467913\",\"expected_generation\":" + invalid + "}";
+    response = req(curl.get(), HTTPMethod::POST, "http://localhost/api/v1/sessions/stop", body);
+    REQUIRE(response);
+    REQUIRE(response->first == 400);
+  }
+
   // Test that we can stop a session when the generation still matches
   auto stop_request = StreamSessionStopRequest{.session_id = "10594003729173467913", .expected_generation = generation};
   response = req(curl.get(), HTTPMethod::POST, "http://localhost/api/v1/sessions/stop", rfl::json::write(stop_request));

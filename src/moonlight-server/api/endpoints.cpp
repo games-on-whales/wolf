@@ -375,7 +375,8 @@ void UnixSocketServer::endpoint_StreamSessionStop(const HTTPRequest &req, std::s
   } else {
     logs::log(logs::warning, "[API] Invalid event: {} - {}", req.body, session.error().what());
     auto res = GenericErrorResponse{.error = session.error().what()};
-    send_http(socket, 500, rfl::json::write(res));
+    // Malformed request (e.g. an expected_generation that isn't a decimal string): a client error
+    send_http(socket, 400, rfl::json::write(res));
   }
 }
 
