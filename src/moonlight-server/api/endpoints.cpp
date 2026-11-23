@@ -1,6 +1,7 @@
 #include <api/api.hpp>
 #include <control/input_handler.hpp>
 #include <core/docker.hpp>
+#include <mutex>
 #include <rtp/udp-ping.hpp>
 #include <state/config.hpp>
 #include <state/sessions.hpp>
@@ -44,6 +45,10 @@ template <typename Fn> state::ProfilesList with_moonlight_apps(const state::Prof
          }) |
          ranges::to<state::ProfilesList>();
 }
+
+// Serialises the load -> save -> store of the Moonlight apps list between
+// concurrent AddApp/RemoveApp requests, so one cannot overwrite the other.
+std::mutex moonlight_apps_mutex;
 
 } // namespace
 
@@ -140,12 +145,19 @@ void UnixSocketServer::endpoint_Apps(const HTTPRequest &req, std::shared_ptr<Uni
 void UnixSocketServer::endpoint_AddApp(const HTTPRequest &req, std::shared_ptr<UnixSocket> socket) {
   auto app = rfl::json::read<rfl::Reflector<events::App>::ReflType>(req.body);
   if (app) {
-    auto new_app = rfl::Reflector<events::App>::to(app.value(), this->state_->app_state->event_bus);
-    auto error = try_update_profiles(state_->app_state->config, [&](const state::ProfilesList &profiles) {
-      return with_moonlight_apps(profiles, [&](const auto &apps) { return apps.push_back(new_app); });
-    });
-    if (error) {
-      send_http(socket, 500, rfl::json::write(GenericErrorResponse{.error = *error}));
+    std::lock_guard lock(moonlight_apps_mutex);
+    try {
+      auto new_app = rfl::Reflector<events::App>::to(app.value(), this->state_->app_state->event_bus);
+      auto error = try_update_profiles(state_->app_state->config, [&](const state::ProfilesList &profiles) {
+        return with_moonlight_apps(profiles, [&](const auto &apps) { return apps.push_back(new_app); });
+      });
+      if (error) {
+        send_http(socket, 500, rfl::json::write(GenericErrorResponse{.error = *error}));
+        return;
+      }
+    } catch (const std::exception &e) {
+      logs::log(logs::error, "[API] Unable to add the app: {}", e.what());
+      send_http(socket, 500, rfl::json::write(GenericErrorResponse{.error = e.what()}));
       return;
     }
 
@@ -160,6 +172,7 @@ void UnixSocketServer::endpoint_AddApp(const HTTPRequest &req, std::shared_ptr<U
 void UnixSocketServer::endpoint_RemoveApp(const HTTPRequest &req, std::shared_ptr<UnixSocket> socket) {
   auto app = rfl::json::read<AppDeleteRequest>(req.body);
   if (app) {
+    std::lock_guard lock(moonlight_apps_mutex);
     auto error = try_update_profiles(state_->app_state->config, [&](const state::ProfilesList &profiles) {
       return with_moonlight_apps(profiles, [&](const auto &apps) {
         return apps | //

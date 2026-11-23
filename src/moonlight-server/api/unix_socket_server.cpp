@@ -20,6 +20,10 @@ UnixSocketServer::UnixSocketServer(boost::asio::io_context &io_context,
 
   state_ = std::make_shared<UnixSocketState>(io_context, app_state, socket_path);
 
+  state_->http.on_unhandled_error = [this](const std::shared_ptr<UnixSocket> &socket, const std::string &error) {
+    send_http(socket, 500, rfl::json::write(GenericErrorResponse{.error = error}));
+  };
+
   state_->http.add(HTTPMethod::GET,
                    "/api/v1/events",
                    {.summary = "Subscribe to events",

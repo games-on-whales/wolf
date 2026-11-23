@@ -8,6 +8,7 @@
 #include <rfl/toml.hpp>
 #include <sessions/handlers.hpp>
 #include <state/config.hpp>
+#include <stdexcept>
 
 using Catch::Matchers::ContainsSubstring;
 using Catch::Matchers::Equals;
@@ -347,6 +348,254 @@ TEST_CASE("APPs APIs keep memory unchanged when saving fails", "[API]") {
   REQUIRE(apps.apps.size() == 2);
   REQUIRE(apps.apps[0].title == "Firefox");
   REQUIRE(apps.apps[1].title == "Test ball");
+}
+
+TEST_CASE("APPs APIs concurrent adds are not lost", "[API]") {
+  auto event_bus = std::make_shared<events::EventBusType>();
+  auto running_sessions = std::make_shared<immer::atom<immer::vector<events::StreamSession>>>();
+  auto config = state::load_or_default("config.test.toml", event_bus, running_sessions);
+  config.config_source = "config.test.EDITED.toml";
+  auto app_state = immer::box<state::AppState>(state::AppState{
+      .config = {config},
+      .pairing_cache = std::make_shared<immer::atom<immer::map<std::string, state::PairCache>>>(),
+      .pairing_atom = std::make_shared<immer::atom<immer::map<std::string, immer::box<events::PairSignal>>>>(),
+      .event_bus = event_bus,
+      .running_sessions = running_sessions});
+
+  auto runtime_dir = api_runtime_dir();
+  auto socket_path = api_socket_path();
+  std::thread server_thread([app_state, runtime_dir]() { wolf::api::start_server(runtime_dir, app_state); });
+  server_thread.detach();
+  std::this_thread::sleep_for(std::chrono::milliseconds(42));
+
+  auto make_app = [](const std::string &id, const std::string &title) {
+    return rfl::Reflector<wolf::core::events::App>::ReflType{
+        .title = title,
+        .id = id,
+        .support_hdr = false,
+        .h264_gst_pipeline = "h264",
+        .hevc_gst_pipeline = "hevc",
+        .av1_gst_pipeline = "av1",
+        .render_node = "render",
+        .opus_gst_pipeline = "opus",
+        .start_virtual_compositor = false,
+        .runner = wolf::config::AppDocker{.name = "test", .image = "test"}};
+  };
+  auto add_app = [&](const std::string &id, const std::string &title) {
+    auto thread_curl = curl_ptr(curl_easy_init(), ::curl_easy_cleanup);
+    curl_easy_setopt(thread_curl.get(), CURLOPT_UNIX_SOCKET_PATH, socket_path.c_str());
+    curl_easy_setopt(thread_curl.get(), CURLOPT_HTTP_VERSION, CURL_HTTP_VERSION_1_0);
+    curl_easy_setopt(thread_curl.get(), CURLOPT_TIMEOUT, 10L);
+    return req(thread_curl.get(), HTTPMethod::POST, "http://localhost/api/v1/apps/add", rfl::json::write(make_app(id, title)));
+  };
+
+  std::optional<std::pair<long, std::string>> first;
+  std::optional<std::pair<long, std::string>> second;
+  std::thread first_writer([&]() { first = add_app("concurrent-1", "Concurrent app 1"); });
+  std::thread second_writer([&]() { second = add_app("concurrent-2", "Concurrent app 2"); });
+  first_writer.join();
+  second_writer.join();
+
+  REQUIRE(first);
+  REQUIRE(first->first == 200);
+  REQUIRE(second);
+  REQUIRE(second->first == 200);
+
+  auto curl = curl_ptr(curl_easy_init(), ::curl_easy_cleanup);
+  curl_easy_setopt(curl.get(), CURLOPT_UNIX_SOCKET_PATH, socket_path.c_str());
+  curl_easy_setopt(curl.get(), CURLOPT_HTTP_VERSION, CURL_HTTP_VERSION_1_0);
+  auto response = req(curl.get(), HTTPMethod::GET, "http://localhost/api/v1/apps");
+  REQUIRE(response);
+  auto apps = rfl::json::read<AppListResponse>(response->second).value();
+  REQUIRE(apps.apps.size() == 4);
+  REQUIRE_THAT(response->second, ContainsSubstring("Concurrent app 1"));
+  REQUIRE_THAT(response->second, ContainsSubstring("Concurrent app 2"));
+}
+
+TEST_CASE("APPs APIs return 500 when the app cannot be converted", "[API]") {
+  auto event_bus = std::make_shared<events::EventBusType>();
+  auto running_sessions = std::make_shared<immer::atom<immer::vector<events::StreamSession>>>();
+  auto config = state::load_or_default("config.test.toml", event_bus, running_sessions);
+  config.config_source = "config.test.EDITED.toml";
+  auto app_state = immer::box<state::AppState>(state::AppState{
+      .config = {config},
+      .pairing_cache = std::make_shared<immer::atom<immer::map<std::string, state::PairCache>>>(),
+      .pairing_atom = std::make_shared<immer::atom<immer::map<std::string, immer::box<events::PairSignal>>>>(),
+      .event_bus = event_bus,
+      .running_sessions = running_sessions});
+
+  auto runtime_dir = api_runtime_dir();
+  auto socket_path = api_socket_path();
+  std::thread server_thread([app_state, runtime_dir]() { wolf::api::start_server(runtime_dir, app_state); });
+  server_thread.detach();
+  std::this_thread::sleep_for(std::chrono::milliseconds(42));
+
+  auto curl = curl_ptr(curl_easy_init(), ::curl_easy_cleanup);
+  curl_easy_setopt(curl.get(), CURLOPT_UNIX_SOCKET_PATH, socket_path.c_str());
+  curl_easy_setopt(curl.get(), CURLOPT_HTTP_VERSION, CURL_HTTP_VERSION_1_0);
+  curl_easy_setopt(curl.get(), CURLOPT_TIMEOUT, 10L);
+
+  // The mount has no ':' separator, so converting the runner throws
+  auto app = rfl::Reflector<wolf::core::events::App>::ReflType{
+      .title = "Broken app",
+      .id = "broken",
+      .support_hdr = false,
+      .h264_gst_pipeline = "h264",
+      .hevc_gst_pipeline = "hevc",
+      .av1_gst_pipeline = "av1",
+      .render_node = "render",
+      .opus_gst_pipeline = "opus",
+      .start_virtual_compositor = false,
+      .runner = wolf::config::AppDocker{.name = "test", .image = "test", .mounts = {"/tmp"}}};
+  auto response = req(curl.get(), HTTPMethod::POST, "http://localhost/api/v1/apps/add", rfl::json::write(app));
+  REQUIRE(response);
+  REQUIRE(response->first == 500);
+
+  response = req(curl.get(), HTTPMethod::GET, "http://localhost/api/v1/apps");
+  REQUIRE(response);
+  auto apps = rfl::json::read<AppListResponse>(response->second).value();
+  REQUIRE(apps.apps.size() == 2);
+}
+
+TEST_CASE("Client settings APIs validate client_id and keep memory unchanged when saving fails", "[API]") {
+  auto event_bus = std::make_shared<events::EventBusType>();
+  auto running_sessions = std::make_shared<immer::atom<immer::vector<events::StreamSession>>>();
+  auto config = state::load_or_default("config.test.toml", event_bus, running_sessions);
+  config.config_source = "/nonexistent-wolf-dir/config.toml";
+  auto app_state = immer::box<state::AppState>(state::AppState{
+      .config = {config},
+      .pairing_cache = std::make_shared<immer::atom<immer::map<std::string, state::PairCache>>>(),
+      .pairing_atom = std::make_shared<immer::atom<immer::map<std::string, immer::box<events::PairSignal>>>>(),
+      .event_bus = event_bus,
+      .running_sessions = running_sessions});
+
+  auto runtime_dir = api_runtime_dir();
+  auto socket_path = api_socket_path();
+  std::thread server_thread([app_state, runtime_dir]() { wolf::api::start_server(runtime_dir, app_state); });
+  server_thread.detach();
+  std::this_thread::sleep_for(std::chrono::milliseconds(42));
+
+  auto curl = curl_ptr(curl_easy_init(), ::curl_easy_cleanup);
+  curl_easy_setopt(curl.get(), CURLOPT_UNIX_SOCKET_PATH, socket_path.c_str());
+  curl_easy_setopt(curl.get(), CURLOPT_HTTP_VERSION, CURL_HTTP_VERSION_1_0);
+  curl_easy_setopt(curl.get(), CURLOPT_TIMEOUT, 10L);
+
+  auto response = req(curl.get(),
+                      HTTPMethod::POST,
+                      "http://localhost/api/v1/clients/settings",
+                      R"({"client_id":"not-a-number","app_state_folder":"OVERRIDDEN","settings":{}})");
+  REQUIRE(response);
+  REQUIRE(response->first == 400);
+
+  response = req(curl.get(),
+                 HTTPMethod::POST,
+                 "http://localhost/api/v1/clients/settings",
+                 R"({"client_id":"10594003729173467913","app_state_folder":"OVERRIDDEN","settings":{}})");
+  REQUIRE(response);
+  REQUIRE(response->first == 500);
+
+  auto clients = app_state->config.get().paired_clients->load().get();
+  REQUIRE(clients.size() == 1);
+  REQUIRE_THAT(clients[0]->app_state_folder, Equals("some/folder"));
+}
+
+TEST_CASE("Profile APIs keep memory unchanged when saving fails", "[API]") {
+  auto event_bus = std::make_shared<events::EventBusType>();
+  auto running_sessions = std::make_shared<immer::atom<immer::vector<events::StreamSession>>>();
+  auto config = state::load_or_default("config.test.toml", event_bus, running_sessions);
+  config.config_source = "/nonexistent-wolf-dir/config.toml";
+  auto app_state = immer::box<state::AppState>(state::AppState{
+      .config = {config},
+      .pairing_cache = std::make_shared<immer::atom<immer::map<std::string, state::PairCache>>>(),
+      .pairing_atom = std::make_shared<immer::atom<immer::map<std::string, immer::box<events::PairSignal>>>>(),
+      .event_bus = event_bus,
+      .running_sessions = running_sessions});
+
+  auto runtime_dir = api_runtime_dir();
+  auto socket_path = api_socket_path();
+  std::thread server_thread([app_state, runtime_dir]() { wolf::api::start_server(runtime_dir, app_state); });
+  server_thread.detach();
+  std::this_thread::sleep_for(std::chrono::milliseconds(42));
+
+  auto curl = curl_ptr(curl_easy_init(), ::curl_easy_cleanup);
+  curl_easy_setopt(curl.get(), CURLOPT_UNIX_SOCKET_PATH, socket_path.c_str());
+  curl_easy_setopt(curl.get(), CURLOPT_HTTP_VERSION, CURL_HTTP_VERSION_1_0);
+  curl_easy_setopt(curl.get(), CURLOPT_TIMEOUT, 10L);
+
+  auto profile = events::Profile{
+      .id = "test-fail",
+      .name = "Test fail",
+      .icon_png_path = "",
+      .apps = std::make_shared<immer::atom<immer::vector<immer::box<events::App>>>>()};
+  auto response =
+      req(curl.get(), HTTPMethod::POST, "http://localhost/api/v1/profiles/add", rfl::json::write(profile));
+  REQUIRE(response);
+  REQUIRE(response->first == 500);
+
+  response = req(curl.get(), HTTPMethod::POST, "http://localhost/api/v1/profiles/remove", R"({"id":"user"})");
+  REQUIRE(response);
+  REQUIRE(response->first == 500);
+
+  response = req(curl.get(), HTTPMethod::GET, "http://localhost/api/v1/profiles");
+  REQUIRE(response);
+  auto profiles = rfl::json::read<ProfileListResponse>(response->second);
+  REQUIRE(profiles);
+  REQUIRE(profiles.value().profiles.size() == 1);
+  REQUIRE_THAT(profiles.value().profiles[0].name, Equals("User"));
+}
+
+TEST_CASE("HTTPServer pool reports handler exceptions to the error handler", "[API]") {
+  std::string std_error;
+  std::string unknown_error;
+  {
+    HTTPServer<int> server;
+    server.on_unhandled_error = [&](const int &socket, const std::string &error) {
+      if (socket == 1) {
+        std_error = error;
+      } else if (socket == 2) {
+        unknown_error = error;
+      }
+    };
+    server.add(HTTPMethod::POST,
+               "/throw-std",
+               {.handler = [](const HTTPRequest &, int) { throw std::runtime_error("boom-std"); }});
+    server.add(HTTPMethod::POST, "/throw-unknown", {.handler = [](const HTTPRequest &, int) { throw 42; }});
+    REQUIRE(server.handle_request(HTTPRequest{.method = HTTPMethod::POST, .path = "/throw-std"}, 1));
+    REQUIRE(server.handle_request(HTTPRequest{.method = HTTPMethod::POST, .path = "/throw-unknown"}, 2));
+  } // The pool is joined here, so both handlers and error callbacks have run
+
+  REQUIRE_THAT(std_error, Equals("boom-std"));
+  REQUIRE_THAT(unknown_error, Equals("Unknown error"));
+}
+
+TEST_CASE("API returns 500 when a handler throws", "[API]") {
+  auto event_bus = std::make_shared<events::EventBusType>();
+  auto running_sessions = std::make_shared<immer::atom<immer::vector<events::StreamSession>>>();
+  auto config = immer::box<state::Config>(state::load_or_default("config.test.toml", event_bus, running_sessions));
+  auto app_state = immer::box<state::AppState>(state::AppState{
+      .config = config,
+      .pairing_cache = std::make_shared<immer::atom<immer::map<std::string, state::PairCache>>>(),
+      .pairing_atom = std::make_shared<immer::atom<immer::map<std::string, immer::box<events::PairSignal>>>>(),
+      .event_bus = event_bus,
+      .running_sessions = running_sessions});
+
+  auto runtime_dir = api_runtime_dir();
+  auto socket_path = api_socket_path();
+  std::thread server_thread([app_state, runtime_dir]() { wolf::api::start_server(runtime_dir, app_state); });
+  server_thread.detach();
+  std::this_thread::sleep_for(std::chrono::milliseconds(42));
+
+  auto curl = curl_ptr(curl_easy_init(), ::curl_easy_cleanup);
+  curl_easy_setopt(curl.get(), CURLOPT_UNIX_SOCKET_PATH, socket_path.c_str());
+  curl_easy_setopt(curl.get(), CURLOPT_HTTP_VERSION, CURL_HTTP_VERSION_1_0);
+  curl_easy_setopt(curl.get(), CURLOPT_TIMEOUT, 10L);
+
+  // std::stoul in the pause endpoint throws on this id; the pool must answer 500
+  auto response =
+      req(curl.get(), HTTPMethod::POST, "http://localhost/api/v1/sessions/pause", R"({"session_id":"not-a-number"})");
+  REQUIRE(response);
+  REQUIRE(response->first == 500);
+  REQUIRE_THAT(response->second, ContainsSubstring(R"("success":false)"));
 }
 
 TEST_CASE("Profile APIs", "[API]") {
