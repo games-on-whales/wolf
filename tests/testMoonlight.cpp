@@ -191,6 +191,18 @@ TEST_CASE("LocalState config is saved atomically", "[LocalState]") {
     REQUIRE_THAT(files, Equals(std::vector<std::string>{"config.toml"}));
   }
 
+  SECTION("Permissions are preserved") {
+    fs::permissions(config_file, fs::perms::owner_read | fs::perms::owner_write);
+    state::update_profiles(cfg, updated_profiles);
+    REQUIRE(fs::status(config_file).permissions() == (fs::perms::owner_read | fs::perms::owner_write));
+  }
+
+  SECTION("A failed save leaves memory unchanged") {
+    fs::remove_all(test_dir);
+    REQUIRE_THROWS(state::update_profiles(cfg, updated_profiles));
+    REQUIRE(cfg.profiles->load()->at(0)->name == profiles[0]->name);
+  }
+
   SECTION("Readers never see a partially written file") {
     state::update_profiles(cfg, updated_profiles);
     const auto expected_content = read_file(config_file);

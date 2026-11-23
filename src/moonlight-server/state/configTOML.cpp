@@ -1,3 +1,5 @@
+#include <cerrno>
+#include <cstring>
 #include <events/events.hpp>
 #include <events/reflectors.hpp>
 #include <filesystem>
@@ -9,6 +11,8 @@
 #include <rfl/toml.hpp>
 #include <sstream>
 #include <state/config.hpp>
+#include <sys/stat.h>
+#include <unistd.h>
 
 namespace state {
 
@@ -54,6 +58,25 @@ std::optional<std::string> read_file_content(const std::string &file) {
   return content;
 }
 
+/**
+ * Gives `tmp_file` the permission bits and owner of `source` (if it exists), so that replacing the config
+ * doesn't silently turn e.g. a 0600 file owned by the host user into a 0644 root-owned one.
+ * Changing the owner needs privileges: when that isn't allowed the file keeps Wolf's user.
+ */
+void copy_file_metadata(const std::string &source, const std::string &tmp_file) {
+  struct stat st {};
+  if (::stat(source.c_str(), &st) != 0) {
+    return; // New file: nothing to preserve
+  }
+  if (::chown(tmp_file.c_str(), st.st_uid, st.st_gid) != 0 && errno != EPERM) {
+    logs::log(logs::warning, "[CONFIG] Unable to preserve the owner of {}: {}", source, std::strerror(errno));
+  }
+  // chmod after chown: chown may clear setuid/setgid bits
+  if (::chmod(tmp_file.c_str(), st.st_mode & 07777) != 0) {
+    logs::log(logs::warning, "[CONFIG] Unable to preserve the permissions of {}: {}", source, std::strerror(errno));
+  }
+}
+
 void save_config(const std::string &source, const WolfConfig &cfg) {
   detail::save_file_atomically(source, rfl::toml::write(cfg));
 }
@@ -87,6 +110,7 @@ void save_file_atomically(const std::string &source, std::string_view content, c
       throw std::runtime_error(fmt::format("Unable to write {}", tmp_file));
     }
   }
+  copy_file_metadata(source, tmp_file);
 
   std::error_code ec = ops.rename_file(tmp_file, source);
   if (ec) {

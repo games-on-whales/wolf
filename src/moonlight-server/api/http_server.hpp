@@ -3,6 +3,7 @@
 #include <boost/asio/post.hpp>
 #include <boost/asio/thread_pool.hpp>
 #include <functional>
+#include <helpers/logger.hpp>
 #include <immer/box.hpp>
 #include <optional>
 #include <rfl.hpp>
@@ -57,7 +58,14 @@ public:
     if (it != endpoints_.end()) {
       auto boxed_request = immer::box<HTTPRequest>(request);
       auto handler = it->second.handler;
-      boost::asio::post(pool_, [handler, boxed_request, socket]() { handler(*boxed_request, socket); });
+      boost::asio::post(pool_, [handler, boxed_request, socket]() {
+        // An exception escaping a pool task would terminate Wolf
+        try {
+          handler(*boxed_request, socket);
+        } catch (const std::exception &e) {
+          logs::log(logs::error, "[API] Unhandled error in {}: {}", boxed_request->path, e.what());
+        }
+      });
       return true;
     }
     return false;

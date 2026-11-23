@@ -291,6 +291,64 @@ TEST_CASE("APPs APIs", "[API]") {
   REQUIRE(apps3.apps.size() == 2);
 }
 
+TEST_CASE("APPs APIs keep memory unchanged when saving fails", "[API]") {
+  auto event_bus = std::make_shared<events::EventBusType>();
+  auto running_sessions = std::make_shared<immer::atom<immer::vector<events::StreamSession>>>();
+  auto config = state::load_or_default("config.test.toml", event_bus, running_sessions);
+  // The config can't be written there: every save fails
+  config.config_source = "/nonexistent-wolf-dir/config.toml";
+  auto app_state = immer::box<state::AppState>(state::AppState{
+      .config = {config},
+      .pairing_cache = std::make_shared<immer::atom<immer::map<std::string, state::PairCache>>>(),
+      .pairing_atom = std::make_shared<immer::atom<immer::map<std::string, immer::box<events::PairSignal>>>>(),
+      .event_bus = event_bus,
+      .running_sessions = running_sessions});
+
+  auto runtime_dir = api_runtime_dir();
+  auto socket_path = api_socket_path();
+  std::thread server_thread([app_state, runtime_dir]() { wolf::api::start_server(runtime_dir, app_state); });
+  server_thread.detach();
+  std::this_thread::sleep_for(std::chrono::milliseconds(42)); // Wait for the server to start
+
+  auto curl = curl_ptr(curl_easy_init(), ::curl_easy_cleanup);
+  curl_easy_setopt(curl.get(), CURLOPT_UNIX_SOCKET_PATH, socket_path.c_str());
+  curl_easy_setopt(curl.get(), CURLOPT_HTTP_VERSION, CURL_HTTP_VERSION_1_0);
+
+  auto moonlight_profile = state::get_moonlight_profile(config);
+  REQUIRE(moonlight_profile);
+  auto apps_before = moonlight_profile.value()->apps->load();
+  REQUIRE(apps_before.size() == 2);
+
+  auto app = rfl::Reflector<wolf::core::events::App>::ReflType{
+      .title = "Test app",
+      .id = "test",
+      .support_hdr = false,
+      .h264_gst_pipeline = "h264",
+      .hevc_gst_pipeline = "hevc",
+      .av1_gst_pipeline = "av1",
+      .render_node = "render",
+      .opus_gst_pipeline = "opus",
+      .start_virtual_compositor = false,
+      .runner = wolf::config::AppDocker{.name = "test", .image = "test"}};
+  auto response = req(curl.get(), HTTPMethod::POST, "http://localhost/api/v1/apps/add", rfl::json::write(app));
+  REQUIRE(response);
+  REQUIRE(response->first == 500);
+
+  auto app_delete = AppDeleteRequest{.id = apps_before[0]->base.id};
+  response = req(curl.get(), HTTPMethod::POST, "http://localhost/api/v1/apps/delete", rfl::json::write(app_delete));
+  REQUIRE(response);
+  REQUIRE(response->first == 500);
+
+  // Neither the old apps atom nor the current profile list changed
+  REQUIRE(moonlight_profile.value()->apps->load().size() == 2);
+  response = req(curl.get(), HTTPMethod::GET, "http://localhost/api/v1/apps");
+  REQUIRE(response);
+  auto apps = rfl::json::read<AppListResponse>(response->second).value();
+  REQUIRE(apps.apps.size() == 2);
+  REQUIRE(apps.apps[0].title == "Firefox");
+  REQUIRE(apps.apps[1].title == "Test ball");
+}
+
 TEST_CASE("Profile APIs", "[API]") {
   auto event_bus = std::make_shared<events::EventBusType>();
   auto running_sessions = std::make_shared<immer::atom<immer::vector<events::StreamSession>>>();

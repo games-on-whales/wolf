@@ -8,6 +8,45 @@
 
 namespace wolf::api {
 
+namespace {
+
+/**
+ * Persists the new profiles, returning the error message on failure.
+ * update_profiles only stores the new list in memory after the file was saved.
+ */
+template <typename Cfg, typename Fn> std::optional<std::string> try_update_profiles(Cfg &cfg, Fn &&fn) {
+  try {
+    state::update_profiles(cfg, std::forward<Fn>(fn));
+    return std::nullopt;
+  } catch (const std::exception &e) {
+    logs::log(logs::error, "[API] Unable to save the config: {}", e.what());
+    return e.what();
+  }
+}
+
+/**
+ * Returns a copy of the profiles where the Moonlight profile has a new apps atom.
+ * The current atom is never touched, so a failed save leaves memory unchanged.
+ */
+template <typename Fn> state::ProfilesList with_moonlight_apps(const state::ProfilesList &profiles, Fn &&fn) {
+  return profiles | //
+         ranges::views::transform([&](const immer::box<events::Profile> &profile) {
+           if (profile->id != events::MOONLIGHT_PROFILE_ID) {
+             return profile;
+           }
+           using AppList = immer::vector<immer::box<events::App>>;
+           return immer::box<events::Profile>(
+               events::Profile{.id = profile->id,
+                               .name = profile->name,
+                               .icon_png_path = profile->icon_png_path,
+                               .pin = profile->pin,
+                               .apps = std::make_shared<immer::atom<AppList>>(fn(profile->apps->load()))});
+         }) |
+         ranges::to<state::ProfilesList>();
+}
+
+} // namespace
+
 void UnixSocketServer::endpoint_Events(const HTTPRequest &req, std::shared_ptr<UnixSocket> socket) {
   // curl -N --unix-socket /tmp/wolf.sock http://localhost/api/v1/events
   state_->sockets.push_back(socket);
@@ -101,18 +140,14 @@ void UnixSocketServer::endpoint_Apps(const HTTPRequest &req, std::shared_ptr<Uni
 void UnixSocketServer::endpoint_AddApp(const HTTPRequest &req, std::shared_ptr<UnixSocket> socket) {
   auto app = rfl::json::read<rfl::Reflector<events::App>::ReflType>(req.body);
   if (app) {
-    state::update_profiles(state_->app_state->config, [&](const state::ProfilesList &profiles) {
-      return profiles | //
-             ranges::views::transform([app = app.value(), this](const immer::box<events::Profile> &profile) {
-               if (profile->id == events::MOONLIGHT_PROFILE_ID) {
-                 profile->apps->update([app, this](auto &apps) {
-                   return apps.push_back(rfl::Reflector<events::App>::to(app, this->state_->app_state->event_bus));
-                 });
-               }
-               return profile;
-             }) |
-             ranges::to<state::ProfilesList>();
+    auto new_app = rfl::Reflector<events::App>::to(app.value(), this->state_->app_state->event_bus);
+    auto error = try_update_profiles(state_->app_state->config, [&](const state::ProfilesList &profiles) {
+      return with_moonlight_apps(profiles, [&](const auto &apps) { return apps.push_back(new_app); });
     });
+    if (error) {
+      send_http(socket, 500, rfl::json::write(GenericErrorResponse{.error = *error}));
+      return;
+    }
 
     send_http(socket, 200, rfl::json::write(GenericSuccessResponse{.success = true}));
   } else {
@@ -125,21 +160,18 @@ void UnixSocketServer::endpoint_AddApp(const HTTPRequest &req, std::shared_ptr<U
 void UnixSocketServer::endpoint_RemoveApp(const HTTPRequest &req, std::shared_ptr<UnixSocket> socket) {
   auto app = rfl::json::read<AppDeleteRequest>(req.body);
   if (app) {
-    state::update_profiles(state_->app_state->config, [&](const state::ProfilesList &profiles) {
-      return profiles | //
-             ranges::views::transform([app = app.value(), this](const immer::box<events::Profile> &profile) {
-               if (profile->id == events::MOONLIGHT_PROFILE_ID) {
-                 profile->apps->update([app, this](auto &apps) {
-                   return apps | //
-                          ranges::views::filter(
-                              [&app](const immer::box<events::App> &a) { return a->base.id != app.id; }) | //
-                          ranges::to<immer::vector<immer::box<events::App>>>();
-                 });
-               }
-               return profile;
-             }) |
-             ranges::to<state::ProfilesList>();
+    auto error = try_update_profiles(state_->app_state->config, [&](const state::ProfilesList &profiles) {
+      return with_moonlight_apps(profiles, [&](const auto &apps) {
+        return apps | //
+               ranges::views::filter(
+                   [&](const immer::box<events::App> &a) { return a->base.id != app.value().id; }) | //
+               ranges::to<immer::vector<immer::box<events::App>>>();
+      });
     });
+    if (error) {
+      send_http(socket, 500, rfl::json::write(GenericErrorResponse{.error = *error}));
+      return;
+    }
 
     send_http(socket, 200, rfl::json::write(GenericSuccessResponse{.success = true}));
   } else {
@@ -166,9 +198,13 @@ void UnixSocketServer::endpoint_AddProfile(const HTTPRequest &req, std::shared_p
   if (profile_req) {
     auto p = profile_req.value();
 
-    state::update_profiles(state_->app_state->config, [&](const state::ProfilesList &profiles) {
+    auto error = try_update_profiles(state_->app_state->config, [&](const state::ProfilesList &profiles) {
       return profiles.push_back(rfl::Reflector<events::Profile>::to(p, this->state_->app_state->event_bus));
     });
+    if (error) {
+      send_http(socket, 500, rfl::json::write(GenericErrorResponse{.error = *error}));
+      return;
+    }
     send_http(socket, 200, rfl::json::write(GenericSuccessResponse{.success = true}));
   } else {
     logs::log(logs::warning, "[API] Invalid event: {} - {}", req.body, profile_req.error().what());
@@ -182,12 +218,16 @@ void UnixSocketServer::endpoint_RemoveProfile(const HTTPRequest &req, std::share
   if (profile_req) {
     auto p = profile_req.value();
 
-    state::update_profiles(state_->app_state->config, [&](const state::ProfilesList &profiles) {
+    auto error = try_update_profiles(state_->app_state->config, [&](const state::ProfilesList &profiles) {
       return profiles | //
              ranges::views::remove_if(
                  [&p](const immer::box<events::Profile> &profile) { return profile.get().id == p.id; }) | //
              ranges::to<state::ProfilesList>();
     });
+    if (error) {
+      send_http(socket, 500, rfl::json::write(GenericErrorResponse{.error = *error}));
+      return;
+    }
     send_http(socket, 200, rfl::json::write(GenericSuccessResponse{.success = true}));
   } else {
     logs::log(logs::warning, "[API] Invalid event: {} - {}", req.body, profile_req.error().what());
@@ -552,30 +592,45 @@ void UnixSocketServer::endpoint_UpdateClientSettings(const HTTPRequest &req, std
   }
 
   const auto &payload = payload_result.value();
-  auto updated = update_client_settings(
-      this->state_->app_state->config,
-      std::stoull(payload.client_id.value()),
-      [&payload](const config::PairedClient &current_client) {
-        // Edit only the settings that are being passed in the payload
-        auto current_settings = current_client.settings;
-        auto new_settings = payload.settings.get().value_or(PartialClientSettings{});
-        return config::PairedClient{
-            .client_cert = current_client.client_cert, // Immutable, changing this would mean a new client
-            .app_state_folder = payload.app_state_folder.get().value_or(current_client.app_state_folder),
-            .settings = config::ClientSettings{
-                .run_uid = new_settings.run_uid.value_or(current_settings.run_uid),
-                .run_gid = new_settings.run_gid.value_or(current_settings.run_gid),
-                .controllers_override =
-                    new_settings.controllers_override.value_or(current_settings.controllers_override),
-                .mouse_acceleration = new_settings.mouse_acceleration.value_or(current_settings.mouse_acceleration),
-                .v_scroll_acceleration =
-                    new_settings.v_scroll_acceleration.value_or(current_settings.v_scroll_acceleration),
-                .h_scroll_acceleration =
-                    new_settings.h_scroll_acceleration.value_or(current_settings.h_scroll_acceleration),
-                .motion_controller_override =
-                    new_settings.motion_controller_override.value_or(current_settings.motion_controller_override),
-            }};
-      });
+  std::size_t client_id = 0;
+  try {
+    client_id = std::stoull(payload.client_id.value());
+  } catch (const std::exception &) {
+    send_http(socket, 400, rfl::json::write(GenericErrorResponse{.error = "Invalid client_id"}));
+    return;
+  }
+
+  bool updated = false;
+  try {
+    updated = update_client_settings(
+        this->state_->app_state->config,
+        client_id,
+        [&payload](const config::PairedClient &current_client) {
+          // Edit only the settings that are being passed in the payload
+          auto current_settings = current_client.settings;
+          auto new_settings = payload.settings.get().value_or(PartialClientSettings{});
+          return config::PairedClient{
+              .client_cert = current_client.client_cert, // Immutable, changing this would mean a new client
+              .app_state_folder = payload.app_state_folder.get().value_or(current_client.app_state_folder),
+              .settings = config::ClientSettings{
+                  .run_uid = new_settings.run_uid.value_or(current_settings.run_uid),
+                  .run_gid = new_settings.run_gid.value_or(current_settings.run_gid),
+                  .controllers_override =
+                      new_settings.controllers_override.value_or(current_settings.controllers_override),
+                  .mouse_acceleration = new_settings.mouse_acceleration.value_or(current_settings.mouse_acceleration),
+                  .v_scroll_acceleration =
+                      new_settings.v_scroll_acceleration.value_or(current_settings.v_scroll_acceleration),
+                  .h_scroll_acceleration =
+                      new_settings.h_scroll_acceleration.value_or(current_settings.h_scroll_acceleration),
+                  .motion_controller_override =
+                      new_settings.motion_controller_override.value_or(current_settings.motion_controller_override),
+              }};
+        });
+  } catch (const std::exception &e) {
+    logs::log(logs::error, "[API] Unable to save the config: {}", e.what());
+    send_http(socket, 500, rfl::json::write(GenericErrorResponse{.error = e.what()}));
+    return;
+  }
 
   if (!updated) {
     auto res = GenericErrorResponse{.error = "Client not found"};
