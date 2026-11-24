@@ -386,7 +386,10 @@ TEST_CASE("APPs APIs concurrent adds are not lost", "[API]") {
     curl_easy_setopt(thread_curl.get(), CURLOPT_UNIX_SOCKET_PATH, socket_path.c_str());
     curl_easy_setopt(thread_curl.get(), CURLOPT_HTTP_VERSION, CURL_HTTP_VERSION_1_0);
     curl_easy_setopt(thread_curl.get(), CURLOPT_TIMEOUT, 10L);
-    return req(thread_curl.get(), HTTPMethod::POST, "http://localhost/api/v1/apps/add", rfl::json::write(make_app(id, title)));
+    return req(thread_curl.get(),
+               HTTPMethod::POST,
+               "http://localhost/api/v1/apps/add",
+               rfl::json::write(make_app(id, title)));
   };
 
   std::optional<std::pair<long, std::string>> first;
@@ -522,13 +525,11 @@ TEST_CASE("Profile APIs keep memory unchanged when saving fails", "[API]") {
   curl_easy_setopt(curl.get(), CURLOPT_HTTP_VERSION, CURL_HTTP_VERSION_1_0);
   curl_easy_setopt(curl.get(), CURLOPT_TIMEOUT, 10L);
 
-  auto profile = events::Profile{
-      .id = "test-fail",
-      .name = "Test fail",
-      .icon_png_path = "",
-      .apps = std::make_shared<immer::atom<immer::vector<immer::box<events::App>>>>()};
-  auto response =
-      req(curl.get(), HTTPMethod::POST, "http://localhost/api/v1/profiles/add", rfl::json::write(profile));
+  auto profile = events::Profile{.id = "test-fail",
+                                 .name = "Test fail",
+                                 .icon_png_path = "",
+                                 .apps = std::make_shared<immer::atom<immer::vector<immer::box<events::App>>>>()};
+  auto response = req(curl.get(), HTTPMethod::POST, "http://localhost/api/v1/profiles/add", rfl::json::write(profile));
   REQUIRE(response);
   REQUIRE(response->first == 500);
 
@@ -556,9 +557,9 @@ TEST_CASE("HTTPServer pool reports handler exceptions to the error handler", "[A
         unknown_error = error;
       }
     };
-    server.add(HTTPMethod::POST,
-               "/throw-std",
-               {.handler = [](const HTTPRequest &, int) { throw std::runtime_error("boom-std"); }});
+    server.add(HTTPMethod::POST, "/throw-std", {.handler = [](const HTTPRequest &, int) {
+                 throw std::runtime_error("boom-std");
+               }});
     server.add(HTTPMethod::POST, "/throw-unknown", {.handler = [](const HTTPRequest &, int) { throw 42; }});
     REQUIRE(server.handle_request(HTTPRequest{.method = HTTPMethod::POST, .path = "/throw-std"}, 1));
     REQUIRE(server.handle_request(HTTPRequest{.method = HTTPMethod::POST, .path = "/throw-unknown"}, 2));
