@@ -1,12 +1,18 @@
+#include <cerrno>
+#include <cstring>
 #include <events/events.hpp>
 #include <events/reflectors.hpp>
+#include <filesystem>
 #include <fstream>
 #include <gst/gstelementfactory.h>
 #include <gst/gstregistry.h>
 #include <platforms/hw.hpp>
 #include <range/v3/view.hpp>
 #include <rfl/toml.hpp>
+#include <sstream>
 #include <state/config.hpp>
+#include <sys/stat.h>
+#include <unistd.h>
 
 namespace state {
 
@@ -20,6 +26,125 @@ constexpr char const *default_toml =
 
 using namespace std::literals;
 using namespace wolf::config;
+
+namespace {
+
+/**
+ * Replaces the content of `source` without ever exposing a partially written file.
+ *
+ * The new content is written to a temporary file (a fixed `source + ".tmp"` name: callers either hold
+ * the config mutex or this is the initial load) which is then renamed over the destination; a crash, a
+ * full disk or a concurrent reader will see either the old or the new file, never a truncated one.
+ *
+ * When `source` is a bind-mount point (a single bind-mounted file) rename can't replace it, so the
+ * content is written in place instead. The config mutex serialises writers, so those writes can't interleave.
+ */
+bool write_in_place(const std::string &file, std::string_view content) {
+  std::ofstream out(file, std::ios::binary | std::ios::trunc);
+  out.write(content.data(), content.size());
+  out.close();
+  return !out.fail();
+}
+
+std::optional<std::string> read_file_content(const std::string &file) {
+  std::ifstream in(file, std::ios::binary);
+  if (!in) {
+    return std::nullopt;
+  }
+  std::string content{std::istreambuf_iterator<char>(in), std::istreambuf_iterator<char>()};
+  if (in.bad()) {
+    return std::nullopt;
+  }
+  return content;
+}
+
+/**
+ * Gives `tmp_file` the permission bits and owner of `source` (if it exists), so that replacing the config
+ * doesn't silently turn e.g. a 0600 file owned by the host user into a 0644 root-owned one.
+ * Changing the owner needs privileges: when that isn't allowed the file keeps Wolf's user.
+ */
+void copy_file_metadata(const std::string &source, const std::string &tmp_file) {
+  struct stat st {};
+  if (::stat(source.c_str(), &st) != 0) {
+    return; // New file: nothing to preserve
+  }
+  if (::chown(tmp_file.c_str(), st.st_uid, st.st_gid) != 0 && errno != EPERM) {
+    logs::log(logs::warning, "[CONFIG] Unable to preserve the owner of {}: {}", source, std::strerror(errno));
+  }
+  // chmod after chown: chown may clear setuid/setgid bits
+  if (::chmod(tmp_file.c_str(), st.st_mode & 07777) != 0) {
+    logs::log(logs::warning, "[CONFIG] Unable to preserve the permissions of {}: {}", source, std::strerror(errno));
+  }
+}
+
+void save_config(const std::string &source, const WolfConfig &cfg) {
+  detail::save_file_atomically(source, rfl::toml::write(cfg));
+}
+
+} // namespace
+
+namespace detail {
+
+AtomicSaveOps real_atomic_save_ops() {
+  AtomicSaveOps ops;
+  ops.rename_file = [](const std::string &from, const std::string &to) {
+    std::error_code ec;
+    std::filesystem::rename(from, to, ec);
+    return ec;
+  };
+  ops.write_in_place = [](const std::string &file, std::string_view content) { return write_in_place(file, content); };
+  ops.read_file = [](const std::string &file) { return read_file_content(file); };
+  return ops;
+}
+
+void save_file_atomically(const std::string &source, std::string_view content, const AtomicSaveOps &ops) {
+  namespace fs = std::filesystem;
+  auto tmp_file = source + ".tmp";
+  {
+    std::ofstream out(tmp_file, std::ios::binary | std::ios::trunc);
+    out.write(content.data(), content.size());
+    out.close();
+    if (out.fail()) {
+      std::error_code remove_ec;
+      fs::remove(tmp_file, remove_ec);
+      throw std::runtime_error(fmt::format("Unable to write {}", tmp_file));
+    }
+  }
+  copy_file_metadata(source, tmp_file);
+
+  std::error_code ec = ops.rename_file(tmp_file, source);
+  if (ec) {
+    std::error_code remove_ec;
+    if (ec == std::errc::device_or_resource_busy || ec == std::errc::cross_device_link) {
+      logs::log(logs::warning,
+                "[CONFIG] Unable to atomically replace {} ({}), it is probably bind-mounted as a single file: "
+                "writing it in place",
+                source,
+                ec.message());
+      // Keep the previous content to restore it if the in-place write fails; the complete new content
+      // stays in tmp_file until the in-place write succeeds. A source that cannot be read is left
+      // untouched: without a valid backup there is nothing safe to restore after a failed write.
+      auto previous = ops.read_file(source);
+      if (!previous) {
+        throw std::runtime_error(fmt::format("Unable to read {}, new content kept in {}", source, tmp_file));
+      }
+      if (!ops.write_in_place(source, content)) {
+        ops.write_in_place(source, *previous);
+        throw std::runtime_error(fmt::format("Unable to write {}, new content kept in {}", source, tmp_file));
+      }
+      fs::remove(tmp_file, remove_ec);
+      return;
+    }
+    fs::remove(tmp_file, remove_ec);
+    throw std::runtime_error(fmt::format("Unable to replace {}: {}", source, ec.message()));
+  }
+}
+
+void save_file_atomically(const std::string &source, std::string_view content) {
+  save_file_atomically(source, content, real_atomic_save_ops());
+}
+
+} // namespace detail
 
 void create_default(const std::string &source) {
   std::ofstream out_file;
@@ -236,13 +361,9 @@ Config load_or_default(const std::string &source,
           toml::array{*moonlight_profile,
                       toml::table({{"id", "user"}, {"name", "User"}, {"apps", old_cfg.at("apps")}})});
     }
-    std::ofstream out_file;
-    out_file.open(source);
-    if (!out_file.is_open()) {
-      throw std::runtime_error("Failed to open config file for writing");
-    }
-    out_file << new_cfg;
-    out_file.close();
+    std::ostringstream new_cfg_str;
+    new_cfg_str << new_cfg;
+    detail::save_file_atomically(source, new_cfg_str.str());
     logs::log(logs::debug, "Migrated config from v{} to v7", version);
   }
 
@@ -408,7 +529,13 @@ Config load_or_default(const std::string &source,
 }
 
 void pair(const Config &cfg, const PairedClient &client) {
-  // Update CFG
+  std::lock_guard lock(*cfg.config_file_mutex);
+  // Update TOML
+  auto tml = rfl::toml::load<WolfConfig, rfl::DefaultIfMissing>(cfg.config_source).value();
+  tml.paired_clients.push_back(client);
+  save_config(cfg.config_source, tml);
+
+  // Update in-memory state only after the file has been saved
   cfg.paired_clients->update([&client](const PairedClientList &paired_clients) {
     // Removing the client if already present (see: https://github.com/games-on-whales/wolf/issues/211)
     auto filtered_clients = paired_clients                                               //
@@ -418,15 +545,19 @@ void pair(const Config &cfg, const PairedClient &client) {
                             | ranges::to<PairedClientList>();                            //
     return filtered_clients.push_back(client);
   });
-
-  // Update TOML
-  auto tml = rfl::toml::load<WolfConfig, rfl::DefaultIfMissing>(cfg.config_source).value();
-  tml.paired_clients.push_back(client);
-  rfl::toml::save(cfg.config_source, tml);
 }
 
 void unpair(const Config &cfg, const PairedClient &client) {
-  // Update CFG
+  std::lock_guard lock(*cfg.config_file_mutex);
+  // Update TOML
+  auto tml = rfl::toml::load<WolfConfig, rfl::DefaultIfMissing>(cfg.config_source).value();
+  tml.paired_clients.erase(std::remove_if(tml.paired_clients.begin(),
+                                          tml.paired_clients.end(),
+                                          [&client](const auto &v) { return v.client_cert == client.client_cert; }),
+                           tml.paired_clients.end());
+  save_config(cfg.config_source, tml);
+
+  // Update in-memory state only after the file has been saved
   cfg.paired_clients->update([&client](const PairedClientList &paired_clients) {
     return paired_clients                                               //
            | ranges::views::filter([&client](auto paired_client) {      //
@@ -434,30 +565,29 @@ void unpair(const Config &cfg, const PairedClient &client) {
              })                                                         //
            | ranges::to<PairedClientList>();                            //
   });
-
-  // Update TOML
-  auto tml = rfl::toml::load<WolfConfig, rfl::DefaultIfMissing>(cfg.config_source).value();
-  tml.paired_clients.erase(std::remove_if(tml.paired_clients.begin(),
-                                          tml.paired_clients.end(),
-                                          [&client](const auto &v) { return v.client_cert == client.client_cert; }),
-                           tml.paired_clients.end());
-  rfl::toml::save(cfg.config_source, tml);
 }
 
-void update_client_settings(const Config &cfg, std::size_t client_id, const PairedClient &updated_client) {
+bool update_client_settings(const Config &cfg,
+                            std::size_t client_id,
+                            const std::function<PairedClient(const PairedClient &)> &update_fn) {
+  std::lock_guard lock(*cfg.config_file_mutex);
 
+  auto paired_clients = cfg.paired_clients->load();
+  auto found =
+      std::find_if(paired_clients->begin(), paired_clients->end(), [client_id](const immer::box<PairedClient> &client) {
+        return get_client_id(*client) == client_id;
+      });
+  if (found == paired_clients->end()) {
+    return false;
+  }
+
+  auto updated_client = update_fn(**found);
   auto update_client_fn = [&](immer::box<PairedClient> client) -> immer::box<PairedClient> {
     if (get_client_id(client) == client_id) {
       return immer::box<PairedClient>(updated_client);
     }
     return client;
   };
-
-  cfg.paired_clients->update([&](const PairedClientList &paired_clients) {
-    return paired_clients |                             //
-           ranges::views::transform(update_client_fn) | //
-           ranges::to<PairedClientList>();
-  });
 
   // Update the TOML file
   auto tml = rfl::toml::load<WolfConfig, rfl::DefaultIfMissing>(cfg.config_source).value();
@@ -467,14 +597,30 @@ void update_client_settings(const Config &cfg, std::size_t client_id, const Pair
                        ranges::to<std::vector<PairedClient>>();
 
   // Save back to file
-  rfl::toml::save(cfg.config_source, tml);
+  save_config(cfg.config_source, tml);
+
+  // Update in-memory state only after the file has been saved
+  cfg.paired_clients->update([&](const PairedClientList &paired_clients) {
+    return paired_clients |                             //
+           ranges::views::transform(update_client_fn) | //
+           ranges::to<PairedClientList>();
+  });
+
+  return true;
 }
 
-void update_profiles(const Config &cfg, const ProfilesList &profiles) {
-  cfg.profiles->store(profiles);
+void update_client_settings(const Config &cfg, std::size_t client_id, const PairedClient &updated_client) {
+  update_client_settings(cfg, client_id, [&updated_client](const PairedClient &) { return updated_client; });
+}
+
+void update_profiles(const Config &cfg, const std::function<ProfilesList(const ProfilesList &)> &update_fn) {
+  std::lock_guard lock(*cfg.config_file_mutex);
+
+  auto current_profiles = cfg.profiles->load().get();
+  auto new_profiles = update_fn(current_profiles);
 
   auto tml = rfl::toml::load<WolfConfig, rfl::DefaultIfMissing>(cfg.config_source).value();
-  tml.profiles = profiles | //
+  tml.profiles = new_profiles | //
                  ranges::views::transform([](const immer::box<events::Profile> &p) {
                    return Profile{
                        .id = p->id,
@@ -494,7 +640,14 @@ void update_profiles(const Config &cfg, const ProfilesList &profiles) {
                    };
                  }) | //
                  ranges::to_vector;
-  rfl::toml::save(cfg.config_source, tml);
+  save_config(cfg.config_source, tml);
+
+  // Update in-memory state only after the file has been saved
+  cfg.profiles->store(new_profiles);
+}
+
+void update_profiles(const Config &cfg, const ProfilesList &profiles) {
+  update_profiles(cfg, [&profiles](const ProfilesList &) { return profiles; });
 }
 
 } // namespace state
