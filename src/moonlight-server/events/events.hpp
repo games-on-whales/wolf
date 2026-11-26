@@ -74,6 +74,10 @@ struct App {
   std::string opus_gst_pipeline;
   bool start_virtual_compositor;
   bool start_audio_server;
+  /* When false, joypads for this app use the universally-available uinput backend
+   * even on hosts that support uhid. Default true (prefer the rich uhid pad when
+   * the host allows it). */
+  bool use_uhid = true;
   std::shared_ptr<Runner> runner;
 };
 
@@ -221,7 +225,10 @@ struct DockerContainerStopped {
 using MouseTypes = std::variant<input::Mouse, virtual_display::WaylandMouse>;
 using KeyboardTypes = std::variant<input::Keyboard, virtual_display::WaylandKeyboard>;
 using TouchScreenTypes = std::variant<input::TouchScreen, virtual_display::WaylandTouchScreen>;
-using JoypadTypes = std::variant<input::XboxOneJoypad, input::SwitchJoypad, input::PS5Joypad>;
+// Joypads are owned through the generic inputtino::Joypad base: Joypad::create()
+// picks the uhid or uinput backend at runtime and every feature is reachable via
+// the base (unsupported ones no-op), so wolf needs no per-backend wrapper types.
+using JoypadTypes = inputtino::Joypad;
 using JoypadList = immer::map<int /* controller number */, std::shared_ptr<JoypadTypes>>;
 
 enum class ColorRange {

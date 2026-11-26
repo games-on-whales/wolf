@@ -10,6 +10,13 @@ using namespace moonlight::control::pkts;
 using namespace wolf::core;
 
 /**
+ * Returns a MAC address that stays the same for a given client and controller number, so that apps which key
+ * Bluetooth pads by address (e.g. Steam) recognise the virtual pad across sessions.
+ * It is a locally administered unicast address derived from a hash; it carries no client data.
+ */
+std::string stable_joypad_mac(std::size_t session_id, int controller_number);
+
+/**
  * Side effect: session devices might be updated when hotplugging
  */
 void handle_input(events::StreamSession &session,

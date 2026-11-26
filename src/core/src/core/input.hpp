@@ -64,27 +64,8 @@ public:
   std::vector<std::pair<std::string, std::vector<std::string>>> get_udev_hw_db_entries() const override;
 };
 
-class XboxOneJoypad : public inputtino::XboxOneJoypad, public VirtualDevice {
-public:
-  XboxOneJoypad(inputtino::XboxOneJoypad &&j) noexcept : inputtino::XboxOneJoypad(std::move(j)) {}
-
-  std::vector<std::map<std::string, std::string>> get_udev_events() const override;
-  std::vector<std::pair<std::string, std::vector<std::string>>> get_udev_hw_db_entries() const override;
-};
-
-class SwitchJoypad : public inputtino::SwitchJoypad, public VirtualDevice {
-public:
-  SwitchJoypad(inputtino::SwitchJoypad &&j) noexcept : inputtino::SwitchJoypad(std::move(j)) {}
-
-  std::vector<std::map<std::string, std::string>> get_udev_events() const override;
-  std::vector<std::pair<std::string, std::vector<std::string>>> get_udev_hw_db_entries() const override;
-};
-
-class PS5Joypad : public inputtino::PS5Joypad, public VirtualDevice {
-public:
-  PS5Joypad(inputtino::PS5Joypad &&j) noexcept : inputtino::PS5Joypad(std::move(j)) {}
-
-  std::vector<std::map<std::string, std::string>> get_udev_events() const override;
-  std::vector<std::pair<std::string, std::vector<std::string>>> get_udev_hw_db_entries() const override;
-};
+// Joypads are no longer wrapped here: they are used directly as inputtino::Joypad
+// (see events::JoypadTypes), which now self-describes its udev events/hwdb. Mouse,
+// keyboard, trackpad, touchscreen and pen tablet still wrap because they supply
+// wolf-specific udev metadata.
 } // namespace wolf::core::input
