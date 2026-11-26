@@ -740,13 +740,11 @@ void controller_motion(const CONTROLLER_MOTION_PACKET &pkt, events::StreamSessio
     auto x = utils::from_netfloat(pkt.x);
     auto y = utils::from_netfloat(pkt.y);
     auto z = utils::from_netfloat(pkt.z);
-    // Forward Moonlight's units straight through (accel m/s^2, gyro deg/s); each
-    // inputtino backend converts internally as needed, and this no-ops on pads
-    // that don't forward motion.
+    // A no-op on pads without motion.
     if (pkt.motion_type == ACCELERATION) {
-      selected_pad->set_accel(x, y, z);
+      selected_pad->set_motion(inputtino::Joypad::ACCELERATION, x, y, z);
     } else if (pkt.motion_type == GYROSCOPE) {
-      selected_pad->set_gyro(x, y, z);
+      selected_pad->set_motion(inputtino::Joypad::GYROSCOPE, deg2rad(x), deg2rad(y), deg2rad(z));
     }
   }
 }

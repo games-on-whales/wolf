@@ -54,7 +54,7 @@ if (UNIX AND NOT APPLE)
         FetchContent_Declare(
                 inputtino
                 GIT_REPOSITORY https://github.com/kmreisi/inputtino.git
-                GIT_TAG c6e05a3)
+                GIT_TAG 7ab4d41)
         FetchContent_MakeAvailable(inputtino)
     endif ()
 
