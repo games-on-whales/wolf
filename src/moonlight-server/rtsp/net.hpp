@@ -91,6 +91,11 @@ public:
             return session;
           }
         }
+        // The window's owner stopped before finishing its handshake. The packet
+        // is still meant for it, so reject it rather than fall back to the
+        // source IP, which would hand over another session on this IP.
+        logs::log(logs::debug, "[RTSP] session {} owns the RTSP handshake window but is gone", *active);
+        return std::nullopt;
       }
       // No open window (an established session sending a stray ambiguous packet,
       // or a handshake that outran the safety timeout): fall back to the source

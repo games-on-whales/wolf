@@ -42,13 +42,16 @@ public:
   /**
    * Claim the RTSP window for `client_ip`. Returns immediately when no other
    * session from the same IP is mid-handshake; otherwise blocks (up to
-   * MAX_WAIT) until that one's window closes. Call right before replying to
-   * /launch or /resume.
+   * MAX_WAIT) until that one's window closes. A window this same session
+   * already holds (a client retrying after its own failed handshake) is simply
+   * renewed: its old handshake is dead, so there is nothing to wait for. Call
+   * right before replying to /launch or /resume.
    */
   void begin(std::size_t session_id, const std::string &client_ip) {
     std::unique_lock<std::mutex> lk(mtx_);
     const auto give_up = clock::now() + MAX_WAIT;
-    for (auto it = pending_.find(client_ip); it != pending_.end() && clock::now() < it->second.window_end;
+    for (auto it = pending_.find(client_ip);
+         it != pending_.end() && it->second.session_id != session_id && clock::now() < it->second.window_end;
          it = pending_.find(client_ip)) {
       if (clock::now() >= give_up) {
         break; // don't block a launch forever if the previous client vanished

@@ -9,6 +9,8 @@ using Catch::Matchers::Equals;
 #include <rtsp/parser.hpp>
 #include <state/data-structures.hpp>
 #include <string>
+#include <atomic>
+#include <thread>
 using namespace std::string_literals;
 using namespace state;
 using namespace rtsp;
@@ -636,5 +638,74 @@ TEST_CASE("Commands (IP Matching)", "[RTSP]") {
                        REQUIRE(response.value().response.status_code == 200);
                        REQUIRE(response.value().seq_number == 7);
                      });
+  }
+}
+
+TEST_CASE("RTSP handshake window", "[RTSP]") {
+  auto &handshake = RtspHandshake::instance();
+
+  SECTION("A client retrying its own handshake doesn't wait for itself") {
+    const std::string ip = "10.0.1.1";
+    handshake.begin(1, ip);
+    const auto start = std::chrono::steady_clock::now();
+    handshake.begin(1, ip);
+    REQUIRE(std::chrono::steady_clock::now() - start < std::chrono::seconds(1));
+    REQUIRE(handshake.active_session(ip) == 1);
+    handshake.complete(1);
+    REQUIRE_FALSE(handshake.active_session(ip));
+  }
+
+  SECTION("A second client on the same IP waits for the first one's PLAY") {
+    const std::string ip = "10.0.1.2";
+    handshake.begin(1, ip);
+    std::atomic<bool> second_started = false;
+    std::thread second([&] {
+      handshake.begin(2, ip);
+      second_started = true;
+    });
+    std::this_thread::sleep_for(std::chrono::milliseconds(200));
+    REQUIRE_FALSE(second_started);
+    REQUIRE(handshake.active_session(ip) == 1);
+    handshake.complete(1);
+    second.join();
+    REQUIRE(second_started);
+    REQUIRE(handshake.active_session(ip) == 2);
+    handshake.complete(2);
+  }
+}
+
+TEST_CASE("Same-IP session demux", "[RTSP]") {
+  auto &handshake = RtspHandshake::instance();
+  const std::string ip = "10.0.1.3";
+  auto first = test_init_state()->load()->front();
+  first.session_id = 1;
+  first.ip = ip;
+  auto second = first;
+  second.session_id = 2;
+  const auto only_first = immer::vector<events::StreamSession>{}.push_back(first);
+  const auto both = only_first.push_back(second);
+  auto packet = rtsp::parse("OPTIONS rtsp://0.0.0.0:48010 RTSP/1.0\r\n"
+                            "CSeq: 1\r\n"
+                            "Host: 0.0.0.0"
+                            "\r\n\r\n"sv)
+                    .value();
+
+  SECTION("Ambiguous packets go to the session that owns the handshake window") {
+    handshake.begin(2, ip);
+    auto session = tcp_connection::get_session(both, packet, ip);
+    REQUIRE(session);
+    REQUIRE(session->session_id == 2);
+    handshake.complete(2);
+  }
+
+  SECTION("Without a window only a single session on the IP matches") {
+    REQUIRE(tcp_connection::get_session(only_first, packet, ip)->session_id == 1);
+    REQUIRE_FALSE(tcp_connection::get_session(both, packet, ip));
+  }
+
+  SECTION("A window whose owner is gone never falls back to another session") {
+    handshake.begin(2, ip);
+    REQUIRE_FALSE(tcp_connection::get_session(only_first, packet, ip));
+    handshake.complete(2);
   }
 }
