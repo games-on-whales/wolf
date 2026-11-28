@@ -14,8 +14,10 @@ using Catch::Matchers::Equals;
 #include <openssl/x509.h>
 #include <range/v3/view.hpp>
 #include <rest/helpers.hpp>
+#include <sessions/handlers.hpp>
 #include <state/config.hpp>
 #include <streaming/streaming.hpp>
+#include <thread>
 
 using namespace moonlight;
 using namespace state;
@@ -639,4 +641,76 @@ TEST_CASE("Multiple users", "[HTTP]") {
 
   REQUIRE(session4->video_stream_port == 48100);
   REQUIRE(session4->audio_stream_port == 48200);
+}
+
+/*
+ * wait_for_ping must not outlive its session: no ping means no thread left behind
+ */
+struct FakePingSession {
+  std::size_t session_id;
+  std::array<char, 16> rtp_secret_payload;
+  std::string client_ip;
+  unsigned short port;
+};
+
+TEST_CASE("wait_for_ping", "[Sessions]") {
+  using namespace std::chrono_literals;
+
+  auto event_bus = std::make_shared<events::EventBusType>();
+  auto sess = std::make_shared<FakePingSession>(FakePingSession{.session_id = 7,
+                                                                .rtp_secret_payload = {'s', 'e', 'c', 'r', 'e', 't'},
+                                                                .client_ip = "127.0.0.1",
+                                                                .port = 48000});
+
+  auto ping_for = [](const std::array<char, 16> &payload) {
+    return immer::box<events::RTPVideoPingEvent>(
+        events::RTPVideoPingEvent{.client_ip = "127.0.0.1", .client_port = 48000, .payload = payload});
+  };
+
+  SECTION("Returns the ping of its session") {
+    std::thread pinger([&]() {
+      std::this_thread::sleep_for(50ms);
+      event_bus->fire_event(ping_for({'o', 't', 'h', 'e', 'r'})); // Someone else's ping
+      event_bus->fire_event(immer::box<events::StopStreamEvent>(events::StopStreamEvent{.session_id = 8}));
+      event_bus->fire_event(ping_for(sess->rtp_secret_payload));
+    });
+
+    auto ping = wolf::core::sessions::wait_for_ping<events::RTPVideoPingEvent>(event_bus, sess, 10s);
+    pinger.join();
+
+    REQUIRE(ping.has_value());
+    REQUIRE((*ping)->client_ip == "127.0.0.1");
+    REQUIRE((*ping)->payload == sess->rtp_secret_payload);
+    REQUIRE(sess.use_count() == 1); // Handlers are gone
+  }
+
+  SECTION("Gives up after the timeout") {
+    auto start = std::chrono::steady_clock::now();
+    auto ping = wolf::core::sessions::wait_for_ping<events::RTPVideoPingEvent>(event_bus, sess, 100ms);
+
+    REQUIRE_FALSE(ping.has_value());
+    REQUIRE(std::chrono::steady_clock::now() - start < 5s);
+    REQUIRE(sess.use_count() == 1); // Handlers are gone
+  }
+
+  SECTION("Gives up when the session is stopped") {
+    std::thread stopper([&]() {
+      std::this_thread::sleep_for(50ms);
+      event_bus->fire_event(immer::box<events::StopStreamEvent>(events::StopStreamEvent{.session_id = 7}));
+    });
+
+    auto start = std::chrono::steady_clock::now();
+    auto ping = wolf::core::sessions::wait_for_ping<events::RTPVideoPingEvent>(event_bus, sess, 30s);
+    stopper.join();
+
+    REQUIRE_FALSE(ping.has_value());
+    REQUIRE(std::chrono::steady_clock::now() - start < 5s); // Resolved by the stop, not by the timeout
+    REQUIRE(sess.use_count() == 1);                         // Handlers are gone
+  }
+
+  SECTION("A late ping after the timeout is ignored") {
+    auto ping = wolf::core::sessions::wait_for_ping<events::RTPVideoPingEvent>(event_bus, sess, 10ms);
+    REQUIRE_FALSE(ping.has_value());
+    event_bus->fire_event(ping_for(sess->rtp_secret_payload)); // Nobody is listening anymore
+  }
 }
