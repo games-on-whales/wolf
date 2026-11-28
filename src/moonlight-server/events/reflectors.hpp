@@ -48,6 +48,8 @@ template <> struct Reflector<events::App> {
     const bool support_hdr;
     std::optional<std::string> icon_png_path;
 
+    std::string video_producer_buffer_caps;
+
     std::string h264_gst_pipeline;
     std::string hevc_gst_pipeline;
     std::string av1_gst_pipeline;
@@ -65,6 +67,7 @@ template <> struct Reflector<events::App> {
             .id = v.base.id,
             .support_hdr = v.base.support_hdr,
             .icon_png_path = v.base.icon_png_path,
+            .video_producer_buffer_caps = v.video_producer_buffer_caps,
             .h264_gst_pipeline = v.h264_gst_pipeline,
             .hevc_gst_pipeline = v.hevc_gst_pipeline,
             .av1_gst_pipeline = v.av1_gst_pipeline,
@@ -79,6 +82,7 @@ template <> struct Reflector<events::App> {
     auto runner = Reflector<events::Runner>::to(app.runner, ev_bus);
     return events::App{
         .base = {.title = app.title, .id = app.id, .support_hdr = app.support_hdr, .icon_png_path = app.icon_png_path},
+        .video_producer_buffer_caps = app.video_producer_buffer_caps,
         .h264_gst_pipeline = app.h264_gst_pipeline,
         .hevc_gst_pipeline = app.hevc_gst_pipeline,
         .av1_gst_pipeline = app.av1_gst_pipeline,

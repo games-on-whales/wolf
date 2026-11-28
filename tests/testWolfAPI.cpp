@@ -250,6 +250,7 @@ TEST_CASE("APPs APIs", "[API]") {
       .title = "Test app",
       .id = "test",
       .support_hdr = false,
+      .video_producer_buffer_caps = "video/x-raw(memory:CUDAMemory)",
       .h264_gst_pipeline = "h264",
       .hevc_gst_pipeline = "hevc",
       .av1_gst_pipeline = "av1",
@@ -273,10 +274,13 @@ TEST_CASE("APPs APIs", "[API]") {
   REQUIRE(apps2.success);
   REQUIRE(apps2.apps.size() == 3);
   REQUIRE(apps2.apps[2].title == "Test app");
+  // The producer pipeline is built from these caps, an empty string made it unparsable
+  REQUIRE_THAT(apps2.apps[2].video_producer_buffer_caps, Equals("video/x-raw(memory:CUDAMemory)"));
   auto moonlight_profile = state::get_moonlight_profile(config);
   REQUIRE(moonlight_profile);
   immer::vector<immer::box<events::App>> wolf_apps = moonlight_profile.value()->apps->load();
   REQUIRE(wolf_apps.at(2)->base.title == "Test app");
+  REQUIRE_THAT(wolf_apps.at(2)->video_producer_buffer_caps, Equals("video/x-raw(memory:CUDAMemory)"));
 
   // Test that we can remove an app
   auto app_delete = AppDeleteRequest{.id = "test"};
