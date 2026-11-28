@@ -69,6 +69,7 @@ include(TargetLinkLibrariesSystem)
 
 add_subdirectory(src/core)
 add_subdirectory(src/gst-video-context)
+add_subdirectory(src/vulkan-probe)
 
 if (UNIX AND NOT APPLE)
     add_subdirectory(src/fake-udev)

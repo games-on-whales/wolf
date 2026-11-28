@@ -7,6 +7,7 @@
 #include <range/v3/view.hpp>
 #include <rfl/toml.hpp>
 #include <state/config.hpp>
+#include <vulkan-probe.hpp>
 
 namespace state {
 
@@ -37,6 +38,8 @@ static Encoder encoder_type(const GstEncoder &settings) {
   case (utils::hash("vaapi")):
   case (utils::hash("va")):
     return VAAPI;
+  case (utils::hash("vulkan")):
+    return VULKAN;
   case (utils::hash("qsv")):
     return QUICKSYNC;
   case (utils::hash("applemedia")):
@@ -50,17 +53,30 @@ static Encoder encoder_type(const GstEncoder &settings) {
   return UNKNOWN;
 }
 
-static bool is_available(const GPU_VENDOR &gpu_vendor, const GstEncoder &settings) {
+static bool is_available(const GPU_VENDOR &gpu_vendor,
+                         std::string_view encoder_node,
+                         std::string_view tech,
+                         const GstEncoder &settings) {
   if (auto plugin = gst_registry_find_plugin(gst_registry_get(), settings.plugin_name.c_str())) {
     gst_object_unref(plugin);
     return std::all_of(
         settings.check_elements.begin(),
         settings.check_elements.end(),
-        [settings, gpu_vendor](const auto &el_name) {
+        [settings, gpu_vendor, &encoder_node, tech](const auto &el_name) {
+          auto encoder_vendor = encoder_type(settings);
+          // The Vulkan elements register when ANY device in the system can encode the
+          // codec, so on multi-GPU hosts they must be checked against the selected GPU
+          // or they get picked for a GPU that cannot encode (e.g. no AV1 encode).
+          if (encoder_vendor == VULKAN && !vulkan_probe::supports_video_encode(encoder_node, tech)) {
+            logs::log(logs::debug,
+                      "Skipping VULKAN {} encoder: the GPU behind {} cannot encode it",
+                      tech,
+                      encoder_node);
+            return false;
+          }
           // Is the selected GPU vendor compatible with the encoder?
           // (Particularly useful when using multiple GPUs, e.g. nvcodec might be available but user
           // wants to encode using the Intel GPU)
-          auto encoder_vendor = encoder_type(settings);
           if (encoder_vendor == NVIDIA && gpu_vendor != GPU_VENDOR::NVIDIA) {
             logs::log(logs::debug, "Skipping NVIDIA encoder, not a NVIDIA GPU ({})", (int)gpu_vendor);
           } else if (encoder_vendor == VAAPI && (gpu_vendor != GPU_VENDOR::INTEL && gpu_vendor != GPU_VENDOR::AMD)) {
@@ -84,7 +100,7 @@ std::optional<GstEncoder> get_encoder(std::string_view tech,
                                       std::string_view encoder_node,
                                       const std::vector<GstEncoder> &encoders,
                                       const GPU_VENDOR &vendor) {
-  auto default_is_available = std::bind(is_available, vendor, std::placeholders::_1);
+  auto default_is_available = std::bind(is_available, vendor, encoder_node, tech, std::placeholders::_1);
   auto encoder = std::find_if(encoders.begin(), encoders.end(), default_is_available);
   if (encoder != std::end(encoders)) {
     auto encoder_node_name = get_render_node_name(encoder_node);
@@ -96,7 +112,7 @@ std::optional<GstEncoder> get_encoder(std::string_view tech,
                                          .video_params_zero_copy = encoder->video_params_zero_copy,
                                          .encoder_pipeline = encoder->encoder_pipeline};
       logs::log(logs::debug, "Checking if {} is available", possible_vaapi_plugin);
-      if (is_available(vendor, possible_encoder)) {
+      if (is_available(vendor, encoder_node, tech, possible_encoder)) {
         possible_encoder.encoder_pipeline = std::regex_replace(possible_encoder.encoder_pipeline,
                                                                std::regex(fmt::format("va{}enc", tech)),
                                                                possible_vaapi_plugin);
@@ -126,6 +142,19 @@ std::string generate_app_id(const BaseApp &app) {
   return std::to_string(abs((int32_t)hash));
 }
 
+/* Video params for apps that don't run the virtual compositor while the Vulkan
+ * encoders are selected: their zero-copy params are bare caps over
+ * memory:VulkanImage, which a CPU-generated source can neither parse next to
+ * its own caps filter nor negotiate from system memory. videoconvertscale
+ * adapts the format and the session resolution in the raw domain and
+ * vulkanupload allocates the joint multi-planar NV12 image with
+ * VIDEO_ENCODE_SRC usage the Vulkan encoders require (it honors their
+ * allocation query). The {width}/{height} placeholders are substituted at
+ * session time together with the rest of the pipeline. */
+static const std::string VULKAN_SOFTWARE_BRIDGE =
+    "videoconvertscale !\nvulkanupload !\n"
+    "video/x-raw(memory:VulkanImage), format=NV12, width={width}, height={height}, pixel-aspect-ratio=1/1";
+
 std::shared_ptr<immer::atom<immer::vector<immer::box<events::App>>>>
 parse_apps(const std::vector<BaseApp> &apps,
            const std::string &default_app_render_node,
@@ -134,6 +163,7 @@ parse_apps(const std::vector<BaseApp> &apps,
            const std::string &h264_video_params,
            const std::string &hevc_video_params,
            const std::string &av1_video_params,
+           const std::string &vulkan_software_bridge,
            const BaseAppAudioOverride &default_audio_settings,
            SessionsAtoms running_sessions,
            const std::shared_ptr<events::EventBusType> &ev_bus) {
@@ -153,10 +183,21 @@ parse_apps(const std::vector<BaseApp> &apps,
         auto app_video_settings = app.video.value_or(default_video_settings);
         auto app_audio_settings = app.audio.value_or(default_audio_settings);
 
+        /* Apps that don't run the virtual compositor feed their own (CPU generated)
+         * frames into the encoder. The Vulkan zero-copy params are bare caps over
+         * memory:VulkanImage, which such a source can neither parse next to its own
+         * caps filter nor negotiate from system memory: bridge them with
+         * videoconvertscale + vulkanupload, which allocates the joint multi-planar
+         * NV12 image with VIDEO_ENCODE_SRC usage the Vulkan encoders require. An
+         * explicit per-app video_params override still wins. */
+        auto bridge_needed = !app.start_virtual_compositor.value_or(true) && !vulkan_software_bridge.empty();
+        auto app_video_params =
+            app_video_settings.video_params.value_or(bridge_needed ? vulkan_software_bridge : h264_video_params);
+
         auto h264_gst_pipeline = fmt::format(
             "{} !\n{} !\n{} !\n{}", //
             app_video_settings.source.value_or(default_video_settings.source.value()),
-            app_video_settings.video_params.value_or(h264_video_params),
+            app_video_params,
             app_video_settings.h264_encoder.value_or(default_video_settings.h264_encoder.value()),
             app_video_settings.sink.value_or(default_video_settings.sink.value()));
 
@@ -164,7 +205,8 @@ parse_apps(const std::vector<BaseApp> &apps,
             default_video_settings.hevc_encoder.has_value()
                 ? fmt::format("{} !\n{} !\n{} !\n{}", //
                               app_video_settings.source.value_or(default_video_settings.source.value()),
-                              app_video_settings.video_params.value_or(hevc_video_params),
+                              app_video_settings.video_params.value_or(bridge_needed ? vulkan_software_bridge
+                                                                                     : hevc_video_params),
                               app_video_settings.hevc_encoder.value_or(default_video_settings.hevc_encoder.value()),
                               app_video_settings.sink.value_or(default_video_settings.sink.value()))
                 : "";
@@ -173,7 +215,8 @@ parse_apps(const std::vector<BaseApp> &apps,
             default_video_settings.av1_encoder.has_value()
                 ? fmt::format("{} !\n{} !\n{} !\n{}", //
                               app_video_settings.source.value_or(default_video_settings.source.value()),
-                              app_video_settings.video_params.value_or(av1_video_params),
+                              app_video_settings.video_params.value_or(bridge_needed ? vulkan_software_bridge
+                                                                                     : av1_video_params),
                               app_video_settings.av1_encoder.value_or(default_video_settings.av1_encoder.value()),
                               app_video_settings.sink.value_or(default_video_settings.sink.value()))
                 : "";
@@ -217,8 +260,8 @@ Config load_or_default(const std::string &source,
   // First check the version of the config file
   auto base_cfg = rfl::toml::load<BaseConfig, rfl::DefaultIfMissing>(source).value();
   auto version = base_cfg.config_version.value_or(0);
-  if (version <= 6) {
-    logs::log(logs::warning, "Found old config file (v{}), migrating to v7", version);
+  if (version <= 7) {
+    logs::log(logs::warning, "Found old config file (v{}), migrating to v8", version);
     auto backup = source + ".v" + std::to_string(version) + ".old";
     std::filesystem::rename(source, backup);
     auto old_cfg = toml::parse_file(backup);
@@ -243,7 +286,7 @@ Config load_or_default(const std::string &source,
     }
     out_file << new_cfg;
     out_file.close();
-    logs::log(logs::debug, "Migrated config from v{} to v7", version);
+    logs::log(logs::debug, "Migrated config from v{} to v8", version);
   }
 
   // Will throw if the config is invalid
@@ -273,6 +316,23 @@ Config load_or_default(const std::string &source,
     use_zero_copy = false;
   }
 
+  /* The Vulkan encoders only have a zero-copy path in Wolf: waylanddisplaysrc does the
+   * scaling and the RGBA to NV12 conversion, so there is no conversion segment to fall
+   * back to. Without zero copy, drop them so CUDA/VA take over. */
+  if (!use_zero_copy) {
+    logs::log(logs::info, "Zero copy disabled: skipping the Vulkan encoders");
+    auto without_vulkan = [](std::vector<GstEncoder> encoders) {
+      encoders.erase(std::remove_if(encoders.begin(),
+                                    encoders.end(),
+                                    [](const GstEncoder &encoder) { return encoder_type(encoder) == VULKAN; }),
+                     encoders.end());
+      return encoders;
+    };
+    default_gst_video_settings.h264_encoders = without_vulkan(default_gst_video_settings.h264_encoders);
+    default_gst_video_settings.hevc_encoders = without_vulkan(default_gst_video_settings.hevc_encoders);
+    default_gst_video_settings.av1_encoders = without_vulkan(default_gst_video_settings.av1_encoders);
+  }
+
   /* Automatically pick the best encoders */
   auto h264_encoder = get_encoder("h264", default_gst_render_node, default_gst_video_settings.h264_encoders, vendor);
   if (!h264_encoder) {
@@ -282,6 +342,21 @@ Config load_or_default(const std::string &source,
   }
   auto hevc_encoder = get_encoder("h265", default_gst_render_node, default_gst_video_settings.hevc_encoders, vendor);
   auto av1_encoder = get_encoder("av1", default_gst_render_node, default_gst_video_settings.av1_encoders, vendor);
+
+  /* The producer buffer caps are shared by every codec and follow the H264 encoder:
+   * when it feeds Vulkan images to the encoders, every other codec must encode those
+   * too (no other encoder family consumes memory:VulkanImage). Rather than building a
+   * broken pipeline, disable the mismatching codecs; clients fall back to H264/HEVC. */
+  if (encoder_type(*h264_encoder) == VULKAN) {
+    if (hevc_encoder && encoder_type(*hevc_encoder) != VULKAN) {
+      logs::log(logs::warning, "Disabling HEVC: the H264 encoder uses Vulkan images, the HEVC encoder does not");
+      hevc_encoder.reset();
+    }
+    if (av1_encoder && encoder_type(*av1_encoder) != VULKAN) {
+      logs::log(logs::warning, "Disabling AV1: the H264 encoder uses Vulkan images, the AV1 encoder does not");
+      av1_encoder.reset();
+    }
+  }
 
   /* Get paired clients */
   auto paired_clients =
@@ -302,6 +377,10 @@ Config load_or_default(const std::string &source,
     switch (video_encoder) {
     case NVIDIA: {
       default_base_video.producer_buffer_caps = "video/x-raw(memory:CUDAMemory)";
+      break;
+    }
+    case VULKAN: {
+      default_base_video.producer_buffer_caps = "video/x-raw(memory:VulkanImage),format=NV12";
       break;
     }
     case VAAPI:
@@ -380,20 +459,22 @@ Config load_or_default(const std::string &source,
   /* Get profiles, for each app defined will merge with default settings */
   auto profiles = cfg.profiles | //
                   ranges::views::transform([&](const Profile &profile) {
-                    return events::Profile{.id = profile.id,
-                                           .name = profile.name.value_or(""),
-                                           .icon_png_path = profile.icon_png_path.value_or(""),
-                                           .pin = profile.pin,
-                                           .apps = parse_apps(profile.apps,
-                                                              default_app_render_node,
-                                                              default_gst_render_node,
-                                                              default_base_video,
-                                                              h264_video_params,
-                                                              hevc_video_params,
-                                                              av1_video_params,
-                                                              default_base_audio,
-                                                              running_sessions,
-                                                              ev_bus)};
+                    return events::Profile{
+                        .id = profile.id,
+                        .name = profile.name.value_or(""),
+                        .icon_png_path = profile.icon_png_path.value_or(""),
+                        .pin = profile.pin,
+                        .apps = parse_apps(profile.apps,
+                                           default_app_render_node,
+                                           default_gst_render_node,
+                                           default_base_video,
+                                           h264_video_params,
+                                           hevc_video_params,
+                                           av1_video_params,
+                                           encoder_type(*h264_encoder) == VULKAN ? VULKAN_SOFTWARE_BRIDGE : "",
+                                           default_base_audio,
+                                           running_sessions,
+                                           ev_bus)};
                   }) |
                   ranges::to<ProfilesList>();
   auto profiles_atom = std::make_shared<immer::atom<ProfilesList>>(profiles);

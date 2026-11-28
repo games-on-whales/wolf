@@ -99,10 +99,15 @@ void start_video_producer(const std::string &session_id,
                           std::shared_ptr<immer::atom<gst_video_context::gst_context_ptr>> video_context,
                           std::shared_ptr<boost::promise<WaylandDisplayReady>> on_ready,
                           std::shared_ptr<events::EventBusType> event_bus) {
-  auto pipeline = fmt::format("waylanddisplaysrc name=wolf_wayland_source render_node={render_node} ! "
+  // Vulkan images come from the source's own converter: it has to be opted in with
+  // vulkan=true, after which it offers NV12 (and P010) as memory:VulkanImage on the
+  // render node's GstVulkanDevice, shared with the encoders through the gst context.
+  auto vulkan_src_prop = buffer_format.find("VulkanImage") != std::string::npos ? " vulkan=true" : "";
+  auto pipeline = fmt::format("waylanddisplaysrc name=wolf_wayland_source render_node={render_node}{vulkan_src_prop} ! "
                               "{buffer_format}, width={width}, height={height}, framerate={fps}/1 ! \n"    //
                               "interpipesink sync=true async=false name={session_id}_video max-buffers=1", //
                               fmt::arg("buffer_format", buffer_format),
+                              fmt::arg("vulkan_src_prop", vulkan_src_prop),
                               fmt::arg("render_node", render_node),
                               fmt::arg("session_id", session_id),
                               fmt::arg("width", display_mode.width),
