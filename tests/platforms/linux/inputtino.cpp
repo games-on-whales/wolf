@@ -7,9 +7,11 @@
 #include <catch2/matchers/catch_matchers_vector.hpp>
 #include <chrono>
 #include <control/input_handler.hpp>
+#include <cstring>
 #include <platforms/input.hpp>
 #include <platforms/linux/uinput/uinput.hpp>
 #include <thread>
+#include <vector>
 
 using Catch::Matchers::ContainsSubstring;
 using Catch::Matchers::Equals;
@@ -33,7 +35,7 @@ TEST_CASE("uinput - keyboard", "[UINPUT]") {
   auto press_shift_key = pkts::KEYBOARD_PACKET{.key_code = boost::endian::native_to_little((short)0xA0)};
   press_shift_key.type = pkts::KEY_PRESS;
 
-  control::handle_input(session, {}, &press_shift_key);
+  control::handle_input(session, {}, &press_shift_key, sizeof(press_shift_key));
   events = fetch_events_debug(keyboard_dev);
   REQUIRE(events.size() == 1);
   REQUIRE_THAT(libevdev_event_type_get_name(events[0]->type), Equals("EV_KEY"));
@@ -43,7 +45,7 @@ TEST_CASE("uinput - keyboard", "[UINPUT]") {
   auto release_shift_key = pkts::KEYBOARD_PACKET{.key_code = boost::endian::native_to_little((short)0xA0)};
   release_shift_key.type = pkts::KEY_RELEASE;
 
-  control::handle_input(session, {}, &release_shift_key);
+  control::handle_input(session, {}, &release_shift_key, sizeof(release_shift_key));
   events = fetch_events_debug(keyboard_dev);
   REQUIRE(events.size() == 1);
   REQUIRE_THAT(libevdev_event_type_get_name(events[0]->type), Equals("EV_KEY"));
@@ -63,7 +65,7 @@ TEST_CASE("uinput - pen tablet", "[UINPUT]") {
                                  .tilt = 0};
   packet.type = pkts::PEN;
 
-  control::handle_input(session, {}, &packet);
+  control::handle_input(session, {}, &packet, sizeof(packet));
 
   REQUIRE(session.pen_tablet->has_value()); // Should create a pen when a packet arrives
   std::this_thread::sleep_for(std::chrono::milliseconds(150));
@@ -77,7 +79,7 @@ TEST_CASE("uinput - pen tablet", "[UINPUT]") {
   // Changing something just so that libinput picks up the event
   packet.rotation = 90;
   packet.tilt = 45;
-  control::handle_input(session, {}, &packet);
+  control::handle_input(session, {}, &packet, sizeof(packet));
 
   float TARGET_W = 1920;
   float TARGET_H = 1080;
@@ -109,7 +111,7 @@ TEST_CASE("uinput - pen tablet", "[UINPUT]") {
                             .tilt = 90};
   packet.type = pkts::PEN;
 
-  control::handle_input(session, {}, &packet);
+  control::handle_input(session, {}, &packet, sizeof(packet));
   {
     event = get_event(li);
     REQUIRE(libinput_event_get_type(event.get()) == LIBINPUT_EVENT_TABLET_TOOL_TIP);
@@ -140,7 +142,7 @@ TEST_CASE("uinput - touch screen", "[UINPUT]") {
   };
   packet.type = pkts::TOUCH;
 
-  control::handle_input(session, {}, &packet); // Should create a touch screen when a packet arrives
+  control::handle_input(session, {}, &packet, sizeof(packet)); // Should create a touch screen when a packet arrives
   REQUIRE(session.touch_screen->has_value());
   std::this_thread::sleep_for(std::chrono::milliseconds(150));
 
@@ -151,7 +153,7 @@ TEST_CASE("uinput - touch screen", "[UINPUT]") {
   REQUIRE(libinput_device_has_capability(libinput_event_get_device(event.get()), LIBINPUT_DEVICE_CAP_TOUCH));
 
   packet.event_type = pkts::TOUCH_EVENT_HOVER;
-  control::handle_input(session, {}, &packet);
+  control::handle_input(session, {}, &packet, sizeof(packet));
 
   float TARGET_W = 1920;
   float TARGET_H = 1080;
@@ -172,7 +174,7 @@ TEST_CASE("uinput - touch screen", "[UINPUT]") {
   };
   packet.type = pkts::TOUCH;
 
-  control::handle_input(session, {}, &packet);
+  control::handle_input(session, {}, &packet, sizeof(packet));
 
   {
     event = get_event(li);
@@ -202,7 +204,7 @@ TEST_CASE("uinput - mouse", "[UINPUT]") {
     auto mv_packet = pkts::MOUSE_MOVE_REL_PACKET{.delta_x = 10, .delta_y = 20};
     mv_packet.type = pkts::MOUSE_MOVE_REL;
 
-    control::handle_input(session, {}, &mv_packet);
+    control::handle_input(session, {}, &mv_packet, sizeof(mv_packet));
     events = fetch_events_debug(mouse_rel_dev);
     REQUIRE(events.size() == 2);
     REQUIRE_THAT(libevdev_event_type_get_name(events[0]->type), Equals("EV_REL"));
@@ -221,7 +223,7 @@ TEST_CASE("uinput - mouse", "[UINPUT]") {
                                                  .height = boost::endian::native_to_big((short)720)};
     mv_packet.type = pkts::MOUSE_MOVE_ABS;
 
-    control::handle_input(session, {}, &mv_packet);
+    control::handle_input(session, {}, &mv_packet, sizeof(mv_packet));
     events = fetch_events_debug(mouse_abs_dev);
     REQUIRE(events.size() == 2);
     REQUIRE_THAT(libevdev_event_type_get_name(events[0]->type), Equals("EV_ABS"));
@@ -237,7 +239,7 @@ TEST_CASE("uinput - mouse", "[UINPUT]") {
     auto pressed_packet = pkts::MOUSE_BUTTON_PACKET{.button = 5};
     pressed_packet.type = pkts::MOUSE_BUTTON_PRESS;
 
-    control::handle_input(session, {}, &pressed_packet);
+    control::handle_input(session, {}, &pressed_packet, sizeof(pressed_packet));
     events = fetch_events_debug(mouse_rel_dev);
     REQUIRE(events.size() == 2);
     REQUIRE_THAT(libevdev_event_type_get_name(events[0]->type), Equals("EV_MSC"));
@@ -254,7 +256,7 @@ TEST_CASE("uinput - mouse", "[UINPUT]") {
     auto scroll_packet = pkts::MOUSE_SCROLL_PACKET{.scroll_amt1 = boost::endian::native_to_big(scroll_amt)};
     scroll_packet.type = pkts::MOUSE_SCROLL;
 
-    control::handle_input(session, {}, &scroll_packet);
+    control::handle_input(session, {}, &scroll_packet, sizeof(scroll_packet));
     events = fetch_events_debug(mouse_rel_dev);
     REQUIRE(events.size() == 1);
     REQUIRE_THAT(libevdev_event_type_get_name(events[0]->type), Equals("EV_REL"));
@@ -267,7 +269,7 @@ TEST_CASE("uinput - mouse", "[UINPUT]") {
     auto scroll_packet = pkts::MOUSE_HSCROLL_PACKET{.scroll_amount = boost::endian::native_to_big(scroll_amt)};
     scroll_packet.type = pkts::MOUSE_HSCROLL;
 
-    control::handle_input(session, {}, &scroll_packet);
+    control::handle_input(session, {}, &scroll_packet, sizeof(scroll_packet));
     events = fetch_events_debug(mouse_rel_dev);
     REQUIRE(events.size() == 1);
     REQUIRE_THAT(libevdev_event_type_get_name(events[0]->type), Equals("EV_REL"));
@@ -304,7 +306,7 @@ TEST_CASE("uinput - joypad", "[UINPUT]") {
         pkts::CONTROLLER_MULTI_PACKET{.controller_number = controller_number, .button_flags = pkts::RIGHT_STICK};
     c_pkt.type = pkts::CONTROLLER_MULTI;
 
-    control::handle_input(session, {}, &c_pkt);
+    control::handle_input(session, {}, &c_pkt, sizeof(c_pkt));
 
     REQUIRE(session.joypads->load()->size() == 1);
     auto joypad = session.joypads->load()->at(controller_number);
@@ -321,7 +323,7 @@ TEST_CASE("uinput - joypad", "[UINPUT]") {
                                                  .capabilities = pkts::ANALOG_TRIGGERS};
     c_pkt.type = pkts::CONTROLLER_ARRIVAL;
 
-    control::handle_input(session, {}, &c_pkt);
+    control::handle_input(session, {}, &c_pkt, sizeof(c_pkt));
     std::this_thread::sleep_for(std::chrono::milliseconds(300));
 
     auto joypad = session.joypads->load()->at(controller_number);
@@ -371,6 +373,23 @@ TEST_CASE("uinput - paste UTF8", "[UINPUT]") {
     REQUIRE_THAT(wolf::platforms::input::to_hex(utf32), Equals("1F4A9"));
   }
 
+  SECTION("UTF8 claiming more text than was received is dropped") {
+    libevdev_ptr keyboard_dev(libevdev_new(), ::libevdev_free);
+    auto session = events::StreamSession{
+        .keyboard = std::make_shared<std::optional<events::KeyboardTypes>>(std::move(*Keyboard::create()))};
+    link_devnode(keyboard_dev.get(), std::get<state::input::Keyboard>(session.keyboard->value()).get_nodes()[0]);
+
+    // Header plus 2 bytes of text, heap-allocated at its exact size, while data_size claims 4 bytes of text
+    auto utf8_pkt = pkts::UTF8_TEXT_PACKET{.text = "\xF0\x9F\x92\xA9"};
+    utf8_pkt.type = pkts::UTF8_TEXT;
+    utf8_pkt.data_size = boost::endian::native_to_big(8);
+    std::vector<char> buf(sizeof(pkts::INPUT_PKT) + 2);
+    std::memcpy(buf.data(), &utf8_pkt, buf.size());
+
+    control::handle_input(session, {}, reinterpret_cast<pkts::INPUT_PKT *>(buf.data()), buf.size());
+    REQUIRE(fetch_events_debug(keyboard_dev).empty());
+  }
+
   SECTION("Paste UTF8") {
     libevdev_ptr keyboard_dev(libevdev_new(), ::libevdev_free);
     auto session = events::StreamSession{
@@ -384,7 +403,7 @@ TEST_CASE("uinput - paste UTF8", "[UINPUT]") {
     utf8_pkt.type = pkts::UTF8_TEXT;
     utf8_pkt.data_size = boost::endian::native_to_big(8);
 
-    control::handle_input(session, {}, &utf8_pkt);
+    control::handle_input(session, {}, &utf8_pkt, sizeof(utf8_pkt));
     events = fetch_events_debug(keyboard_dev);
     REQUIRE(events.size() == 16);
 

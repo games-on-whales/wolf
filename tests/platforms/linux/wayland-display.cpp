@@ -7,6 +7,8 @@
 #include <catch2/matchers/catch_matchers_vector.hpp>
 #include <control/input_handler.hpp>
 #include <core/virtual-display.hpp>
+#include <cstring>
+#include <vector>
 
 using Catch::Matchers::Contains;
 using Catch::Matchers::Equals;
@@ -46,7 +48,7 @@ TEST_CASE("Wayland virtual inputs", "[WAYLAND]") {
   { // First move the mouse, this way our virtual window will get into focus
     auto mv_packet = pkts::MOUSE_MOVE_REL_PACKET{.delta_x = 10, .delta_y = 20};
     mv_packet.type = pkts::MOUSE_MOVE_REL;
-    control::handle_input(session, {}, &mv_packet);
+    control::handle_input(session, {}, &mv_packet, sizeof(mv_packet));
     wl_display_roundtrip(wd.get());
 
     auto m_ev = mouse_events_q->pop();
@@ -78,7 +80,7 @@ TEST_CASE("Wayland virtual inputs", "[WAYLAND]") {
   {
     auto press_A_key = pkts::KEYBOARD_PACKET{.key_code = boost::endian::native_to_little((short)0x41)};
     press_A_key.type = pkts::KEY_PRESS;
-    control::handle_input(session, {}, &press_A_key);
+    control::handle_input(session, {}, &press_A_key, sizeof(press_A_key));
     wl_display_roundtrip(wd.get());
 
     auto k_ev = kb_events_q->pop();
@@ -90,7 +92,7 @@ TEST_CASE("Wayland virtual inputs", "[WAYLAND]") {
   {
     auto release_A_key = pkts::KEYBOARD_PACKET{.key_code = boost::endian::native_to_little((short)0x41)};
     release_A_key.type = pkts::KEY_RELEASE;
-    control::handle_input(session, {}, &release_A_key);
+    control::handle_input(session, {}, &release_A_key, sizeof(release_A_key));
     wl_display_roundtrip(wd.get());
 
     auto k_ev = kb_events_q->pop();
@@ -103,7 +105,7 @@ TEST_CASE("Wayland virtual inputs", "[WAYLAND]") {
     auto press_SHIFT_A =
         pkts::KEYBOARD_PACKET{.key_code = boost::endian::native_to_little((short)0x41), .modifiers = pkts::SHIFT};
     press_SHIFT_A.type = pkts::KEY_PRESS;
-    control::handle_input(session, {}, &press_SHIFT_A);
+    control::handle_input(session, {}, &press_SHIFT_A, sizeof(press_SHIFT_A));
     wl_display_roundtrip(wd.get());
 
     auto k_ev = kb_events_q->pop();
@@ -125,12 +127,38 @@ TEST_CASE("Wayland virtual inputs", "[WAYLAND]") {
     REQUIRE(!k_ev->pressed);
   }
 
+  { // UTF8 text: heap buffers of exactly the received size, so reading past them shows up under ASan
+    auto utf8_pkt = pkts::UTF8_TEXT_PACKET{.text = "abcd"};
+    utf8_pkt.type = pkts::UTF8_TEXT;
+
+    // data_size claims 4 bytes of text but only 2 were received: must be dropped without typing anything
+    utf8_pkt.data_size = boost::endian::native_to_big(4 + 4);
+    std::vector<char> short_buf(sizeof(pkts::INPUT_PKT) + 2);
+    std::memcpy(short_buf.data(), &utf8_pkt, short_buf.size());
+    control::handle_input(session, {}, reinterpret_cast<pkts::INPUT_PKT *>(short_buf.data()), short_buf.size());
+    wl_display_roundtrip(wd.get());
+    REQUIRE(!kb_events_q->pop().has_value());
+
+    // data_size matches the 1 byte of text received: typed as CTRL+SHIFT+U+61
+    utf8_pkt.data_size = boost::endian::native_to_big(4 + 1);
+    std::vector<char> exact_buf(sizeof(pkts::INPUT_PKT) + 1);
+    std::memcpy(exact_buf.data(), &utf8_pkt, exact_buf.size());
+    control::handle_input(session, {}, reinterpret_cast<pkts::INPUT_PKT *>(exact_buf.data()), exact_buf.size());
+    wl_display_roundtrip(wd.get());
+    auto k_ev = kb_events_q->pop();
+    REQUIRE(k_ev.has_value());
+    REQUIRE(k_ev->keycode == 29); // LEFTCTRL
+    REQUIRE(k_ev->pressed);
+    while (kb_events_q->pop().has_value()) {
+    }
+  }
+
   // Mouse tests: scroll
   {
     short scroll_amt = 10;
     auto scroll_packet = pkts::MOUSE_SCROLL_PACKET{.scroll_amt1 = boost::endian::native_to_big(scroll_amt)};
     scroll_packet.type = pkts::MOUSE_SCROLL;
-    control::handle_input(session, {}, &scroll_packet);
+    control::handle_input(session, {}, &scroll_packet, sizeof(scroll_packet));
     wl_display_roundtrip(wd.get());
 
     // Compositor sends: axis_source, axis, axis_value120, axis_relative_direction (v9), frame.
