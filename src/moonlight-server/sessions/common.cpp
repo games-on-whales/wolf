@@ -22,15 +22,18 @@ void start_runner(std::shared_ptr<events::Runner> runner,
 
   auto pulse_sink_name = fmt::format("{}{}", VIRTUAL_SINK_PREFIX, args->session_id);
   auto audio_server_name = args->audio_server ? audio::get_server_name(args->audio_server->server) : "";
-  // TODO: properly separate XDG_RUNTIME_DIR from <pulse socket path>
-  // for example on my dev machine it's ${XDG_RUNTIME_DIR}/pulse/native
-  // but we know that on our images it's ${XDG_RUNTIME_DIR}/pulse-socket so this should be fine..
-  auto audio_server_on_host = std::filesystem::path(args->host->host_xdg_runtime_dir) /
-                              std::filesystem::path(audio_server_name).filename();
-  full_env.set("PULSE_SINK", pulse_sink_name);
-  full_env.set("PULSE_SOURCE", pulse_sink_name + ".monitor");
-  full_env.set("PULSE_SERVER", audio_server_name);
-  mounted_paths.push_back({audio_server_on_host, audio_server_name});
+  // Without an audio server there's no socket to share: an empty mount destination would make the runner invalid
+  if (!audio_server_name.empty()) {
+    // TODO: properly separate XDG_RUNTIME_DIR from <pulse socket path>
+    // for example on my dev machine it's ${XDG_RUNTIME_DIR}/pulse/native
+    // but we know that on our images it's ${XDG_RUNTIME_DIR}/pulse-socket so this should be fine..
+    auto audio_server_on_host = std::filesystem::path(args->host->host_xdg_runtime_dir) /
+                                std::filesystem::path(audio_server_name).filename();
+    full_env.set("PULSE_SINK", pulse_sink_name);
+    full_env.set("PULSE_SOURCE", pulse_sink_name + ".monitor");
+    full_env.set("PULSE_SERVER", audio_server_name);
+    mounted_paths.push_back({audio_server_on_host, audio_server_name});
+  }
 
   full_env.set("GAMESCOPE_WIDTH", std::to_string(args->video_settings.width));
   full_env.set("GAMESCOPE_HEIGHT", std::to_string(args->video_settings.height));
