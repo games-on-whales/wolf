@@ -1,4 +1,5 @@
 #include "vulkan-probe.hpp"
+#include <algorithm>
 #include <filesystem>
 #include <fstream>
 #include <helpers/logger.hpp>
@@ -88,6 +89,21 @@ static GstVulkanInstance *shared_instance() {
   return instance;
 }
 
+/* VCN 1.0 parts (the Raven, Raven2 and Picasso APUs, and Vega 20): RADV
+ * advertises the video encode extensions on them, but its encode path only
+ * supports VCN 2.0+ and these chips emit corrupt bitstreams. Skip them so the
+ * VA-API encoders take over instead. */
+static bool is_known_broken_encoder(const VkPhysicalDeviceProperties &props) {
+  std::string name = props.deviceName;
+  std::transform(name.begin(), name.end(), name.begin(), ::tolower);
+  for (const char *chip : {"gfx901", "gfx902", "gfx903", "gfx906", "raven", "picasso"}) {
+    if (name.find(chip) != std::string::npos) {
+      return true;
+    }
+  }
+  return false;
+}
+
 bool supports_video_encode(std::string_view render_node, std::string_view codec) {
   std::string codec_str{codec};
   std::string node_str{render_node};
@@ -113,9 +129,19 @@ bool supports_video_encode(std::string_view render_node, std::string_view codec)
   for (guint i = 0; i < instance->n_physical_devices; i++) {
     GstVulkanPhysicalDevice *physical = gst_vulkan_physical_device_new(instance, i);
     bool matches = physical->properties.vendorID == pci_ids->vendor && physical->properties.deviceID == pci_ids->device;
+    std::string device_name = matches ? std::string(physical->properties.deviceName) : "";
+    bool broken = matches && is_known_broken_encoder(physical->properties);
     gst_object_unref(physical);
     if (!matches) {
       continue;
+    }
+    if (broken) {
+      logs::log(logs::info,
+                "Skipping the Vulkan encoders on {}: {} cannot encode correctly "
+                "(VCN 1.0, falling back to the other encoders)",
+                node_str,
+                device_name);
+      return false;
     }
 
     /* The same check gstvulkan.c's plugin init runs before registering the encoders:
