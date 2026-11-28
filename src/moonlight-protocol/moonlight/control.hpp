@@ -318,6 +318,45 @@ struct ControlTerminatePacket {
   std::uint32_t reason = TERMINATE_REASON_GRACEFULL;
 };
 
+#pragma pack(push, 1)
+/**
+ * Sunshine extension: SS_HDR_METADATA from moonlight-common-c Limelight.h. Chromaticities are in
+ * 0.00002 units, luminances in nits except the minimum (0.0001 nit). Primaries are green, blue, red.
+ */
+struct SunshineHdrMetadata {
+  struct {
+    std::uint16_t x;
+    std::uint16_t y;
+  } display_primaries[3];
+  std::uint16_t white_point_x;
+  std::uint16_t white_point_y;
+  std::uint16_t max_display_luminance;
+  std::uint16_t min_display_luminance;
+  std::uint16_t max_content_light_level;
+  std::uint16_t max_frame_average_light_level;
+  std::uint16_t max_full_frame_luminance;
+};
+
+/**
+ * HDR_MODE: 1 enable byte followed by the 26 byte metadata, little endian.
+ * PLACEHOLDER: the metadata is a fixed 1000 nit BT.2020 D65 set, not read from any display or app.
+ */
+struct ControlHdrModePacket {
+  ControlPacket header = {.type = pkts::HDR_MODE, .length = 1 + sizeof(SunshineHdrMetadata)};
+  std::uint8_t enable_hdr = 0;
+  SunshineHdrMetadata metadata = {.display_primaries = {{8500, 39850}, {6550, 2300}, {35400, 14600}},
+                                  .white_point_x = 15635,
+                                  .white_point_y = 16450,
+                                  .max_display_luminance = 1000,
+                                  .min_display_luminance = 1,
+                                  .max_content_light_level = 1000,
+                                  .max_frame_average_light_level = 400,
+                                  .max_full_frame_luminance = 400};
+};
+#pragma pack(pop)
+static_assert(sizeof(SunshineHdrMetadata) == 26, "SS_HDR_METADATA is 26 bytes");
+static_assert(sizeof(ControlHdrModePacket) == 4 + 1 + 26, "HDR_MODE is header + enable + metadata");
+
 struct ControlRumblePacket {
   ControlPacket header;
 

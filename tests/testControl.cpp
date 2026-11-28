@@ -138,3 +138,12 @@ TEST_CASE("control joypad input packets") {
   REQUIRE(input_data->active_gamepad_mask == 1);
   REQUIRE(pressed_btns & pkts::CONTROLLER_BTN::A);
 }
+TEST_CASE("Control HDR_MODE packet", "CONTROL") {
+  SECTION("wire layout: type, length, enable byte, 26 byte SS_HDR_METADATA, little endian") {
+    auto packet = ControlHdrModePacket{};
+    packet.enable_hdr = 1;
+    REQUIRE(sizeof(packet) == 31);
+    REQUIRE_THAT(crypto::str_to_hex({(char *)&packet, sizeof(packet)}),
+                 Equals("0E011B00013421AA9B9619FC08488A0839133D4240E8030100E80390019001"));
+  }
+}
