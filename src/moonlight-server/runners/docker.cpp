@@ -4,6 +4,31 @@
 
 namespace wolf::core::docker {
 
+std::vector<MountPoint> dedupe_mounts(const std::vector<MountPoint> &mounts) {
+  auto normalise = [](std::string destination) {
+    while (destination.size() > 1 && destination.back() == '/') {
+      destination.pop_back();
+    }
+    return destination;
+  };
+
+  std::vector<MountPoint> unique;
+  for (const auto &mount : mounts) {
+    auto same_destination = [&](const MountPoint &kept) {
+      return normalise(kept.destination) == normalise(mount.destination);
+    };
+    if (auto kept = std::find_if(unique.begin(), unique.end(), same_destination); kept != unique.end()) {
+      logs::log(logs::warning,
+                "[DOCKER] Mount {} dropped: its destination is already mounted by {}",
+                fmt::format("{}", mount),
+                fmt::format("{}", *kept));
+    } else {
+      unique.push_back(mount);
+    }
+  }
+  return unique;
+}
+
 void create_udev_hw_files(std::filesystem::path base_hw_db_path,
                           std::vector<std::pair<std::string, std::vector<std::string>>> udev_hw_db_entries) {
   for (const auto &[filename, content] : udev_hw_db_entries) {
@@ -204,7 +229,7 @@ void RunDocker::run(std::string_view session_id,
                              .image = this->container.image,
                              .status = CREATED,
                              .ports = this->container.ports,
-                             .mounts = mounts,
+                             .mounts = dedupe_mounts(mounts),
                              .devices = devices,
                              .env = full_env};
 

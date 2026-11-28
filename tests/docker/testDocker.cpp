@@ -113,6 +113,34 @@ TEST_CASE("Docker TOML", "[DOCKER]") {
   REQUIRE_THAT(container.base_create_json.value(), Equals("{'HostConfig': {}}"));
 }
 
+TEST_CASE("Docker mounts are deduplicated by destination", "[DOCKER]") {
+  using docker::MountPoint;
+  MountPoint runner_home = {.source = "/data/profile", .destination = "/home/retro", .mode = "rw"};
+  MountPoint default_home = {.source = "/etc/wolf/state", .destination = "/home/retro", .mode = "rw"};
+  MountPoint sub_path = {.source = "/data/steam", .destination = "/home/retro/.local/share/Steam", .mode = "rw"};
+
+  SECTION("The runner mount, listed first, wins over the default at the same destination") {
+    auto mounts = docker::dedupe_mounts({runner_home, sub_path, default_home});
+    REQUIRE(mounts.size() == 2);
+    REQUIRE_THAT(mounts[0].source, Equals("/data/profile"));
+    REQUIRE_THAT(mounts[1].destination, Equals("/home/retro/.local/share/Steam"));
+  }
+
+  SECTION("A trailing slash is the same destination") {
+    default_home.destination = "/home/retro/";
+    auto mounts = docker::dedupe_mounts({runner_home, default_home});
+    REQUIRE(mounts.size() == 1);
+    REQUIRE_THAT(mounts[0].source, Equals("/data/profile"));
+  }
+
+  SECTION("Distinct destinations are all kept, in order") {
+    auto mounts = docker::dedupe_mounts({sub_path, default_home});
+    REQUIRE(mounts.size() == 2);
+    REQUIRE_THAT(mounts[0].source, Equals("/data/steam"));
+    REQUIRE_THAT(mounts[1].source, Equals("/etc/wolf/state"));
+  }
+}
+
 TEST_CASE("Docker create detects container name conflicts", "[DOCKER]") {
   REQUIRE(docker::is_container_name_conflict_response(409, R"({"message":"Conflict"})"));
 

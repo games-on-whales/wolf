@@ -140,4 +140,10 @@ private:
   docker::DockerAPI docker_api;
 };
 
+/**
+ * Keeps the first mount for each destination and logs a warning for every later one, since Podman rejects
+ * duplicate destinations. The runner's own mounts come before Wolf's defaults, so the user's mount wins.
+ */
+std::vector<MountPoint> dedupe_mounts(const std::vector<MountPoint> &mounts);
+
 } // namespace wolf::core::docker
