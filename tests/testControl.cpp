@@ -3,7 +3,6 @@
 
 using Catch::Matchers::Equals;
 
-#include <control/control.hpp>
 #include <cstring>
 #include <moonlight/control.hpp>
 using namespace moonlight::control;
@@ -125,6 +124,62 @@ TEST_CASE("Control decrypt reads only the received packet", "CONTROL") {
     auto smallest = encrypt_packet(aes_key, 0, std::string_view{"\x01\x02\x03\x04", 4});
     REQUIRE(smallest->fits_in(smallest->full_size()));
   }
+}
+
+TEST_CASE("Control V2 uses distinct wire nonces for each direction", "CONTROL") {
+  const std::string key = "EDF04A215C4FBEA20934120C8480D855";
+  const auto payload = crypto::hex_to_str("020302000000");
+  const auto mode = ControlMode::v2;
+  const std::uint32_t sequence = 0x01020304;
+
+  // Full packets independently generated with CryptoKit.
+  const auto client = encrypt_packet(key, sequence, payload, mode, ControlOrigin::client);
+  REQUIRE_THAT(crypto::str_to_hex(to_string(*client)),
+               Equals("01001A0004030201E024199442ADB229428DCE814B8D3CFC8850D54BBA1B"));
+  REQUIRE(decrypt_packet(*client, key, mode) == payload);
+
+  const auto host = encrypt_packet(key, sequence, payload, mode);
+  REQUIRE_THAT(crypto::str_to_hex(to_string(*host)),
+               Equals("01001A0004030201AAB21D05090B9AE217884AF63B145E3EAE4C7DDC2E65"));
+  REQUIRE(decrypt_packet(*host, key, mode, ControlOrigin::host) == payload);
+  REQUIRE_THROWS_AS(decrypt_packet(*host, key, mode), std::runtime_error);
+}
+
+TEST_CASE("Control mode and sequence are shared for one key", "CONTROL") {
+  ControlEncryption state;
+  REQUIRE_FALSE(state.next_host_sequence());
+  REQUIRE_FALSE(state.claim_peer());
+
+  SECTION("Clients can select Control V2") {
+    REQUIRE(state.negotiate(CONTROL_V2_FLAG));
+    REQUIRE(state.mode() == ControlMode::v2);
+    REQUIRE(state.claim_peer());
+    REQUIRE_FALSE(state.claim_peer());
+    for (std::uint32_t sequence = 0; sequence < 258; ++sequence) {
+      REQUIRE(state.next_host_sequence() == sequence);
+    }
+    REQUIRE_FALSE(state.negotiate(0));
+    REQUIRE(state.negotiate(CONTROL_V2_FLAG));
+    REQUIRE(state.next_host_sequence() == 258);
+  }
+
+  SECTION("Clients that omit the flag retain legacy control") {
+    REQUIRE(state.negotiate(0));
+    REQUIRE(state.mode() == ControlMode::legacy);
+    REQUIRE(state.claim_peer());
+    REQUIRE(state.claim_peer());
+    REQUIRE(state.next_host_sequence() == 0);
+    REQUIRE(state.next_host_sequence() == 0);
+    REQUIRE_FALSE(state.negotiate(CONTROL_V2_FLAG));
+  }
+}
+
+TEST_CASE("Reused legacy keys cannot negotiate Control V2", "CONTROL") {
+  ControlEncryption state(false);
+  REQUIRE_FALSE(state.negotiate(CONTROL_V2_FLAG));
+  REQUIRE(state.mode() == ControlMode::pending);
+  REQUIRE(state.negotiate(0));
+  REQUIRE(state.claim_peer());
 }
 
 TEST_CASE("control joypad input packets") {
