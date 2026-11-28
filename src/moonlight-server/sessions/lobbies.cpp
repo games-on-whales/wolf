@@ -1,3 +1,4 @@
+#include <atomic>
 #include <immer/vector_transient.hpp>
 #include <sessions/common.hpp>
 #include <sessions/handlers.hpp>
@@ -62,6 +63,48 @@ void leave_lobby(const std::shared_ptr<events::EventBusType> &ev_bus,
     // Nobody left in the lobby, and it's set to stop when everyone leaves
     ev_bus->fire_event(immer::box<events::StopLobbyEvent>{events::StopLobbyEvent{.lobby_id = lobby.id}});
   }
+}
+
+immer::vector<immer::box<events::EventBusHandlers>>
+setup_empty_lobby_handlers(const immer::box<state::AppState> &app_state, std::chrono::milliseconds timeout) {
+  immer::vector_transient<immer::box<events::EventBusHandlers>> handlers;
+  if (timeout.count() <= 0) {
+    return handlers.persistent();
+  }
+
+  // lobby_id -> epoch of the last session that left it
+  auto left_lobbies = std::make_shared<immer::atom<immer::map<std::string, std::uint64_t>>>();
+  auto next_epoch = std::make_shared<std::atomic<std::uint64_t>>(0);
+
+  handlers.push_back(app_state->event_bus->register_handler<immer::box<events::LeaveLobbyEvent>>(
+      [=](const immer::box<events::LeaveLobbyEvent> &ev) {
+        auto lobby_id = ev->lobby_id;
+        auto epoch = ++(*next_epoch);
+        left_lobbies->update([=](const auto map) { return map.set(lobby_id, epoch); });
+
+        std::thread([=]() {
+          std::this_thread::sleep_for(timeout);
+          auto latest = left_lobbies->load();
+          auto current = latest->find(lobby_id);
+          if (!current || *current != epoch) {
+            return;
+          }
+          left_lobbies->update([=](const auto map) {
+            auto entry = map.find(lobby_id);
+            return entry && *entry == epoch ? map.erase(lobby_id) : map;
+          });
+
+          immer::vector<events::Lobby> lobbies = app_state->lobbies->load();
+          auto lobby = state::get_lobby_by_id(lobbies, lobby_id);
+          if (lobby && lobby->connected_sessions->load()->empty()) {
+            logs::log(logs::info, "[LOBBY] Lobby {} empty for {}ms, stopping it", lobby_id, timeout.count());
+            app_state->event_bus->fire_event(
+                immer::box<events::StopLobbyEvent>{events::StopLobbyEvent{.lobby_id = lobby_id}});
+          }
+        }).detach();
+      }));
+
+  return handlers.persistent();
 }
 
 immer::vector<immer::box<events::EventBusHandlers>>
@@ -358,6 +401,11 @@ setup_lobbies_handlers(const immer::box<state::AppState> &app_state,
         logs::log(logs::info, "Detected WolfUI combo for session {}", event->session_id);
         on_moonlight_session_over(event->session_id);
       }));
+
+  auto empty_timeout = get_opt_in_timeout("WOLF_EMPTY_LOBBY_TIMEOUT_MS");
+  for (const auto &handler : setup_empty_lobby_handlers(app_state, empty_timeout)) {
+    handlers.push_back(handler);
+  }
 
   return handlers.persistent();
 }
