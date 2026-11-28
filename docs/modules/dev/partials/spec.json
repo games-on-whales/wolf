@@ -838,6 +838,16 @@
             },
             "description": ""
           },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/wolf__api__GenericErrorResponse"
+                }
+              }
+            },
+            "description": ""
+          },
           "500": {
             "content": {
               "application/json": {
@@ -1114,6 +1124,16 @@
             "anyOf": [
               {
                 "$ref": "#/components/schemas/wolf__config__ClientSettings"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "generation": {
+            "anyOf": [
+              {
+                "type": "string"
               },
               {
                 "type": "null"
@@ -1627,6 +1647,16 @@
         "properties": {
           "session_id": {
             "type": "string"
+          },
+          "expected_generation": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
           }
         },
         "required": [

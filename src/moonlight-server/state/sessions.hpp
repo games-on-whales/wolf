@@ -1,10 +1,13 @@
 #pragma once
 
+#include <atomic>
+#include <cstdint>
 #include <events/events.hpp>
 #include <helpers/logger.hpp>
 #include <helpers/utils.hpp>
 #include <immer/vector.hpp>
 #include <optional>
+#include <random>
 #include <range/v3/view.hpp>
 #include <state/config.hpp>
 #include <state/serialised_config.hpp>
@@ -28,6 +31,19 @@ inline std::optional<events::StreamSession> get_session_by_id(const immer::vecto
     logs::log(logs::warning, "Found multiple sessions for a given ID: {}", id);
     return {};
   }
+}
+
+/** True while `generation` is still the execution registered for `session_id`. */
+inline bool is_current_execution(const immer::vector<events::StreamSession> &sessions,
+                                 std::size_t session_id,
+                                 std::uint64_t generation) {
+  auto current = get_session_by_id(sessions, session_id);
+  return current && current->generation == generation;
+}
+
+/** Resume replaces the session record but keeps the running execution: the new record takes its generation. */
+inline void carry_execution(const events::StreamSession &old_session, events::StreamSession &new_session) {
+  new_session.generation = old_session.generation;
 }
 
 inline std::optional<events::StreamSession> get_session_by_client(const immer::vector<events::StreamSession> &sessions,
@@ -117,6 +133,13 @@ inline std::shared_ptr<events::StreamSession> create_stream_session(immer::box<s
       .audio_stream_port = static_cast<unsigned short>(get_port(AUDIO_PING_PORT)),
       .control_stream_port = static_cast<unsigned short>(get_port(CONTROL_PORT))};
 
+  // Random 62-bit start: an execution identity is not reused after Wolf restarts, even if the clock goes back.
+  static std::atomic<std::uint64_t> next_generation{[] {
+    std::random_device device;
+    std::uint64_t seed = (static_cast<std::uint64_t>(device()) << 32) ^ static_cast<std::uint64_t>(device());
+    return (seed & ((std::uint64_t{1} << 62) - 1)) | 1; // never 0, room to count up
+  }()};
+  session.generation = next_generation.fetch_add(1, std::memory_order_relaxed);
   return std::make_shared<events::StreamSession>(session);
 }
 

@@ -208,8 +208,16 @@ UnixSocketServer::UnixSocketServer(boost::asio::io_context &io_context,
       "/api/v1/sessions/stop",
       {
           .summary = "Stop a stream session",
+          .description =
+              "Optional `expected_generation`: the `generation` of the execution to stop, as returned by "
+              "`/api/v1/sessions`. Like `session_id` it is a decimal string (e.g. `\"42\"`), since it may not "
+              "fit a JSON number. When set, the session is only stopped if it is still that execution "
+              "(409 otherwise). A value that is not a decimal string (a JSON number, `\"\"`, `\"abc\"`) is "
+              "rejected with 400.",
           .request_description = APIDescription{.json_schema = rfl::json::to_schema<StreamSessionStopRequest>()},
           .response_description = {{200, {.json_schema = rfl::json::to_schema<GenericSuccessResponse>()}},
+                                   {400, {.json_schema = rfl::json::to_schema<GenericErrorResponse>()}},
+                                   {409, {.json_schema = rfl::json::to_schema<GenericErrorResponse>()}},
                                    {500, {.json_schema = rfl::json::to_schema<GenericErrorResponse>()}}},
           .handler = [this](auto req, auto socket) { endpoint_StreamSessionStop(req, socket); },
       });
