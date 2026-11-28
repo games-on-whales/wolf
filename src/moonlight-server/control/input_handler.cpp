@@ -636,6 +636,28 @@ void controller_arrival(const CONTROLLER_ARRIVAL_PACKET &pkt,
   }
 }
 
+void unplug_joypad(events::StreamSession &session, int controller_number) {
+  auto joypad = session.joypads->load()->find(controller_number);
+  if (!joypad) {
+    return;
+  }
+  auto removed_pad = *joypad;
+
+  logs::log(logs::debug, "Removing joypad {}", controller_number);
+  // Send the event downstream, Docker will pick it up and remove the device
+  events::UnplugDeviceEvent unplug_ev{.session_id = std::to_string(session.session_id)};
+  std::visit(
+      [&unplug_ev](auto &pad) {
+        unplug_ev.udev_events = pad.get_udev_events();
+        unplug_ev.udev_hw_db_entries = pad.get_udev_hw_db_entries();
+      },
+      *removed_pad);
+  session.event_bus->fire_event(immer::box<events::UnplugDeviceEvent>(unplug_ev));
+
+  // Remove the joypad, this will delete the last reference
+  session.joypads->update([&](events::JoypadList joypads) { return joypads.erase(controller_number); });
+}
+
 void controller_multi(const CONTROLLER_MULTI_PACKET &pkt,
                       events::StreamSession &session,
                       immer::box<std::shared_ptr<ENetPeer>> connected_client) {
@@ -646,19 +668,7 @@ void controller_multi(const CONTROLLER_MULTI_PACKET &pkt,
 
     // Check if Moonlight is sending the final packet for this pad
     if (!(pkt.active_gamepad_mask & (1 << pkt.controller_number))) {
-      logs::log(logs::debug, "Removing joypad {}", pkt.controller_number);
-      // Send the event downstream, Docker will pick it up and remove the device
-      events::UnplugDeviceEvent unplug_ev{.session_id = std::to_string(session.session_id)};
-      std::visit(
-          [&unplug_ev](auto &pad) {
-            unplug_ev.udev_events = pad.get_udev_events();
-            unplug_ev.udev_hw_db_entries = pad.get_udev_hw_db_entries();
-          },
-          *selected_pad);
-      session.event_bus->fire_event(immer::box<events::UnplugDeviceEvent>(unplug_ev));
-
-      // Remove the joypad, this will delete the last reference
-      session.joypads->update([&](events::JoypadList joypads) { return joypads.erase(pkt.controller_number); });
+      unplug_joypad(session, pkt.controller_number);
     }
   } else {
     // Old Moonlight doesn't support CONTROLLER_ARRIVAL, we create a default pad when it's first mentioned

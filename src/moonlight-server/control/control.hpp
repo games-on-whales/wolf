@@ -23,6 +23,12 @@ void run_control(int port,
 
 using enet_clients_map = immer::map<ENetPeer *, immer::box<events::StreamSession>>;
 
+/**
+ * True when running_sessions holds a session with the same id and the same ENet secret as `session`.
+ * A peer that belongs to an older connection of the same client fails the secret comparison.
+ */
+bool is_current_session(const state::SessionsAtoms &running_sessions, const events::StreamSession &session);
+
 std::shared_ptr<ENetPeer> to_shared_ptr(ENetPeer *peer);
 
 bool encrypt_and_send(std::string_view payload,
