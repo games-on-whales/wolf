@@ -239,7 +239,21 @@ static GstFlowReturn gst_rtp_moonlight_pay_video_generate_output(GstBaseTransfor
   if (inbuf == nullptr)
     return GST_FLOW_OK;
 
-  auto rtp_packets = gst_moonlight_video::split_into_rtp(rtpmoonlightpay_video, inbuf);
+  /* Time the frame spent in this pipeline since it was stamped, reported to Moonlight as host processing latency */
+  GstClockTime frame_running_time = GST_CLOCK_TIME_NONE;
+  if (trans->segment.format == GST_FORMAT_TIME && GST_BUFFER_PTS_IS_VALID(inbuf)) {
+    frame_running_time = gst_segment_to_running_time(&trans->segment, GST_FORMAT_TIME, GST_BUFFER_PTS(inbuf));
+  }
+  GstClockTime now_running_time = GST_CLOCK_TIME_NONE;
+  if (GstClock *clock = gst_element_get_clock(GST_ELEMENT(trans))) {
+    now_running_time = gst_clock_get_time(clock) - gst_element_get_base_time(GST_ELEMENT(trans));
+    gst_object_unref(clock);
+  }
+
+  auto rtp_packets = gst_moonlight_video::split_into_rtp(
+      rtpmoonlightpay_video,
+      inbuf,
+      gst_moonlight_video::host_processing_latency(frame_running_time, now_running_time));
 
   /* Send the generated packets to any downstream listener */
   gst_pad_push_list(trans->srcpad, rtp_packets);
